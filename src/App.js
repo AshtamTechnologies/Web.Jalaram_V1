@@ -1,25 +1,30 @@
-import logo from './logo.svg';
+import { useState, useEffect } from 'react';
+import Login     from './Pages/Login';
+import Dashboard from './Pages/Dashboard';
 import './App.css';
 
-function App() {
-  return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
-  );
-}
+export default function App() {
+  // ── Persist login state across refreshes ──
+  const [loggedIn, setLoggedIn] = useState(() => {
+    return localStorage.getItem('isLoggedIn') === 'true';
+  });
 
-export default App;
+  // ── Blank the browser tab title ──
+  useEffect(() => {
+    document.title = '';
+  }, []);
+
+  const handleLogin = () => {
+    localStorage.setItem('isLoggedIn', 'true');
+    setLoggedIn(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('isLoggedIn');
+    setLoggedIn(false);
+  };
+
+  return loggedIn
+    ? <Dashboard onLogout={handleLogout} />
+    : <Login     onLogin={handleLogin}  />;
+}
