@@ -13,6 +13,7 @@ export default function Login({ onLogin, onNavigate }) {
   // ── Forgot password ──────────────────────────────────────
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotError,   setForgotError]   = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState('');
 
   // ── Forced password change ───────────────────────────────
   const [forceChange,     setForceChange]     = useState(false);
@@ -47,6 +48,7 @@ export default function Login({ onLogin, onNavigate }) {
     setFormData(p => ({ ...p, [name]: value }));
     clearFieldError(name);
     if (forgotError) setForgotError('');
+    if (forgotSuccess) setForgotSuccess('');
   };
 
   const handleChangeInput = (e) => {
@@ -82,7 +84,8 @@ export default function Login({ onLogin, onNavigate }) {
     setForgotLoading(true);
     try {
       await apiService.forgotPassword(email);
-      onNavigate('forgotPassword', { email, skipToStep: 'sent' });
+      setForgotError('');
+      setForgotSuccess('Reset link sent! Please check your inbox.');
     } catch (err) {
       setForgotError(err.response?.data?.message || 'Failed to send reset email. Please try again.');
     } finally {
@@ -99,8 +102,7 @@ export default function Login({ onLogin, onNavigate }) {
     setErrors({});
     try {
       await apiService.resetPassword({
-        email: changeData.email,
-        token: changeData.resetToken,
+        email:       changeData.email,
         newPassword: changeData.newPassword,
       });
       alert('Password changed successfully! Please log in with your new password.');
@@ -128,17 +130,8 @@ export default function Login({ onLogin, onNavigate }) {
       // forced password change
       if (response.forcePasswordChange === true) {
         setChangeData({ email: formData.email, userId: response.userId, resetToken: '', newPassword: '', confirmPassword: '' });
+        setChangeStep(2);
         setForceChange(true);
-        try {
-          const tr = await apiService.forgotPasswordToken(formData.email);
-          const token = tr.token || tr.data?.token || tr;
-          if (!token) throw new Error('No token received');
-          setChangeData(p => ({ ...p, resetToken: token }));
-          setChangeStep(2);
-        } catch {
-          setErrors({ submit: 'Failed to initialize password change. Please try logging in again.' });
-          setForceChange(false);
-        }
         setLoading(false);
         return;
       }
@@ -429,6 +422,16 @@ export default function Login({ onLogin, onNavigate }) {
               fontFamily: 'Nunito,sans-serif', fontSize: '12.5px', fontWeight: 600,
             }}>
               ⚠️ {forgotError}
+            </div>
+          )}
+          {forgotSuccess && (
+            <div style={{
+              margin: '8px 0 12px', padding: '10px 13px',
+              background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.3)',
+              borderRadius: '10px', color: '#16a34a',
+              fontFamily: 'Nunito,sans-serif', fontSize: '12.5px', fontWeight: 600,
+            }}>
+              ✅ {forgotSuccess}
             </div>
           )}
 
