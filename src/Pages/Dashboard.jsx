@@ -13,6 +13,7 @@ import './Common1.css';
 
 // ── Owner page — lives in its own file ──
 import OwnerPage from './Owner';
+import SitePage from './Site.jsx'
 
 /* ─────────────────────────────────────
    MOCK DATA
@@ -325,7 +326,7 @@ export default function Dashboard({ onLogout }) {
       case 'clients':   return <Placeholder title="Clients"   Icon={Users}         />;
       case 'owners':    return <OwnerPage />;   {/* ← imported from Owner.jsx */}
       case 'payments':  return <Placeholder title="Payments"  Icon={CreditCard}    />;
-      case 'sites':     return <Placeholder title="Sites"     Icon={MapPin}        />;
+      case 'sites':     return <SitePage/>;
       default:          return <DashboardPage />;
     }
   };
