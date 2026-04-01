@@ -1,59 +1,25 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   MapPin, Plus, Home, Globe,
   Building2, Search, RefreshCw,
   X, AlertCircle, Check, Edit2, Eye, ChevronDown,
   ChevronUp, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
-  Filter, Layers, Navigation, UserCircle
+  Filter, Layers, Navigation, UserCircle, Loader2
 } from 'lucide-react';
 import './Common1.css';
+import { apiService } from '../api/api'; // ← adjust path if needed
 
-/* ─── Sample Owners (would come from API / OwnerPage state in a real app) ─── */
-const SAMPLE_OWNERS = [
-  { _id: 1,  ownerName: 'Rajesh Mehta'   },
-  { _id: 2,  ownerName: 'Priya Shah'     },
-  { _id: 3,  ownerName: 'Amit Patel'     },
-  { _id: 4,  ownerName: 'Sneha Desai'    },
-  { _id: 5,  ownerName: 'Kiran Joshi'    },
-  { _id: 6,  ownerName: 'Dinesh Trivedi' },
-  { _id: 7,  ownerName: 'Meena Kapoor'   },
-  { _id: 8,  ownerName: 'Suresh Nair'    },
-  { _id: 9,  ownerName: 'Pooja Agarwal'  },
-  { _id: 10, ownerName: 'Vikram Singh'   },
-  { _id: 11, ownerName: 'Anita Rao'      },
-  { _id: 12, ownerName: 'Harish Bhatt'   },
-  { _id: 13, ownerName: 'Reena Sharma'   },
-  { _id: 14, ownerName: 'Mahesh Pandya'  },
-  { _id: 15, ownerName: 'Kavita Mehta'   },
-];
-
+/* ─────────────────────────────────────────
+   CONSTANTS
+───────────────────────────────────────── */
 const SITE_TYPE_OPTIONS = ['Residential', 'Govt', 'Industrial', 'Terrace'];
 
-/* per-type badge colours */
 const TYPE_COLORS = {
-  Residential: { color: 'rgb(74, 85, 104)'  },
-  Govt:        { color: 'rgb(74, 85, 104)'},
-  Industrial:  { color: 'rgb(74, 85, 104)'},
-  Terrace:     { color: 'rgb(74, 85, 104)'},
+  Residential: { color: 'rgb(74, 85, 104)' },
+  Govt:        { color: 'rgb(74, 85, 104)' },
+  Industrial:  { color: 'rgb(74, 85, 104)' },
+  Terrace:     { color: 'rgb(74, 85, 104)' },
 };
-
-const SAMPLE_SITES = [
-  { siteID: 1,  addressLine1: '14, Navrangpura',    addressLine2: 'Near Gujarat College', addressLine3: 'Opp. Fire Station', landmark: 'Gujarat College',       city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Residential', country: 'India', ownerID: 1  },
-  { siteID: 2,  addressLine1: '7, Satellite Road',  addressLine2: 'Jodhpur Cross Roads',  addressLine3: '',                  landmark: 'D-Mart Satellite',      city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Govt',        country: 'India', ownerID: 2  },
-  { siteID: 3,  addressLine1: '22, Maninagar',      addressLine2: 'Khokhra Circle',       addressLine3: '',                  landmark: 'Maninagar Railway',     city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Industrial',  country: 'India', ownerID: 3  },
-  { siteID: 4,  addressLine1: '5, Bodakdev',        addressLine2: 'Judges Bungalow Rd',   addressLine3: 'Near ISKCON',       landmark: 'ISKCON Temple',         city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Terrace',     country: 'India', ownerID: 4  },
-  { siteID: 5,  addressLine1: '9, Paldi',           addressLine2: 'Shreyas Crossing',     addressLine3: '',                  landmark: 'Shreyas Railway',       city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Residential', country: 'India', ownerID: 5  },
-  { siteID: 6,  addressLine1: '3, Vastrapur',       addressLine2: 'Vastrapur Lake Road',  addressLine3: '',                  landmark: 'Vastrapur Lake',        city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Govt',        country: 'India', ownerID: 6  },
-  { siteID: 7,  addressLine1: '18, Gota',           addressLine2: 'SP Ring Road',         addressLine3: 'Near Zydus',        landmark: 'Zydus Hospital',        city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Industrial',  country: 'India', ownerID: 7  },
-  { siteID: 8,  addressLine1: '11, Chandkheda',     addressLine2: 'BRTS Corridor',        addressLine3: '',                  landmark: 'Chandkheda Bus Stop',   city: 'Gandhinagar', district: 'Gandhinagar', siteType: 'Terrace',     country: 'India', ownerID: 8  },
-  { siteID: 9,  addressLine1: '26, Thaltej',        addressLine2: 'SG Highway',           addressLine3: 'Near Rajpath Club', landmark: 'Rajpath Club',          city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Residential', country: 'India', ownerID: 9  },
-  { siteID: 10, addressLine1: '8, Science City Rd', addressLine2: 'Sola Road',            addressLine3: '',                  landmark: 'Science City',          city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Govt',        country: 'India', ownerID: 10 },
-  { siteID: 11, addressLine1: '33, Bopal',          addressLine2: 'Ambli-Bopal Road',     addressLine3: '',                  landmark: 'Bopal Cross Roads',     city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Industrial',  country: 'India', ownerID: 11 },
-  { siteID: 12, addressLine1: '4, Motera',          addressLine2: 'Stadium Road',         addressLine3: 'Gate No. 2',        landmark: 'Narendra Modi Stadium', city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Terrace',     country: 'India', ownerID: 12 },
-  { siteID: 13, addressLine1: '15, Nikol',          addressLine2: 'Nikol Naroda Road',    addressLine3: '',                  landmark: 'Nikol BRTS',            city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Residential', country: 'India', ownerID: 13 },
-  { siteID: 14, addressLine1: '6, Naroda',          addressLine2: 'GIDC Road',            addressLine3: 'Opp. GIDC Gate',    landmark: 'Naroda GIDC',           city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Govt',        country: 'India', ownerID: 14 },
-  { siteID: 15, addressLine1: '29, Bapunagar',      addressLine2: 'CTM Cross Roads',      addressLine3: '',                  landmark: 'CTM Circle',            city: 'Ahmedabad',   district: 'Ahmedabad',   siteType: 'Industrial',  country: 'India', ownerID: 15 },
-];
 
 const EMPTY_FORM = {
   addressLine1: '', addressLine2: '', addressLine3: '',
@@ -61,7 +27,37 @@ const EMPTY_FORM = {
   siteType: '', country: 'India', ownerID: '',
 };
 
-/* ─── Validation helpers ─── */
+const PAGE_SIZE_OPTIONS = [10, 12, 15, 20];
+
+/* ─────────────────────────────────────────
+   NORMALIZE HELPERS
+   Handle camelCase / PascalCase from .NET API
+───────────────────────────────────────── */
+function normalizeSite(raw) {
+  return {
+    siteID:       raw.siteID       ?? raw.SiteID       ?? raw.id ?? raw.Id,
+    addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? '',
+    addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? '',
+    addressLine3: raw.addressLine3 ?? raw.AddressLine3 ?? '',
+    landmark:     raw.landmark     ?? raw.Landmark     ?? '',
+    city:         raw.city         ?? raw.City         ?? '',
+    district:     raw.district     ?? raw.District     ?? '',
+    siteType:     raw.siteType     ?? raw.SiteType     ?? '',
+    country:      raw.country      ?? raw.Country      ?? 'India',
+    ownerID:      raw.ownerID      ?? raw.OwnerID      ?? raw.ownerId ?? raw.OwnerId ?? null,
+  };
+}
+
+function normalizeOwner(raw) {
+  return {
+    _id:       raw.ownerID  ?? raw.OwnerID  ?? raw.ownerId ?? raw.OwnerId ?? raw.id ?? raw.Id,
+    ownerName: raw.ownerName ?? raw.OwnerName ?? '',
+  };
+}
+
+/* ─────────────────────────────────────────
+   VALIDATION
+───────────────────────────────────────── */
 const ADDRESS_REGEX = /^[\w\s,.\-/'&#()]{1,200}$/;
 const TEXT_REGEX    = /^[a-zA-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s.\-]{0,99}$/;
 
@@ -76,28 +72,41 @@ function validateTextField(key, value, type, required) {
   return '';
 }
 
-/* ─── Helper: resolve owner display label ─── */
-function ownerLabel(ownerID) {
-  const o = SAMPLE_OWNERS.find(x => x._id === ownerID);
-  return o ? `${o.ownerName} (ID: ${o._id})` : '—';
-}
+const TEXT_FIELDS = [
+  { key: 'addressLine1', label: 'Address Line 1', icon: Home,       placeholder: 'e.g. 14, Navrangpura',      col: 12, required: true,  type: 'address' },
+  { key: 'addressLine2', label: 'Address Line 2', icon: Home,       placeholder: 'e.g. Near Gujarat College', col: 6,  required: false, type: 'address' },
+  { key: 'addressLine3', label: 'Address Line 3', icon: Home,       placeholder: 'e.g. Opp. Fire Station',    col: 6,  required: false, type: 'address' },
+  { key: 'landmark',     label: 'Landmark',       icon: Navigation, placeholder: 'e.g. Gujarat College',      col: 6,  required: false, type: 'address' },
+  { key: 'city',         label: 'City',           icon: Building2,  placeholder: 'e.g. Ahmedabad',            col: 6,  required: true,  type: 'text'    },
+  { key: 'district',     label: 'District',       icon: MapPin,     placeholder: 'e.g. Ahmedabad',            col: 6,  required: true,  type: 'text'    },
+];
 
-const PAGE_SIZE_OPTIONS = [10, 12, 15, 20];
+/* ─────────────────────────────────────────
+   SORT ICON
+───────────────────────────────────────── */
+function SortIcon({ col, sortKey, sortDir }) {
+  const active = sortKey === col;
+  return (
+    <span className="pg-sort-icon">
+      <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"   />
+      <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
+    </span>
+  );
+}
 
 /* ═══════════════════════════════════════════
    OWNER COMBO-DROPDOWN
-   Shows owner name in trigger; stores ownerID.
-   Searchable by name or numeric ID.
+   Populated from GET /Owner API
 ═══════════════════════════════════════════ */
-function OwnerCombo({ value, onChange, onBlur, hasError }) {
+function OwnerCombo({ value, onChange, onBlur, hasError, owners }) {
   const [open, setOpen]   = useState(false);
   const [query, setQuery] = useState('');
   const wrapRef           = useRef(null);
   const inputRef          = useRef(null);
 
-  const selected = SAMPLE_OWNERS.find(o => o._id === value);
+  const selected = owners.find(o => o._id === value || o._id === Number(value));
 
-  const filtered = SAMPLE_OWNERS.filter(o =>
+  const filtered = owners.filter(o =>
     o.ownerName.toLowerCase().includes(query.toLowerCase()) ||
     String(o._id).includes(query)
   );
@@ -132,7 +141,6 @@ function OwnerCombo({ value, onChange, onBlur, hasError }) {
 
   return (
     <div className="pg-combo-wrap" ref={wrapRef}>
-      {/* Trigger */}
       <div
         className={`pg-field-wrap pg-combo-trigger ${hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
         onClick={openDropdown}
@@ -141,14 +149,13 @@ function OwnerCombo({ value, onChange, onBlur, hasError }) {
       >
         <UserCircle size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
         <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`}>
-          {selected ? selected.ownerName : 'Select owner…'}
+          {selected ? selected.ownerName : owners.length === 0 ? 'Loading owners…' : 'Select owner…'}
         </span>
         {selected
           ? <X size={13} className="pg-combo-clear" onClick={clear} />
           : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
       </div>
 
-      {/* Panel */}
       {open && (
         <div className="pg-combo-panel">
           <div className="pg-combo-search">
@@ -163,17 +170,21 @@ function OwnerCombo({ value, onChange, onBlur, hasError }) {
             {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
           </div>
           <div className="pg-combo-list">
-            {filtered.length === 0 ? (
+            {owners.length === 0 ? (
+              <div className="pg-combo-empty">No owners available</div>
+            ) : filtered.length === 0 ? (
               <div className="pg-combo-empty">No owners match</div>
             ) : filtered.map(o => (
               <div
                 key={o._id}
-                className={`pg-combo-option${o._id === value ? ' pg-combo-option--active' : ''}`}
+                className={`pg-combo-option${(o._id === value || o._id === Number(value)) ? ' pg-combo-option--active' : ''}`}
                 onClick={() => select(o)}
               >
                 <span className="pg-combo-option__name">{o.ownerName}</span>
                 <span className="pg-combo-option__id">ID: {o._id}</span>
-                {o._id === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                {(o._id === value || o._id === Number(value)) && (
+                  <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+                )}
               </div>
             ))}
           </div>
@@ -185,7 +196,6 @@ function OwnerCombo({ value, onChange, onBlur, hasError }) {
 
 /* ═══════════════════════════════════════════
    SITE-TYPE DROPDOWN
-   Fixed options: Residential, Govt, Industrial, Terrace
 ═══════════════════════════════════════════ */
 function SiteTypeDropdown({ value, onChange, onBlur, hasError }) {
   const [open, setOpen] = useState(false);
@@ -216,7 +226,7 @@ function SiteTypeDropdown({ value, onChange, onBlur, hasError }) {
       >
         <Layers size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
         {value
-          ? <span className="pg-sitetype-pill" style={{ color: colors.color, background: colors.bg }}>{value}</span>
+          ? <span className="pg-sitetype-pill" style={{ color: colors.color }}>{value}</span>
           : <span className="pg-combo-display pg-combo-display--placeholder">Select site type…</span>}
         {value
           ? <X size={13} className="pg-combo-clear" onClick={clear} />
@@ -233,7 +243,7 @@ function SiteTypeDropdown({ value, onChange, onBlur, hasError }) {
                 className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
                 onClick={() => select(opt)}
               >
-                <span className="pg-sitetype-pill" style={{ color: c.color, background: c.bg }}>{opt}</span>
+                <span className="pg-sitetype-pill" style={{ color: c.color }}>{opt}</span>
                 {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
               </div>
             );
@@ -244,22 +254,14 @@ function SiteTypeDropdown({ value, onChange, onBlur, hasError }) {
   );
 }
 
-/* ─── Sort Icon ─── */
-function SortIcon({ col, sortKey, sortDir }) {
-  const active = sortKey === col;
-  return (
-    <span className="pg-sort-icon">
-      <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"   />
-      <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
-    </span>
-  );
-}
-
 /* ═══════════════════════════════════════════
    VIEW MODAL
 ═══════════════════════════════════════════ */
-function ViewModal({ site, onClose, onEdit }) {
+function ViewModal({ site, onClose, onEdit, owners }) {
   if (!site) return null;
+
+  const owner      = owners.find(o => o._id === site.ownerID || o._id === Number(site.ownerID));
+  const typeColors = site.siteType ? TYPE_COLORS[site.siteType] : null;
 
   const InfoRow = ({ icon: Icon, label, value, highlight }) =>
     value ? (
@@ -274,13 +276,10 @@ function ViewModal({ site, onClose, onEdit }) {
       </div>
     ) : null;
 
-  const typeColors = site.siteType ? TYPE_COLORS[site.siteType] : null;
-
   return (
     <div className="pg-overlay pg-overlay--view" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="pg-modal pg-modal--view">
 
-        {/* Banner */}
         <div className="pg-view__banner">
           <button className="pg-view__close" onClick={onClose}><X size={15} /></button>
           <div className="pg-view__banner-content">
@@ -304,7 +303,6 @@ function ViewModal({ site, onClose, onEdit }) {
           )}
         </div>
 
-        {/* Body */}
         <div className="pg-view__body">
           <div className="pg-view__section-label">Address</div>
           <InfoRow icon={Home}       label="Address Line 1" value={site.addressLine1} highlight />
@@ -316,7 +314,6 @@ function ViewModal({ site, onClose, onEdit }) {
           <InfoRow icon={Building2} label="City"     value={site.city}     />
           <InfoRow icon={MapPin}    label="District" value={site.district} />
 
-          {/* Site type with coloured badge */}
           {site.siteType && (
             <div className="pg-info-row">
               <div className="pg-info-row__icon">
@@ -324,7 +321,7 @@ function ViewModal({ site, onClose, onEdit }) {
               </div>
               <div className="pg-info-row__content">
                 <div className="pg-info-row__label">Site Type</div>
-                <span className="pg-sitetype-pill" style={{ color: typeColors?.color, background: typeColors?.bg }}>
+                <span className="pg-sitetype-pill" style={{ color: typeColors?.color }}>
                   {site.siteType}
                 </span>
               </div>
@@ -333,10 +330,14 @@ function ViewModal({ site, onClose, onEdit }) {
           <InfoRow icon={Globe} label="Country" value={site.country} />
 
           <div className="pg-view__section-label pg-view__section-label--mt">Owner</div>
-          <InfoRow icon={UserCircle} label="Owner" value={ownerLabel(site.ownerID)} highlight />
+          <InfoRow
+            icon={UserCircle}
+            label="Owner"
+            value={owner ? `${owner.ownerName} (ID: ${owner._id})` : site.ownerID ? `ID: ${site.ownerID}` : '—'}
+            highlight
+          />
         </div>
 
-        {/* Footer */}
         <div className="pg-view__foot">
           <button className="pg-btn-cancel" onClick={onClose}>Close</button>
           <button className="pg-view__btn-edit" onClick={() => { onClose(); onEdit(site); }}>
@@ -349,27 +350,16 @@ function ViewModal({ site, onClose, onEdit }) {
 }
 
 /* ═══════════════════════════════════════════
-   TEXT FIELD DEFINITIONS (non-special fields)
+   ADD / EDIT MODAL  (with real API calls)
 ═══════════════════════════════════════════ */
-const TEXT_FIELDS = [
-  { key: 'addressLine1', label: 'Address Line 1', icon: Home,       placeholder: 'e.g. 14, Navrangpura',      col: 12, required: true,  type: 'address' },
-  { key: 'addressLine2', label: 'Address Line 2', icon: Home,       placeholder: 'e.g. Near Gujarat College', col: 6,  required: false, type: 'address' },
-  { key: 'addressLine3', label: 'Address Line 3', icon: Home,       placeholder: 'e.g. Opp. Fire Station',    col: 6,  required: false, type: 'address' },
-  { key: 'landmark',     label: 'Landmark',       icon: Navigation, placeholder: 'e.g. Gujarat College',      col: 6,  required: false, type: 'address' },
-  { key: 'city',         label: 'City',           icon: Building2,  placeholder: 'e.g. Ahmedabad',            col: 6,  required: true,  type: 'text'    },
-  { key: 'district',     label: 'District',       icon: MapPin,     placeholder: 'e.g. Ahmedabad',            col: 6,  required: true,  type: 'text'    },
-];
-
-/* ═══════════════════════════════════════════
-   ADD / EDIT MODAL
-═══════════════════════════════════════════ */
-function SiteModal({ onClose, onSave, editData }) {
+function SiteModal({ onClose, onSaved, editData, owners }) {
   const isEdit = !!editData;
   const [form, setForm]             = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
   const [errors, setErrors]         = useState({});
   const [touched, setTouched]       = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess]       = useState(false);
+  const [apiError, setApiError]     = useState('');
 
   const runValidate = (f) => {
     const e = {};
@@ -377,7 +367,6 @@ function SiteModal({ onClose, onSave, editData }) {
       const err = validateTextField(key, f[key], type, required);
       if (err) e[key] = err;
     });
-    // siteType is optional per schema (Nullable) — no required error
     if (!f.ownerID) e.ownerID = 'Please select an owner';
     return e;
   };
@@ -409,14 +398,47 @@ function SiteModal({ onClose, onSave, editData }) {
     const allTouched = {};
     [...TEXT_FIELDS.map(f => f.key), 'siteType', 'ownerID'].forEach(k => { allTouched[k] = true; });
     setTouched(allTouched);
+
     const e = runValidate(form);
     if (Object.keys(e).length) { setErrors(e); return; }
+
+    // Guard: ensure siteID exists for edit
+    if (isEdit && !editData.siteID) {
+      setApiError('Site ID is missing — cannot update. Please refresh and try again.');
+      return;
+    }
+
     setSubmitting(true);
-    await new Promise(r => setTimeout(r, 700));
-    setSuccess(true);
-    await new Promise(r => setTimeout(r, 750));
-    onSave({ ...form, siteID: isEdit ? editData.siteID : Date.now() });
-    onClose();
+    setApiError('');
+
+    try {
+      let saved;
+
+      if (isEdit) {
+        // ── PUT /api/Site/{siteID} via apiService ─────────────
+        const response = await apiService.updateSite(editData.siteID, form);
+        saved = normalizeSite(response?.data ?? response ?? { ...form, siteID: editData.siteID });
+      } else {
+        // ── POST /api/Site via apiService ─────────────────────
+        const response = await apiService.createSite(form);
+        saved = normalizeSite(response?.data ?? response);
+      }
+
+      setSuccess(true);
+      await new Promise(r => setTimeout(r, 700));
+      onSaved(saved, isEdit);
+      onClose();
+
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.title   ||
+        err?.message                 ||
+        'Something went wrong. Please try again.';
+      setApiError(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -434,6 +456,14 @@ function SiteModal({ onClose, onSave, editData }) {
           </div>
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
+
+        {/* API-level error banner */}
+        {apiError && (
+          <div className="pg-api-error">
+            <AlertCircle size={14} style={{ flexShrink: 0 }} />
+            <span>{apiError}</span>
+          </div>
+        )}
 
         {/* Form */}
         <div className="pg-modal__body">
@@ -500,7 +530,7 @@ function SiteModal({ onClose, onSave, editData }) {
               </div>
             </div>
 
-            {/* ── Owner combo-dropdown (full width) ── */}
+            {/* ── Owner combo-dropdown (full width) — fed from API ── */}
             <div className="col-12">
               <label className="pg-field-label">
                 Owner <span className="pg-field-label__required">*</span>
@@ -511,6 +541,7 @@ function SiteModal({ onClose, onSave, editData }) {
                 onChange={v => handleChange('ownerID', v)}
                 onBlur={() => handleDropdownBlur('ownerID')}
                 hasError={!!errors.ownerID}
+                owners={owners}
               />
               {errors.ownerID && (
                 <div className="pg-field-error">
@@ -536,9 +567,11 @@ function SiteModal({ onClose, onSave, editData }) {
         <div className="pg-modal__foot">
           <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
           <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
-            {success   ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Added!'}</> :
-             submitting ? <><RefreshCw size={13} className="pg-spin" /> Saving…</> :
-                          <><Plus size={14} /> {isEdit ? 'Save Changes' : 'Add Site'}</>}
+            {success
+              ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Added!'}</>
+              : submitting
+                ? <><RefreshCw size={13} className="pg-spin" /> Saving…</>
+                : <><Plus size={14} /> {isEdit ? 'Save Changes' : 'Add Site'}</>}
           </button>
         </div>
       </div>
@@ -547,9 +580,9 @@ function SiteModal({ onClose, onSave, editData }) {
 }
 
 /* ─── Mobile Site Card ─── */
-function SiteCard({ s, onEdit, onView }) {
+function SiteCard({ s, onEdit, onView, owners }) {
   const typeColors = s.siteType ? TYPE_COLORS[s.siteType] : null;
-  const owner      = SAMPLE_OWNERS.find(o => o._id === s.ownerID);
+  const owner      = owners.find(o => o._id === s.ownerID || o._id === Number(s.ownerID));
   return (
     <div className="pg-card">
       <div className="pg-card__header">
@@ -562,7 +595,6 @@ function SiteCard({ s, onEdit, onView }) {
           <button className="pg-card__btn-view" onClick={() => onView(s)} title="View"><Eye size={13} /></button>
         </div>
       </div>
-
       <div className="pg-card__body">
         {s.landmark && (
           <div className="pg-card__row">
@@ -579,7 +611,7 @@ function SiteCard({ s, onEdit, onView }) {
         {s.siteType && typeColors && (
           <div className="pg-card__row">
             <Layers size={12} color="#c0c0d8" className="pg-card__row-icon" />
-            <span className="pg-sitetype-pill" style={{ color: typeColors.color, background: typeColors.bg }}>{s.siteType}</span>
+            <span className="pg-sitetype-pill" style={{ color: typeColors.color }}>{s.siteType}</span>
           </div>
         )}
         {owner && (
@@ -597,26 +629,66 @@ function SiteCard({ s, onEdit, onView }) {
    SITE PAGE
 ═══════════════════════════════════════════ */
 export default function SitePage() {
-  const [sites, setSites]         = useState(SAMPLE_SITES);
+  const [sites, setSites]           = useState([]);
+  const [owners, setOwners]         = useState([]);  // ← fetched from GET /Owner
+  const [loading, setLoading]       = useState(true);
+  const [fetchError, setFetchError] = useState('');
+
   const [showModal, setShowModal] = useState(false);
   const [editSite, setEditSite]   = useState(null);
   const [viewSite, setViewSite]   = useState(null);
-  const [search, setSearch]       = useState('');
-  const [sortKey, setSortKey]     = useState('addressLine1');
-  const [sortDir, setSortDir]     = useState('asc');
-  const [page, setPage]           = useState(1);
-  const [pageSize, setPageSize]   = useState(12);
 
+  const [search, setSearch]     = useState('');
+  const [sortKey, setSortKey]   = useState('addressLine1');
+  const [sortDir, setSortDir]   = useState('asc');
+  const [page, setPage]         = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+
+  /* ── Fetch sites + owners in parallel on mount ── */
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setFetchError('');
+    try {
+      // Both APIs run in parallel for speed
+      const [sitesRes, ownersRes] = await Promise.all([
+        apiService.getAllSites(),
+        apiService.getAllOwners(),
+      ]);
+
+      const siteList = Array.isArray(sitesRes)
+        ? sitesRes
+        : Array.isArray(sitesRes?.data) ? sitesRes.data : [];
+
+      const ownerList = Array.isArray(ownersRes)
+        ? ownersRes
+        : Array.isArray(ownersRes?.data) ? ownersRes.data : [];
+
+      setSites(siteList.map(normalizeSite));
+      setOwners(ownerList.map(normalizeOwner));
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message                 ||
+        'Failed to load data. Please try again.';
+      setFetchError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  /* ── Derived data ── */
   const filtered = sites.filter(s => {
     const q     = search.toLowerCase();
-    const owner = SAMPLE_OWNERS.find(o => o._id === s.ownerID);
+    const owner = owners.find(o => o._id === s.ownerID || o._id === Number(s.ownerID));
     return (
-      s.addressLine1.toLowerCase().includes(q) ||
+      (s.addressLine1 || '').toLowerCase().includes(q) ||
       (s.addressLine2 || '').toLowerCase().includes(q) ||
-      s.city.toLowerCase().includes(q) ||
-      s.district.toLowerCase().includes(q) ||
-      (s.landmark || '').toLowerCase().includes(q) ||
-      (s.siteType || '').toLowerCase().includes(q) ||
+      (s.city         || '').toLowerCase().includes(q) ||
+      (s.district     || '').toLowerCase().includes(q) ||
+      (s.landmark     || '').toLowerCase().includes(q) ||
+      (s.siteType     || '').toLowerCase().includes(q) ||
       (owner?.ownerName || '').toLowerCase().includes(q)
     );
   });
@@ -630,13 +702,27 @@ export default function SitePage() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
 
-  const handleSort  = (key) => { if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(key); setSortDir('asc'); } setPage(1); };
-  const handleAdd   = (s) => { setSites(p => [...p, s]); setPage(1); };
-  const handleSave  = (s) => setSites(p => p.map(x => x.siteID === s.siteID ? s : x));
-  const handleEdit  = (s) => { setEditSite(s); setShowModal(true); };
-  const closeModal  = () => { setShowModal(false); setEditSite(null); };
-  const handleView  = (s) => setViewSite(s);
-  const closeView   = () => setViewSite(null);
+  /* ── Handlers ── */
+  const handleSort = (key) => {
+    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortKey(key); setSortDir('asc'); }
+    setPage(1);
+  };
+
+  // Called by SiteModal after successful POST or PUT
+  const handleSaved = (saved, isEdit) => {
+    if (isEdit) {
+      setSites(prev => prev.map(x => x.siteID === saved.siteID ? saved : x));
+    } else {
+      setSites(prev => [...prev, saved]);
+      setPage(1);
+    }
+  };
+
+  const handleEdit = (s) => { setEditSite(s); setShowModal(true); };
+  const closeModal = () => { setShowModal(false); setEditSite(null); };
+  const handleView = (s) => setViewSite(s);
+  const closeView  = () => setViewSite(null);
 
   const COLS = [
     { key: 'addressLine1', label: 'Address Line 1',  w: '20%' },
@@ -656,6 +742,33 @@ export default function SitePage() {
       acc.push(p);
       return acc;
     }, []);
+
+  /* ── Loading state ── */
+  if (loading) {
+    return (
+      <div className="pg-page">
+        <div className="pg-loader">
+          <Loader2 size={32} color="#049edf" className="pg-spin" />
+          <span className="pg-loader__text">Loading sites…</span>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Fetch error state ── */
+  if (fetchError) {
+    return (
+      <div className="pg-page">
+        <div className="pg-fetch-error">
+          <AlertCircle size={28} color="#ef4444" />
+          <span className="pg-fetch-error__msg">{fetchError}</span>
+          <button className="pg-btn-add" onClick={fetchData}>
+            <RefreshCw size={13} /> Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -693,6 +806,10 @@ export default function SitePage() {
                 />
                 {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
               </div>
+              {/* Refresh button */}
+              <button className="pg-pg-btn" onClick={fetchData} title="Refresh list" style={{ marginLeft: 'auto' }}>
+                <RefreshCw size={13} />
+              </button>
             </div>
           </div>
 
@@ -730,34 +847,28 @@ export default function SitePage() {
                   </tr>
                 ) : paginated.map(s => {
                   const typeColors = s.siteType ? TYPE_COLORS[s.siteType] : null;
-                  const owner      = SAMPLE_OWNERS.find(o => o._id === s.ownerID);
+                  const owner      = owners.find(o => o._id === s.ownerID || o._id === Number(s.ownerID));
                   return (
                     <tr key={s.siteID} className="pg-tr">
-                      {/* Address Line 1 */}
                       <td className="pg-td pg-td--overflow">
                         <div className="pg-td__primary">{s.addressLine1}</div>
                         {s.addressLine3 && <div className="pg-td__secondary">{s.addressLine3}</div>}
                       </td>
-                      {/* Address Line 2 */}
                       <td className="pg-td pg-td--overflow pg-tablet-hide">
                         <span className="pg-td__ellipsis" title={s.addressLine2}>{s.addressLine2 || '—'}</span>
                       </td>
-                      {/* Landmark */}
                       <td className="pg-td pg-td--overflow pg-tablet-hide">
                         <span className="pg-td__ellipsis" title={s.landmark}>{s.landmark || '—'}</span>
                       </td>
-                      {/* City / District */}
                       <td className="pg-td">
                         <span style={{ color: '#4a5568' }}>{s.city}</span>
                         {s.district !== s.city && <span className="pg-td__secondary">, {s.district}</span>}
                       </td>
-                      {/* Site Type */}
                       <td className="pg-td">
                         {s.siteType && typeColors
-                          ? <span className="pg-sitetype-pill" style={{ color: typeColors.color, background: typeColors.bg }}>{s.siteType}</span>
+                          ? <span className="pg-sitetype-pill" style={{ color: typeColors.color }}>{s.siteType}</span>
                           : <span className="pg-td__dash">—</span>}
                       </td>
-                      {/* Owner */}
                       <td className="pg-td pg-td--overflow pg-tablet-hide">
                         {owner
                           ? <div>
@@ -766,11 +877,9 @@ export default function SitePage() {
                             </div>
                           : <span className="pg-td__dash">—</span>}
                       </td>
-                      {/* Country */}
                       <td className="pg-td pg-tablet-hide">
                         <span style={{ color: '#4a5568' }}>{s.country}</span>
                       </td>
-                      {/* Action */}
                       <td className="pg-td">
                         <div className="pg-action-wrap">
                           <button className="pg-btn-edit" onClick={() => handleEdit(s)} title="Edit"><Edit2 size={13} /></button>
@@ -792,7 +901,7 @@ export default function SitePage() {
                 <span className="pg-empty__label">No sites found</span>
               </div>
             ) : paginated.map(s => (
-              <SiteCard key={s.siteID} s={s} onEdit={handleEdit} onView={handleView} />
+              <SiteCard key={s.siteID} s={s} onEdit={handleEdit} onView={handleView} owners={owners} />
             ))}
           </div>
 
@@ -821,10 +930,15 @@ export default function SitePage() {
       </div>
 
       {showModal && (
-        <SiteModal onClose={closeModal} onSave={editSite ? handleSave : handleAdd} editData={editSite} />
+        <SiteModal
+          onClose={closeModal}
+          onSaved={handleSaved}
+          editData={editSite}
+          owners={owners}
+        />
       )}
       {viewSite && (
-        <ViewModal site={viewSite} onClose={closeView} onEdit={handleEdit} />
+        <ViewModal site={viewSite} onClose={closeView} onEdit={handleEdit} owners={owners} />
       )}
     </>
   );

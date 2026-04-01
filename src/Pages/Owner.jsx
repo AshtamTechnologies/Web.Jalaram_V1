@@ -1,31 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   UserCircle, Plus, Phone, Home, Globe,
   Building2, MapPin, Search, Users, RefreshCw,
   X, AlertCircle, Check, Edit2, Eye, ChevronDown,
   ChevronUp, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
-  Filter, Mail
+  Filter, Mail, Loader2
 } from 'lucide-react';
 import './Common1.css';
+import { apiService } from '../api/api';
 
-const SAMPLE_OWNERS = [
-  { ownerName: 'Rajesh Mehta',   alternateContactName: 'R. Mehta',   ownerAddress: '14, Navrangpura, Ahmedabad', phone1: '+91 98765 43210', phone2: '+91 79001 12233', city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: 'rajesh@example.com', _id: 1  },
-  { ownerName: 'Priya Shah',     alternateContactName: 'P. Shah',    ownerAddress: '7, Satellite Road, Ahmedabad', phone1: '+91 90000 11122', phone2: '',               city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: '',                   _id: 2  },
-  { ownerName: 'Amit Patel',     alternateContactName: 'A. Patel',   ownerAddress: '22, Maninagar, Ahmedabad',    phone1: '+91 99001 22334', phone2: '',               city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: 'amit@example.com',   _id: 3  },
-  { ownerName: 'Sneha Desai',    alternateContactName: 'S. Desai',   ownerAddress: '5, Bodakdev, Ahmedabad',      phone1: '+91 97890 12345', phone2: '+91 79003 44556', city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: '',                   _id: 4  },
-  { ownerName: 'Kiran Joshi',    alternateContactName: 'K. Joshi',   ownerAddress: '9, Paldi, Ahmedabad',         phone1: '+91 96543 21098', phone2: '',               city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: 'kiran@example.com',  _id: 5  },
-  { ownerName: 'Dinesh Trivedi', alternateContactName: 'D. Trivedi', ownerAddress: '3, Vastrapur, Ahmedabad',     phone1: '+91 94567 89012', phone2: '+91 79004 55667', city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: '',                   _id: 6  },
-  { ownerName: 'Meena Kapoor',   alternateContactName: 'M. Kapoor',  ownerAddress: '18, Gota, Ahmedabad',         phone1: '+91 93456 78901', phone2: '',               city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: 'meena@example.com',  _id: 7  },
-  { ownerName: 'Suresh Nair',    alternateContactName: 'S. Nair',    ownerAddress: '11, Chandkheda, Ahmedabad',   phone1: '+91 92345 67890', phone2: '+91 79005 66778', city: 'Gandhinagar', district: 'Gandhinagar', state: 'Gujarat', country: 'India', emailAddress: '',                   _id: 8  },
-  { ownerName: 'Pooja Agarwal',  alternateContactName: 'P. Agarwal', ownerAddress: '26, Thaltej, Ahmedabad',      phone1: '+91 91234 56789', phone2: '',               city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: 'pooja@example.com',  _id: 9  },
-  { ownerName: 'Vikram Singh',   alternateContactName: 'V. Singh',   ownerAddress: '8, Science City Rd',          phone1: '+91 90123 45678', phone2: '+91 79006 77889', city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: '',                   _id: 10 },
-  { ownerName: 'Anita Rao',      alternateContactName: 'A. Rao',     ownerAddress: '33, Bopal, Ahmedabad',        phone1: '+91 89012 34567', phone2: '',               city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: 'anita@example.com',  _id: 11 },
-  { ownerName: 'Harish Bhatt',   alternateContactName: 'H. Bhatt',   ownerAddress: '4, Motera, Ahmedabad',        phone1: '+91 88901 23456', phone2: '+91 79007 88990', city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: '',                   _id: 12 },
-  { ownerName: 'Reena Sharma',   alternateContactName: 'R. Sharma',  ownerAddress: '15, Nikol, Ahmedabad',        phone1: '+91 87890 12345', phone2: '',               city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: 'reena@example.com',  _id: 13 },
-  { ownerName: 'Mahesh Pandya',  alternateContactName: 'M. Pandya',  ownerAddress: '6, Naroda, Ahmedabad',        phone1: '+91 86789 01234', phone2: '+91 79008 99001', city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: '',                   _id: 14 },
-  { ownerName: 'Kavita Mehta',   alternateContactName: 'K. Mehta',   ownerAddress: '29, Bapunagar, Ahmedabad',   phone1: '+91 85678 90123', phone2: '',               city: 'Ahmedabad',   district: 'Ahmedabad',   state: 'Gujarat', country: 'India', emailAddress: 'kavita@example.com', _id: 15 },
-];
-
+/* ─────────────────────────────────────────
+   CONSTANTS & HELPERS
+───────────────────────────────────────── */
 const EMPTY_FORM = {
   ownerName: '', alternateContactName: '', ownerAddress: '',
   phone1: '', phone2: '', city: '', district: '',
@@ -48,16 +34,16 @@ function validatePhone(value) {
 }
 
 const FIELDS = [
-  { key: 'ownerName',            label: 'Owner Name',             icon: UserCircle, placeholder: 'e.g. Rajesh Mehta',                       col: 6,  required: true,  type: 'name'     },
-  { key: 'alternateContactName', label: 'Alternate Contact Name', icon: Users,      placeholder: 'e.g. R. Mehta',                           col: 6,  required: false, type: 'name'     },
-  { key: 'ownerAddress',         label: 'Owner Address',          icon: Home,       placeholder: 'Street / Area',                           col: 12, required: false, type: 'text'     },
-  { key: 'phone1',               label: 'Phone 1',                icon: Phone,      placeholder: '+91 98765 43210 or 079-27650000',          col: 6,  required: true,  type: 'phone'    },
-  { key: 'phone2',               label: 'Phone 2',                icon: Phone,      placeholder: '+91 79001 12233 or 0265-2xxxxxx',          col: 6,  required: false, type: 'phone'    },
-  { key: 'city',                 label: 'City',                   icon: Building2,  placeholder: 'e.g. Ahmedabad',                          col: 6,  required: true,  type: 'text'     },
-  { key: 'district',             label: 'District',               icon: MapPin,     placeholder: 'e.g. Ahmedabad',                          col: 6,  required: true,  type: 'text'     },
-  { key: 'state',                label: 'State',                  icon: MapPin,     placeholder: 'e.g. Gujarat',                            col: 6,  required: true,  type: 'text'     },
-  { key: 'country',              label: 'Country',                icon: Globe,      placeholder: 'India',                                   col: 6,  required: true,  type: 'readonly' },
-  { key: 'emailAddress',         label: 'Email Address',          icon: Mail,       placeholder: 'example@email.com',                       col: 12, required: false, type: 'email'    },
+  { key: 'ownerName',            label: 'Owner Name',             icon: UserCircle, placeholder: 'e.g. Rajesh Mehta',              col: 6,  required: true,  type: 'name'     },
+  { key: 'alternateContactName', label: 'Alternate Contact Name', icon: Users,      placeholder: 'e.g. R. Mehta',                  col: 6,  required: false, type: 'name'     },
+  { key: 'ownerAddress',         label: 'Owner Address',          icon: Home,       placeholder: 'Street / Area',                  col: 12, required: false, type: 'text'     },
+  { key: 'phone1',               label: 'Phone 1',                icon: Phone,      placeholder: '+91 98765 43210 or 079-27650000', col: 6,  required: true,  type: 'phone'    },
+  { key: 'phone2',               label: 'Phone 2',                icon: Phone,      placeholder: '+91 79001 12233 or 0265-2xxxxxx', col: 6,  required: false, type: 'phone'    },
+  { key: 'city',                 label: 'City',                   icon: Building2,  placeholder: 'e.g. Ahmedabad',                 col: 6,  required: true,  type: 'text'     },
+  { key: 'district',             label: 'District',               icon: MapPin,     placeholder: 'e.g. Anand',                     col: 6,  required: true,  type: 'text'     },
+  { key: 'state',                label: 'State',                  icon: MapPin,     placeholder: 'e.g. Gujarat',                   col: 6,  required: true,  type: 'text'     },
+  { key: 'country',              label: 'Country',                icon: Globe,      placeholder: 'India',                          col: 6,  required: true,  type: 'readonly' },
+  { key: 'emailAddress',         label: 'Email Address',          icon: Mail,       placeholder: 'example@email.com',              col: 12, required: false, type: 'email'    },
 ];
 
 const PAGE_SIZE_OPTIONS = [10, 12, 15, 20];
@@ -66,17 +52,89 @@ function validateField(key, value, type, required) {
   const v = (value || '').trim();
   if (required && !v) return 'This field is required';
   if (!v) return '';
-  if (type === 'name') {
-    if (!NAME_REGEX.test(v)) return "Only letters, spaces, and . ' - are allowed";
-  }
+  if (type === 'name')  { if (!NAME_REGEX.test(v))  return "Only letters, spaces, and . ' - are allowed"; }
   if (type === 'phone') return validatePhone(v);
-  if (type === 'email') {
-    if (!EMAIL_REGEX.test(v)) return 'Enter a valid email address';
-  }
+  if (type === 'email') { if (!EMAIL_REGEX.test(v)) return 'Enter a valid email address'; }
   return '';
 }
 
-/* ─── Sort Icon ─── */
+/* ─────────────────────────────────────────
+   normalizeOwner
+   Confirmed from Swagger: API returns
+   ownerID (capital ID), ownerName,
+   alternateContactName, ownerAddress,
+   phone1, phone2, city, district,
+   state, country, emailAddress
+───────────────────────────────────────── */
+function normalizeOwner(raw) {
+  console.log('Owner raw from API:', raw);
+
+  // Swagger confirms the PK field is "ownerID"
+  const id =
+    raw.ownerID              ??   // ← confirmed from Swagger screenshot
+    raw.ownerId              ??   // fallback camelCase variant
+    raw.OwnerId              ??
+    raw.owner_id             ??
+    raw.id                   ??
+    raw.Id                   ??
+    null;
+
+  if (id === null || id === undefined) {
+    const fallback = Object.entries(raw).find(
+      ([k, v]) =>
+        (typeof v === 'number' || (typeof v === 'string' && /^\d+$/.test(v))) &&
+        k.toLowerCase().includes('id')
+    );
+    if (fallback) {
+      console.warn(`normalizeOwner: used fallback ID field "${fallback[0]}" = ${fallback[1]}`);
+    }
+    return buildOwner(fallback ? fallback[1] : undefined, raw);
+  }
+
+  return buildOwner(id, raw);
+}
+
+function buildOwner(id, raw) {
+  return {
+    _id:                  id,
+    ownerName:            raw.ownerName            ?? raw.OwnerName            ?? '',
+    alternateContactName: raw.alternateContactName ?? raw.AlternateContactName ?? '',
+    ownerAddress:         raw.ownerAddress         ?? raw.OwnerAddress         ?? '',
+    phone1:               raw.phone1               ?? raw.Phone1               ?? '',
+    phone2:               raw.phone2               ?? raw.Phone2               ?? '',
+    city:                 raw.city                 ?? raw.City                 ?? '',
+    district:             raw.district             ?? raw.District             ?? '',
+    state:                raw.state                ?? raw.State                ?? '',
+    country:              raw.country              ?? raw.Country              ?? 'India',
+    emailAddress:         raw.emailAddress         ?? raw.EmailAddress         ?? '',
+  };
+}
+
+/* ─────────────────────────────────────────
+   toPayload
+   Sends plain camelCase keys — confirmed
+   working from Swagger (ownerName, phone1…)
+   The ownerID in PUT body is handled inside
+   apiService.updateOwner in api.js
+───────────────────────────────────────── */
+function toPayload(form) {
+  return {
+    ownerName:            form.ownerName.trim(),
+    alternateContactName: form.alternateContactName.trim(),
+    ownerAddress:         form.ownerAddress.trim(),
+    phone1:               form.phone1.trim(),
+    phone2:               form.phone2.trim(),
+    city:                 form.city.trim(),
+    district:             form.district.trim(),
+    state:                form.state.trim(),
+    country:              form.country.trim(),
+    emailAddress:         form.emailAddress.trim(),
+  };
+}
+
+/* ─────────────────────────────────────────
+   SORT ICON
+───────────────────────────────────────── */
 function SortIcon({ col, sortKey, sortDir }) {
   const active = sortKey === col;
   return (
@@ -109,8 +167,6 @@ function ViewModal({ owner, onClose, onEdit }) {
   return (
     <div className="pg-overlay pg-overlay--view" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="pg-modal pg-modal--view">
-
-        {/* Banner */}
         <div className="pg-view__banner">
           <button className="pg-view__close" onClick={onClose}><X size={15} /></button>
           <div className="pg-view__banner-content">
@@ -130,7 +186,6 @@ function ViewModal({ owner, onClose, onEdit }) {
           </div>
         </div>
 
-        {/* Body */}
         <div className="pg-view__body">
           <div className="pg-view__section-label">Contact</div>
           <InfoRow icon={Phone} label="Phone 1"       value={owner.phone1}       highlight />
@@ -144,7 +199,6 @@ function ViewModal({ owner, onClose, onEdit }) {
           <InfoRow icon={Globe}     label="Country"       value={owner.country}      />
         </div>
 
-        {/* Footer */}
         <div className="pg-view__foot">
           <button className="pg-btn-cancel" onClick={onClose}>Close</button>
           <button className="pg-view__btn-edit" onClick={() => { onClose(); onEdit(owner); }}>
@@ -159,13 +213,14 @@ function ViewModal({ owner, onClose, onEdit }) {
 /* ═══════════════════════════════════════════
    ADD / EDIT MODAL
 ═══════════════════════════════════════════ */
-function OwnerModal({ onClose, onSave, editData }) {
+function OwnerModal({ onClose, onSaved, editData }) {
   const isEdit = !!editData;
   const [form, setForm]             = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
   const [errors, setErrors]         = useState({});
   const [touched, setTouched]       = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess]       = useState(false);
+  const [apiError, setApiError]     = useState('');
 
   const runValidate = (f) => {
     const e = {};
@@ -182,28 +237,74 @@ function OwnerModal({ onClose, onSave, editData }) {
     setForm(updated);
     if (touched[key]) {
       const field = FIELDS.find(f => f.key === key);
-      setErrors(p => ({ ...p, [key]: validateField(key, val, field.type, field.required) }));
+      const err = validateField(key, val, field.type, field.required);
+      setErrors(p => ({ ...p, [key]: err }));
     }
   };
 
   const handleBlur = (key) => {
     setTouched(p => ({ ...p, [key]: true }));
     const field = FIELDS.find(f => f.key === key);
-    setErrors(p => ({ ...p, [key]: validateField(key, form[key], field.type, field.required) }));
+    const err = validateField(key, form[key], field.type, field.required);
+    setErrors(p => ({ ...p, [key]: err }));
   };
 
   const handleSubmit = async () => {
     const allTouched = {};
     FIELDS.forEach(f => { allTouched[f.key] = true; });
     setTouched(allTouched);
+
     const e = runValidate(form);
     if (Object.keys(e).length) { setErrors(e); return; }
+
+    if (isEdit && (editData._id === undefined || editData._id === null)) {
+      setApiError(
+        'Owner ID is missing — cannot update. ' +
+        'Open browser console and check "Owner raw from API:" to see the exact ID field name.'
+      );
+      return;
+    }
+
     setSubmitting(true);
-    await new Promise(r => setTimeout(r, 700));
-    setSuccess(true);
-    await new Promise(r => setTimeout(r, 750));
-    onSave({ ...form, _id: isEdit ? editData._id : Date.now() });
-    onClose();
+    setApiError('');
+
+    try {
+      const payload = toPayload(form);
+      let saved;
+
+      if (isEdit) {
+        // PUT /Owner/{ownerID}  — ownerID is also injected into the body by apiService.updateOwner
+        console.log(`Updating owner ID: ${editData._id}`, payload);
+        const response = await apiService.updateOwner(editData._id, payload);
+        // API may return the updated object or just a success message
+        const raw = response?.data ?? response;
+        saved = (raw && typeof raw === 'object' && (raw.ownerID ?? raw.ownerId ?? raw.id))
+          ? normalizeOwner(raw)
+          : { ...editData, ...form }; // fallback: merge edits locally
+      } else {
+        // POST /Owner
+        const response = await apiService.createOwner(payload);
+        const raw = response?.data ?? response;
+        saved = normalizeOwner(raw);
+      }
+
+      setSuccess(true);
+      await new Promise(r => setTimeout(r, 700));
+      onSaved(saved, isEdit);
+      onClose();
+
+    } catch (err) {
+      console.error('Save owner error:', err);
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.title   ||
+        err?.response?.data          ||
+        err?.message                 ||
+        'Something went wrong. Please try again.';
+      setApiError(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -221,6 +322,14 @@ function OwnerModal({ onClose, onSave, editData }) {
           </div>
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
+
+        {/* API error banner */}
+        {apiError && (
+          <div className="pg-api-error">
+            <AlertCircle size={14} style={{ flexShrink: 0 }} />
+            <span>{apiError}</span>
+          </div>
+        )}
 
         {/* Form */}
         <div className="pg-modal__body">
@@ -246,7 +355,7 @@ function OwnerModal({ onClose, onSave, editData }) {
                     <input
                       readOnly={isReadonly}
                       placeholder={placeholder}
-                      value={form[key]}
+                      value={form[key] ?? ''}
                       onChange={e => !isReadonly && handleChange(key, e.target.value)}
                       onBlur={() => !isReadonly && handleBlur(key)}
                       className={`pg-field-input${isReadonly ? ' pg-field-input--readonly' : ''}`}
@@ -276,9 +385,11 @@ function OwnerModal({ onClose, onSave, editData }) {
         <div className="pg-modal__foot">
           <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
           <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
-            {success   ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Added!'}</> :
-             submitting ? <><RefreshCw size={13} className="pg-spin" /> Saving…</> :
-                          <><Plus size={14} /> {isEdit ? 'Save Changes' : 'Add Owner'}</>}
+            {success
+              ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Added!'}</>
+              : submitting
+                ? <><RefreshCw size={13} className="pg-spin" /> Saving…</>
+                : <><Plus size={14} /> {isEdit ? 'Save Changes' : 'Add Owner'}</>}
           </button>
         </div>
       </div>
@@ -293,14 +404,15 @@ function OwnerCard({ o, onEdit, onView }) {
       <div className="pg-card__header">
         <div className="pg-card__title-wrap">
           <div className="pg-card__title">{o.ownerName}</div>
-          <div className="pg-card__subtitle">{o.alternateContactName}</div>
+          {o.alternateContactName && (
+            <div className="pg-card__subtitle">{o.alternateContactName}</div>
+          )}
         </div>
         <div className="pg-card__actions">
           <button className="pg-card__btn-edit" onClick={() => onEdit(o)} title="Edit"><Edit2 size={13} /></button>
           <button className="pg-card__btn-view" onClick={() => onView(o)} title="View"><Eye size={13} /></button>
         </div>
       </div>
-
       <div className="pg-card__body">
         {o.ownerAddress && (
           <div className="pg-card__row">
@@ -322,10 +434,20 @@ function OwnerCard({ o, onEdit, onView }) {
         </div>
         <div className="pg-card__row">
           <Building2 size={12} color="#c0c0d8" className="pg-card__row-icon" />
-          <span className="pg-card__row-text">
-            {o.city}{o.district !== o.city ? `, ${o.district}` : ''}{o.state ? `, ${o.state}` : ''}
-          </span>
+          <span className="pg-card__row-text">{o.city || '—'}</span>
         </div>
+        {o.district && o.district !== o.city && (
+          <div className="pg-card__row">
+            <MapPin size={12} color="#c0c0d8" className="pg-card__row-icon" />
+            <span className="pg-card__row-text">{o.district}</span>
+          </div>
+        )}
+        {o.state && (
+          <div className="pg-card__row">
+            <MapPin size={12} color="#c0c0d8" className="pg-card__row-icon" />
+            <span className="pg-card__row-text">{o.state}</span>
+          </div>
+        )}
         {o.emailAddress && (
           <div className="pg-card__row">
             <Mail size={12} color="#c0c0d8" className="pg-card__row-icon" />
@@ -341,23 +463,59 @@ function OwnerCard({ o, onEdit, onView }) {
    OWNER PAGE
 ═══════════════════════════════════════════ */
 export default function OwnerPage() {
-  const [owners, setOwners]       = useState(SAMPLE_OWNERS);
+  const [owners, setOwners]         = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [fetchError, setFetchError] = useState('');
+
   const [showModal, setShowModal] = useState(false);
   const [editOwner, setEditOwner] = useState(null);
   const [viewOwner, setViewOwner] = useState(null);
-  const [search, setSearch]       = useState('');
-  const [sortKey, setSortKey]     = useState('ownerName');
-  const [sortDir, setSortDir]     = useState('asc');
-  const [page, setPage]           = useState(1);
-  const [pageSize, setPageSize]   = useState(12);
 
-  const filtered = owners.filter(o =>
-    o.ownerName.toLowerCase().includes(search.toLowerCase()) ||
-    o.city.toLowerCase().includes(search.toLowerCase()) ||
-    o.phone1.includes(search) ||
-    (o.alternateContactName || '').toLowerCase().includes(search.toLowerCase()) ||
-    (o.emailAddress || '').toLowerCase().includes(search.toLowerCase())
-  );
+  const [search, setSearch]     = useState('');
+  const [sortKey, setSortKey]   = useState('ownerName');
+  const [sortDir, setSortDir]   = useState('asc');
+  const [page, setPage]         = useState(1);
+  const [pageSize, setPageSize] = useState(12);
+
+  /* ── Fetch all owners ── */
+  const fetchOwners = useCallback(async () => {
+    setLoading(true);
+    setFetchError('');
+    try {
+      const response = await apiService.getAllOwners();
+      const list = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.data)
+          ? response.data
+          : [];
+      console.log('Raw owners list from API:', list);
+      setOwners(list.map(normalizeOwner));
+    } catch (err) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message                 ||
+        'Failed to load owners. Please try again.';
+      setFetchError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchOwners(); }, [fetchOwners]);
+
+  /* ── Search across all visible fields ── */
+  const filtered = owners.filter(o => {
+    const q = search.toLowerCase();
+    return (
+      (o.ownerName            || '').toLowerCase().includes(q) ||
+      (o.alternateContactName || '').toLowerCase().includes(q) ||
+      (o.city                 || '').toLowerCase().includes(q) ||
+      (o.district             || '').toLowerCase().includes(q) ||
+      (o.state                || '').toLowerCase().includes(q) ||
+      (o.phone1               || '').includes(search)          ||
+      (o.emailAddress         || '').toLowerCase().includes(q)
+    );
+  });
 
   const sorted = [...filtered].sort((a, b) => {
     const av = (a[sortKey] || '').toString().toLowerCase();
@@ -368,28 +526,41 @@ export default function OwnerPage() {
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
   const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
 
+  /* ── Handlers ── */
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('asc'); }
     setPage(1);
   };
 
-  const handleAdd  = (o) => { setOwners(p => [...p, o]); setPage(1); };
-  const handleSave = (o) => setOwners(p => p.map(x => x._id === o._id ? o : x));
-  const handleEdit = (o) => { setEditOwner(o); setShowModal(true); };
+  const handleSaved = (saved, isEdit) => {
+    if (isEdit) {
+      setOwners(prev => prev.map(x => x._id === saved._id ? saved : x));
+    } else {
+      setOwners(prev => [...prev, saved]);
+      setPage(1);
+    }
+  };
+
+  const handleEdit = (o) => {
+    setEditOwner({ ...o });   // spread so modal gets a fresh copy
+    setShowModal(true);
+  };
   const closeModal = () => { setShowModal(false); setEditOwner(null); };
   const handleView = (o) => setViewOwner(o);
   const closeView  = () => setViewOwner(null);
 
+  /* ── Table columns ── */
   const COLS = [
-    { key: 'ownerName',    label: 'Owner Name',     w: '18%' },
-    { key: 'ownerAddress', label: 'Address',         w: '20%', tabletHide: true },
-    { key: 'phone1',       label: 'Phone 1',         w: '14%' },
-    { key: 'phone2',       label: 'Phone 2',         w: '13%', tabletHide: true },
-    { key: 'city',         label: 'City / District', w: '13%' },
-    { key: 'state',        label: 'State',           w: '10%', tabletHide: true },
-    { key: 'emailAddress', label: 'Email',           w: '14%', tabletHide: true },
-    { key: '_action',      label: 'Action',          w: '10%', noSort: true },
+    { key: 'ownerName',    label: 'Owner Name', w: '15%' },
+    { key: 'ownerAddress', label: 'Address',    w: '15%' },
+    { key: 'phone1',       label: 'Phone 1',    w: '12%' },
+    { key: 'phone2',       label: 'Phone 2',    w: '11%' },
+    { key: 'city',         label: 'City',       w: '9%'  },
+    { key: 'district',     label: 'District',   w: '9%'  },
+    { key: 'state',        label: 'State',      w: '9%'  },
+    { key: 'emailAddress', label: 'Email',      w: '12%' },
+    { key: '_action',      label: 'Action',     w: '8%',  noSort: true },
   ];
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -399,6 +570,33 @@ export default function OwnerPage() {
       acc.push(p);
       return acc;
     }, []);
+
+  /* ── Loading ── */
+  if (loading) {
+    return (
+      <div className="pg-page">
+        <div className="pg-loader">
+          <Loader2 size={32} color="#049edf" className="pg-spin" />
+          <span className="pg-loader__text">Loading owners…</span>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Fetch error ── */
+  if (fetchError) {
+    return (
+      <div className="pg-page">
+        <div className="pg-fetch-error">
+          <AlertCircle size={28} color="#ef4444" />
+          <span className="pg-fetch-error__msg">{fetchError}</span>
+          <button className="pg-btn-add" onClick={fetchOwners}>
+            <RefreshCw size={13} /> Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -430,12 +628,15 @@ export default function OwnerPage() {
               <div className="pg-search-box">
                 <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
                 <input
-                  placeholder="Search by name, city, phone, email…"
+                  placeholder="Search by name, city, district, state, phone, email…"
                   value={search}
                   onChange={e => { setSearch(e.target.value); setPage(1); }}
                 />
                 {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
               </div>
+              <button className="pg-pg-btn" onClick={fetchOwners} title="Refresh list" style={{ marginLeft: 'auto' }}>
+                <RefreshCw size={13} />
+              </button>
             </div>
           </div>
 
@@ -448,11 +649,7 @@ export default function OwnerPage() {
                     <th
                       key={col.key}
                       style={{ width: col.w }}
-                      className={[
-                        'pg-th',
-                        col.noSort ? '' : 'pg-th--sort',
-                        col.tabletHide ? 'pg-tablet-hide' : '',
-                      ].filter(Boolean).join(' ')}
+                      className={['pg-th', col.noSort ? '' : 'pg-th--sort'].filter(Boolean).join(' ')}
                       onClick={() => !col.noSort && handleSort(col.key)}
                     >
                       <div className="pg-th__inner">
@@ -477,31 +674,70 @@ export default function OwnerPage() {
                   </tr>
                 ) : paginated.map(o => (
                   <tr key={o._id} className="pg-tr">
+
+                    {/* Owner Name + Alternate */}
                     <td className="pg-td pg-td--overflow">
-                      <div className="pg-td__primary">{o.ownerName}</div>
-                      <div className="pg-td__secondary">{o.alternateContactName}</div>
+                      <div className="pg-td__primary">{o.ownerName || '—'}</div>
+                      {o.alternateContactName && (
+                        <div className="pg-td__secondary">{o.alternateContactName}</div>
+                      )}
                     </td>
-                    <td className="pg-td pg-td--overflow pg-tablet-hide">
-                      <span className="pg-td__ellipsis" title={o.ownerAddress}>{o.ownerAddress || '—'}</span>
+
+                    {/* Address */}
+                    <td className="pg-td pg-td--overflow">
+                      <span className="pg-td__ellipsis" title={o.ownerAddress}>
+                        {o.ownerAddress || '—'}
+                      </span>
                     </td>
-                    <td className="pg-td"><span style={{ color: '#4a5568' }}>{o.phone1}</span></td>
-                    <td className="pg-td pg-tablet-hide"><span className="pg-td__muted">{o.phone2 || '—'}</span></td>
+
+                    {/* Phone 1 */}
                     <td className="pg-td">
-                      <span style={{ color: '#4a5568' }}>{o.city}</span>
-                      {o.district !== o.city && <span className="pg-td__secondary">, {o.district}</span>}
+                      <span style={{ color: '#4a5568' }}>{o.phone1 || '—'}</span>
                     </td>
-                    <td className="pg-td pg-tablet-hide"><span style={{ color: '#4a5568' }}>{o.state || '—'}</span></td>
-                    <td className="pg-td pg-td--overflow pg-tablet-hide">
-                      <span className="pg-td__ellipsis" title={o.emailAddress} style={{ color: o.emailAddress ? '#4a5568' : '#c0c0d8' }}>
+
+                    {/* Phone 2 */}
+                    <td className="pg-td">
+                      <span className="pg-td__muted">{o.phone2 || '—'}</span>
+                    </td>
+
+                    {/* City — separate column */}
+                    <td className="pg-td">
+                      <span style={{ color: '#4a5568' }}>{o.city || '—'}</span>
+                    </td>
+
+                    {/* District — separate column */}
+                    <td className="pg-td">
+                      <span style={{ color: '#4a5568' }}>{o.district || '—'}</span>
+                    </td>
+
+                    {/* State — always visible */}
+                    <td className="pg-td">
+                      <span style={{ color: '#4a5568' }}>{o.state || '—'}</span>
+                    </td>
+
+                    {/* Email — always visible */}
+                    <td className="pg-td pg-td--overflow">
+                      <span
+                        className="pg-td__ellipsis"
+                        title={o.emailAddress}
+                        style={{ color: o.emailAddress ? '#4a5568' : '#c0c0d8' }}
+                      >
                         {o.emailAddress || '—'}
                       </span>
                     </td>
+
+                    {/* Actions */}
                     <td className="pg-td">
                       <div className="pg-action-wrap">
-                        <button className="pg-btn-edit" onClick={() => handleEdit(o)} title="Edit"><Edit2 size={13} /></button>
-                        <button className="pg-btn-view" onClick={() => handleView(o)} title="View"><Eye size={13} /></button>
+                        <button className="pg-btn-edit" onClick={() => handleEdit(o)} title="Edit">
+                          <Edit2 size={13} />
+                        </button>
+                        <button className="pg-btn-view" onClick={() => handleView(o)} title="View">
+                          <Eye size={13} />
+                        </button>
                       </div>
                     </td>
+
                   </tr>
                 ))}
               </tbody>
@@ -523,29 +759,52 @@ export default function OwnerPage() {
           {/* Pagination */}
           <div className="pg-pagination">
             <div className="pg-pagination__left">
-              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}><ChevronsLeft size={13} /></button>
-              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}>
+                <ChevronsLeft size={13} />
+              </button>
+              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+                <ChevronLeft size={13} />
+              </button>
               {pageNums.map((p, i) =>
                 p === '…'
                   ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
-                  : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>
+                  : <button
+                      key={p}
+                      className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`}
+                      onClick={() => setPage(p)}
+                    >{p}</button>
               )}
-              <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight size={13} /></button>
-              <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}><ChevronsRight size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
+                <ChevronRight size={13} />
+              </button>
+              <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}>
+                <ChevronsRight size={13} />
+              </button>
             </div>
             <div className="pg-pagination__right">
-              <select className="pg-pagesize-select" value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}>
+              <select
+                className="pg-pagesize-select"
+                value={pageSize}
+                onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
+              >
                 {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
               </select>
               <span className="pg-pagination__text">Items per page</span>
-              <span className="pg-pagination__text">{page} of {totalPages} pages ({sorted.length} items)</span>
+              <span className="pg-pagination__text">
+                {page} of {totalPages} pages ({sorted.length} items)
+              </span>
             </div>
           </div>
+
         </div>
       </div>
 
       {showModal && (
-        <OwnerModal onClose={closeModal} onSave={editOwner ? handleSave : handleAdd} editData={editOwner} />
+        <OwnerModal
+          onClose={closeModal}
+          onSaved={handleSaved}
+          editData={editOwner}
+        />
       )}
       {viewOwner && (
         <ViewModal owner={viewOwner} onClose={closeView} onEdit={handleEdit} />

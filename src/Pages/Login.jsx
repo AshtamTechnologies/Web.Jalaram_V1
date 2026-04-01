@@ -124,51 +124,55 @@ export default function Login({ onLogin, onNavigate }) {
     if (Object.keys(errs).length) { setErrors(errs); return; }
 
     setLoading(true);
+    setErrors({});
+
     try {
+      // apiService.loginUser now throws if:
+      //   • the HTTP status is non-2xx (wrong credentials → 401/400)
+      //   • the response has no valid JWT token
+      //   • the JWT is already expired
+      // So if we reach the lines below, the login is genuinely successful.
       const response = await apiService.loginUser(formData);
 
-      // forced password change
+      // forced password change — apiService returns early without storing tokens
       if (response.forcePasswordChange === true) {
-        setChangeData({ email: formData.email, userId: response.userId, resetToken: '', newPassword: '', confirmPassword: '' });
+        setChangeData({
+          email:           formData.email,
+          userId:          response.userId,
+          resetToken:      '',
+          newPassword:     '',
+          confirmPassword: '',
+        });
         setChangeStep(2);
         setForceChange(true);
         setLoading(false);
         return;
       }
 
-      // extract userId
-      let userId = response.userId
-        || response.user?.id || response.user?.userId
-        || response.userData?.id;
-      if (!userId && (response.accessToken || response.token)) {
-        const d = decodeJWT(response.accessToken || response.token);
-        userId = d?.nameid || d?.sub || d?.userId || d?.id;
-      }
-      if (userId) localStorage.setItem('userId', String(userId));
-
-      if (response.accessToken) localStorage.setItem('authToken', response.accessToken);
-      else if (response.token) localStorage.setItem('authToken', response.token);
-      if (response.refreshToken) localStorage.setItem('refreshToken', response.refreshToken);
-      localStorage.setItem('isLoggedIn', 'true');
-      localStorage.setItem('userData', JSON.stringify(response));
-
-      const roleId = response.roleId;
+      // Role-based navigation — localStorage is already set by apiService
+      const roleId = response.roleId || response.user?.roleId;
       if (roleId === 1 || roleId === '1') {
-        localStorage.setItem('userRole', 'admin');
-        localStorage.setItem('roleId', '1');
         onNavigate('admin');
       } else {
-        localStorage.setItem('userRole', 'user');
-        localStorage.setItem('roleId', String(roleId || 2));
         onLogin && onLogin();
       }
     } catch (error) {
+      // Surface the error message from the API (e.g. "Invalid credentials")
+      // or fall back to generic messages based on what went wrong.
       if (error.response) {
-        setErrors({ submit: error.response.data?.message || error.response.data?.error || 'Invalid email or password' });
+        const msg =
+          error.response.data?.message ||
+          error.response.data?.error   ||
+          (error.response.status === 401 ? 'Invalid email or password.' : null) ||
+          (error.response.status === 400 ? 'Invalid request. Check your details.' : null) ||
+          'Login failed. Please try again.';
+        setErrors({ submit: msg });
       } else if (error.request) {
+        // Request was made but no response received (network error / server down)
         setErrors({ submit: 'Network error. Please check your connection.' });
       } else {
-        setErrors({ submit: 'Login failed. Please try again.' });
+        // Something else went wrong (e.g. our own token validation logic)
+        setErrors({ submit: error.message || 'Login failed. Please try again.' });
       }
     } finally {
       setLoading(false);

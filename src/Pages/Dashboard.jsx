@@ -3,7 +3,8 @@ import {
   LayoutDashboard, Users, CalendarCheck, LogOut,
   Menu, X, ChevronDown, RefreshCw, DollarSign,
   Bell, Search, TrendingUp, ArrowUpRight,
-  MapPin, CreditCard, Layers, TrendingDown, UserCircle
+  MapPin, CreditCard, Layers, TrendingDown, UserCircle,
+  ChevronRight, Receipt, FileText, PlusSquare
 } from 'lucide-react';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -11,9 +12,11 @@ import {
 } from 'recharts';
 import './Common1.css';
 
-// ── Owner page — lives in its own file ──
 import OwnerPage from './Owner';
-import SitePage from './Site.jsx'
+import SitePage from './Site.jsx';
+import Hoarding from './Hoarding.jsx';
+import Hoardingexpense from './Hoardingexpense.jsx'
+import LandContract from './LandContract.jsx'
 
 /* ─────────────────────────────────────
    MOCK DATA
@@ -28,34 +31,53 @@ const MONTHLY_REVENUE = [
 ];
 
 const BOOKING_STATUS = [
-  { name: 'Active',  value: 62, color: '#049edf' },
+  { name: 'Active', value: 62, color: '#049edf' },
   { name: 'Expired', value: 24, color: '#e84040' },
   { name: 'Pending', value: 14, color: '#f59e0b' },
 ];
 
 const RECENT_BOOKINGS = [
-  { id: '#BK-1041', client: 'Mehta Enterprises',  site: 'NH-48 Ahmedabad',  duration: '30 days', amount: '₹42,000', statusId: 1 },
-  { id: '#BK-1040', client: 'Shah Motors',         site: 'SG Highway, Sola', duration: '15 days', amount: '₹18,500', statusId: 3 },
-  { id: '#BK-1039', client: 'Patel Jewellers',     site: 'Manek Chowk',      duration: '60 days', amount: '₹73,000', statusId: 1 },
-  { id: '#BK-1038', client: 'NeoMart Retail',      site: 'Vastrapur Lake',   duration: '30 days', amount: '₹39,000', statusId: 2 },
-  { id: '#BK-1037', client: 'Desai Constructions', site: 'Ring Road West',   duration: '45 days', amount: '₹55,500', statusId: 1 },
+  { id: '#BK-1041', client: 'Mehta Enterprises', site: 'NH-48 Ahmedabad', duration: '30 days', amount: '₹42,000', statusId: 1 },
+  { id: '#BK-1040', client: 'Shah Motors', site: 'SG Highway, Sola', duration: '15 days', amount: '₹18,500', statusId: 3 },
+  { id: '#BK-1039', client: 'Patel Jewellers', site: 'Manek Chowk', duration: '60 days', amount: '₹73,000', statusId: 1 },
+  { id: '#BK-1038', client: 'NeoMart Retail', site: 'Vastrapur Lake', duration: '30 days', amount: '₹39,000', statusId: 2 },
+  { id: '#BK-1037', client: 'Desai Constructions', site: 'Ring Road West', duration: '45 days', amount: '₹55,500', statusId: 1 },
 ];
 
 const STATUS_STYLE = {
-  1: { bg: '#e8faf3', color: '#1a9e6e', label: 'Active'  },
+  1: { bg: '#e8faf3', color: '#1a9e6e', label: 'Active' },
   3: { bg: '#fff8e1', color: '#e08a00', label: 'Pending' },
   2: { bg: '#ffeaea', color: '#e84040', label: 'Expired' },
 };
 
+/* ─────────────────────────────────────
+   MENU
+───────────────────────────────────── */
 const MENU = [
-  { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', badge: null },
-  { id: 'hoardings', icon: Layers,          label: 'Hoardings', badge: null },
-  { id: 'bookings',  icon: CalendarCheck,   label: 'Bookings',  badge: null  },
-  { id: 'clients',   icon: Users,           label: 'Clients',   badge: null },
-  { id: 'owners',    icon: UserCircle,      label: 'Owners',    badge: null },
-  { id: 'payments',  icon: CreditCard,      label: 'Payments',  badge: null  },
-  { id: 'sites',     icon: MapPin,          label: 'Sites',     badge: null },
+  { id: 'dashboard',       icon: LayoutDashboard, label: 'Dashboard',       badge: null },
+  {
+    id: 'hoardings', icon: Layers, label: 'Hoardings', badge: null,
+    children: [
+      { id: 'new-hoarding',     icon: PlusSquare, label: 'New Hoarding'     },
+      { id: 'hoarding-expense', icon: Receipt,    label: 'Hoarding Expense' },
+    ],
+  },
+  { id: 'bookings',        icon: CalendarCheck,   label: 'Bookings',        badge: null },
+  { id: 'sites',           icon: MapPin,          label: 'Sites',           badge: null },
+  { id: 'land-contract',   icon: FileText,        label: 'Land Contract',   badge: null },
+  { id: 'clients',         icon: Users,           label: 'Clients',         badge: null },
+  { id: 'owners',          icon: UserCircle,      label: 'Owners',          badge: null },
+  { id: 'payments',        icon: CreditCard,      label: 'Payments',        badge: null },
 ];
+
+const CHILD_TO_PARENT = {};
+MENU.forEach(item => {
+  item.children?.forEach(child => {
+    CHILD_TO_PARENT[child.id] = item.id;
+  });
+});
+
+const PARENT_IDS = MENU.filter(item => item.children?.length).map(item => item.id);
 
 /* ─────────────── hook ─────────────── */
 function useWindowWidth() {
@@ -72,14 +94,24 @@ function useWindowWidth() {
    MAIN COMPONENT
 ═══════════════════════════════════════════ */
 export default function Dashboard({ onLogout }) {
-  const [tab,        setTab]        = useState(() => sessionStorage.getItem('dashTab') || 'dashboard');
+  const [tab, setTab] = useState(() => sessionStorage.getItem('dashTab') || 'dashboard');
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [dropOpen,   setDropOpen]   = useState(false);
+  const [dropOpen, setDropOpen]     = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [adminName,  setAdminName]  = useState('Admin');
+  const [adminName, setAdminName]   = useState('Admin');
 
-  const dropRef  = useRef(null);
-  const width    = useWindowWidth();
+  const [expandedMenus, setExpandedMenus] = useState(() => {
+    const saved = sessionStorage.getItem('dashTab') || 'dashboard';
+    const initial = {};
+    PARENT_IDS.forEach(parentId => {
+      const children = MENU.find(m => m.id === parentId)?.children?.map(c => c.id) ?? [];
+      initial[parentId] = children.includes(saved);
+    });
+    return initial;
+  });
+
+  const dropRef = useRef(null);
+  const width   = useWindowWidth();
   const isMobile = width < 768;
 
   useEffect(() => {
@@ -99,6 +131,28 @@ export default function Dashboard({ onLogout }) {
     setTab(id);
     sessionStorage.setItem('dashTab', id);
     setMobileMenu(false);
+    const ownerParent = CHILD_TO_PARENT[id] ?? null;
+    setExpandedMenus(prev => {
+      const next = {};
+      PARENT_IDS.forEach(parentId => {
+        next[parentId] = parentId === ownerParent ? true : false;
+      });
+      return next;
+    });
+  };
+
+  const handleParentClick = (item) => {
+    if (item.children?.length) {
+      setExpandedMenus(prev => {
+        const next = {};
+        PARENT_IDS.forEach(parentId => {
+          next[parentId] = parentId === item.id ? !prev[item.id] : false;
+        });
+        return next;
+      });
+    } else {
+      changeTab(item.id);
+    }
   };
 
   const handleLogout = () => {
@@ -112,6 +166,9 @@ export default function Dashboard({ onLogout }) {
     await new Promise(r => setTimeout(r, 900));
     setRefreshing(false);
   };
+
+  const isParentActive = (item) =>
+    item.children?.some(c => c.id === tab) ?? false;
 
   /* ══════════════════════════════════════
      SIDEBAR INNER
@@ -131,36 +188,108 @@ export default function Dashboard({ onLogout }) {
       <div className="sidebar-section-label">Main Menu</div>
 
       <nav className="sidebar-nav">
-        {MENU.map(({ id, icon: Icon, label, badge }) => {
-          const active = tab === id;
+        {MENU.map((item) => {
+          const { id, icon: Icon, label, badge, children } = item;
+          const hasChildren  = children?.length > 0;
+          const parentActive = isParentActive(item);
+          const isSelfActive = tab === id;                    // non-parent direct active
+          const isExpanded   = !!expandedMenus[id];
+
+          /* ── styles driven by active state ── */
+          const parentBtnStyle = (parentActive || isSelfActive) ? {
+            background:  'rgba(4,158,223,0.13)',
+            color:       '#049edf',
+            borderLeft:  '3px solid #049edf',
+            paddingLeft: 'calc(1rem - 3px)',   // compensate for border
+            fontWeight:  700,
+          } : {
+            borderLeft: '3px solid transparent',
+            paddingLeft: 'calc(1rem - 3px)',
+          };
+
           return (
-            <button
-              key={id}
-              onClick={() => changeTab(id)}
-              className={`nav-btn${active ? ' active' : ''}`}
-            >
-              <div className="nav-btn-icon"><Icon size={17} /></div>
-              <span className="nav-btn-label">{label}</span>
-              {badge && <span className="nav-badge">{badge}</span>}
-            </button>
+            <div key={id}>
+              <button
+                onClick={() => handleParentClick(item)}
+                className="nav-btn"
+                style={parentBtnStyle}
+              >
+                <div
+                  className="nav-btn-icon"
+                  style={{ color: (parentActive || isSelfActive) ? '#049edf' : undefined }}
+                >
+                  <Icon size={17} />
+                </div>
+                <span className="nav-btn-label">{label}</span>
+                {badge && <span className="nav-badge">{badge}</span>}
+
+                {hasChildren && (
+                  <ChevronRight
+                    size={13}
+                    style={{
+                      transform:  isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                      transition: 'transform 0.22s cubic-bezier(0.22,1,0.36,1)',
+                      color:      parentActive ? '#049edf' : '#c0c0d8',
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
+              </button>
+
+              {/* Sub-menu */}
+              {hasChildren && (
+                <div
+                  className="nav-submenu"
+                  style={{
+                    maxHeight:  isExpanded ? `${children.length * 48}px` : '0px',
+                    overflow:   'hidden',
+                    transition: 'max-height 0.28s cubic-bezier(0.22,1,0.36,1)',
+                  }}
+                >
+                  {children.map(({ id: cid, icon: CIcon, label: clabel }) => {
+                    const isChildActive = tab === cid;
+
+                    const childBtnStyle = isChildActive ? {
+                      background:  'rgba(4,158,223,0.10)',
+                      color:       '#049edf',
+                      fontWeight:  700,
+                    } : {};
+
+                    return (
+                      <button
+                        key={cid}
+                        onClick={() => changeTab(cid)}
+                        className="nav-sub-btn"
+                        style={childBtnStyle}
+                      >
+                        {/* Active indicator bar */}
+                        <div
+                          className="nav-sub-indicator"
+                          style={{
+                            background:  isChildActive ? '#049edf' : 'transparent',
+                            width:       '3px',
+                            borderRadius: '2px',
+                            alignSelf:   'stretch',
+                            flexShrink:  0,
+                            transition:  'background 0.2s',
+                          }}
+                        />
+                        <div
+                          className="nav-btn-icon nav-btn-icon--sm"
+                          style={{ color: isChildActive ? '#049edf' : undefined }}
+                        >
+                          <CIcon size={14} />
+                        </div>
+                        <span className="nav-btn-label">{clabel}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           );
         })}
       </nav>
-
-      {/* <div className="sidebar-profile">
-        <div className="sidebar-profile-avatar">{adminName.charAt(0).toUpperCase()}</div>
-        <div style={{ minWidth: 0 }}>
-          <div className="sidebar-profile-name">{adminName}</div>
-          <div className="sidebar-profile-role">Administrator</div>
-        </div>
-      </div>
-
-      <div className="sidebar-logout-wrap">
-        <button onClick={handleLogout} className="sidebar-logout-btn">
-          <div className="sidebar-logout-icon"><LogOut size={16} color="#e84040" /></div>
-          <span>Logout</span>
-        </button>
-      </div> */}
     </div>
   );
 
@@ -180,10 +309,10 @@ export default function Dashboard({ onLogout }) {
   ══════════════════════════════════════ */
   const DashboardPage = () => {
     const STATS = [
-      { title: 'Total Hoardings',  value: '148',    sub: '+6 added this month',   icon: Layers,        color: '#049edf', bg: 'rgba(4,158,223,0.1)'  },
-      { title: 'Active Bookings',  value: '62',     sub: '14 expiring this week', icon: CalendarCheck, color: '#1a9e6e', bg: 'rgba(26,158,110,0.1)' },
-      { title: 'Expired Bookings', value: '24',     sub: '8 pending renewal',     icon: TrendingDown,  color: '#e84040', bg: 'rgba(232,64,64,0.1)'  },
-      { title: 'Total Revenue',    value: '₹16.1L', sub: '+23% vs last month',    icon: DollarSign,    color: '#6c63ff', bg: 'rgba(108,99,255,0.1)' },
+      { title: 'Total Hoardings', value: '148', sub: '+6 added this month',  icon: Layers,       color: '#049edf', bg: 'rgba(4,158,223,0.1)'   },
+      { title: 'Active Bookings', value: '62',  sub: '14 expiring this week', icon: CalendarCheck, color: '#1a9e6e', bg: 'rgba(26,158,110,0.1)'  },
+      { title: 'Expired Bookings',value: '24',  sub: '8 pending renewal',    icon: TrendingDown,  color: '#e84040', bg: 'rgba(232,64,64,0.1)'   },
+      { title: 'Total Revenue',   value: '₹16.1L', sub: '+23% vs last month',icon: DollarSign,   color: '#6c63ff', bg: 'rgba(108,99,255,0.1)'  },
     ];
 
     return (
@@ -321,19 +450,18 @@ export default function Dashboard({ onLogout }) {
   /* ── Route ── */
   const renderContent = () => {
     switch (tab) {
-      case 'hoardings': return <Placeholder title="Hoardings" Icon={Layers}        />;
-      case 'bookings':  return <Placeholder title="Bookings"  Icon={CalendarCheck} />;
-      case 'clients':   return <Placeholder title="Clients"   Icon={Users}         />;
-      case 'owners':    return <OwnerPage />;   {/* ← imported from Owner.jsx */}
-      case 'payments':  return <Placeholder title="Payments"  Icon={CreditCard}    />;
-      case 'sites':     return <SitePage/>;
-      default:          return <DashboardPage />;
+      case 'new-hoarding':     return <Hoarding />;
+      case 'hoarding-expense': return <Hoardingexpense />;
+      case 'land-contract':    return <LandContract />;
+      case 'bookings':         return <Placeholder title="Bookings"  Icon={CalendarCheck} />;
+      case 'clients':          return <Placeholder title="Clients"   Icon={Users}         />;
+      case 'owners':           return <OwnerPage />;
+      case 'payments':         return <Placeholder title="Payments"  Icon={CreditCard}    />;
+      case 'sites':            return <SitePage />;
+      default:                 return <DashboardPage />;
     }
   };
 
-  /* ══════════════════════════════════════
-     RENDER
-  ══════════════════════════════════════ */
   return (
     <div className="dashboard-root">
       <div className="bg-blobs" aria-hidden="true">
@@ -365,14 +493,8 @@ export default function Dashboard({ onLogout }) {
                 {mobileMenu ? <X size={19} /> : <Menu size={19} />}
               </button>
             )}
-            {/* <div className="search-box">
-              <Search size={13} color="#b0b0c4" style={{ flexShrink: 0 }} />
-              <input placeholder="Search hoardings, bookings…" />
-            </div> */}
           </div>
-
           <div className="topbar-right">
-
             <div ref={dropRef} style={{ position: 'relative' }}>
               <button className="profile-btn" onClick={() => setDropOpen(v => !v)}>
                 <div className="profile-avatar">{adminName.charAt(0).toUpperCase()}</div>
@@ -382,13 +504,8 @@ export default function Dashboard({ onLogout }) {
                   style={{ transform: dropOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', flexShrink: 0 }}
                 />
               </button>
-
               {dropOpen && (
                 <div className="profile-dropdown">
-                  {/* <div className="dropdown-header">
-                    <div className="dropdown-name">{adminName}</div>
-                    <div className="dropdown-role">Administrator</div>
-                  </div> */}
                   <button className="dropdown-logout" onClick={handleLogout}>
                     <LogOut size={14} /> Logout
                   </button>
