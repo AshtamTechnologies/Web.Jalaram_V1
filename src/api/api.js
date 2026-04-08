@@ -26,7 +26,19 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
+// Safely convert any effdt value to a valid ISO string
+// Handles: already ISO ("2024-01-15T00:00:00.000Z"), date-only ("2024-01-15"), null/undefined
+function toSafeISO(effdt) {
+  if (!effdt) return new Date().toISOString();
+  // Already a full ISO string — return as-is
+  if (typeof effdt === 'string' && effdt.includes('T')) {
+    const d = new Date(effdt);
+    return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+  }
+  // Date-only string "YYYY-MM-DD"
+  const d = new Date(effdt + 'T00:00:00.000Z');
+  return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+} 
 // ── Helper: decode JWT to extract claims ────────────────────
 const decodeJWT = (token) => {
   try {
@@ -49,6 +61,7 @@ const isValidJWT = (token) => {
 // ========================================
 // API SERVICE
 // ========================================
+const statusToNum = (s) => (s === 'Active' ? 1 : 0);
 export const apiService = {
 
   // ─────────────────────────────────────
@@ -58,12 +71,10 @@ export const apiService = {
   loginUser: async ({ email, password }) => {
     const response = await api.post('/Login/login', { email, password });
 
-    // ── Forced password change — return early, don't store anything ──
     if (response.forcePasswordChange === true) {
       return response;
     }
 
-    // ── Strict token validation ──────────────────────────────────────
     const rawToken = response.token || response.accessToken;
 
     if (!isValidJWT(rawToken)) {
@@ -75,7 +86,6 @@ export const apiService = {
 
     const token = rawToken.replace(/^Bearer\s+/i, '').trim();
 
-    // ── Decode and sanity-check the token payload ────────────────────
     const decoded = decodeJWT(token);
     if (!decoded) {
       localStorage.clear();
@@ -84,7 +94,6 @@ export const apiService = {
       throw err;
     }
 
-    // ── Verify the token is not already expired ──────────────────────
     if (decoded.exp && decoded.exp * 1000 < Date.now()) {
       localStorage.clear();
       const err = new Error('Authentication failed: token is already expired.');
@@ -92,7 +101,6 @@ export const apiService = {
       throw err;
     }
 
-    // ── All checks passed — persist auth data ────────────────────────
     localStorage.setItem('authToken', token);
 
     if (response.refreshToken) {
@@ -106,10 +114,10 @@ export const apiService = {
     if (userId) localStorage.setItem('userId', String(userId));
 
     const roleId = response.roleId || response.user?.roleId || 2;
-    localStorage.setItem('roleId',   String(roleId));
+    localStorage.setItem('roleId', String(roleId));
     localStorage.setItem('userRole', roleId === 1 || roleId === '1' ? 'admin' : 'user');
 
-    localStorage.setItem('userData',   JSON.stringify(response.user || response));
+    localStorage.setItem('userData', JSON.stringify(response.user || response));
     localStorage.setItem('isLoggedIn', 'true');
 
     return response;
@@ -120,7 +128,7 @@ export const apiService = {
 
   resetPassword: (data) =>
     api.post('/Login/reset-password', {
-      email:       data.email,
+      email: data.email,
       newPassword: data.newPassword,
     }),
 
@@ -131,10 +139,6 @@ export const apiService = {
 
   // ─────────────────────────────────────
   // OWNERS
-  // API field names confirmed from Swagger:
-  //   ownerID (PK), ownerName, alternateContactName,
-  //   ownerAddress, phone1, phone2, city, district,
-  //   state, country, emailAddress
   // ─────────────────────────────────────
 
   getAllOwners: () =>
@@ -145,31 +149,31 @@ export const apiService = {
 
   createOwner: (ownerData) =>
     api.post('/Owner', {
-      ownerName:            ownerData.ownerName,
+      ownerName: ownerData.ownerName,
       alternateContactName: ownerData.alternateContactName,
-      ownerAddress:         ownerData.ownerAddress,
-      phone1:               ownerData.phone1,
-      phone2:               ownerData.phone2,
-      city:                 ownerData.city,
-      district:             ownerData.district,
-      state:                ownerData.state,
-      country:              ownerData.country,
-      emailAddress:         ownerData.emailAddress,
+      ownerAddress: ownerData.ownerAddress,
+      phone1: ownerData.phone1,
+      phone2: ownerData.phone2,
+      city: ownerData.city,
+      district: ownerData.district,
+      state: ownerData.state,
+      country: ownerData.country,
+      emailAddress: ownerData.emailAddress,
     }),
 
   updateOwner: (ownerId, ownerData) =>
     api.put(`/Owner/${ownerId}`, {
-      ownerID:              Number(ownerId),
-      ownerName:            ownerData.ownerName,
+      ownerID: Number(ownerId),
+      ownerName: ownerData.ownerName,
       alternateContactName: ownerData.alternateContactName,
-      ownerAddress:         ownerData.ownerAddress,
-      phone1:               ownerData.phone1,
-      phone2:               ownerData.phone2,
-      city:                 ownerData.city,
-      district:             ownerData.district,
-      state:                ownerData.state,
-      country:              ownerData.country,
-      emailAddress:         ownerData.emailAddress,
+      ownerAddress: ownerData.ownerAddress,
+      phone1: ownerData.phone1,
+      phone2: ownerData.phone2,
+      city: ownerData.city,
+      district: ownerData.district,
+      state: ownerData.state,
+      country: ownerData.country,
+      emailAddress: ownerData.emailAddress,
     }),
 
   deleteOwner: (ownerId) =>
@@ -177,10 +181,6 @@ export const apiService = {
 
   // ─────────────────────────────────────
   // SITES
-  // API body schema (confirmed):
-  //   siteID (PK), addressLine1, addressLine2,
-  //   addressLine3, landmark, city, district,
-  //   siteType, country, ownerID (FK → Owner)
   // ─────────────────────────────────────
 
   getAllSites: () =>
@@ -191,30 +191,32 @@ export const apiService = {
 
   createSite: (siteData) =>
     api.post('/Site', {
-      siteID:       0,
+      siteID: 0,
       addressLine1: siteData.addressLine1,
-      addressLine2: siteData.addressLine2  || '',
-      addressLine3: siteData.addressLine3  || '',
-      landmark:     siteData.landmark      || '',
-      city:         siteData.city,
-      district:     siteData.district,
-      siteType:     siteData.siteType      || '',
-      country:      siteData.country,
-      ownerID:      Number(siteData.ownerID),
+      addressLine2: siteData.addressLine2 || '',
+      addressLine3: siteData.addressLine3 || '',
+      landmark: siteData.landmark || '',
+      city: siteData.city,
+      district: siteData.district,
+      siteType: siteData.siteType || '',
+      country: siteData.country,
+      status: statusToNum(siteData.status),   // ← ADD
+      ownerID: Number(siteData.ownerID),
     }),
 
   updateSite: (siteId, siteData) =>
     api.put(`/Site/${siteId}`, {
-      siteID:       Number(siteId),
+      siteID: Number(siteId),
       addressLine1: siteData.addressLine1,
-      addressLine2: siteData.addressLine2  || '',
-      addressLine3: siteData.addressLine3  || '',
-      landmark:     siteData.landmark      || '',
-      city:         siteData.city,
-      district:     siteData.district,
-      siteType:     siteData.siteType      || '',
-      country:      siteData.country,
-      ownerID:      Number(siteData.ownerID),
+      addressLine2: siteData.addressLine2 || '',
+      addressLine3: siteData.addressLine3 || '',
+      landmark: siteData.landmark || '',
+      city: siteData.city,
+      district: siteData.district,
+      siteType: siteData.siteType || '',
+      country: siteData.country,
+      status: statusToNum(siteData.status),   // ← ADD
+      ownerID: Number(siteData.ownerID),
     }),
 
   deleteSite: (siteId) =>
@@ -222,9 +224,6 @@ export const apiService = {
 
   // ─────────────────────────────────────
   // HOARDING TYPES
-  // Returns: [{ hoardingTypeID, hoardingTypeName, ... }, ...]
-  // Used to dynamically populate the "Hoarding Type" dropdown
-  // instead of hardcoded HOARDING_TYPE_LABELS / OPTIONS constants
   // ─────────────────────────────────────
 
   getAllHoardingTypes: () =>
@@ -242,95 +241,218 @@ export const apiService = {
 
   createHoarding: (data) =>
     api.post('/Hoarding', {
-      hoardingID:   0,
-      effdt:        data.effdt
-                      ? new Date(data.effdt + 'T00:00:00.000Z').toISOString()
-                      : new Date().toISOString(),
+      hoardingID: 0,
+      effdt: data.effdt
+        ? new Date(data.effdt + 'T00:00:00.000Z').toISOString()
+        : new Date().toISOString(),
       hoardingCode: data.hoardingCode,
-      material:     data.material,
+      material: data.material,
       hoardingType: Number(data.hoardingType),
-      status:       data.status,
-      monthlyRent:  Number(data.monthlyRent),
-      width:        Number(data.width),
-      height:       Number(data.height),
-      siteID:       Number(data.siteID),
+      status: data.status,
+      monthlyRent: Number(data.monthlyRent),
+      width: Number(data.width),
+      height: Number(data.height),
+      siteID: Number(data.siteID),
     }),
 
   addHoardingEffdt: (hoardingCode, data) =>
     api.post('/Hoarding', {
-      hoardingID:   0,
-      effdt:        data.effdt
-                      ? new Date(data.effdt + 'T00:00:00.000Z').toISOString()
-                      : new Date().toISOString(),
+      hoardingID: 0,
+      effdt: data.effdt
+        ? new Date(data.effdt + 'T00:00:00.000Z').toISOString()
+        : new Date().toISOString(),
       hoardingCode: hoardingCode,
-      material:     data.material,
+      material: data.material,
       hoardingType: Number(data.hoardingType),
-      status:       data.status,
-      monthlyRent:  Number(data.monthlyRent),
-      width:        Number(data.width),
-      height:       Number(data.height),
-      siteID:       Number(data.siteID),
+      status: data.status,
+      monthlyRent: Number(data.monthlyRent),
+      width: Number(data.width),
+      height: Number(data.height),
+      siteID: Number(data.siteID),
     }),
 
-  updateHoarding: (hoardingID, data) =>
-    api.put(`/Hoarding/${hoardingID}`, {
-      hoardingID:   Number(hoardingID),
-      effdt:        data.effdt
-                      ? new Date(data.effdt + 'T00:00:00.000Z').toISOString()
-                      : new Date().toISOString(),
-      hoardingCode: data.hoardingCode,
-      material:     data.material,
-      hoardingType: Number(data.hoardingType),
-      status:       data.status,
-      monthlyRent:  Number(data.monthlyRent),
-      width:        Number(data.width),
-      height:       Number(data.height),
-      siteID:       Number(data.siteID),
-    }),
-
+updateHoarding: (hoardingID, data) =>
+  api.put(`/Hoarding/${hoardingID}`, {
+    hoardingID: Number(hoardingID),
+    effdt: toSafeISO(data.effdt),   // ← use helper
+    hoardingCode: data.hoardingCode,
+    material: data.material,
+    hoardingType: Number(data.hoardingType),
+    status: data.status,
+    monthlyRent: Number(data.monthlyRent),
+    width: Number(data.width),
+    height: Number(data.height),
+    siteID: Number(data.siteID),
+  }),
   deleteHoarding: (hoardingID) =>
     api.delete(`/Hoarding/${hoardingID}`),
 
   // ─────────────────────────────────────
   // HOARDING EXPENSES
+
   // ─────────────────────────────────────
 
+  // GET /api/HoardingExpense — used to populate the main table
   getAllExpenses: () =>
     api.get('/HoardingExpense'),
 
+  // GET /api/HoardingExpense/{expenseID}
   getExpenseById: (expenseID) =>
     api.get(`/HoardingExpense/${expenseID}`),
 
+  // POST /api/HoardingExpense
+  // Body: { expenseID: 0, hoardingID, expenseDate (ISO), expenseType, expenseDTL, amount, paidBy, comments }
   createExpense: (data) =>
     api.post('/HoardingExpense', {
-      expenseID:   0,
-      hoardingID:  Number(data.hoardingID),
+      expenseID: 0,
+      hoardingID: Number(data.hoardingID),
       expenseDate: data.expenseDate
-                     ? new Date(data.expenseDate).toISOString()
-                     : new Date().toISOString(),
+        ? new Date(data.expenseDate).toISOString()
+        : new Date().toISOString(),
       expenseType: data.expenseType,
-      expenseDTL:  data.expenseDTL,
-      amount:      Number(data.amount),
-      paidBy:      data.paidBy,
-      comments:    data.comments || '',
+      expenseDTL: data.expenseDTL,
+      amount: Number(data.amount),
+      paidBy: data.paidBy,
+      comments: data.comments || '',
     }),
 
+  // PUT /api/HoardingExpense/{expenseID}
+  // Body: { expenseID, hoardingID, expenseDate (ISO), expenseType, expenseDTL, amount, paidBy, comments }
   updateExpense: (expenseID, data) =>
     api.put(`/HoardingExpense/${expenseID}`, {
-      expenseID:   Number(expenseID),
-      hoardingID:  Number(data.hoardingID),
+      expenseID: Number(expenseID),
+      hoardingID: Number(data.hoardingID),
       expenseDate: data.expenseDate
-                     ? new Date(data.expenseDate).toISOString()
-                     : new Date().toISOString(),
+        ? new Date(data.expenseDate).toISOString()
+        : new Date().toISOString(),
       expenseType: data.expenseType,
-      expenseDTL:  data.expenseDTL,
-      amount:      Number(data.amount),
-      paidBy:      data.paidBy,
-      comments:    data.comments || '',
+      expenseDTL: data.expenseDTL,
+      amount: Number(data.amount),
+      paidBy: data.paidBy,
+      comments: data.comments || '',
     }),
 
+  // DELETE /api/HoardingExpense/{expenseID}
   deleteExpense: (expenseID) =>
     api.delete(`/HoardingExpense/${expenseID}`),
+
+  // ─────────────────────────────────────
+  // HOARDING PHOTOS
+  // ─────────────────────────────────────
+
+  // GET /api/HoardingPhoto/GetByHoardingID/{hoardingID}
+  // Returns [] silently on 404 (no photos yet)
+  getPhotosByHoardingID: async (hoardingID) => {
+    try {
+      return await api.get(`/HoardingPhoto/GetByHoardingID/${hoardingID}`);
+    } catch (err) {
+      if (err?.response?.status === 404) return [];
+      throw err;
+    }
+  },
+
+  // POST /api/HoardingPhoto — multipart/form-data
+  // POST /api/HoardingPhoto — multipart/form-data (used for both add AND replace)
+  uploadHoardingPhoto: (formData) =>
+    api.post('/HoardingPhoto', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+
+  // Replace = delete old + upload new
+  updateHoardingPhoto: async (formData) => {
+    const oldId = formData.get('hoardingPhotoID');
+    // Delete the old photo first
+    if (oldId && Number(oldId) > 0) {
+      await api.delete(`/HoardingPhoto/${oldId}`);
+    }
+    // Reset ID to 0 for fresh upload
+    formData.set('hoardingPhotoID', '0');
+    return api.post('/HoardingPhoto', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  // DELETE /api/HoardingPhoto/{hoardingPhotoID}
+  deleteHoardingPhoto: (hoardingPhotoID) =>
+    api.delete(`/HoardingPhoto/${hoardingPhotoID}`),
+
+
+  // ─────────────────────────────────────
+  // LAND CONTRACTS
+  // ─────────────────────────────────────
+getAllPaymentFreqs: () =>
+  api.get('/PaymentFreq/GetAll'),
+
+  getAllLandContracts: () =>
+    api.get('/LandContract/GetAll'),
+
+  createLandContract: (data) => {
+    const fd = new FormData();
+    fd.append('landContractID', 0);
+    fd.append('ownerID', data.ownerID);
+    fd.append('hoardingID', data.hoardingID);
+    fd.append('startDate', data.startDate);
+    fd.append('endDate', data.endDate);
+    fd.append('totalContractValue', data.totalContractValue);
+    fd.append('paymentFreqID', data.paymentFreqID);
+    fd.append('amountPerFreq', data.amountPerFreq);
+    if (data.advancePaid != null && data.advancePaid !== '')
+      fd.append('advancePaid', data.advancePaid);
+    fd.append('status', data.status);
+    fd.append('comments', data.comments || '');
+    fd.append('DocumentPath', data.landContractdocument instanceof File ? 'pending' : 'none');
+    if (data.landContractdocument instanceof File)
+      fd.append('landContractdocument', data.landContractdocument);
+    return api.post('/LandContract/Create', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+updateLandContract: async (data) => {
+  const fd = new FormData();
+  fd.append('landContractID',     data.landContractID);
+  fd.append('ownerID',            data.ownerID);
+  fd.append('hoardingID',         data.hoardingID);
+  fd.append('startDate',          data.startDate);
+  fd.append('endDate',            data.endDate);
+  fd.append('totalContractValue', data.totalContractValue);
+  fd.append('paymentFreqID',      data.paymentFreqID);
+  fd.append('amountPerFreq',      data.amountPerFreq);
+  if (data.advancePaid != null && data.advancePaid !== '')
+    fd.append('advancePaid', data.advancePaid);
+  fd.append('status',   data.status);
+  fd.append('comments', data.comments || '');
+
+  if (data.landContractdocument instanceof File) {
+    // User uploaded a new file — send it directly
+    fd.append('landContractdocument', data.landContractdocument);
+    fd.append('DocumentPath', 'pending');
+  } else if (typeof data.documentPath === 'string' && data.documentPath.trim()) {
+    // No new file — re-fetch existing document from URL and re-send
+    try {
+      const res  = await fetch(data.documentPath);
+      const blob = await res.blob();
+      const name = data.documentPath.split('/').pop() || 'document';
+      fd.append('landContractdocument', new File([blob], name, { type: blob.type }));
+      fd.append('DocumentPath', data.documentPath);
+    } catch {
+      fd.append('DocumentPath', data.documentPath);
+    }
+  } else {
+    fd.append('DocumentPath', 'none');
+  }
+
+  return api.put('/LandContract/Update', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+},
+
+  deleteLandContract: (landContractID) =>
+    api.delete(`/LandContract/Delete/${landContractID}`),
+
+
 };
+
+
 
 export default api;

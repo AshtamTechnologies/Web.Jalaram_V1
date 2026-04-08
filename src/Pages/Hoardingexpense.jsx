@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+import ReactDOM from 'react-dom';
 import {
   Plus, Search, X, AlertCircle, Check, Edit2,
   RefreshCw, Calendar,
   ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight,
   ChevronLeft, ChevronRight, MapPin, Loader2,
-  FileText, Eye, ArrowLeft,
+  FileText, ArrowLeft,
   Building2, Tag, MessageSquare, User, IndianRupee, Trash2,
 } from 'lucide-react';
 import { apiService } from '../api/api';
@@ -21,6 +22,8 @@ const EXPENSE_TYPE_OPTIONS = [
   'NUT - BOLT', 'WOODEN PATTI', 'ANGLE FOR SUPPORT',
 ];
 
+const EXPENSE_TYPE_COMBO_OPTIONS = EXPENSE_TYPE_OPTIONS.map(t => ({ value: t, label: t }));
+
 const EMPTY_ROW = {
   _rowId: '', expenseDate: '', expenseType: '',
   expenseDTL: '', amount: '', paidBy: '', comments: '',
@@ -29,11 +32,6 @@ const EMPTY_ROW = {
 /* ─────────────────────────────────────────
    HELPERS
 ───────────────────────────────────────── */
-function fmtDate(d) {
-  if (!d) return '—';
-  try { return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
-  catch { return d; }
-}
 function fmtCurrency(v) {
   if (v === '' || v == null) return '—';
   return '₹' + Number(v).toLocaleString('en-IN');
@@ -52,6 +50,49 @@ function getLatest(h) {
 }
 function makeRowId() {
   return `row_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+function toDateInputValue(isoStr) {
+  if (!isoStr) return '';
+  return isoStr.split('T')[0];
+}
+
+/* ═══════════════════════════════════════════════════════
+   PORTAL DROPDOWN  — escapes overflow / backdrop-filter
+═══════════════════════════════════════════════════════ */
+function PortalDropdown({ open, triggerRef, panelRef, children }) {
+  const [style, setStyle] = useState({ position: 'fixed', top: 0, left: 0, width: 0, zIndex: 99999 });
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const panelH     = panelRef.current?.offsetHeight || 260;
+      const spaceBelow = window.innerHeight - r.bottom;
+      const flipUp     = spaceBelow < panelH + 8 && r.top > panelH + 8;
+      setStyle({ position: 'fixed', top: flipUp ? r.top - panelH - 4 : r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); };
+  }, [open, triggerRef, panelRef]);
+
+  if (!open) return null;
+  return ReactDOM.createPortal(<div ref={panelRef} style={style}>{children}</div>, document.body);
+}
+
+function useOutsideClick(wrapRef, panelRef, open, onClose) {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      const inWrap  = wrapRef.current  && wrapRef.current.contains(e.target);
+      const inPanel = panelRef.current && panelRef.current.contains(e.target);
+      if (!inWrap && !inPanel) onClose();
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open, wrapRef, panelRef, onClose]);
 }
 
 /* ─────────────────────────────────────────
@@ -93,79 +134,204 @@ function FieldError({ msg }) {
   ) : null;
 }
 
+/* ═══════════════════════════════════════════
+   COMBO DROPDOWN  (portal-based)
+═══════════════════════════════════════════ */
+function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: Icon, options, searchable = false, emptyText = 'No options' }) {
+  const [open, setOpen]           = useState(false);
+  const [query, setQuery]         = useState('');
+  const [wasOpened, setWasOpened] = useState(false);
+  const wrapRef    = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef   = useRef(null);
+  const inputRef   = useRef(null);
+  const listRef    = useRef(null);
+
+  const close = useCallback(() => { setOpen(false); setQuery(''); if (wasOpened) { onBlur?.(); setWasOpened(false); } }, [wasOpened, onBlur]);
+  useOutsideClick(wrapRef, panelRef, open, close);
+
+  const selected = options.find(o => String(o.value) === String(value));
+  const filtered = searchable ? options.filter(o => o.label.toLowerCase().includes(query.toLowerCase())) : options;
+
+  const openDD = () => {
+    setOpen(true); setWasOpened(true); setQuery('');
+    setTimeout(() => { if (searchable) { inputRef.current?.focus(); return; } const items = listRef.current?.querySelectorAll('.pg-combo-option'); if (items?.length) { const ai = Array.from(items).findIndex(el => el.classList.contains('pg-combo-option--active')); (ai >= 0 ? items[ai] : items[0])?.focus(); } }, 0);
+  };
+  const select = (opt) => { onChange(opt.value); setOpen(false); setQuery(''); setWasOpened(false); };
+  const clear  = (e)   => { e.stopPropagation(); onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.(); };
+  const arrowNav = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx   = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') close();
+  };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef}>
+      <div ref={triggerRef} className={`pg-field-wrap pg-combo-trigger ${hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
+        onClick={openDD} tabIndex={0}
+        onKeyDown={e => { if (!open) { if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDD(); } } else arrowNav(e); }}>
+        {Icon && <Icon size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />}
+        <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`}>
+          {selected ? selected.label : placeholder}
+        </span>
+        {selected ? <X size={13} className="pg-combo-clear" onClick={clear} /> : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+      </div>
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static' }}>
+          {searchable && (
+            <div className="pg-combo-search">
+              <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+              <input ref={inputRef} className="pg-combo-search__input" placeholder="Search…" value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => { if (e.key === 'ArrowDown') { e.preventDefault(); listRef.current?.querySelectorAll('.pg-combo-option')?.[0]?.focus(); } else if (e.key === 'Escape') close(); }} />
+              {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+            </div>
+          )}
+          <div className="pg-combo-list" ref={listRef}>
+            {filtered.length === 0 ? <div className="pg-combo-empty">{emptyText}</div>
+              : filtered.map(opt => (
+                <div key={opt.value} className={`pg-combo-option${String(opt.value) === String(value) ? ' pg-combo-option--active' : ''}`}
+                  onClick={() => select(opt)} tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); } else arrowNav(e); }}>
+                  <span className="pg-combo-option__name">{opt.label}</span>
+                  {String(opt.value) === String(value) && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                </div>
+              ))}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   CELL COMBO DROPDOWN  (portal-based, table cells)
+═══════════════════════════════════════════ */
+function CellComboDropdown({ value, onChange, options, hasError, placeholder = 'Select…' }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef    = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef   = useRef(null);
+  const listRef    = useRef(null);
+
+  const close = useCallback(() => setOpen(false), []);
+  useOutsideClick(wrapRef, panelRef, open, close);
+
+  const selected = options.find(o => String(o.value) === String(value));
+  const openDD   = () => { setOpen(v => !v); setTimeout(() => { const items = listRef.current?.querySelectorAll('.exp-cell-combo-option'); if (items?.length) { const ai = Array.from(items).findIndex(el => el.classList.contains('exp-cell-combo-option--active')); (ai >= 0 ? items[ai] : items[0])?.focus(); } }, 0); };
+  const select   = (opt) => { onChange(opt.value); setOpen(false); };
+  const clear    = (e)   => { e.stopPropagation(); onChange(''); setOpen(false); };
+  const arrowNav = (e) => {
+    const items = listRef.current?.querySelectorAll('.exp-cell-combo-option');
+    const idx   = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') close();
+  };
+
+  return (
+    <div className="exp-cell-combo-wrap" ref={wrapRef}>
+      <div ref={triggerRef} className={`exp-cell-combo-trigger${hasError ? ' exp-cell-combo-trigger--err' : ''}`}
+        tabIndex={0} onClick={openDD}
+        onKeyDown={e => { if (!open) { if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDD(); } } else arrowNav(e); }}>
+        <span className={`exp-cell-combo-display${!selected ? ' exp-cell-combo-display--placeholder' : ''}`}>{selected ? selected.label : placeholder}</span>
+        {selected ? <X size={11} className="exp-cell-combo-clear" onClick={clear} /> : <ChevronDown size={11} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+      </div>
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="exp-cell-combo-panel" style={{ position: 'static' }}>
+          <div className="exp-cell-combo-list" ref={listRef}>
+            {options.map(opt => (
+              <div key={opt.value} className={`exp-cell-combo-option${String(opt.value) === String(value) ? ' exp-cell-combo-option--active' : ''}`}
+                tabIndex={0} onClick={() => select(opt)}
+                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); } else arrowNav(e); }}>
+                <span>{opt.label}</span>
+                {String(opt.value) === String(value) && <Check size={11} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+              </div>
+            ))}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────
    HOARDING SEARCH WIDGET
 ───────────────────────────────────────── */
 function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabled }) {
-  const [query, setQuery]     = useState('');
-  const [open, setOpen]       = useState(false);
-  const [results, setResults] = useState([]);
-  const wrapRef               = useRef(null);
+  const [query, setQuery]           = useState('');
+  const [open, setOpen]             = useState(false);
+  const [results, setResults]       = useState([]);
+  const [focusedIdx, setFocusedIdx] = useState(-1);
+  const wrapRef  = useRef(null);
+  const listRef  = useRef(null);
+  const inputRef = useRef(null);
 
   const selectedHoarding = hoardings.find(h => h.versions.some(v => v.hoardingID === Number(value)));
 
   useEffect(() => {
-    if (!query.trim()) { setResults([]); return; }
+    if (!query.trim()) { setResults([]); setFocusedIdx(-1); return; }
     const q = query.toLowerCase();
     const matched = hoardings.filter(h => {
       const latest = getLatest(h);
       const site = sites.find(s => s.siteID === latest?.siteID);
       if (!site) return false;
-      return (
-        (site.addressLine1 || '').toLowerCase().includes(q) ||
-        (site.addressLine2 || '').toLowerCase().includes(q) ||
-        (site.addressLine3 || '').toLowerCase().includes(q) ||
-        (site.landmark     || '').toLowerCase().includes(q) ||
-        (site.city         || '').toLowerCase().includes(q) ||
-        (site.district     || '').toLowerCase().includes(q) ||
-        (h.hoardingCode    || '').toLowerCase().includes(q)
-      );
+      return ['addressLine1','addressLine2','addressLine3','landmark','city','district']
+        .some(k => (site[k]||'').toLowerCase().includes(q)) ||
+        (h.hoardingCode||'').toLowerCase().includes(q);
     });
-    setResults(matched.slice(0, 12));
+    setResults(matched.slice(0, 12)); setFocusedIdx(-1);
   }, [query, hoardings, sites]);
 
   useEffect(() => {
-    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    if (focusedIdx < 0 || !listRef.current) return;
+    listRef.current.querySelectorAll('.exp-hoarding-option')[focusedIdx]?.scrollIntoView({ block: 'nearest' });
+  }, [focusedIdx]);
+
+  useEffect(() => {
+    const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setFocusedIdx(-1); } };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const selectHoarding = (h) => {
-    onChange(getLatest(h)?.hoardingID);
-    setQuery(''); setOpen(false); setResults([]);
+  const selectH = (h) => { onChange(getLatest(h)?.hoardingID); setQuery(''); setOpen(false); setResults([]); setFocusedIdx(-1); };
+  const clearH  = ()  => { onChange(''); setQuery(''); setResults([]); setFocusedIdx(-1); };
+
+  const handleInputKeyDown = (e) => {
+    if (!open || results.length === 0) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedIdx(i => (i + 1) % results.length); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setFocusedIdx(i => (i - 1 + results.length) % results.length); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (focusedIdx >= 0 && results[focusedIdx]) selectH(results[focusedIdx]); }
+    else if (e.key === 'Escape') { setOpen(false); setFocusedIdx(-1); }
   };
-  const clearSelection = () => { onChange(''); setQuery(''); setResults([]); };
 
   return (
     <div className="exp-hoarding-widget" ref={wrapRef}>
       {!disabled && (
-        <div
-          className={`pg-field-wrap ${error ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'} exp-search-trigger`}
-          onClick={() => setOpen(true)}
-        >
+        <div className={`pg-field-wrap ${error ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'} exp-search-trigger`} onClick={() => setOpen(true)}>
           <Search size={14} color={error ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
-          <input
-            className="pg-field-input"
-            placeholder="Type address line, landmark, city, district or hoarding code…"
-            value={query}
+          <input ref={inputRef} className="pg-field-input"
+            placeholder="Type address, landmark, city, district or hoarding code…"
+            value={query} autoComplete="off"
             onChange={e => { setQuery(e.target.value); setOpen(true); }}
             onFocus={() => setOpen(true)}
-            autoComplete="off"
+            onKeyDown={handleInputKeyDown}
           />
-          {query && <X size={12} style={{ cursor: 'pointer', color: '#c0c0d8', flexShrink: 0 }} onClick={e => { e.stopPropagation(); setQuery(''); setResults([]); }} />}
+          {query && <X size={12} style={{ cursor: 'pointer', color: '#c0c0d8', flexShrink: 0 }}
+            onClick={e => { e.stopPropagation(); setQuery(''); setResults([]); setFocusedIdx(-1); }} />}
         </div>
       )}
-
       {open && results.length > 0 && (
-        <div className="exp-hoarding-dropdown">
-          {results.map(h => {
+        <div className="exp-hoarding-dropdown" ref={listRef}>
+          {results.map((h, idx) => {
             const latest = getLatest(h);
-            const site = sites.find(s => s.siteID === latest?.siteID);
-            const addr = site
-              ? [site.addressLine1, site.addressLine2, site.addressLine3, site.landmark, site.city, site.district].filter(Boolean).join(', ')
-              : `Site ${latest?.siteID}`;
+            const site   = sites.find(s => s.siteID === latest?.siteID);
+            const addr   = site ? ['addressLine1','addressLine2','addressLine3','landmark','city','district'].map(k => site[k]).filter(Boolean).join(', ') : `Site ${latest?.siteID}`;
             return (
-              <div key={h.hoardingCode} className="exp-hoarding-option" onMouseDown={() => selectHoarding(h)}>
+              <div key={h.hoardingCode} className={`exp-hoarding-option${idx === focusedIdx ? ' exp-hoarding-option--focused' : ''}`}
+                onMouseDown={() => selectH(h)} onMouseEnter={() => setFocusedIdx(idx)}>
                 <div className="exp-hoarding-option__code"><Building2 size={12} /> {h.hoardingCode}</div>
                 <div className="exp-hoarding-option__addr">{addr}</div>
                 <div className="exp-hoarding-option__meta">
@@ -178,17 +344,12 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
         </div>
       )}
       {open && query.trim() && results.length === 0 && (
-        <div className="exp-hoarding-dropdown">
-          <div className="exp-hoarding-empty"><MapPin size={18} /><span>No hoardings found</span></div>
-        </div>
+        <div className="exp-hoarding-dropdown"><div className="exp-hoarding-empty"><MapPin size={18} /><span>No hoardings found</span></div></div>
       )}
-
       {value && selectedHoarding && (() => {
         const latest = getLatest(selectedHoarding);
-        const site = latest ? sites.find(s => s.siteID === latest.siteID) : null;
-        const addr = site
-          ? [site.addressLine1, site.addressLine2, site.addressLine3, site.landmark, site.city, site.district].filter(Boolean).join(', ')
-          : '';
+        const site   = latest ? sites.find(s => s.siteID === latest.siteID) : null;
+        const addr   = site ? ['addressLine1','addressLine2','addressLine3','landmark','city','district'].map(k => site[k]).filter(Boolean).join(', ') : '';
         return (
           <div className="exp-selected-hoarding">
             <div className="exp-selected-hoarding__inner">
@@ -198,17 +359,11 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
                 <div className="exp-selected-hoarding__addr">{addr}</div>
                 <div className="exp-selected-hoarding__chips">
                   {latest?.material && <span className="exp-chip">{latest.material}</span>}
-                  {latest?.status && (
-                    <span className={`exp-chip exp-chip--${latest.status === 'Active' ? 'green' : latest.status === 'Inactive' ? 'red' : 'yellow'}`}>
-                      {latest.status}
-                    </span>
-                  )}
+                  {latest?.status && <span className={`exp-chip exp-chip--${latest.status === 'Active' ? 'green' : latest.status === 'Inactive' ? 'red' : 'yellow'}`}>{latest.status}</span>}
                   {latest?.width && latest?.height && <span className="exp-chip">{latest.width}×{latest.height} ft</span>}
                 </div>
               </div>
-              {!disabled && (
-                <button className="exp-selected-hoarding__clear" onClick={clearSelection} title="Clear selection"><X size={13} /></button>
-              )}
+              {!disabled && <button className="exp-selected-hoarding__clear" onClick={clearH} title="Clear"><X size={13} /></button>}
             </div>
           </div>
         );
@@ -217,21 +372,28 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
   );
 }
 
-/* ─────────────────────────────────────────
-   DELETE CONFIRM MODAL
-───────────────────────────────────────── */
-function DeleteConfirmModal({ hoardingID, hoardingCode, expenseCount, onConfirm, onCancel }) {
+/* ═══════════════════════════════════════════
+   DELETE ROW CONFIRM MODAL
+   — Used for individual expense row deletion
+═══════════════════════════════════════════ */
+function DeleteRowModal({ row, onConfirm, onCancel, deleting }) {
   return (
-    <div className="pg-overlay" onClick={onCancel}>
+    <div className="pg-overlay" style={{ zIndex: 99998 }} onClick={onCancel}>
       <div className="exp-delete-modal" onClick={e => e.stopPropagation()}>
         <div className="exp-delete-modal__icon"><Trash2 size={22} color="#dc2626" /></div>
-        <div className="exp-delete-modal__title">Delete All Expenses?</div>
+        <div className="exp-delete-modal__title">Delete Expense?</div>
         <div className="exp-delete-modal__sub">
-          All <strong>{expenseCount}</strong> expense{expenseCount !== 1 ? 's' : ''} for hoarding <strong>{hoardingCode}</strong> will be permanently removed. This action cannot be undone.
+          {row._expenseID
+            ? <>This will permanently delete <strong>Expense #{row._expenseID}</strong> from the server. This cannot be undone.</>
+            : <>This will remove this unsaved row from the list.</>}
         </div>
         <div className="exp-delete-modal__actions">
-          <button className="pg-btn-cancel" onClick={onCancel}>Cancel</button>
-          <button className="exp-btn-delete-confirm" onClick={onConfirm}><Trash2 size={13} /> Delete All</button>
+          <button className="pg-btn-cancel" onClick={onCancel} disabled={deleting}>Cancel</button>
+          <button className="exp-btn-delete-confirm" onClick={onConfirm} disabled={deleting}>
+            {deleting
+              ? <><Loader2 size={13} className="pg-spin" /> Deleting…</>
+              : <><Trash2 size={13} /> Delete</>}
+          </button>
         </div>
       </div>
     </div>
@@ -253,30 +415,22 @@ function ExpenseEntryPanel({ row, errors, onChange }) {
           </InputWrap>
           <FieldError msg={errors.expenseDate} />
         </div>
-
         <div className="col-12 col-md-8">
           <FieldLabel label="Expense Type" required />
-          <InputWrap error={errors.expenseType} icon={Tag}>
-            <select className="pg-field-input" value={row.expenseType}
-              onChange={e => onChange('expenseType', e.target.value)}>
-              <option value="">Select expense type…</option>
-              {EXPENSE_TYPE_OPTIONS.map((t, i) => <option key={i} value={t}>{t}</option>)}
-            </select>
-          </InputWrap>
+          <ComboDropdown value={row.expenseType} onChange={v => onChange('expenseType', v)} onBlur={() => {}}
+            hasError={!!errors.expenseType} placeholder="Select expense type…" icon={Tag}
+            options={EXPENSE_TYPE_COMBO_OPTIONS} searchable emptyText="No matching types" />
           <FieldError msg={errors.expenseType} />
         </div>
-
         <div className="col-12">
           <FieldLabel label="Expense Detail" required />
           <InputWrap error={errors.expenseDTL} icon={FileText}>
             <textarea className="pg-field-input exp-entry-textarea" rows={3}
               placeholder="Describe the expense in detail…"
-              value={row.expenseDTL}
-              onChange={e => onChange('expenseDTL', e.target.value)} />
+              value={row.expenseDTL} onChange={e => onChange('expenseDTL', e.target.value)} />
           </InputWrap>
           <FieldError msg={errors.expenseDTL} />
         </div>
-
         <div className="col-12 col-md-6">
           <FieldLabel label="Amount (₹)" required />
           <InputWrap error={errors.amount} icon={IndianRupee}>
@@ -286,7 +440,6 @@ function ExpenseEntryPanel({ row, errors, onChange }) {
           </InputWrap>
           <FieldError msg={errors.amount} />
         </div>
-
         <div className="col-12 col-md-6">
           <FieldLabel label="Paid By" required />
           <InputWrap error={errors.paidBy} icon={User}>
@@ -295,17 +448,12 @@ function ExpenseEntryPanel({ row, errors, onChange }) {
           </InputWrap>
           <FieldError msg={errors.paidBy} />
         </div>
-
         <div className="col-12">
           <FieldLabel label="Comments" />
           <InputWrap error={errors.comments} icon={MessageSquare}>
-            <textarea
-              className="pg-field-input exp-entry-textarea"
-              rows={3}
+            <textarea className="pg-field-input exp-entry-textarea" rows={3}
               placeholder="Optional remarks…"
-              value={row.comments}
-              onChange={e => onChange('comments', e.target.value)}
-            />
+              value={row.comments} onChange={e => onChange('comments', e.target.value)} />
           </InputWrap>
           <FieldError msg={errors.comments} />
         </div>
@@ -316,18 +464,29 @@ function ExpenseEntryPanel({ row, errors, onChange }) {
 
 /* ─────────────────────────────────────────
    INLINE ROWS TABLE
+   — Delete button shows spinner while deleting
+   — Saved rows (with _expenseID) call the API
+   — Unsaved rows (no _expenseID) removed locally
 ───────────────────────────────────────── */
-function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow }) {
+function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingRowId }) {
   if (rows.length === 0) return null;
   const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+
+  const DeleteBtn = ({ rowId }) => {
+    const isDeleting = deletingRowId === rowId;
+    return (
+      <button className="exp-del-row-btn" onClick={() => !isDeleting && onDeleteRow(rowId)}
+        title={isDeleting ? 'Deleting…' : 'Delete this expense'}
+        disabled={isDeleting} style={{ opacity: isDeleting ? 0.6 : 1 }}>
+        {isDeleting ? <Loader2 size={13} className="pg-spin" /> : <Trash2 size={13} />}
+      </button>
+    );
+  };
 
   return (
     <div className="exp-rows-wrap">
       <div className="exp-rows-header">
-        <div className="exp-rows-header__left">
-          <FileText size={14} color="#049edf" />
-          <span>Expense Entries ({rows.length})</span>
-        </div>
+        <div className="exp-rows-header__left"><FileText size={14} color="#049edf" /><span>Expense Entries ({rows.length})</span></div>
         <div className="exp-rows-header__total">Total: <strong>{fmtCurrency(total)}</strong></div>
       </div>
 
@@ -349,63 +508,46 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow }) {
             </thead>
             <tbody>
               {rows.map((row, idx) => {
-                const errs = rowErrors[row._rowId] || {};
+                const errs      = rowErrors[row._rowId] || {};
+                const isDeleting = deletingRowId === row._rowId;
                 return (
-                  <tr key={row._rowId} className={Object.keys(errs).length ? 'exp-tbl-row exp-tbl-row--err' : 'exp-tbl-row'}>
+                  <tr key={row._rowId}
+                    className={`${Object.keys(errs).length ? 'exp-tbl-row exp-tbl-row--err' : 'exp-tbl-row'}${isDeleting ? ' exp-tbl-row--deleting' : ''}`}
+                    style={{ opacity: isDeleting ? 0.5 : 1, pointerEvents: isDeleting ? 'none' : 'auto' }}>
                     <td className="exp-td exp-td-idx">{idx + 1}</td>
                     <td className="exp-td">
-                      <input type="date"
-                        className={`exp-cell-input${errs.expenseDate ? ' exp-cell-input--err' : ''}`}
-                        value={row.expenseDate}
-                        onChange={e => onChangeRow(row._rowId, 'expenseDate', e.target.value)} />
+                      <input type="date" className={`exp-cell-input${errs.expenseDate ? ' exp-cell-input--err' : ''}`}
+                        value={row.expenseDate} onChange={e => onChangeRow(row._rowId, 'expenseDate', e.target.value)} />
                       {errs.expenseDate && <div className="exp-cell-err">{errs.expenseDate}</div>}
                     </td>
                     <td className="exp-td">
-                      <select
-                        className={`exp-cell-input${errs.expenseType ? ' exp-cell-input--err' : ''}`}
-                        value={row.expenseType}
-                        onChange={e => onChangeRow(row._rowId, 'expenseType', e.target.value)}>
-                        <option value="">Select…</option>
-                        {EXPENSE_TYPE_OPTIONS.map((t, i) => <option key={i} value={t}>{t}</option>)}
-                      </select>
+                      <CellComboDropdown value={row.expenseType} onChange={v => onChangeRow(row._rowId, 'expenseType', v)}
+                        options={EXPENSE_TYPE_COMBO_OPTIONS} hasError={!!errs.expenseType} placeholder="Select…" />
                       {errs.expenseType && <div className="exp-cell-err">{errs.expenseType}</div>}
                     </td>
                     <td className="exp-td">
-                      <textarea
-                        className={`exp-cell-input exp-cell-scroll${errs.expenseDTL ? ' exp-cell-input--err' : ''}`}
-                        placeholder="Detail…"
-                        value={row.expenseDTL}
-                        onChange={e => onChangeRow(row._rowId, 'expenseDTL', e.target.value)}
-                      />
+                      <textarea className={`exp-cell-input exp-cell-scroll${errs.expenseDTL ? ' exp-cell-input--err' : ''}`}
+                        placeholder="Detail…" value={row.expenseDTL}
+                        onChange={e => onChangeRow(row._rowId, 'expenseDTL', e.target.value)} />
                       {errs.expenseDTL && <div className="exp-cell-err">{errs.expenseDTL}</div>}
                     </td>
                     <td className="exp-td">
-                      <input type="number" min="0" step="0.01"
-                        className={`exp-cell-input${errs.amount ? ' exp-cell-input--err' : ''}`}
+                      <input type="number" min="0" step="0.01" className={`exp-cell-input${errs.amount ? ' exp-cell-input--err' : ''}`}
                         placeholder="0" value={row.amount}
                         onChange={e => onChangeRow(row._rowId, 'amount', e.target.value)} />
                       {errs.amount && <div className="exp-cell-err">{errs.amount}</div>}
                     </td>
                     <td className="exp-td">
-                      <input
-                        className={`exp-cell-input${errs.paidBy ? ' exp-cell-input--err' : ''}`}
+                      <input className={`exp-cell-input${errs.paidBy ? ' exp-cell-input--err' : ''}`}
                         placeholder="Name…" value={row.paidBy}
                         onChange={e => onChangeRow(row._rowId, 'paidBy', e.target.value)} />
                       {errs.paidBy && <div className="exp-cell-err">{errs.paidBy}</div>}
                     </td>
                     <td className="exp-td">
-                      <textarea
-                        className="exp-cell-input exp-cell-scroll"
-                        placeholder="Optional…"
-                        value={row.comments}
-                        onChange={e => onChangeRow(row._rowId, 'comments', e.target.value)}
-                      />
+                      <textarea className="exp-cell-input exp-cell-scroll" placeholder="Optional…"
+                        value={row.comments} onChange={e => onChangeRow(row._rowId, 'comments', e.target.value)} />
                     </td>
-                    <td className="exp-td exp-td-del">
-                      <button className="exp-del-row-btn" onClick={() => onDeleteRow(row._rowId)} title="Remove row">
-                        <Trash2 size={13} />
-                      </button>
-                    </td>
+                    <td className="exp-td exp-td-del"><DeleteBtn rowId={row._rowId} /></td>
                   </tr>
                 );
               })}
@@ -414,15 +556,17 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow }) {
         </div>
       </div>
 
-      {/* Mobile cards */}
+      {/* Mobile */}
       <div className="exp-rows-mobile">
         {rows.map((row, idx) => {
-          const errs = rowErrors[row._rowId] || {};
+          const errs      = rowErrors[row._rowId] || {};
+          const isDeleting = deletingRowId === row._rowId;
           return (
-            <div key={row._rowId} className={`exp-mob-card${Object.keys(errs).length ? ' exp-mob-card--err' : ''}`}>
+            <div key={row._rowId} className={`exp-mob-card${Object.keys(errs).length ? ' exp-mob-card--err' : ''}`}
+              style={{ opacity: isDeleting ? 0.5 : 1, pointerEvents: isDeleting ? 'none' : 'auto' }}>
               <div className="exp-mob-card__top">
                 <span className="exp-mob-card__num">#{idx + 1}</span>
-                <button className="exp-del-row-btn" onClick={() => onDeleteRow(row._rowId)}><Trash2 size={13} /></button>
+                <DeleteBtn rowId={row._rowId} />
               </div>
               <div className="row g-2">
                 <div className="col-6">
@@ -439,11 +583,8 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow }) {
                 </div>
                 <div className="col-12">
                   <div className="exp-mob-label">Expense Type <span className="exp-req">*</span></div>
-                  <select className={`exp-cell-input${errs.expenseType ? ' exp-cell-input--err' : ''}`}
-                    value={row.expenseType} onChange={e => onChangeRow(row._rowId, 'expenseType', e.target.value)}>
-                    <option value="">Select…</option>
-                    {EXPENSE_TYPE_OPTIONS.map((t, i) => <option key={i} value={t}>{t}</option>)}
-                  </select>
+                  <CellComboDropdown value={row.expenseType} onChange={v => onChangeRow(row._rowId, 'expenseType', v)}
+                    options={EXPENSE_TYPE_COMBO_OPTIONS} hasError={!!errs.expenseType} placeholder="Select…" />
                   {errs.expenseType && <div className="exp-cell-err">{errs.expenseType}</div>}
                 </div>
                 <div className="col-12">
@@ -456,14 +597,14 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow }) {
                 <div className="col-6">
                   <div className="exp-mob-label">Paid By <span className="exp-req">*</span></div>
                   <input className={`exp-cell-input${errs.paidBy ? ' exp-cell-input--err' : ''}`}
-                    placeholder="Name…" value={row.paidBy} onChange={e => onChangeRow(row._rowId, 'paidBy', e.target.value)} />
+                    placeholder="Name…" value={row.paidBy}
+                    onChange={e => onChangeRow(row._rowId, 'paidBy', e.target.value)} />
                   {errs.paidBy && <div className="exp-cell-err">{errs.paidBy}</div>}
                 </div>
                 <div className="col-6">
                   <div className="exp-mob-label">Comments</div>
-                  <textarea className="exp-cell-input exp-cell-scroll"
-                    placeholder="Optional…" value={row.comments}
-                    onChange={e => onChangeRow(row._rowId, 'comments', e.target.value)} />
+                  <textarea className="exp-cell-input exp-cell-scroll" placeholder="Optional…"
+                    value={row.comments} onChange={e => onChangeRow(row._rowId, 'comments', e.target.value)} />
                 </div>
               </div>
             </div>
@@ -477,7 +618,7 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow }) {
 /* ─────────────────────────────────────────
    EXPENSE FORM  (Add / Edit)
 ───────────────────────────────────────── */
-function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, onSave }) {
+function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
   const isAdd = mode === 'add';
 
   const [hoardingID, setHoardingID]       = useState(isAdd ? '' : (expense?.hoardingID || ''));
@@ -488,30 +629,28 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, onS
     const siblings = (allExpenses || []).filter(e => e.hoardingID === expense.hoardingID);
     const source   = siblings.length > 0 ? siblings : [expense];
     return source.map(e => ({
-      ...EMPTY_ROW,
-      _rowId:      makeRowId(),
-      _expenseID:  e.expenseID,
-      expenseDate: e.expenseDate || '',
-      expenseType: e.expenseType || '',
-      expenseDTL:  e.expenseDTL  || '',
-      amount:      e.amount ?? '',
-      paidBy:      e.paidBy  || '',
-      comments:    e.comments || '',
+      ...EMPTY_ROW, _rowId: makeRowId(), _expenseID: e.expenseID,
+      expenseDate: toDateInputValue(e.expenseDate),
+      expenseType: e.expenseType || '', expenseDTL: e.expenseDTL  || '',
+      amount: e.amount ?? '', paidBy: e.paidBy || '', comments: e.comments || '',
     }));
   });
 
-  const [rowErrors, setRowErrors] = useState({});
-
-  const emptyCurrentRow = () => ({ ...EMPTY_ROW, _rowId: makeRowId() });
-  const [currentRow, setCurrentRow]         = useState(emptyCurrentRow);
-  const [currentErrors, setCurrentErrors]   = useState({});
-
+  const [rowErrors, setRowErrors]         = useState({});
+  const emptyCurrentRow                   = () => ({ ...EMPTY_ROW, _rowId: makeRowId() });
+  const [currentRow, setCurrentRow]       = useState(emptyCurrentRow);
+  const [currentErrors, setCurrentErrors] = useState({});
   const [showEntryForm, setShowEntryForm] = useState(isAdd);
 
-  const [saving, setSaving] = useState(false);
-  const [saveOk, setSaveOk] = useState(false);
-  const [apiErr, setApiErr] = useState('');
+  const [saving, setSaving]             = useState(false);
+  const [saveOk, setSaveOk]             = useState(false);
+  const [apiErr, setApiErr]             = useState('');
 
+  /* ── Per-row delete state ── */
+  const [deleteTarget, setDeleteTarget] = useState(null);  // row object pending confirmation
+  const [deletingRowId, setDeletingRowId] = useState(null); // rowId currently being deleted
+
+  /* ─── Row change / delete handlers ─── */
   const handleCurrentChange = (key, val) => {
     setCurrentRow(p => ({ ...p, [key]: val }));
     if (currentErrors[key]) setCurrentErrors(p => ({ ...p, [key]: '' }));
@@ -530,70 +669,94 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, onS
     setRows(prev => prev.map(r => r._rowId === rowId ? { ...r, [key]: val } : r));
     if (rowErrors[rowId]?.[key]) setRowErrors(prev => ({ ...prev, [rowId]: { ...prev[rowId], [key]: '' } }));
   };
+
+  /* ── Request confirmation before deleting ── */
   const handleDeleteRow = (rowId) => {
-    setRows(prev => prev.filter(r => r._rowId !== rowId));
-    setRowErrors(prev => { const n = { ...prev }; delete n[rowId]; return n; });
+    const row = rows.find(r => r._rowId === rowId);
+    if (!row) return;
+    setDeleteTarget(row);          // open confirm modal
   };
 
+  /* ── Confirmed: delete from API (if saved) then remove from state ── */
+  const confirmDeleteRow = async () => {
+    if (!deleteTarget) return;
+    const row = deleteTarget;
+    setDeleteTarget(null);
+    setDeletingRowId(row._rowId);
+    setApiErr('');
+
+    try {
+      if (row._expenseID) {
+        // Saved record — call DELETE /api/HoardingExpense/{expenseID}
+        await apiService.deleteExpense(row._expenseID);
+      }
+      // Remove from local state after successful API call (or for unsaved rows)
+      setRows(prev => prev.filter(r => r._rowId !== row._rowId));
+      setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Failed to delete expense. Please try again.';
+      setApiErr(msg);
+    } finally {
+      setDeletingRowId(null);
+    }
+  };
+
+  /* ── Save all rows ── */
   const handleSave = () => {
     if (!hoardingID) { setHoardingError('Required'); return; }
     setHoardingError('');
-
     const newRowErrors = {};
     let hasErr = false;
-    rows.forEach(r => {
-      const e = validateRow(r);
-      if (Object.keys(e).length) { newRowErrors[r._rowId] = e; hasErr = true; }
-    });
-
+    rows.forEach(r => { const e = validateRow(r); if (Object.keys(e).length) { newRowErrors[r._rowId] = e; hasErr = true; } });
     const entryHasData = Object.entries(currentRow).filter(([k]) => k !== '_rowId').some(([, v]) => v !== '');
     if (showEntryForm && entryHasData) {
       const errs = validateRow(currentRow);
       if (Object.keys(errs).length) { setCurrentErrors(errs); return; }
       if (hasErr) { setRowErrors(newRowErrors); return; }
-      _doSave([...rows, { ...currentRow }]);
-      return;
+      _doSave([...rows, { ...currentRow }]); return;
     }
-
     if (rows.length === 0) { setApiErr('Please add at least one expense row.'); return; }
     if (hasErr) { setRowErrors(newRowErrors); return; }
     _doSave(rows);
   };
 
-  const _doSave = (allRows) => {
+  const _doSave = async (allRows) => {
     setSaving(true); setApiErr('');
-    setTimeout(() => {
-      try {
-        allRows.forEach(row => {
-          const isNewRecord = !row._expenseID;
-          onSave({
-            expenseID:   isNewRecord ? (Date.now() + Math.random()) : row._expenseID,
-            hoardingID:  Number(hoardingID),
-            expenseDate: row.expenseDate,
-            expenseType: row.expenseType,
-            expenseDTL:  row.expenseDTL,
-            amount:      Number(row.amount),
-            paidBy:      row.paidBy,
-            comments:    row.comments || '',
-          }, isNewRecord);
-        });
-        setSaving(false); setSaveOk(true);
-        setTimeout(() => onBack(), 700);
-      } catch (err) {
-        setApiErr(err?.message || 'Save failed. Please try again.');
-        setSaving(false);
+    try {
+      for (const row of allRows) {
+        const payload = {
+          hoardingID: Number(hoardingID), expenseDate: row.expenseDate,
+          expenseType: row.expenseType, expenseDTL: row.expenseDTL,
+          amount: Number(row.amount), paidBy: row.paidBy, comments: row.comments || '',
+        };
+        if (!row._expenseID) await apiService.createExpense(payload);
+        else await apiService.updateExpense(row._expenseID, payload);
       }
-    }, 500);
+      setSaveOk(true);
+      setTimeout(() => onBack(), 700);
+    } catch (err) {
+      setApiErr(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Save failed.');
+    } finally { setSaving(false); }
   };
 
   const totalAmount = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-  const saveLabel = `Save ${rows.length > 0 ? rows.length : ''} Expense${rows.length !== 1 ? 's' : ''}`.trim();
+  const saveLabel   = `Save ${rows.length > 0 ? rows.length : ''} Expense${rows.length !== 1 ? 's' : ''}`.trim();
 
   return (
     <div className="hd-form-page">
+      {/* Delete confirm modal */}
+      {deleteTarget && (
+        <DeleteRowModal
+          row={deleteTarget}
+          onConfirm={confirmDeleteRow}
+          onCancel={() => setDeleteTarget(null)}
+          deleting={!!deletingRowId}
+        />
+      )}
+
       <div className="hd-topbar">
         <div className="hd-topbar-left">
-          <button className="hd-back-btn" onClick={onBack}>
+          <button className="hd-back-btn" onClick={onBack} disabled={saving}>
             <ArrowLeft size={14} />
             <span className="d-none d-sm-inline">Back to Expenses</span>
             <span className="d-inline d-sm-none">Back</span>
@@ -601,11 +764,7 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, onS
           <div className="hd-topbar-divider" />
           <div>
             <div className="hd-topbar-title">{isAdd ? 'Add New Expenses' : `Edit Expenses — ${expense?.hoardingCode || `Hoarding #${expense?.hoardingID}`}`}</div>
-            <div className="hd-topbar-sub">
-              {isAdd
-                ? 'Fill each expense and click "Add Expense Row" to queue, then save all'
-                : 'Update expense details or add more rows for this hoarding'}
-            </div>
+            <div className="hd-topbar-sub">{isAdd ? 'Fill each expense and click "Add Expense Row" to queue, then save all' : 'Update expense details or add more rows for this hoarding'}</div>
           </div>
         </div>
       </div>
@@ -613,30 +772,26 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, onS
       <div className="hd-form-body">
         <div className="container-fluid px-0">
           {apiErr && (
-            <div className="pg-field-error hd-api-error mb-3"><AlertCircle size={14} /><span>{apiErr}</span></div>
+            <div className="pg-field-error hd-api-error mb-3">
+              <AlertCircle size={14} /><span>{apiErr}</span>
+              <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }} onClick={() => setApiErr('')}>✕</button>
+            </div>
           )}
           <div className="row g-4">
-
             <div className="col-12">
               <div className="hd-section-card">
                 <div className="hd-section-head">
                   <div className="hd-section-icon-wrap"><Building2 size={14} color="#049edf" /></div>
                   <div>
                     <div className="hd-section-title">Hoarding Selection</div>
-                    <div className="hd-section-sub">
-                      {isAdd ? 'All expense rows will be linked to this hoarding' : 'Hoarding linked to this expense (locked)'}
-                    </div>
+                    <div className="hd-section-sub">{isAdd ? 'All expense rows will be linked to this hoarding' : 'Hoarding linked to this expense (locked)'}</div>
                   </div>
                 </div>
                 <div className="hd-section-body">
                   <FieldLabel label="Search Hoarding by Site Address" required />
-                  <HoardingSearchWidget
-                    hoardings={hoardings} sites={sites}
-                    value={hoardingID}
+                  <HoardingSearchWidget hoardings={hoardings} sites={sites} value={hoardingID}
                     onChange={val => { setHoardingID(val); if (val) setHoardingError(''); }}
-                    error={hoardingError}
-                    disabled={!isAdd}
-                  />
+                    error={hoardingError} disabled={!isAdd} />
                   <FieldError msg={hoardingError} />
                 </div>
               </div>
@@ -648,44 +803,31 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, onS
                   <div className="hd-section-icon-wrap"><FileText size={14} color="#049edf" /></div>
                   <div style={{ flex: 1 }}>
                     <div className="hd-section-title">Expense Entry</div>
-                    <div className="hd-section-sub">
-                      {isAdd
-                        ? 'Add one or more expense rows for this hoarding'
-                        : `${rows.length} expense row${rows.length !== 1 ? 's' : ''} · ${fmtCurrency(totalAmount)}`}
-                    </div>
+                    <div className="hd-section-sub">{isAdd ? 'Add one or more expense rows for this hoarding' : `${rows.length} expense row${rows.length !== 1 ? 's' : ''} · ${fmtCurrency(totalAmount)}`}</div>
                   </div>
                   {!isAdd && (
-                    <button
-                      className={`exp-toggle-btn${showEntryForm ? ' exp-toggle-btn--cancel' : ''}`}
-                      onClick={() => { setShowEntryForm(v => !v); setCurrentErrors({}); }}
-                    >
+                    <button className={`exp-toggle-btn${showEntryForm ? ' exp-toggle-btn--cancel' : ''}`}
+                      onClick={() => { setShowEntryForm(v => !v); setCurrentErrors({}); }}>
                       {showEntryForm ? <><X size={13} /> Cancel</> : <><Plus size={13} /> Add Expense Row</>}
                     </button>
                   )}
                 </div>
-
                 <div className="hd-section-body">
                   {showEntryForm && (
                     <>
                       <ExpenseEntryPanel row={currentRow} errors={currentErrors} onChange={handleCurrentChange} />
                       <div className="exp-addrow-bar">
-                        <button className="exp-btn-addrow" onClick={handleAddRow}>
-                          <Plus size={14} /> Add Expense Row
-                        </button>
-                        {rows.length > 0 && (
-                          <span className="exp-addrow-hint">
-                            {rows.length} row{rows.length !== 1 ? 's' : ''} queued · {fmtCurrency(totalAmount)}
-                          </span>
-                        )}
+                        <button className="exp-btn-addrow" onClick={handleAddRow}><Plus size={14} /> Add Expense Row</button>
+                        {rows.length > 0 && <span className="exp-addrow-hint">{rows.length} row{rows.length !== 1 ? 's' : ''} queued · {fmtCurrency(totalAmount)}</span>}
                       </div>
                     </>
                   )}
-
                   <ExpenseRowsTable
                     rows={rows} rowErrors={rowErrors}
-                    onChangeRow={handleChangeRow} onDeleteRow={handleDeleteRow}
+                    onChangeRow={handleChangeRow}
+                    onDeleteRow={handleDeleteRow}
+                    deletingRowId={deletingRowId}
                   />
-
                   {!isAdd && rows.length === 0 && !showEntryForm && (
                     <div className="exp-edit-empty">
                       <FileText size={28} color="#d0d0e8" />
@@ -701,12 +843,10 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, onS
 
       <div className="hd-form-footer hd-form-footer--sticky">
         <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
-        <button className="pg-btn-save" onClick={handleSave} disabled={saving}>
-          {saveOk
-            ? <><Check size={13} /> Saved!</>
-            : saving
-              ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
-              : <><Check size={13} /> {saveLabel}</>}
+        <button className="pg-btn-save" onClick={handleSave} disabled={saving || !!deletingRowId}>
+          {saveOk ? <><Check size={13} /> Saved!</>
+            : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
+            : <><Check size={13} /> {saveLabel}</>}
         </button>
       </div>
     </div>
@@ -717,23 +857,22 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, onS
    MAIN PAGE
 ───────────────────────────────────────── */
 export default function HoardingExpensePage() {
-  const [hoardings, setHoardings]       = useState([]);
-  const [sites, setSites]               = useState([]);
-  const [loadingMeta, setLoadingMeta]   = useState(true);
-  const [loadError, setLoadError]       = useState('');
-  const [expenses, setExpenses]         = useState([]);
+  const [hoardings, setHoardings]     = useState([]);
+  const [sites, setSites]             = useState([]);
+  const [expenses, setExpenses]       = useState([]);
+  const [loadingMeta, setLoadingMeta] = useState(true);
+  const [loadingExp, setLoadingExp]   = useState(true);
+  const [loadError, setLoadError]     = useState('');
 
   const [view, setView]             = useState(() => sessionStorage.getItem('exp_view') || 'grid');
   const [formMode, setFormMode]     = useState(() => sessionStorage.getItem('exp_formMode') || null);
-  const [editTarget, setEditTarget] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('exp_editTarget')) || null; } catch { return null; }
-  });
-  const [deleteTarget, setDeleteTarget] = useState(null);
-  const [search, setSearch]             = useState('');
-  const [sortKey, setSortKey]           = useState('hoardingCode');
-  const [sortDir, setSortDir]           = useState('asc');
-  const [page, setPage]                 = useState(1);
-  const [pageSize, setPageSize]         = useState(10);
+  const [editTarget, setEditTarget] = useState(() => { try { return JSON.parse(sessionStorage.getItem('exp_editTarget')) || null; } catch { return null; } });
+
+  const [search, setSearch]     = useState('');
+  const [sortKey, setSortKey]   = useState('hoardingCode');
+  const [sortDir, setSortDir]   = useState('asc');
+  const [page, setPage]         = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const fetchMeta = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
@@ -745,40 +884,39 @@ export default function HoardingExpensePage() {
         if (!map[code]) map[code] = { hoardingCode: code, versions: [] };
         map[code].versions.push({
           hoardingID: rec.hoardingID, effdt: rec.effdt ? rec.effdt.split('T')[0] : '',
-          material: rec.material || '', hoardingType: rec.hoardingType || '',
-          status: rec.status || '', monthlyRent: rec.monthlyRent ?? '',
-          width: rec.width ?? '', height: rec.height ?? '', siteID: rec.siteID || '',
+          material: rec.material||'', hoardingType: rec.hoardingType||'', status: rec.status||'',
+          monthlyRent: rec.monthlyRent??'', width: rec.width??'', height: rec.height??'', siteID: rec.siteID||'',
         });
       });
       setHoardings(Object.values(map));
       setSites(Array.isArray(rawSites) ? rawSites : []);
     } catch (err) {
-      setLoadError(err?.response?.data?.message || err?.message || 'Failed to load hoardings / sites.');
+      setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally { setLoadingMeta(false); }
   }, []);
 
-  useEffect(() => { fetchMeta(); }, [fetchMeta]);
+  const fetchExpenses = useCallback(async () => {
+    setLoadingExp(true);
+    try {
+      const raw = await apiService.getAllExpenses();
+      setExpenses((Array.isArray(raw) ? raw : []).map(e => ({ ...e, expenseDate: toDateInputValue(e.expenseDate) })));
+    } catch (err) { console.error('Failed to fetch expenses:', err); }
+    finally { setLoadingExp(false); }
+  }, []);
+
+  useEffect(() => { fetchMeta(); fetchExpenses(); }, [fetchMeta, fetchExpenses]);
+
   useEffect(() => {
     sessionStorage.setItem('exp_view', view);
     sessionStorage.setItem('exp_formMode', formMode || '');
-    try { sessionStorage.setItem('exp_editTarget', editTarget ? JSON.stringify(editTarget) : ''); } catch { /* ignore */ }
+    try { sessionStorage.setItem('exp_editTarget', editTarget ? JSON.stringify(editTarget) : ''); } catch {}
   }, [view, formMode, editTarget]);
 
-  const handleSave = (record, isNew) => {
-    setExpenses(prev =>
-      isNew
-        ? [record, ...prev]
-        : prev.map(e => e.expenseID === record.expenseID ? record : e)
-    );
-  };
+  const handleFormBack = useCallback(() => {
+    sessionStorage.removeItem('exp_view'); sessionStorage.removeItem('exp_formMode'); sessionStorage.removeItem('exp_editTarget');
+    setView('grid'); setEditTarget(null); fetchExpenses();
+  }, [fetchExpenses]);
 
-  /* Delete ALL expenses for a hoarding */
-  const handleDeleteGroup = (hoardingID) => {
-    setExpenses(prev => prev.filter(e => e.hoardingID !== hoardingID));
-    setDeleteTarget(null);
-  };
-
-  /* ── GROUP expenses by hoardingID ── */
   const groupedRows = React.useMemo(() => {
     const map = {};
     expenses.forEach(exp => {
@@ -788,12 +926,10 @@ export default function HoardingExpensePage() {
         const latest   = hoarding ? getLatest(hoarding) : null;
         const site     = latest   ? sites.find(s => s.siteID === latest.siteID) : null;
         map[key] = {
-          hoardingID:   key,
+          hoardingID: key,
           hoardingCode: hoarding?.hoardingCode || `ID ${key}`,
-          siteLabel:    site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : `Hoarding ID ${key}`,
-          totalAmount:  0,
-          count:        0,
-          _firstExpense: exp,   // used to open edit form
+          siteLabel: site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : `Hoarding ID ${key}`,
+          totalAmount: 0, count: 0, _firstExpense: exp,
         };
       }
       map[key].totalAmount += Number(exp.amount) || 0;
@@ -804,63 +940,33 @@ export default function HoardingExpensePage() {
 
   const filtered = groupedRows.filter(r => {
     const q = search.toLowerCase();
-    return (
-      r.hoardingCode.toLowerCase().includes(q) ||
-      r.siteLabel.toLowerCase().includes(q) ||
-      String(r.hoardingID).includes(q)
-    );
+    return r.hoardingCode.toLowerCase().includes(q) || r.siteLabel.toLowerCase().includes(q) || String(r.hoardingID).includes(q);
   });
 
   const sortedRows = [...filtered].sort((a, b) => {
-    let av, bv;
-    if (sortKey === 'totalAmount') {
-      av = a.totalAmount; bv = b.totalAmount;
-      return sortDir === 'asc' ? av - bv : bv - av;
-    }
-    av = String(a[sortKey] ?? '').toLowerCase();
-    bv = String(b[sortKey] ?? '').toLowerCase();
+    if (sortKey === 'totalAmount') return sortDir === 'asc' ? a.totalAmount - b.totalAmount : b.totalAmount - a.totalAmount;
+    const av = String(a[sortKey] ?? '').toLowerCase(), bv = String(b[sortKey] ?? '').toLowerCase();
     return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
   });
 
-  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
-  const paginated  = sortedRows.slice((page - 1) * pageSize, page * pageSize);
-
-  const handleSort = (key) => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortDir('asc'); }
-    setPage(1);
-  };
-
+  const totalPages  = Math.max(1, Math.ceil(sortedRows.length / pageSize));
+  const paginated   = sortedRows.slice((page - 1) * pageSize, page * pageSize);
   const totalAmount = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
     .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
     .reduce((acc, p, i, arr) => { if (i > 0 && arr[i] - arr[i - 1] > 1) acc.push('…'); acc.push(p); return acc; }, []);
 
-  /* 3 columns only */
   const COLS = [
     { key: 'hoardingCode', label: 'Hoarding' },
     { key: 'totalAmount',  label: 'Total Amount' },
     { key: '_action',      label: 'Actions', noSort: true },
   ];
 
+  const isLoading = loadingMeta || loadingExp;
+
   if (view === 'form') {
-    return (
-      <ExpenseForm
-        mode={formMode}
-        expense={editTarget}
-        hoardings={hoardings}
-        sites={sites}
-        allExpenses={expenses}
-        onBack={() => {
-          sessionStorage.removeItem('exp_view');
-          sessionStorage.removeItem('exp_formMode');
-          sessionStorage.removeItem('exp_editTarget');
-          setView('grid'); setEditTarget(null);
-        }}
-        onSave={handleSave}
-      />
-    );
+    return <ExpenseForm mode={formMode} expense={editTarget} hoardings={hoardings} sites={sites} allExpenses={expenses} onBack={handleFormBack} />;
   }
 
   return (
@@ -873,17 +979,17 @@ export default function HoardingExpensePage() {
             {expenses.length > 0 && <> · Total: <strong>{fmtCurrency(totalAmount)}</strong></>}
           </p>
         </div>
-        <button className="pg-btn-add" onClick={() => { setFormMode('add'); setEditTarget(null); setView('form'); }} disabled={loadingMeta}>
+        <button className="pg-btn-add" onClick={() => { setFormMode('add'); setEditTarget(null); setView('form'); }} disabled={isLoading}>
           <Plus size={14} /> Add Expense
         </button>
       </div>
 
-      {!loadingMeta && expenses.length > 0 && (
+      {!isLoading && expenses.length > 0 && (
         <div className="exp-stats-strip">
           {[
-            { icon: <FileText size={16} color="#049edf" />, bg: 'rgba(4,158,223,0.1)', label: 'Total Expenses', val: expenses.length },
-            { icon: <IndianRupee size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)', label: 'Total Amount', val: fmtCurrency(totalAmount) },
-            { icon: <Building2 size={16} color="#6c63ff" />, bg: 'rgba(108,99,255,0.1)', label: 'Hoardings Covered', val: new Set(expenses.map(e => e.hoardingID)).size },
+            { icon: <FileText size={16} color="#049edf" />,    bg: 'rgba(4,158,223,0.1)',   label: 'Total Expenses',    val: expenses.length },
+            { icon: <IndianRupee size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)',   label: 'Total Amount',      val: fmtCurrency(totalAmount) },
+            { icon: <Building2 size={16} color="#6c63ff" />,   bg: 'rgba(108,99,255,0.1)',  label: 'Hoardings Covered', val: new Set(expenses.map(e => e.hoardingID)).size },
           ].map(s => (
             <div key={s.label} className="exp-stat-item">
               <div className="exp-stat-item__icon" style={{ background: s.bg }}>{s.icon}</div>
@@ -896,38 +1002,29 @@ export default function HoardingExpensePage() {
       {loadError && (
         <div className="pg-field-error hd-api-error mb-3" style={{ margin: '0 0 16px 0' }}>
           <AlertCircle size={14} /><span>{loadError}</span>
-          <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }} onClick={fetchMeta}>Retry</button>
+          <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}
+            onClick={() => { fetchMeta(); fetchExpenses(); }}>Retry</button>
         </div>
       )}
 
       <div className="pg-container">
         <div className="pg-toolbar">
           <div className="pg-toolbar__inner">
-            <div className="pg-toolbar__count">
-              <Building2 size={14} color="#9090a8" />
-              <span><strong>{loadingMeta ? '…' : filtered.length}</strong> hoarding{filtered.length !== 1 ? 's' : ''}</span>
-            </div>
+            <div className="pg-toolbar__count"><Building2 size={14} color="#9090a8" /><span><strong>{isLoading ? '…' : filtered.length}</strong> hoarding{filtered.length !== 1 ? 's' : ''}</span></div>
             <div className="pg-search-box">
               <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
-              <input placeholder="Search hoarding code or site…" value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }} />
+              <input placeholder="Search hoarding code or site…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
               {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
             </div>
-            <button className="pg-pg-btn" onClick={fetchMeta} title="Refresh"
-              style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <RefreshCw size={13} className={loadingMeta ? 'pg-spin' : ''} />
+            <button className="pg-pg-btn" onClick={() => { fetchMeta(); fetchExpenses(); }} title="Refresh" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <RefreshCw size={13} className={isLoading ? 'pg-spin' : ''} />
             </button>
           </div>
         </div>
 
-        {loadingMeta && (
-          <div style={{ padding: '60px 0', textAlign: 'center', color: '#9090a8' }}>
-            <Loader2 size={28} className="pg-spin" style={{ marginBottom: 10 }} />
-            <div style={{ fontSize: 13 }}>Loading hoardings &amp; sites…</div>
-          </div>
-        )}
+        {isLoading && <div style={{ padding: '60px 0', textAlign: 'center', color: '#9090a8' }}><Loader2 size={28} className="pg-spin" style={{ marginBottom: 10 }} /><div style={{ fontSize: 13 }}>Loading expenses…</div></div>}
 
-        {!loadingMeta && expenses.length === 0 && (
+        {!isLoading && expenses.length === 0 && (
           <div className="pg-empty" style={{ padding: '70px 20px' }}>
             <div className="pg-empty__inner">
               <FileText size={42} color="#d0d0e8" />
@@ -937,15 +1034,14 @@ export default function HoardingExpensePage() {
           </div>
         )}
 
-        {!loadingMeta && expenses.length > 0 && (
+        {!isLoading && expenses.length > 0 && (
           <div className="pg-desktop-table">
             <table className="pg-table">
               <thead>
                 <tr>
                   {COLS.map(col => (
-                    <th key={col.key}
-                      className={['pg-th', !col.noSort && 'pg-th--sort'].filter(Boolean).join(' ')}
-                      onClick={() => !col.noSort && handleSort(col.key)}>
+                    <th key={col.key} className={['pg-th', !col.noSort && 'pg-th--sort'].filter(Boolean).join(' ')}
+                      onClick={() => !col.noSort && (() => { if (sortKey === col.key) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(col.key); setSortDir('asc'); } setPage(1); })()}>
                       <div className="pg-th__inner">{col.label}{!col.noSort && <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />}</div>
                     </th>
                   ))}
@@ -953,45 +1049,18 @@ export default function HoardingExpensePage() {
               </thead>
               <tbody>
                 {paginated.length === 0 ? (
-                  <tr><td colSpan={COLS.length} className="pg-td pg-empty">
-                    <div className="pg-empty__inner"><FileText size={36} color="#d0d0e8" /><span className="pg-empty__label">No hoardings match your search</span></div>
-                  </td></tr>
+                  <tr><td colSpan={COLS.length} className="pg-td pg-empty"><div className="pg-empty__inner"><FileText size={36} color="#d0d0e8" /><span className="pg-empty__label">No hoardings match your search</span></div></td></tr>
                 ) : paginated.map(r => (
                   <tr key={r.hoardingID} className="pg-tr">
-
-                    {/* Hoarding */}
                     <td className="pg-td">
                       <div className="pg-td__primary hd-code-cell">{r.hoardingCode}</div>
                       <div style={{ fontSize: 11, color: '#9090a8', marginTop: 2 }}>{r.siteLabel}</div>
                       <div style={{ fontSize: 11, color: '#b0b0c8', marginTop: 1 }}>{r.count} expense{r.count !== 1 ? 's' : ''}</div>
                     </td>
-
-                    {/* Total Amount */}
-                    <td className="pg-td">
-                      <span className="exp-amount-val">{fmtCurrency(r.totalAmount)}</span>
-                    </td>
-
-                    {/* Actions — Edit only */}
+                    <td className="pg-td"><span className="exp-amount-val">{fmtCurrency(r.totalAmount)}</span></td>
                     <td className="pg-td">
                       <div className="pg-action-wrap">
-                        <button
-                          className="pg-btn-view"
-                          title="Edit expenses for this hoarding"
-                          onClick={() => {
-                            setFormMode('edit');
-                            setEditTarget(r._firstExpense);
-                            setView('form');
-                          }}
-                        >
-                          <Edit2 size={13} />
-                        </button>
-                        <button
-                          className="exp-btn-delete"
-                          title="Delete all expenses for this hoarding"
-                          onClick={() => setDeleteTarget(r)}
-                        >
-                          <Trash2 size={13} />
-                        </button>
+                        <button className="pg-btn-view" title="Edit" onClick={() => { setFormMode('edit'); setEditTarget(r._firstExpense); setView('form'); }}><Edit2 size={13} /></button>
                       </div>
                     </td>
                   </tr>
@@ -1001,14 +1070,9 @@ export default function HoardingExpensePage() {
           </div>
         )}
 
-        {/* Mobile cards */}
-        {!loadingMeta && expenses.length > 0 && (
+        {!isLoading && expenses.length > 0 && (
           <div className="pg-mobile-cards">
-            {paginated.length === 0 ? (
-              <div className="pg-empty__inner" style={{ padding: '40px 20px' }}>
-                <FileText size={36} color="#d0d0e8" /><span className="pg-empty__label">No hoardings match your search</span>
-              </div>
-            ) : paginated.map(r => (
+            {paginated.map(r => (
               <div key={r.hoardingID} className="pg-card">
                 <div className="pg-card__header">
                   <div className="pg-card__title-wrap">
@@ -1016,43 +1080,25 @@ export default function HoardingExpensePage() {
                     <div className="pg-card__subtitle">{r.siteLabel}</div>
                   </div>
                   <div className="pg-card__actions">
-                    <button
-                      className="pg-card__btn-view"
-                      onClick={() => { setFormMode('edit'); setEditTarget(r._firstExpense); setView('form'); }}
-                      title="Edit"
-                    >
-                      <Edit2 size={13} />
-                    </button>
-                    <button className="exp-btn-delete" onClick={() => setDeleteTarget(r)} title="Delete all">
-                      <Trash2 size={13} />
-                    </button>
+                    <button className="pg-card__btn-view" onClick={() => { setFormMode('edit'); setEditTarget(r._firstExpense); setView('form'); }} title="Edit"><Edit2 size={13} /></button>
                   </div>
                 </div>
                 <div className="pg-card__body">
-                  <div className="pg-card__row">
-                    <IndianRupee size={12} color="#c0c0d8" className="pg-card__row-icon" />
-                    <span className="pg-card__row-text" style={{ fontWeight: 800, color: '#1a1a2e' }}>{fmtCurrency(r.totalAmount)}</span>
-                  </div>
-                  <div className="pg-card__row">
-                    <FileText size={12} color="#c0c0d8" className="pg-card__row-icon" />
-                    <span className="pg-card__row-text">{r.count} expense{r.count !== 1 ? 's' : ''}</span>
-                  </div>
+                  <div className="pg-card__row"><IndianRupee size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text" style={{ fontWeight: 800, color: '#1a1a2e' }}>{fmtCurrency(r.totalAmount)}</span></div>
+                  <div className="pg-card__row"><FileText size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.count} expense{r.count !== 1 ? 's' : ''}</span></div>
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {!loadingMeta && expenses.length > 0 && (
+        {!isLoading && expenses.length > 0 && (
           <div className="pg-pagination">
             <div className="pg-pagination__left">
-              <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(1)}><ChevronsLeft  size={13} /></button>
-              <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(p => p - 1)}><ChevronLeft  size={13} /></button>
-              {pageNums.map((p, i) => p === '…'
-                ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
-                : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>
-              )}
-              <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight  size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}><ChevronsLeft size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={13} /></button>
+              {pageNums.map((p, i) => p === '…' ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span> : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>)}
+              <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight size={13} /></button>
               <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}><ChevronsRight size={13} /></button>
             </div>
             <div className="pg-pagination__right">
@@ -1065,16 +1111,6 @@ export default function HoardingExpensePage() {
           </div>
         )}
       </div>
-
-      {deleteTarget && (
-        <DeleteConfirmModal
-          hoardingID={deleteTarget.hoardingID}
-          hoardingCode={deleteTarget.hoardingCode}
-          expenseCount={deleteTarget.count}
-          onConfirm={() => handleDeleteGroup(deleteTarget.hoardingID)}
-          onCancel={() => setDeleteTarget(null)}
-        />
-      )}
     </div>
   );
 }

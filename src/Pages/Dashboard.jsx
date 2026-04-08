@@ -54,20 +54,20 @@ const STATUS_STYLE = {
    MENU
 ───────────────────────────────────── */
 const MENU = [
-  { id: 'dashboard',       icon: LayoutDashboard, label: 'Dashboard',       badge: null },
+  // { id: 'dashboard', icon: LayoutDashboard, label: 'Dashboard', badge: null },
   {
     id: 'hoardings', icon: Layers, label: 'Hoardings', badge: null,
     children: [
-      { id: 'new-hoarding',     icon: PlusSquare, label: 'New Hoarding'     },
-      { id: 'hoarding-expense', icon: Receipt,    label: 'Hoarding Expense' },
+      { id: 'new-hoarding', icon: PlusSquare, label: 'Maintain Hoarding' },
+      { id: 'hoarding-expense', icon: Receipt, label: 'Hoarding Expense' },
     ],
   },
-  { id: 'bookings',        icon: CalendarCheck,   label: 'Bookings',        badge: null },
-  { id: 'sites',           icon: MapPin,          label: 'Sites',           badge: null },
-  { id: 'land-contract',   icon: FileText,        label: 'Land Contract',   badge: null },
-  { id: 'clients',         icon: Users,           label: 'Clients',         badge: null },
-  { id: 'owners',          icon: UserCircle,      label: 'Owners',          badge: null },
-  { id: 'payments',        icon: CreditCard,      label: 'Payments',        badge: null },
+  { id: 'bookings', icon: CalendarCheck, label: 'Bookings', badge: null },
+  { id: 'sites', icon: MapPin, label: 'Sites', badge: null },
+  { id: 'land-contract', icon: FileText, label: 'Land Contracts', badge: null },
+  { id: 'clients', icon: Users, label: 'Clients', badge: null },
+  { id: 'owners', icon: UserCircle, label: 'Owners', badge: null },
+  { id: 'payments', icon: CreditCard, label: 'Payments', badge: null },
 ];
 
 const CHILD_TO_PARENT = {};
@@ -96,9 +96,9 @@ function useWindowWidth() {
 export default function Dashboard({ onLogout }) {
   const [tab, setTab] = useState(() => sessionStorage.getItem('dashTab') || 'dashboard');
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [dropOpen, setDropOpen]     = useState(false);
+  const [dropOpen, setDropOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [adminName, setAdminName]   = useState('Admin');
+  const [adminName, setAdminName] = useState('Admin');
 
   const [expandedMenus, setExpandedMenus] = useState(() => {
     const saved = sessionStorage.getItem('dashTab') || 'dashboard';
@@ -111,7 +111,7 @@ export default function Dashboard({ onLogout }) {
   });
 
   const dropRef = useRef(null);
-  const width   = useWindowWidth();
+  const width = useWindowWidth();
   const isMobile = width < 768;
 
   useEffect(() => {
@@ -176,7 +176,7 @@ export default function Dashboard({ onLogout }) {
   const SideInner = () => (
     <div className="sidebar-inner">
       <div className="sidebar-logo-area">
-        <div className="sidebar-logo-img-wrap">
+        <div className="sidebar-logo-img-wrap" onClick={() => changeTab('dashboard')} style={{ cursor: 'pointer' }}>
           <img
             src="/logoimp.svg"
             alt="HoardPro Logo"
@@ -190,18 +190,18 @@ export default function Dashboard({ onLogout }) {
       <nav className="sidebar-nav">
         {MENU.map((item) => {
           const { id, icon: Icon, label, badge, children } = item;
-          const hasChildren  = children?.length > 0;
+          const hasChildren = children?.length > 0;
           const parentActive = isParentActive(item);
           const isSelfActive = tab === id;                    // non-parent direct active
-          const isExpanded   = !!expandedMenus[id];
+          const isExpanded = !!expandedMenus[id];
 
           /* ── styles driven by active state ── */
           const parentBtnStyle = (parentActive || isSelfActive) ? {
-            background:  'rgba(4,158,223,0.13)',
-            color:       '#049edf',
-            borderLeft:  '3px solid #049edf',
+            background: 'rgba(4,158,223,0.13)',
+            color: '#049edf',
+            borderLeft: '3px solid #049edf',
             paddingLeft: 'calc(1rem - 3px)',   // compensate for border
-            fontWeight:  700,
+            fontWeight: 700,
           } : {
             borderLeft: '3px solid transparent',
             paddingLeft: 'calc(1rem - 3px)',
@@ -227,9 +227,9 @@ export default function Dashboard({ onLogout }) {
                   <ChevronRight
                     size={13}
                     style={{
-                      transform:  isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                      transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
                       transition: 'transform 0.22s cubic-bezier(0.22,1,0.36,1)',
-                      color:      parentActive ? '#049edf' : '#c0c0d8',
+                      color: parentActive ? '#049edf' : '#c0c0d8',
                       flexShrink: 0,
                     }}
                   />
@@ -241,8 +241,8 @@ export default function Dashboard({ onLogout }) {
                 <div
                   className="nav-submenu"
                   style={{
-                    maxHeight:  isExpanded ? `${children.length * 48}px` : '0px',
-                    overflow:   'hidden',
+                    maxHeight: isExpanded ? `${children.length * 48}px` : '0px',
+                    overflow: 'hidden',
                     transition: 'max-height 0.28s cubic-bezier(0.22,1,0.36,1)',
                   }}
                 >
@@ -250,9 +250,9 @@ export default function Dashboard({ onLogout }) {
                     const isChildActive = tab === cid;
 
                     const childBtnStyle = isChildActive ? {
-                      background:  'rgba(4,158,223,0.10)',
-                      color:       '#049edf',
-                      fontWeight:  700,
+                      background: 'rgba(4,158,223,0.10)',
+                      color: '#049edf',
+                      fontWeight: 700,
                     } : {};
 
                     return (
@@ -266,12 +266,12 @@ export default function Dashboard({ onLogout }) {
                         <div
                           className="nav-sub-indicator"
                           style={{
-                            background:  isChildActive ? '#049edf' : 'transparent',
-                            width:       '3px',
+                            background: isChildActive ? '#049edf' : 'transparent',
+                            width: '3px',
                             borderRadius: '2px',
-                            alignSelf:   'stretch',
-                            flexShrink:  0,
-                            transition:  'background 0.2s',
+                            alignSelf: 'stretch',
+                            flexShrink: 0,
+                            transition: 'background 0.2s',
                           }}
                         />
                         <div
@@ -309,10 +309,10 @@ export default function Dashboard({ onLogout }) {
   ══════════════════════════════════════ */
   const DashboardPage = () => {
     const STATS = [
-      { title: 'Total Hoardings', value: '148', sub: '+6 added this month',  icon: Layers,       color: '#049edf', bg: 'rgba(4,158,223,0.1)'   },
-      { title: 'Active Bookings', value: '62',  sub: '14 expiring this week', icon: CalendarCheck, color: '#1a9e6e', bg: 'rgba(26,158,110,0.1)'  },
-      { title: 'Expired Bookings',value: '24',  sub: '8 pending renewal',    icon: TrendingDown,  color: '#e84040', bg: 'rgba(232,64,64,0.1)'   },
-      { title: 'Total Revenue',   value: '₹16.1L', sub: '+23% vs last month',icon: DollarSign,   color: '#6c63ff', bg: 'rgba(108,99,255,0.1)'  },
+      { title: 'Total Hoardings', value: '148', sub: '+6 added this month', icon: Layers, color: '#049edf', bg: 'rgba(4,158,223,0.1)' },
+      { title: 'Active Bookings', value: '62', sub: '14 expiring this week', icon: CalendarCheck, color: '#1a9e6e', bg: 'rgba(26,158,110,0.1)' },
+      { title: 'Expired Bookings', value: '24', sub: '8 pending renewal', icon: TrendingDown, color: '#e84040', bg: 'rgba(232,64,64,0.1)' },
+      { title: 'Total Revenue', value: '₹16.1L', sub: '+23% vs last month', icon: DollarSign, color: '#6c63ff', bg: 'rgba(108,99,255,0.1)' },
     ];
 
     return (
@@ -355,8 +355,8 @@ export default function Dashboard({ onLogout }) {
               <AreaChart data={MONTHLY_REVENUE}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#049edf" stopOpacity={0.22} />
-                    <stop offset="95%" stopColor="#049edf" stopOpacity={0}    />
+                    <stop offset="5%" stopColor="#049edf" stopOpacity={0.22} />
+                    <stop offset="95%" stopColor="#049edf" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
@@ -450,15 +450,15 @@ export default function Dashboard({ onLogout }) {
   /* ── Route ── */
   const renderContent = () => {
     switch (tab) {
-      case 'new-hoarding':     return <Hoarding />;
+      case 'new-hoarding': return <Hoarding />;
       case 'hoarding-expense': return <Hoardingexpense />;
-      case 'land-contract':    return <LandContract />;
-      case 'bookings':         return <Placeholder title="Bookings"  Icon={CalendarCheck} />;
-      case 'clients':          return <Placeholder title="Clients"   Icon={Users}         />;
-      case 'owners':           return <OwnerPage />;
-      case 'payments':         return <Placeholder title="Payments"  Icon={CreditCard}    />;
-      case 'sites':            return <SitePage />;
-      default:                 return <DashboardPage />;
+      case 'land-contract': return <LandContract />;
+      case 'bookings': return <Placeholder title="Bookings" Icon={CalendarCheck} />;
+      case 'clients': return <Placeholder title="Clients" Icon={Users} />;
+      case 'owners': return <OwnerPage />;
+      case 'payments': return <Placeholder title="Payments" Icon={CreditCard} />;
+      case 'sites': return <SitePage />;
+      default: return <DashboardPage />;
     }
   };
 

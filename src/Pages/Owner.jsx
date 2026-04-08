@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef  } from 'react';
 import {
   UserCircle, Plus, Phone, Home, Globe,
   Building2, MapPin, Search, Users, RefreshCw,
@@ -17,7 +17,219 @@ const EMPTY_FORM = {
   phone1: '', phone2: '', city: '', district: '',
   state: '', country: 'India', emailAddress: '',
 };
+/* ─────────────────────────────────────────
+   INDIA STATES & DISTRICTS
+───────────────────────────────────────── */
+const INDIA_STATES = [
+  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
+  'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
+  'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
+  'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
+  'Tripura','Uttar Pradesh','Uttarakhand','West Bengal',
+  'Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry',
+];
 
+const DISTRICTS_BY_STATE = {
+  'Gujarat': [
+    'Ahmedabad','Amreli','Anand','Aravalli','Banaskantha','Bharuch',
+    'Bhavnagar','Botad','Chhota Udaipur','Dahod','Dang','Devbhoomi Dwarka',
+    'Gandhinagar','Gir Somnath','Jamnagar','Junagadh','Kheda','Kutch',
+    'Mahisagar','Mehsana','Morbi','Narmada','Navsari','Panchmahal','Patan',
+    'Porbandar','Rajkot','Sabarkantha','Surat','Surendranagar','Tapi',
+    'Vadodara','Valsad',
+  ],
+  'Maharashtra': [
+    'Ahmednagar','Akola','Amravati','Aurangabad','Beed','Bhandara','Buldhana',
+    'Chandrapur','Dhule','Gadchiroli','Gondia','Hingoli','Jalgaon','Jalna',
+    'Kolhapur','Latur','Mumbai City','Mumbai Suburban','Nagpur','Nanded',
+    'Nandurbar','Nashik','Osmanabad','Palghar','Parbhani','Pune','Raigad',
+    'Ratnagiri','Sangli','Satara','Sindhudurg','Solapur','Thane','Wardha',
+    'Washim','Yavatmal',
+  ],
+  'Rajasthan': [
+    'Ajmer','Alwar','Banswara','Baran','Barmer','Bharatpur','Bhilwara',
+    'Bikaner','Bundi','Chittorgarh','Churu','Dausa','Dholpur','Dungarpur',
+    'Ganganagar','Hanumangarh','Jaipur','Jaisalmer','Jalore','Jhalawar',
+    'Jhunjhunu','Jodhpur','Karauli','Kota','Nagaur','Pali','Pratapgarh',
+    'Rajsamand','Sawai Madhopur','Sikar','Sirohi','Tonk','Udaipur',
+  ],
+  'Uttar Pradesh': [
+    'Agra','Aligarh','Ambedkar Nagar','Amethi','Amroha','Auraiya','Ayodhya',
+    'Azamgarh','Baghpat','Bahraich','Ballia','Balrampur','Banda','Barabanki',
+    'Bareilly','Basti','Bhadohi','Bijnor','Budaun','Bulandshahr','Chandauli',
+    'Chitrakoot','Deoria','Etah','Etawah','Farrukhabad','Fatehpur','Firozabad',
+    'Gautam Buddh Nagar','Ghaziabad','Ghazipur','Gonda','Gorakhpur','Hamirpur',
+    'Hapur','Hardoi','Hathras','Jalaun','Jaunpur','Jhansi','Kannauj',
+    'Kanpur Dehat','Kanpur Nagar','Kasganj','Kaushambi','Kushinagar',
+    'Lakhimpur Kheri','Lalitpur','Lucknow','Maharajganj','Mahoba','Mainpuri',
+    'Mathura','Mau','Meerut','Mirzapur','Moradabad','Muzaffarnagar','Pilibhit',
+    'Pratapgarh','Prayagraj','Raebareli','Rampur','Saharanpur','Sambhal',
+    'Sant Kabir Nagar','Shahjahanpur','Shamli','Shravasti','Siddharthnagar',
+    'Sitapur','Sonbhadra','Sultanpur','Unnao','Varanasi',
+  ],
+  'Madhya Pradesh': [
+    'Agar Malwa','Alirajpur','Anuppur','Ashoknagar','Balaghat','Barwani',
+    'Betul','Bhind','Bhopal','Burhanpur','Chhatarpur','Chhindwara','Damoh',
+    'Datia','Dewas','Dhar','Dindori','Guna','Gwalior','Harda','Hoshangabad',
+    'Indore','Jabalpur','Jhabua','Katni','Khandwa','Khargone','Mandla',
+    'Mandsaur','Morena','Narsinghpur','Neemuch','Niwari','Panna','Raisen',
+    'Rajgarh','Ratlam','Rewa','Sagar','Satna','Sehore','Seoni','Shahdol',
+    'Shajapur','Sheopur','Shivpuri','Sidhi','Singrauli','Tikamgarh','Ujjain',
+    'Umaria','Vidisha',
+  ],
+  'Karnataka': [
+    'Bagalkot','Ballari','Belagavi','Bengaluru Rural','Bengaluru Urban',
+    'Bidar','Chamarajanagar','Chikkaballapur','Chikkamagaluru','Chitradurga',
+    'Dakshina Kannada','Davanagere','Dharwad','Gadag','Hassan','Haveri',
+    'Kalaburagi','Kodagu','Kolar','Koppal','Mandya','Mysuru','Raichur',
+    'Ramanagara','Shivamogga','Tumakuru','Udupi','Uttara Kannada','Vijayapura',
+    'Yadgir',
+  ],
+  'Tamil Nadu': [
+    'Ariyalur','Chengalpattu','Chennai','Coimbatore','Cuddalore','Dharmapuri',
+    'Dindigul','Erode','Kallakurichi','Kancheepuram','Kanyakumari','Karur',
+    'Krishnagiri','Madurai','Mayiladuthurai','Nagapattinam','Namakkal',
+    'Nilgiris','Perambalur','Pudukkottai','Ramanathapuram','Ranipet','Salem',
+    'Sivagangai','Tenkasi','Thanjavur','Theni','Thoothukudi','Tiruchirappalli',
+    'Tirunelveli','Tirupathur','Tiruppur','Tiruvallur','Tiruvannamalai',
+    'Tiruvarur','Vellore','Viluppuram','Virudhunagar',
+  ],
+  'West Bengal': [
+    'Alipurduar','Bankura','Birbhum','Cooch Behar','Dakshin Dinajpur',
+    'Darjeeling','Hooghly','Howrah','Jalpaiguri','Jhargram','Kalimpong',
+    'Kolkata','Malda','Murshidabad','Nadia','North 24 Parganas',
+    'Paschim Bardhaman','Paschim Medinipur','Purba Bardhaman','Purba Medinipur',
+    'Purulia','South 24 Parganas','Uttar Dinajpur',
+  ],
+  'Andhra Pradesh': [
+    'Alluri Sitharama Raju','Anakapalli','Ananthapuramu','Annamayya',
+    'Bapatla','Chittoor','East Godavari','Eluru','Guntur','Kakinada',
+    'Konaseema','Krishna','Kurnool','Nandyal','NTR','Palnadu','Parvathipuram Manyam',
+    'Prakasam','Sri Potti Sriramulu Nellore','Sri Sathya Sai','Srikakulam',
+    'Tirupati','Visakhapatnam','Vizianagaram','West Godavari','YSR Kadapa',
+  ],
+  'Telangana': [
+    'Adilabad','Bhadradri Kothagudem','Hanumakonda','Hyderabad','Jagtial',
+    'Jangaon','Jayashankar Bhupalpally','Jogulamba Gadwal','Kamareddy',
+    'Karimnagar','Khammam','Kumuram Bheem','Mahabubabad','Mahabubnagar',
+    'Mancherial','Medak','Medchal–Malkajgiri','Mulugu','Nagarkurnool',
+    'Nalgonda','Narayanpet','Nirmal','Nizamabad','Peddapalli','Rajanna Sircilla',
+    'Rangareddy','Sangareddy','Siddipet','Suryapet','Vikarabad','Wanaparthy',
+    'Warangal','Yadadri Bhuvanagiri',
+  ],
+  'Delhi': [
+    'Central Delhi','East Delhi','New Delhi','North Delhi','North East Delhi',
+    'North West Delhi','Shahdara','South Delhi','South East Delhi',
+    'South West Delhi','West Delhi',
+  ],
+  'Punjab': [
+    'Amritsar','Barnala','Bathinda','Faridkot','Fatehgarh Sahib','Fazilka',
+    'Ferozepur','Gurdaspur','Hoshiarpur','Jalandhar','Kapurthala','Ludhiana',
+    'Malerkotla','Mansa','Moga','Mohali','Muktsar','Pathankot','Patiala',
+    'Rupnagar','Sangrur','Shahid Bhagat Singh Nagar','Tarn Taran',
+  ],
+  'Haryana': [
+    'Ambala','Bhiwani','Charkhi Dadri','Faridabad','Fatehabad','Gurugram',
+    'Hisar','Jhajjar','Jind','Kaithal','Karnal','Kurukshetra','Mahendragarh',
+    'Nuh','Palwal','Panchkula','Panipat','Rewari','Rohtak','Sirsa','Sonipat',
+    'Yamunanagar',
+  ],
+  'Bihar': [
+    'Araria','Arwal','Aurangabad','Banka','Begusarai','Bhagalpur','Bhojpur',
+    'Buxar','Darbhanga','East Champaran','Gaya','Gopalganj','Jamui','Jehanabad',
+    'Kaimur','Katihar','Khagaria','Kishanganj','Lakhisarai','Madhepura',
+    'Madhubani','Munger','Muzaffarpur','Nalanda','Nawada','Patna','Purnia',
+    'Rohtas','Saharsa','Samastipur','Saran','Sheikhpura','Sheohar',
+    'Sitamarhi','Siwan','Supaul','Vaishali','West Champaran',
+  ],
+  'Odisha': [
+    'Angul','Balangir','Balasore','Bargarh','Bhadrak','Boudh','Cuttack',
+    'Deogarh','Dhenkanal','Gajapati','Ganjam','Jagatsinghpur','Jajpur',
+    'Jharsuguda','Kalahandi','Kandhamal','Kendrapara','Kendujhar','Khordha',
+    'Koraput','Malkangiri','Mayurbhanj','Nabarangpur','Nayagarh','Nuapada',
+    'Puri','Rayagada','Sambalpur','Subarnapur','Sundargarh',
+  ],
+  'Kerala': [
+    'Alappuzha','Ernakulam','Idukki','Kannur','Kasaragod','Kollam',
+    'Kottayam','Kozhikode','Malappuram','Palakkad','Pathanamthitta',
+    'Thiruvananthapuram','Thrissur','Wayanad',
+  ],
+  'Assam': [
+    'Bajali','Baksa','Barpeta','Biswanath','Bongaigaon','Cachar','Charaideo',
+    'Chirang','Darrang','Dhemaji','Dhubri','Dibrugarh','Dima Hasao',
+    'Goalpara','Golaghat','Hailakandi','Hojai','Jorhat','Kamrup',
+    'Kamrup Metropolitan','Karbi Anglong','Karimganj','Kokrajhar','Lakhimpur',
+    'Majuli','Morigaon','Nagaon','Nalbari','Sivasagar','Sonitpur','South Salmara-Mankachar',
+    'Tinsukia','Udalguri','West Karbi Anglong',
+  ],
+  'Chhattisgarh': [
+    'Balod','Baloda Bazar','Balrampur','Bastar','Bemetara','Bijapur',
+    'Bilaspur','Dantewada','Dhamtari','Durg','Gariyaband','Gaurela-Pendra-Marwahi',
+    'Janjgir-Champa','Jashpur','Kabirdham','Kanker','Khairagarh','Kondagaon',
+    'Korba','Korea','Mahasamund','Manendragarh','Mohla-Manpur','Mungeli',
+    'Narayanpur','Raigarh','Raipur','Rajnandgaon','Sakti','Sarangarh-Bilaigarh',
+    'Sukma','Surajpur','Surguja',
+  ],
+  'Jharkhand': [
+    'Bokaro','Chatra','Deoghar','Dhanbad','Dumka','East Singhbhum','Garhwa',
+    'Giridih','Godda','Gumla','Hazaribagh','Jamtara','Khunti','Koderma',
+    'Latehar','Lohardaga','Pakur','Palamu','Ramgarh','Ranchi','Sahebganj',
+    'Seraikela Kharsawan','Simdega','West Singhbhum',
+  ],
+  'Himachal Pradesh': [
+    'Bilaspur','Chamba','Hamirpur','Kangra','Kinnaur','Kullu','Lahaul and Spiti',
+    'Mandi','Shimla','Sirmaur','Solan','Una',
+  ],
+  'Uttarakhand': [
+    'Almora','Bageshwar','Chamoli','Champawat','Dehradun','Haridwar',
+    'Nainital','Pauri Garhwal','Pithoragarh','Rudraprayag','Tehri Garhwal',
+    'Udham Singh Nagar','Uttarkashi',
+  ],
+  'Goa': ['North Goa','South Goa'],
+  'Manipur': [
+    'Bishnupur','Chandel','Churachandpur','Imphal East','Imphal West',
+    'Jiribam','Kakching','Kamjong','Kangpokpi','Noney','Pherzawl',
+    'Senapati','Tamenglong','Tengnoupal','Thoubal','Ukhrul',
+  ],
+  'Meghalaya': [
+    'East Garo Hills','East Jaintia Hills','East Khasi Hills','Eastern West Khasi Hills',
+    'North Garo Hills','Ri Bhoi','South Garo Hills','South West Garo Hills',
+    'South West Khasi Hills','West Garo Hills','West Jaintia Hills','West Khasi Hills',
+  ],
+  'Arunachal Pradesh': [
+    'Anjaw','Changlang','Dibang Valley','East Kameng','East Siang','Itanagar Capital Complex',
+    'Kamle','Kra Daadi','Kurung Kumey','Lepa Rada','Lohit','Longding',
+    'Lower Dibang Valley','Lower Siang','Lower Subansiri','Namsai','Pakke-Kessang',
+    'Papum Pare','Shi Yomi','Siang','Tawang','Tirap','Upper Dibang Valley',
+    'Upper Siang','Upper Subansiri','West Kameng','West Siang',
+  ],
+  'Nagaland': [
+    'Chumoukedima','Dimapur','Kiphire','Kohima','Longleng','Mokokchung',
+    'Mon','Niuland','Noklak','Peren','Phek','Shamator','Tseminyü',
+    'Tuensang','Wokha','Zunheboto',
+  ],
+  'Mizoram': [
+    'Aizawl','Champhai','Hnahthial','Khawzawl','Kolasib','Lawngtlai',
+    'Lunglei','Mamit','Saiha','Saitual','Serchhip',
+  ],
+  'Tripura': [
+    'Dhalai','Gomati','Khowai','North Tripura','Sepahijala','South Tripura',
+    'Unakoti','West Tripura',
+  ],
+  'Sikkim': ['East Sikkim','North Sikkim','Pakyong','Soreng','South Sikkim','West Sikkim'],
+  'Jammu and Kashmir': [
+    'Anantnag','Bandipora','Baramulla','Budgam','Doda','Ganderbal',
+    'Jammu','Kathua','Kishtwar','Kulgam','Kupwara','Poonch','Pulwama',
+    'Rajouri','Ramban','Reasi','Samba','Shopian','Srinagar','Udhampur',
+  ],
+  'Ladakh': ['Kargil','Leh'],
+  'Puducherry': ['Karaikal','Mahe','Puducherry','Yanam'],
+  'Chandigarh': ['Chandigarh'],
+  'Andaman and Nicobar Islands': ['Nicobar','North and Middle Andaman','South Andaman'],
+  'Dadra and Nagar Haveli and Daman and Diu': ['Dadra and Nagar Haveli','Daman','Diu'],
+  'Lakshadweep': ['Lakshadweep'],
+};
 const NAME_REGEX  = /^[a-zA-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s.''\-]{0,99}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^\+?[\d][\d\s\-]{4,18}$/;
@@ -34,14 +246,14 @@ function validatePhone(value) {
 }
 
 const FIELDS = [
-  { key: 'ownerName',            label: 'Owner Name',             icon: UserCircle, placeholder: 'e.g. Rajesh Mehta',              col: 6,  required: true,  type: 'name'     },
+  { key: 'ownerName', label: 'Owner Name', icon: UserCircle, placeholder: 'e.g. Rajesh Mehta', col: 6, required: true, type: 'text' },
   { key: 'alternateContactName', label: 'Alternate Contact Name', icon: Users,      placeholder: 'e.g. R. Mehta',                  col: 6,  required: false, type: 'name'     },
   { key: 'ownerAddress',         label: 'Owner Address',          icon: Home,       placeholder: 'Street / Area',                  col: 12, required: false, type: 'text'     },
   { key: 'phone1',               label: 'Phone 1',                icon: Phone,      placeholder: '+91 98765 43210 or 079-27650000', col: 6,  required: true,  type: 'phone'    },
   { key: 'phone2',               label: 'Phone 2',                icon: Phone,      placeholder: '+91 79001 12233 or 0265-2xxxxxx', col: 6,  required: false, type: 'phone'    },
   { key: 'city',                 label: 'City',                   icon: Building2,  placeholder: 'e.g. Ahmedabad',                 col: 6,  required: true,  type: 'text'     },
-  { key: 'district',             label: 'District',               icon: MapPin,     placeholder: 'e.g. Anand',                     col: 6,  required: true,  type: 'text'     },
-  { key: 'state',                label: 'State',                  icon: MapPin,     placeholder: 'e.g. Gujarat',                   col: 6,  required: true,  type: 'text'     },
+  { key: 'state',    label: 'State',    icon: MapPin, placeholder: '', col: 6, required: true,  type: 'combo-state'    },
+{ key: 'district', label: 'District', icon: MapPin, placeholder: '', col: 6, required: true,  type: 'combo-district' },
   { key: 'country',              label: 'Country',                icon: Globe,      placeholder: 'India',                          col: 6,  required: true,  type: 'readonly' },
   { key: 'emailAddress',         label: 'Email Address',          icon: Mail,       placeholder: 'example@email.com',              col: 12, required: false, type: 'email'    },
 ];
@@ -57,7 +269,262 @@ function validateField(key, value, type, required) {
   if (type === 'email') { if (!EMAIL_REGEX.test(v)) return 'Enter a valid email address'; }
   return '';
 }
+/* ═══════════════════════════════════════════
+   STATE COMBO
+═══════════════════════════════════════════ */
+function StateCombo({ value, onChange, onBlur, hasError }) {
+  const [open, setOpen]           = useState(false);
+  const [query, setQuery]         = useState('');
+  const [wasOpened, setWasOpened] = useState(false);
+  const wrapRef  = useRef(null);
+  const inputRef = useRef(null);
+  const listRef  = useRef(null);
 
+  const filtered = INDIA_STATES.filter(s =>
+    s.toLowerCase().includes(query.toLowerCase())
+  );
+
+  useEffect(() => {
+    function handler(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery('');
+        if (wasOpened) { onBlur?.(); setWasOpened(false); }
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onBlur, wasOpened]);
+
+  const openDropdown = () => {
+    setOpen(true); setWasOpened(true); setQuery('');
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const select = (state) => { onChange(state); setOpen(false); setQuery(''); setWasOpened(false); };
+
+  const clear = (e) => {
+    e.stopPropagation();
+    onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.();
+  };
+
+  const handleTriggerKeyDown = (e) => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDropdown(); }
+      return;
+    }
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') { setOpen(false); setQuery(''); onBlur?.(); setWasOpened(false); }
+  };
+
+  const handleSearchKeyDown = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    if (e.key === 'ArrowDown') { e.preventDefault(); items?.[0]?.focus(); }
+    else if (e.key === 'Escape') { setOpen(false); setQuery(''); onBlur?.(); setWasOpened(false); }
+  };
+
+  const handleOptionKeyDown = (e, opt) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+    else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const items = listRef.current?.querySelectorAll('.pg-combo-option');
+      const idx = Array.from(items).indexOf(e.currentTarget);
+      (items[idx + 1] || items[0])?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const items = listRef.current?.querySelectorAll('.pg-combo-option');
+      const idx = Array.from(items).indexOf(e.currentTarget);
+      (items[idx - 1] || items[items.length - 1])?.focus();
+    } else if (e.key === 'Escape') { setOpen(false); setQuery(''); onBlur?.(); setWasOpened(false); }
+  };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef}>
+      <div
+        className={`pg-field-wrap pg-combo-trigger ${hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
+        onClick={openDropdown} tabIndex={0} onKeyDown={handleTriggerKeyDown}
+      >
+        <MapPin size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+        <span className={`pg-combo-display${!value ? ' pg-combo-display--placeholder' : ''}`}>
+          {value || 'Select state…'}
+        </span>
+        {value
+          ? <X size={13} className="pg-combo-clear" onClick={clear} />
+          : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+      </div>
+
+      {open && (
+        <div className="pg-combo-panel">
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              className="pg-combo-search__input"
+              placeholder="Search state…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+            />
+            {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+          </div>
+          <div className="pg-combo-list" ref={listRef}>
+            {filtered.length === 0 ? (
+              <div className="pg-combo-empty">No states match</div>
+            ) : filtered.map(s => (
+              <div
+                key={s}
+                className={`pg-combo-option${s === value ? ' pg-combo-option--active' : ''}`}
+                onClick={() => select(s)} tabIndex={0}
+                onKeyDown={e => handleOptionKeyDown(e, s)}
+              >
+                <span className="pg-combo-option__name">{s}</span>
+                {s === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   DISTRICT COMBO  (depends on state)
+═══════════════════════════════════════════ */
+function DistrictCombo({ value, onChange, onBlur, hasError, stateValue }) {
+  const [open, setOpen]           = useState(false);
+  const [query, setQuery]         = useState('');
+  const [wasOpened, setWasOpened] = useState(false);
+  const wrapRef  = useRef(null);
+  const inputRef = useRef(null);
+  const listRef  = useRef(null);
+
+  const options  = stateValue ? (DISTRICTS_BY_STATE[stateValue] || []) : [];
+  const disabled = !stateValue;
+
+  const filtered = options.filter(d =>
+    d.toLowerCase().includes(query.toLowerCase())
+  );
+
+  useEffect(() => {
+    function handler(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery('');
+        if (wasOpened) { onBlur?.(); setWasOpened(false); }
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onBlur, wasOpened]);
+
+  const openDropdown = () => {
+    if (disabled) return;
+    setOpen(true); setWasOpened(true); setQuery('');
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const select = (district) => { onChange(district); setOpen(false); setQuery(''); setWasOpened(false); };
+
+  const clear = (e) => {
+    e.stopPropagation();
+    onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.();
+  };
+
+  const handleTriggerKeyDown = (e) => {
+    if (disabled) return;
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDropdown(); }
+      return;
+    }
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') { setOpen(false); setQuery(''); onBlur?.(); setWasOpened(false); }
+  };
+
+  const handleSearchKeyDown = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    if (e.key === 'ArrowDown') { e.preventDefault(); items?.[0]?.focus(); }
+    else if (e.key === 'Escape') { setOpen(false); setQuery(''); onBlur?.(); setWasOpened(false); }
+  };
+
+  const handleOptionKeyDown = (e, opt) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+    else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const items = listRef.current?.querySelectorAll('.pg-combo-option');
+      const idx = Array.from(items).indexOf(e.currentTarget);
+      (items[idx + 1] || items[0])?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const items = listRef.current?.querySelectorAll('.pg-combo-option');
+      const idx = Array.from(items).indexOf(e.currentTarget);
+      (items[idx - 1] || items[items.length - 1])?.focus();
+    } else if (e.key === 'Escape') { setOpen(false); setQuery(''); onBlur?.(); setWasOpened(false); }
+  };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef}>
+      <div
+        className={`pg-field-wrap pg-combo-trigger ${
+          disabled    ? 'pg-field-wrap--readonly' :
+          hasError    ? 'pg-field-wrap--error'    : 'pg-field-wrap--normal'
+        }`}
+        onClick={openDropdown}
+        tabIndex={disabled ? -1 : 0}
+        onKeyDown={handleTriggerKeyDown}
+        style={disabled ? { cursor: 'not-allowed', opacity: 0.6 } : {}}
+      >
+        <MapPin size={14} color={hasError ? '#ef4444' : disabled ? '#049edf' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+        <span className={`pg-combo-display${!value ? ' pg-combo-display--placeholder' : ''}`}>
+          {disabled ? 'Select a state first…' : value || 'Select district…'}
+        </span>
+        {value && !disabled
+          ? <X size={13} className="pg-combo-clear" onClick={clear} />
+          : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+      </div>
+
+      {open && !disabled && (
+        <div className="pg-combo-panel">
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              className="pg-combo-search__input"
+              placeholder="Search district…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+            />
+            {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+          </div>
+          <div className="pg-combo-list" ref={listRef}>
+            {options.length === 0 ? (
+              <div className="pg-combo-empty">No districts available for this state</div>
+            ) : filtered.length === 0 ? (
+              <div className="pg-combo-empty">No districts match</div>
+            ) : filtered.map(d => (
+              <div
+                key={d}
+                className={`pg-combo-option${d === value ? ' pg-combo-option--active' : ''}`}
+                onClick={() => select(d)} tabIndex={0}
+                onKeyDown={e => handleOptionKeyDown(e, d)}
+              >
+                <span className="pg-combo-option__name">{d}</span>
+                {d === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 /* ─────────────────────────────────────────
    normalizeOwner
    Confirmed from Swagger: API returns
@@ -232,16 +699,23 @@ function OwnerModal({ onClose, onSaved, editData }) {
     return e;
   };
 
-  const handleChange = (key, val) => {
-    const updated = { ...form, [key]: val };
-    setForm(updated);
-    if (touched[key]) {
-      const field = FIELDS.find(f => f.key === key);
-      const err = validateField(key, val, field.type, field.required);
-      setErrors(p => ({ ...p, [key]: err }));
-    }
-  };
-
+const handleChange = (key, val) => {
+  const updated = { ...form, [key]: val };
+  if (key === 'state') updated.district = '';          // reset district
+  setForm(updated);
+  if (touched[key]) {
+    const field = FIELDS.find(f => f.key === key);
+    const err = validateField(key, val, field.type, field.required);
+    setErrors(p => ({ ...p, [key]: err }));
+    if (key === 'state') setErrors(p => ({ ...p, district: '' })); // clear district error too
+  }
+};
+const handleComboBlur = (key) => {
+  setTouched(p => ({ ...p, [key]: true }));
+  const field = FIELDS.find(f => f.key === key);
+  const err = validateField(key, form[key], field.type, field.required);
+  setErrors(p => ({ ...p, [key]: err }));
+};
   const handleBlur = (key) => {
     setTouched(p => ({ ...p, [key]: true }));
     const field = FIELDS.find(f => f.key === key);
@@ -334,47 +808,67 @@ function OwnerModal({ onClose, onSaved, editData }) {
         {/* Form */}
         <div className="pg-modal__body">
           <div className="row g-3">
-            {FIELDS.map(({ key, label, icon: Icon, placeholder, col, required, type }) => {
-              const isReadonly = type === 'readonly';
-              const hasError   = !!errors[key];
-              let wrapClass = 'pg-field-wrap ';
-              wrapClass += isReadonly ? 'pg-field-wrap--readonly' : hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal';
+          {FIELDS.map(({ key, label, icon: Icon, placeholder, col, required, type }) => {
+  const isReadonly     = type === 'readonly';
+  const isComboState   = type === 'combo-state';
+  const isComboDistrict= type === 'combo-district';
+  const hasError       = !!errors[key];
+  const wrapClass      = `pg-field-wrap ${isReadonly ? 'pg-field-wrap--readonly' : hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`;
 
-              return (
-                <div key={key} className={`col-12 col-sm-${col}`}>
-                  <label className="pg-field-label">
-                    {label}{' '}
-                    {isReadonly
-                      ? <span className="pg-field-label__fixed">🔒 Fixed</span>
-                      : required
-                        ? <span className="pg-field-label__required">*</span>
-                        : <span className="pg-field-label__optional">(optional)</span>}
-                  </label>
-                  <div className={wrapClass}>
-                    <Icon size={14} color={hasError ? '#ef4444' : isReadonly ? '#049edf' : '#c0c0d8'} style={{ flexShrink: 0 }} />
-                    <input
-                      readOnly={isReadonly}
-                      placeholder={placeholder}
-                      value={form[key] ?? ''}
-                      onChange={e => !isReadonly && handleChange(key, e.target.value)}
-                      onBlur={() => !isReadonly && handleBlur(key)}
-                      className={`pg-field-input${isReadonly ? ' pg-field-input--readonly' : ''}`}
-                    />
-                  </div>
-                  {hasError && (
-                    <div className="pg-field-error">
-                      <AlertCircle size={11} style={{ flexShrink: 0, marginTop: '1px' }} />
-                      <span>{errors[key]}</span>
-                    </div>
-                  )}
-                  {type === 'phone' && !hasError && touched[key] && (
-                    <div className="pg-field-hint">
-                      Mobile: +91 98765 43210 &nbsp;|&nbsp; Landline: 079-27650000
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+  return (
+    <div key={key} className={`col-12 col-sm-${col}`}>
+      <label className="pg-field-label">
+        {label}{' '}
+        {isReadonly
+          ? <span className="pg-field-label__fixed">🔒 Fixed</span>
+          : required
+            ? <span className="pg-field-label__required">*</span>
+            : <span className="pg-field-label__optional">(optional)</span>}
+      </label>
+
+      {isComboState ? (
+        <StateCombo
+          value={form.state ?? ''}
+          onChange={val => handleChange('state', val)}
+          onBlur={() => handleComboBlur('state')}
+          hasError={hasError}
+        />
+      ) : isComboDistrict ? (
+        <DistrictCombo
+          value={form.district ?? ''}
+          onChange={val => handleChange('district', val)}
+          onBlur={() => handleComboBlur('district')}
+          hasError={hasError}
+          stateValue={form.state}
+        />
+      ) : (
+        <div className={wrapClass}>
+          <Icon size={14} color={hasError ? '#ef4444' : isReadonly ? '#049edf' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+          <input
+            readOnly={isReadonly}
+            placeholder={placeholder}
+            value={form[key] ?? ''}
+            onChange={e => !isReadonly && handleChange(key, e.target.value)}
+            onBlur={() => !isReadonly && handleBlur(key)}
+            className={`pg-field-input${isReadonly ? ' pg-field-input--readonly' : ''}`}
+          />
+        </div>
+      )}
+
+      {hasError && (
+        <div className="pg-field-error">
+          <AlertCircle size={11} style={{ flexShrink: 0, marginTop: '1px' }} />
+          <span>{errors[key]}</span>
+        </div>
+      )}
+      {type === 'phone' && !hasError && touched[key] && (
+        <div className="pg-field-hint">
+          Mobile: +91 98765 43210 &nbsp;|&nbsp; Landline: 079-27650000
+        </div>
+      )}
+    </div>
+  );
+})}
           </div>
           <p className="pg-form__note">
             <span className="pg-field-label__required">*</span> Required fields &nbsp;·&nbsp; Fields marked optional may be left blank
@@ -729,12 +1223,12 @@ export default function OwnerPage() {
                     {/* Actions */}
                     <td className="pg-td">
                       <div className="pg-action-wrap">
-                        <button className="pg-btn-edit" onClick={() => handleEdit(o)} title="Edit">
+                        <button className="pg-btn-view" onClick={() => handleEdit(o)} title="Edit">
                           <Edit2 size={13} />
                         </button>
-                        <button className="pg-btn-view" onClick={() => handleView(o)} title="View">
+                        {/* <button className="pg-btn-view" onClick={() => handleView(o)} title="View">
                           <Eye size={13} />
-                        </button>
+                        </button> */}
                       </div>
                     </td>
 
