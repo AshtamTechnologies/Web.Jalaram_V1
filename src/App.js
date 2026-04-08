@@ -9,9 +9,9 @@ export default function App() {
     return localStorage.getItem('isLoggedIn') === 'true';
   });
 
-  // ── Blank the browser tab title ──
+  // ✅ Set proper browser tab title
   useEffect(() => {
-    document.title = '';
+    document.title = 'JalaramAd';
   }, []);
 
   const handleLogin = () => {
