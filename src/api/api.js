@@ -451,6 +451,70 @@ updateLandContract: async (data) => {
     api.delete(`/LandContract/Delete/${landContractID}`),
 
 
+
+
+
+  // ─────────────────────────────────────────────────────────────────────────────
+// LAND PAYMENTS
+// Add these methods inside the `apiService` object in your existing api.js file
+// Place them after the `deleteLandContract` method
+// ─────────────────────────────────────────────────────────────────────────────
+
+  // GET /api/LandPayment  — fetch all payments
+  getAllLandPayments: () =>
+    api.get('/LandPayment'),
+
+  // GET /api/LandPayment/{id}  — fetch single payment by ID
+  getLandPaymentById: (id) =>
+    api.get(`/LandPayment/${id}`),
+
+  // POST /api/LandPayment  — create a new payment
+  createLandPayment: (data) =>
+    api.post('/LandPayment', {
+      landPaymentID:   0,
+      ownerID:         Number(data.ownerID),
+      landContractID:  Number(data.landContractID),
+      hoardingID:      Number(data.hoardingID) || 0,
+      paymentDate:     data.paymentDate
+        ? new Date(data.paymentDate + 'T00:00:00.000Z').toISOString()
+        : new Date().toISOString(),
+      paymentPurpose:  data.paymentPurpose  || '',
+      amountPaid:      Number(data.amountPaid),
+      paymentMode:     data.paymentMode     || '',
+      nextDueDate:     data.nextDueDate
+        ? new Date(data.nextDueDate + 'T00:00:00.000Z').toISOString()
+        : null,
+      bankName:        data.bankName        || '',
+      referenceNumber: data.referenceNumber || '',
+      paidBy:          data.paidBy          || '',
+      comments:        data.comments        || '',
+    }),
+
+  // PUT /api/LandPayment/{id}  — update an existing payment
+  updateLandPayment: (id, data) =>
+    api.put(`/LandPayment/${id}`, {
+      landPaymentID:   Number(id),
+      ownerID:         Number(data.ownerID),
+      landContractID:  Number(data.landContractID),
+      hoardingID:      Number(data.hoardingID) || 0,
+      paymentDate:     data.paymentDate
+        ? new Date(data.paymentDate + 'T00:00:00.000Z').toISOString()
+        : new Date().toISOString(),
+      paymentPurpose:  data.paymentPurpose  || '',
+      amountPaid:      Number(data.amountPaid),
+      paymentMode:     data.paymentMode     || '',
+      nextDueDate:     data.nextDueDate
+        ? new Date(data.nextDueDate + 'T00:00:00.000Z').toISOString()
+        : null,
+      bankName:        data.bankName        || '',
+      referenceNumber: data.referenceNumber || '',
+      paidBy:          data.paidBy          || '',
+      comments:        data.comments        || '',
+    }),
+
+  // DELETE /api/LandPayment/{id}  — permanently remove a payment
+  deleteLandPayment: (id) =>
+    api.delete(`/LandPayment/${id}`),
 };
 
 

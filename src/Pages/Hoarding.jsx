@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom';
 import {
   Plus, Search, X, AlertCircle, Check, Edit2,
@@ -15,10 +15,10 @@ import './Common1.css';
 /* ─────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────── */
-const MATERIAL_OPTIONS = ['Flex', 'Vinyl', 'Metal', 'LED', 'Acrylic'];
-const STATUS_OPTIONS   = ['Active', 'Inactive', 'Under Maintenance'];
+const MATERIAL_OPTIONS  = ['Flex', 'Vinyl', 'Metal', 'LED', 'Acrylic'];
+const STATUS_OPTIONS    = ['Active', 'Inactive', 'Under Maintenance'];
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
-const HISTORY_PER_PAGE = 3;
+const HISTORY_PER_PAGE  = 3;
 
 const EMPTY_VERSION = {
   effdt: '', material: '', hoardingType: '', status: 'Active',
@@ -107,9 +107,9 @@ function validateVersion(form, needEffdt) {
 ───────────────────────────────────────── */
 function StatusBadge({ status }) {
   const map = {
-    'Active':           { cls: 'hd-status-active',   Icon: CheckCircle },
-    'Inactive':         { cls: 'hd-status-inactive',  Icon: AlertCircle },
-    'Under Maintenance':{ cls: 'hd-status-maint',     Icon: Wrench },
+    'Active':            { cls: 'hd-status-active',   Icon: CheckCircle },
+    'Inactive':          { cls: 'hd-status-inactive',  Icon: AlertCircle },
+    'Under Maintenance': { cls: 'hd-status-maint',     Icon: Wrench },
   };
   const { cls, Icon } = map[status] || { cls: 'hd-status-inactive', Icon: AlertCircle };
   return (
@@ -139,8 +139,8 @@ function FieldLabel({ label, required, readOnly }) {
   return (
     <label className="pg-field-label">
       {label}
-      {required  && <span className="pg-field-label__required"> *</span>}
-      {readOnly  && <span className="pg-field-label__fixed"> 🔒 Fixed</span>}
+      {required && <span className="pg-field-label__required"> *</span>}
+      {readOnly && <span className="pg-field-label__fixed"> 🔒 Fixed</span>}
     </label>
   );
 }
@@ -163,55 +163,99 @@ function FieldError({ msg }) {
   ) : null;
 }
 
-/* ═══════════════════════════════════════════
-   REUSABLE GENERIC COMBO DROPDOWN
-   Used for Material, Status, Hoarding Type, Site
-═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   COMBO DROPDOWN  — portal-based so it always escapes overflow /
+   backdrop-filter / stacking-context issues in modals & cards.
+═══════════════════════════════════════════════════════════════ */
 function ComboDropdown({
-  value,          // current selected value (id/key)
-  onChange,       // (val) => void
-  onBlur,         // () => void — only fires if user opened it
+  value,
+  onChange,
+  onBlur,
   hasError,
   placeholder,
   icon: Icon,
-  options,        // [{ value, label, sub? }]
+  options,
   searchable = false,
-  emptyText = 'No options',
+  emptyText  = 'No options',
 }) {
-  const [open, setOpen]           = useState(false);
-  const [query, setQuery]         = useState('');
-  const [wasOpened, setWasOpened] = useState(false);
-  const wrapRef  = useRef(null);
-  const inputRef = useRef(null);
-  const listRef  = useRef(null);
+  const [open,       setOpen]       = useState(false);
+  const [query,      setQuery]      = useState('');
+  const [wasOpened,  setWasOpened]  = useState(false);
+  const [panelStyle, setPanelStyle] = useState({ position: 'fixed', top: 0, left: 0, width: 0, zIndex: 99999 });
+
+  const wrapRef    = useRef(null);   // the whole combo wrapper
+  const triggerRef = useRef(null);   // the visible trigger pill
+  const panelRef   = useRef(null);   // the floating panel
+  const inputRef   = useRef(null);   // search <input> inside panel
+  const listRef    = useRef(null);   // option list
 
   const selected = options.find(o => String(o.value) === String(value));
 
   const filtered = searchable
     ? options.filter(o =>
         o.label.toLowerCase().includes(query.toLowerCase()) ||
-        (o.sub  && o.sub.toLowerCase().includes(query.toLowerCase()))
+        (o.sub && o.sub.toLowerCase().includes(query.toLowerCase()))
       )
     : options;
 
-  /* Close on outside click */
+  /* ── Position the portal panel under (or above) the trigger ── */
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+
+    const reposition = () => {
+      const r      = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const panelH = panelRef.current?.offsetHeight || 260;
+      const flipUp = (window.innerHeight - r.bottom) < panelH + 8 && r.top > panelH + 8;
+      setPanelStyle({
+        position: 'fixed',
+        top:      flipUp ? r.top - panelH - 4 : r.bottom + 4,
+        left:     r.left,
+        width:    r.width,
+        zIndex:   99999,
+      });
+    };
+
+    reposition();
+    window.addEventListener('scroll',  reposition, true);
+    window.addEventListener('resize',  reposition);
+    return () => {
+      window.removeEventListener('scroll',  reposition, true);
+      window.removeEventListener('resize',  reposition);
+    };
+  }, [open]);
+
+  /* ── Close on outside click ── */
   useEffect(() => {
-    function handler(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+    if (!open) return;
+    const handler = (e) => {
+      const inWrap  = wrapRef.current?.contains(e.target);
+      const inPanel = panelRef.current?.contains(e.target);
+      if (!inWrap && !inPanel) {
         setOpen(false);
         setQuery('');
-        if (wasOpened) { onBlur && onBlur(); setWasOpened(false); }
+        if (wasOpened) { onBlur?.(); setWasOpened(false); }
       }
-    }
+    };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [onBlur, wasOpened]);
+  }, [open, wasOpened, onBlur]);
 
   const openDropdown = () => {
     setOpen(true);
     setWasOpened(true);
     setQuery('');
-    setTimeout(() => (searchable ? inputRef.current?.focus() : listRef.current?.querySelector('.pg-combo-option')?.focus()), 0);
+    setTimeout(() => (
+      searchable
+        ? inputRef.current?.focus()
+        : listRef.current?.querySelector('.pg-combo-option')?.focus()
+    ), 0);
+  };
+
+  const closeDropdown = () => {
+    setOpen(false);
+    setQuery('');
+    if (wasOpened) { onBlur?.(); setWasOpened(false); }
   };
 
   const select = (opt) => {
@@ -227,10 +271,12 @@ function ComboDropdown({
     setOpen(false);
     setQuery('');
     setWasOpened(false);
-    onBlur && onBlur();
+    onBlur?.();
   };
 
-  /* Arrow key nav on trigger */
+  /* Arrow-key navigation helpers */
+  const navItems = () => listRef.current?.querySelectorAll('.pg-combo-option') ?? [];
+
   const handleTriggerKeyDown = (e) => {
     if (!open) {
       if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
@@ -238,102 +284,108 @@ function ComboDropdown({
       }
       return;
     }
-    const items = listRef.current?.querySelectorAll('.pg-combo-option');
-    const idx   = Array.from(items || []).indexOf(document.activeElement);
-    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
-    else if (e.key === 'Escape') { setOpen(false); setQuery(''); onBlur && onBlur(); setWasOpened(false); }
+    const items = navItems();
+    const idx   = Array.from(items).indexOf(document.activeElement);
+    if      (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape')    { closeDropdown(); }
   };
 
   const handleSearchKeyDown = (e) => {
-    const items = listRef.current?.querySelectorAll('.pg-combo-option');
-    if (e.key === 'ArrowDown') { e.preventDefault(); items?.[0]?.focus(); }
-    else if (e.key === 'Escape') { setOpen(false); setQuery(''); onBlur && onBlur(); setWasOpened(false); }
+    if      (e.key === 'ArrowDown') { e.preventDefault(); navItems()[0]?.focus(); }
+    else if (e.key === 'Escape')    { closeDropdown(); }
   };
 
   const handleOptionKeyDown = (e, opt) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
-    else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      const items = listRef.current?.querySelectorAll('.pg-combo-option');
-      const idx   = Array.from(items).indexOf(e.currentTarget);
-      (items[idx + 1] || items[0])?.focus();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      const items = listRef.current?.querySelectorAll('.pg-combo-option');
-      const idx   = Array.from(items).indexOf(e.currentTarget);
-      (items[idx - 1] || items[items.length - 1])?.focus();
-    } else if (e.key === 'Escape') {
-      setOpen(false); setQuery(''); onBlur && onBlur(); setWasOpened(false);
-    }
+    const items = navItems();
+    const idx   = Array.from(items).indexOf(e.currentTarget);
+    if      (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp')   { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape')    { closeDropdown(); }
   };
+
+  /* ── The floating panel rendered via portal ── */
+  const panel = open ? ReactDOM.createPortal(
+    <div ref={panelRef} style={panelStyle}>
+      <div className="pg-combo-panel" style={{ position: 'static' }}>
+        {searchable && (
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              className="pg-combo-search__input"
+              placeholder="Search…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
+            />
+            {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+          </div>
+        )}
+        <div className="pg-combo-list" ref={listRef}>
+          {filtered.length === 0 ? (
+            <div className="pg-combo-empty">{emptyText}</div>
+          ) : filtered.map(opt => (
+            <div
+              key={opt.value}
+              className={`pg-combo-option${String(opt.value) === String(value) ? ' pg-combo-option--active' : ''}`}
+              onClick={() => select(opt)}
+              tabIndex={0}
+              onKeyDown={e => handleOptionKeyDown(e, opt)}
+            >
+              <span className="pg-combo-option__name">{opt.label}</span>
+              {opt.sub && <span className="pg-combo-option__id">{opt.sub}</span>}
+              {String(opt.value) === String(value) && (
+                <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>,
+    document.body
+  ) : null;
 
   return (
     <div className="pg-combo-wrap" ref={wrapRef}>
+      {/* Trigger */}
       <div
+        ref={triggerRef}
         className={`pg-field-wrap pg-combo-trigger ${hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
         onClick={openDropdown}
         tabIndex={0}
         onKeyDown={handleTriggerKeyDown}
       >
-        {Icon && <Icon size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />}
+        {Icon && (
+          <Icon size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+        )}
         <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`}>
-          {selected
-            ? <>{selected.label}{selected.sub && <span className="pg-combo-option__id" style={{ marginLeft: 6 }}>{selected.sub}</span>}</>
-            : placeholder}
+          {selected ? (
+            <>
+              {selected.label}
+              {selected.sub && (
+                <span className="pg-combo-option__id" style={{ marginLeft: 6 }}>{selected.sub}</span>
+              )}
+            </>
+          ) : placeholder}
         </span>
         {selected
           ? <X size={13} className="pg-combo-clear" onClick={clear} />
-          : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+          : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
+        }
       </div>
 
-      {open && (
-        <div className="pg-combo-panel">
-          {searchable && (
-            <div className="pg-combo-search">
-              <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
-              <input
-                ref={inputRef}
-                className="pg-combo-search__input"
-                placeholder="Search…"
-                value={query}
-                onChange={e => setQuery(e.target.value)}
-                onKeyDown={handleSearchKeyDown}
-              />
-              {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
-            </div>
-          )}
-          <div className="pg-combo-list" ref={listRef}>
-            {filtered.length === 0 ? (
-              <div className="pg-combo-empty">{emptyText}</div>
-            ) : filtered.map(opt => (
-              <div
-                key={opt.value}
-                className={`pg-combo-option${String(opt.value) === String(value) ? ' pg-combo-option--active' : ''}`}
-                onClick={() => select(opt)}
-                tabIndex={0}
-                onKeyDown={e => handleOptionKeyDown(e, opt)}
-              >
-                <span className="pg-combo-option__name">{opt.label}</span>
-                {opt.sub && <span className="pg-combo-option__id">{opt.sub}</span>}
-                {String(opt.value) === String(value) && (
-                  <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {/* Portal panel */}
+      {panel}
     </div>
   );
 }
 
 /* ─────────────────────────────────────────
-   VERSION FORM  (all 4 selects → ComboDropdown)
+   VERSION FORM
 ───────────────────────────────────────── */
 function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes }) {
-
-  /* Build option arrays */
   const siteOptions = sites.map(s => ({
     value: s.siteID,
     label: s.addressLine1,
@@ -371,7 +423,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
         <FieldError msg={errors.effdt} />
       </div>
 
-      {/* ── Site Combo ── */}
+      {/* Site */}
       <div className="col-12 col-md-4">
         <FieldLabel label="Site" required />
         <ComboDropdown
@@ -388,7 +440,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
         <FieldError msg={errors.siteID} />
       </div>
 
-      {/* ── Material Combo ── */}
+      {/* Material */}
       <div className="col-12 col-md-4">
         <FieldLabel label="Material" required />
         <ComboDropdown
@@ -403,7 +455,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
         <FieldError msg={errors.material} />
       </div>
 
-      {/* ── Hoarding Type Combo ── */}
+      {/* Hoarding Type */}
       <div className="col-12 col-md-4">
         <FieldLabel label="Hoarding Type" required />
         <ComboDropdown
@@ -420,7 +472,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
         <FieldError msg={errors.hoardingType} />
       </div>
 
-      {/* ── Status Combo ── */}
+      {/* Status */}
       <div className="col-12 col-md-4">
         <FieldLabel label="Status" required />
         <ComboDropdown
@@ -497,9 +549,9 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
    PHOTO SECTION
 ───────────────────────────────────────── */
 function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readOnly = false }) {
-  const [lightbox, setLightbox]         = useState(null);
-  const [uploading, setUploading]       = useState(false);
-  const [photoError, setPhotoError]     = useState('');
+  const [lightbox,       setLightbox]       = useState(null);
+  const [uploading,      setUploading]      = useState(false);
+  const [photoError,     setPhotoError]     = useState('');
   const [replacingPhoto, setReplacingPhoto] = useState(null);
   const addRef     = useRef(null);
   const replaceRef = useRef(null);
@@ -517,18 +569,18 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
   };
 
   const buildFormData = ({ file, filename }) => {
-    const fd = new FormData();
-    const userId    = getLoggedInUserId();
-    const now       = new Date().toISOString();
-    const effdtISO  = toISODateTime(effdtRaw);
-    const resolvedFilename = filename || file.name;
+    const fd           = new FormData();
+    const userId       = getLoggedInUserId();
+    const now          = new Date().toISOString();
+    const effdtISO     = toISODateTime(effdtRaw);
+    const resolvedName = filename || file.name;
     fd.append('hoardingPhotoID', '0');
     fd.append('hoardingID',      String(hoardingID));
     fd.append('effdt',           effdtISO);
-    fd.append('photo',           file, resolvedFilename);
-    fd.append('photoUrl',        resolvedFilename);
-    fd.append('photoPath',       resolvedFilename);
-    fd.append('filename',        resolvedFilename);
+    fd.append('photo',           file, resolvedName);
+    fd.append('photoUrl',        resolvedName);
+    fd.append('photoPath',       resolvedName);
+    fd.append('filename',        resolvedName);
     fd.append('uploadedOn',      now);
     fd.append('lastUpdateDttm',  now);
     fd.append('lastUpdatedBy',   String(userId));
@@ -568,7 +620,10 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
     } finally { setUploading(false); setReplacingPhoto(null); }
   };
 
-  const triggerReplace = (photo) => { setReplacingPhoto(photo); setTimeout(() => replaceRef.current?.click(), 50); };
+  const triggerReplace = (photo) => {
+    setReplacingPhoto(photo);
+    setTimeout(() => replaceRef.current?.click(), 50);
+  };
 
   const handleDelete = async (photo) => {
     if (!window.confirm(`Delete photo "${photo.filename}"?`)) return;
@@ -642,9 +697,9 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
               <img src={resolvePhotoSrc(p)} alt={p.filename} />
               <div className="hd-photo-name">{p.filename}</div>
               <div className="hd-photo-overlay">
-                <button className="hd-photo-action" onClick={() => setLightbox(p)} title="View" disabled={uploading}><ZoomIn size={12} /></button>
+                <button className="hd-photo-action"         onClick={() => setLightbox(p)}  title="View"    disabled={uploading}><ZoomIn  size={12} /></button>
                 {!readOnly && <button className="hd-photo-action replace" onClick={() => triggerReplace(p)} title="Replace" disabled={uploading}><Replace size={12} /></button>}
-                {!readOnly && <button className="hd-photo-action danger"  onClick={() => handleDelete(p)}    title="Delete"  disabled={uploading}><Trash2  size={12} /></button>}
+                {!readOnly && <button className="hd-photo-action danger"  onClick={() => handleDelete(p)}   title="Delete"  disabled={uploading}><Trash2  size={12} /></button>}
               </div>
             </div>
           ))}
@@ -664,11 +719,13 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
           style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
         >
           <div style={{ position: 'relative', cursor: 'default' }} onClick={() => setLightbox(null)}>
-            <img src={resolvePhotoSrc(lightbox)} alt={lightbox.filename}
+            <img
+              src={resolvePhotoSrc(lightbox)} alt={lightbox.filename}
               style={{ maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain', borderRadius: 8, display: 'block', cursor: 'pointer' }}
               onClick={() => setLightbox(null)}
             />
-            <button onClick={() => setLightbox(null)}
+            <button
+              onClick={() => setLightbox(null)}
               style={{ position: 'absolute', top: -12, right: -12, width: 28, height: 28, borderRadius: '50%', border: 'none', background: '#fff', color: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.35)' }}
             ><X size={14} /></button>
           </div>
@@ -731,8 +788,8 @@ function EffdtHistory({ versions, sites, hoardingTypeMap, activePanel, onView, o
               <div className="col-6 col-md-2"><span className="hd-effdt-val strong">{fmtCurrency(v.monthlyRent)}</span></div>
               <div className="col-12 col-md-1">
                 <div className="pg-action-wrap" style={{ justifyContent: 'flex-end' }}>
-                  <button className={`pg-btn-edit${isSelected && activePanel.mode === 'view' ? ' hd-btn-view-active' : ''}`} onClick={() => onView(gi, v)} title="View details"><Eye size={13} /></button>
-                  <button className={`pg-btn-view${isSelected && activePanel.mode === 'edit' ? ' hd-btn-edit-active' : ''}`} onClick={() => onEdit(gi, v)} title="Edit this version"><Edit2 size={13} /></button>
+                  <button className={`pg-btn-edit${isSelected && activePanel.mode === 'view' ? ' hd-btn-view-active' : ''}`} onClick={() => onView(gi, v)} title="View details"><Eye    size={13} /></button>
+                  <button className={`pg-btn-view${isSelected && activePanel.mode === 'edit' ? ' hd-btn-edit-active' : ''}`} onClick={() => onEdit(gi, v)} title="Edit this version"><Edit2  size={13} /></button>
                 </div>
               </div>
             </div>
@@ -769,23 +826,20 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     ? [...hoarding.versions].sort((a, b) => new Date(b.effdt) - new Date(a.effdt))
     : [];
 
-  const [hoardingCode, setHoardingCode]             = useState(hoarding?.hoardingCode || '');
-  const [hcError, setHcError]                       = useState('');
-  const [addForm, setAddForm]                       = useState({ ...EMPTY_VERSION });
-  const [addErrors, setAddErrors]                   = useState({});
-  const [newlySavedHoardingID, setNewlySavedHoardingID] = useState(null);
-  const [newlySavedEffdtRaw, setNewlySavedEffdtRaw] = useState('');
-
-  const [activePanel, setActivePanel] = useState(null);
-  const [effdtForm, setEffdtForm]     = useState({});
-  const [effdtErrors, setEffdtErrors] = useState({});
-
-  const [photosMap, setPhotosMap]         = useState({});
-  const [photosLoading, setPhotosLoading] = useState(false);
-
-  const [saving, setSaving] = useState(false);
-  const [saveOk, setSaveOk] = useState(false);
-  const [apiErr, setApiErr] = useState('');
+  const [hoardingCode,           setHoardingCode]           = useState(hoarding?.hoardingCode || '');
+  const [hcError,                setHcError]                = useState('');
+  const [addForm,                setAddForm]                = useState({ ...EMPTY_VERSION });
+  const [addErrors,              setAddErrors]              = useState({});
+  const [newlySavedHoardingID,   setNewlySavedHoardingID]   = useState(null);
+  const [newlySavedEffdtRaw,     setNewlySavedEffdtRaw]     = useState('');
+  const [activePanel,            setActivePanel]            = useState(null);
+  const [effdtForm,              setEffdtForm]              = useState({});
+  const [effdtErrors,            setEffdtErrors]            = useState({});
+  const [photosMap,              setPhotosMap]              = useState({});
+  const [photosLoading,          setPhotosLoading]          = useState(false);
+  const [saving,                 setSaving]                 = useState(false);
+  const [saveOk,                 setSaveOk]                 = useState(false);
+  const [apiErr,                 setApiErr]                 = useState('');
 
   const activeVersion = activePanel !== null && activePanel.idx >= 0
     ? sortedVersions[activePanel.idx]
@@ -802,8 +856,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     } finally { setPhotosLoading(false); }
   }, []);
 
-  const photosFor = (hID) => (hID ? (photosMap[hID] || []) : []);
-
+  const photosFor    = (hID) => (hID ? (photosMap[hID] || []) : []);
   const scrollToPanel = () =>
     setTimeout(() => document.getElementById('hd-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
 
@@ -894,18 +947,26 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     try {
       if (isPanelNew) {
         await apiService.addHoardingEffdt(hoarding.hoardingCode, {
-          effdt: effdtForm.effdt, material: effdtForm.material,
-          hoardingType: effdtForm.hoardingType, status: effdtForm.status,
-          monthlyRent: effdtForm.monthlyRent, width: effdtForm.width,
-          height: effdtForm.height, siteID: effdtForm.siteID,
+          effdt:        effdtForm.effdt,
+          material:     effdtForm.material,
+          hoardingType: effdtForm.hoardingType,
+          status:       effdtForm.status,
+          monthlyRent:  effdtForm.monthlyRent,
+          width:        effdtForm.width,
+          height:       effdtForm.height,
+          siteID:       effdtForm.siteID,
         });
       } else {
         await apiService.updateHoarding(effdtForm.hoardingID, {
           hoardingCode: hoarding.hoardingCode,
-          effdt: effdtForm.effdt, material: effdtForm.material,
-          hoardingType: effdtForm.hoardingType, status: effdtForm.status,
-          monthlyRent: effdtForm.monthlyRent, width: effdtForm.width,
-          height: effdtForm.height, siteID: effdtForm.siteID,
+          effdt:        effdtForm.effdt,
+          material:     effdtForm.material,
+          hoardingType: effdtForm.hoardingType,
+          status:       effdtForm.status,
+          monthlyRent:  effdtForm.monthlyRent,
+          width:        effdtForm.width,
+          height:       effdtForm.height,
+          siteID:       effdtForm.siteID,
         });
       }
       setSaveOk(true);
@@ -929,7 +990,9 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
           <div>
             <div className="hd-topbar-title">{isAdd ? 'Add New Hoarding' : `Edit — ${hoarding?.hoardingCode}`}</div>
             <div className="hd-topbar-sub">
-              {isAdd ? 'Fill all required fields' : `${sortedVersions.length} effective date version${sortedVersions.length !== 1 ? 's' : ''}`}
+              {isAdd
+                ? 'Fill all required fields'
+                : `${sortedVersions.length} effective date version${sortedVersions.length !== 1 ? 's' : ''}`}
             </div>
           </div>
         </div>
@@ -1065,7 +1128,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                             <div className="hd-section-sub">Read-only snapshot</div>
                           </div>
                           <button className="hd-btn-outline-sm" onClick={() => openEdit(activePanel.idx, activeVersion)}><Edit2 size={12} /> Edit</button>
-                          <button className="hd-btn-ghost-sm" onClick={closePanel}><X size={12} /></button>
+                          <button className="hd-btn-ghost-sm"   onClick={closePanel}><X size={12} /></button>
                         </div>
                         <div className="hd-section-body">
                           <div className="row g-3">
@@ -1134,8 +1197,8 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                           }
                         </div>
                         <div className="hd-form-footer">
-                          <button className="pg-btn-cancel" onClick={closePanel} disabled={saving}>Cancel</button>
-                          <button className="pg-btn-save" onClick={saveEffdt} disabled={saving}>
+                          <button className="pg-btn-cancel" onClick={closePanel}  disabled={saving}>Cancel</button>
+                          <button className="pg-btn-save"   onClick={saveEffdt}   disabled={saving}>
                             {saveOk ? <><Check size={13} /> Saved!</> : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Save Changes</>}
                           </button>
                         </div>
@@ -1165,7 +1228,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                         </div>
                         <div className="hd-form-footer">
                           <button className="pg-btn-cancel" onClick={closePanel} disabled={saving}>Cancel</button>
-                          <button className="pg-btn-save" onClick={saveEffdt} disabled={saving}>
+                          <button className="pg-btn-save"   onClick={saveEffdt}  disabled={saving}>
                             {saveOk ? <><Check size={13} /> Saved!</> : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Save</>}
                           </button>
                         </div>
@@ -1181,8 +1244,8 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
 
       {isAdd && (
         <div className="hd-form-footer hd-form-footer--sticky">
-          <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
-          <button className="pg-btn-save" onClick={saveNewHoarding} disabled={saving}>
+          <button className="pg-btn-cancel" onClick={onBack}          disabled={saving}>Cancel</button>
+          <button className="pg-btn-save"   onClick={saveNewHoarding} disabled={saving}>
             {saveOk ? <><Check size={13} /> Saved!</> : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Save Hoarding</>}
           </button>
         </div>
@@ -1201,7 +1264,7 @@ export default function HoardingPage() {
   const [loading,       setLoading]       = useState(true);
   const [loadError,     setLoadError]     = useState('');
 
-  const [view,       setView]       = useState(() => sessionStorage.getItem('hd_view') || 'grid');
+  const [view,       setView]       = useState(() => sessionStorage.getItem('hd_view')     || 'grid');
   const [formMode,   setFormMode]   = useState(() => sessionStorage.getItem('hd_formMode') || null);
   const [editTarget, setEditTarget] = useState(() => {
     try { return JSON.parse(sessionStorage.getItem('hd_editTarget')) || null; }
@@ -1216,7 +1279,7 @@ export default function HoardingPage() {
   const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
-    sessionStorage.setItem('hd_view', view);
+    sessionStorage.setItem('hd_view',     view);
     sessionStorage.setItem('hd_formMode', formMode || '');
     try { sessionStorage.setItem('hd_editTarget', editTarget ? JSON.stringify(editTarget) : ''); }
     catch { /* ignore */ }
@@ -1231,7 +1294,7 @@ export default function HoardingPage() {
         apiService.getAllHoardingTypes(),
       ]);
       setHoardings(groupHoardingsByCode(Array.isArray(rawHoardings) ? rawHoardings : []));
-      setSites(Array.isArray(rawSites)  ? rawSites  : []);
+      setSites(Array.isArray(rawSites) ? rawSites : []);
       setHoardingTypes(Array.isArray(rawTypes) ? rawTypes : []);
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load hoardings.');
@@ -1322,11 +1385,11 @@ export default function HoardingPage() {
     { key: 'hoardingCode', label: 'Hoarding Code' },
     { key: 'siteLabel',    label: 'Site' },
     { key: 'typeLabel',    label: 'Type' },
-    { key: 'material',     label: 'Material',      tabletHide: true },
+    { key: 'material',     label: 'Material',     tabletHide: true },
     { key: 'status',       label: 'Status' },
-    { key: 'monthlyRent',  label: 'Monthly Rent',  tabletHide: true },
-    { key: 'size',         label: 'Size (W×H)',     tabletHide: true, noSort: true },
-    { key: '_action',      label: 'Action',         noSort: true },
+    { key: 'monthlyRent',  label: 'Monthly Rent', tabletHide: true },
+    { key: 'size',         label: 'Size (W×H)',   tabletHide: true, noSort: true },
+    { key: '_action',      label: 'Action',        noSort: true },
   ];
 
   return (
@@ -1438,9 +1501,9 @@ export default function HoardingPage() {
                   </div>
                 </div>
                 <div className="pg-card__body">
-                  <div className="pg-card__row"><Layers size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.material}</span></div>
+                  <div className="pg-card__row"><Layers     size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.material}</span></div>
                   <div className="pg-card__row"><DollarSign size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{fmtCurrency(r.monthlyRent)} / month</span></div>
-                  <div className="pg-card__row"><Maximize2 size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.width && r.height ? `${r.width} × ${r.height} ft (${r.width * r.height} sq ft)` : '—'}</span></div>
+                  <div className="pg-card__row"><Maximize2  size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.width && r.height ? `${r.width} × ${r.height} ft (${r.width * r.height} sq ft)` : '—'}</span></div>
                   <div className="pg-card__row"><StatusBadge status={r.status} /></div>
                 </div>
               </div>
