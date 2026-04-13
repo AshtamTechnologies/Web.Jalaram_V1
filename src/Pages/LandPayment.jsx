@@ -3,13 +3,14 @@ import {
   Plus, Search, X, AlertCircle, Check, Edit2,
   RefreshCw, Calendar, ChevronUp, ChevronDown,
   ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
-  Loader2, FileText, Eye, ArrowLeft, Building2, User,
-  IndianRupee, Trash2, ShieldCheck, MessageSquare,
+  Loader2, FileText, ArrowLeft, Building2, User,
+  IndianRupee, ShieldCheck, MessageSquare,
   CreditCard, TrendingUp, Hash, Landmark, Banknote,
   Receipt, Clock, CheckCircle2,
 } from 'lucide-react';
 import { apiService } from '../api/api';
 import './Common1.css';
+import { useResizableColumns } from '../hooks/useResizableColumns';
 
 /* ─────────────────────────────────────────
    CONSTANTS
@@ -479,151 +480,6 @@ function ContractDropdown({ contracts, ownerID, value, onChange, error, disabled
   );
 }
 
-/* ─────────────────────────────────────────
-   DELETE CONFIRM MODAL
-───────────────────────────────────────── */
-function DeleteConfirmModal({ payment, onConfirm, onCancel }) {
-  return (
-    <div className="pg-overlay" onClick={onCancel}>
-      <div className="exp-delete-modal" onClick={e => e.stopPropagation()}>
-        <div className="exp-delete-modal__icon"><Trash2 size={22} color="#dc2626" /></div>
-        <div className="exp-delete-modal__title">Delete Payment?</div>
-        <div className="exp-delete-modal__sub">
-          Payment <strong>#{payment.landPaymentID}</strong> of <strong>{fmtCurrency(payment.amountPaid)}</strong> will be permanently removed.
-        </div>
-        <div className="exp-delete-modal__actions">
-          <button className="pg-btn-cancel" onClick={onCancel}>Cancel</button>
-          <button className="exp-btn-delete-confirm" onClick={onConfirm}><Trash2 size={13} /> Delete</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────────────────────────
-   VIEW MODAL
-───────────────────────────────────────── */
-function PaymentViewModal({ payment, owners, hoardings, contracts, onClose, onEdit }) {
-  if (!payment) return null;
-
-  const owner    = owners.find(o => o.ownerID === Number(payment.ownerID) || o.ownerID === payment.ownerID);
-  const hoarding = hoardings.find(h => h.hoardingID === Number(payment.hoardingID) || h.hoardingID === payment.hoardingID);
-  const contract = contracts.find(c => c.landContractID === Number(payment.landContractID) || c.landContractID === payment.landContractID);
-  const mst      = paymentModeStyle(payment.paymentMode);
-
-  return (
-    <div className="pg-overlay" onClick={onClose}>
-      <div className="pg-modal lc-view-modal" onClick={e => e.stopPropagation()}>
-        <div className="lc-view-banner">
-          <button className="pg-view__close" onClick={onClose}><X size={14} /></button>
-          <div className="lc-view-banner__inner">
-            <div className="lc-view-banner__icon"><Receipt size={22} color="#fff" /></div>
-            <div style={{ minWidth: 0, flex: 1 }}>
-              <div className="lc-view-banner__id">Payment #{payment.landPaymentID}</div>
-              <div className="lc-view-banner__owner">{owner?.ownerName || `Owner ID ${payment.ownerID}`}</div>
-            </div>
-            <span
-              className="lc-view-banner__status"
-              style={{ background: mst.bg, color: mst.color, border: `1px solid ${mst.border}` }}
-            >
-              {payment.paymentMode || '—'}
-            </span>
-          </div>
-          {hoarding && (
-            <div className="lc-view-banner__site">
-              <Building2 size={12} /><span>{hoardingLabel(hoarding)}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="pg-view__body">
-          <div className="row g-3 mt-0">
-            {contract && (
-              <div className="col-12">
-                <div className="pg-info-row">
-                  <div className="pg-info-row__icon pg-info-row__icon--highlight"><FileText size={14} color="#049edf" /></div>
-                  <div className="pg-info-row__content">
-                    <div className="pg-info-row__label">Land Contract</div>
-                    <div className="pg-info-row__value">
-                      Contract #{contract.landContractID}
-                      <span style={{ color: '#9090a8', fontWeight: 500, marginLeft: 8, fontSize: 12 }}>
-                        {fmtDate(contract.startDate)} → {fmtDate(contract.endDate)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {[
-              { label: 'Payment Date',    value: fmtDate(payment.paymentDate),  Icon: Calendar },
-              { label: 'Next Due Date',   value: fmtDate(payment.nextDueDate),  Icon: Calendar },
-              { label: 'Amount Paid',     value: fmtCurrency(payment.amountPaid), Icon: IndianRupee },
-              { label: 'Payment Purpose', value: payment.paymentPurpose || '—', Icon: Receipt },
-              { label: 'Payment Mode',    value: payment.paymentMode    || '—', Icon: CreditCard },
-              { label: 'Paid By',         value: payment.paidBy         || '—', Icon: User },
-            ].map(f => (
-              <div key={f.label} className="col-6">
-                <div className="pg-info-row">
-                  <div className="pg-info-row__icon pg-info-row__icon--highlight"><f.Icon size={14} color="#049edf" /></div>
-                  <div className="pg-info-row__content">
-                    <div className="pg-info-row__label">{f.label}</div>
-                    <div className="pg-info-row__value">{f.value}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {(payment.bankName || payment.referenceNumber) && (
-              <>
-                {payment.bankName && (
-                  <div className="col-6">
-                    <div className="pg-info-row">
-                      <div className="pg-info-row__icon pg-info-row__icon--highlight"><Landmark size={14} color="#049edf" /></div>
-                      <div className="pg-info-row__content">
-                        <div className="pg-info-row__label">Bank Name</div>
-                        <div className="pg-info-row__value">{payment.bankName}</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {payment.referenceNumber && (
-                  <div className="col-6">
-                    <div className="pg-info-row">
-                      <div className="pg-info-row__icon pg-info-row__icon--highlight"><Hash size={14} color="#049edf" /></div>
-                      <div className="pg-info-row__content">
-                        <div className="pg-info-row__label">Reference No.</div>
-                        <div className="pg-info-row__value" style={{ fontFamily: 'monospace', letterSpacing: 0.5 }}>{payment.referenceNumber}</div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-
-            {payment.comments && (
-              <div className="col-12">
-                <div className="pg-info-row">
-                  <div className="pg-info-row__icon"><MessageSquare size={14} color="#9090a8" /></div>
-                  <div className="pg-info-row__content">
-                    <div className="pg-info-row__label">Comments</div>
-                    <div className="pg-info-row__value">{payment.comments}</div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="pg-view__foot">
-          <button className="pg-btn-cancel" onClick={onClose}>Close</button>
-          <button className="pg-view__btn-edit" onClick={() => { onClose(); onEdit(); }}><Edit2 size={13} /> Edit</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ═══════════════════════════════════════════
    PAYMENT FORM
 ═══════════════════════════════════════════ */
@@ -1040,8 +896,6 @@ export default function LandPaymentPage() {
   const [view,       setView]       = useState('grid');
   const [formMode,   setFormMode]   = useState(null);
   const [editTarget, setEditTarget] = useState(null);
-  const [viewTarget, setViewTarget] = useState(null);
-  const [deleteTarget, setDeleteTarget] = useState(null);
 
   const [search,       setSearch]       = useState('');
   const [modeFilter,   setModeFilter]   = useState('');
@@ -1049,6 +903,11 @@ export default function LandPaymentPage() {
   const [sortDir,      setSortDir]      = useState('desc');
   const [page,         setPage]         = useState(1);
   const [pageSize,     setPageSize]     = useState(10);
+
+  const tableRef = useRef(null);
+  const [tableReady, setTableReady] = useState(false);
+  useEffect(() => { if (!loadingMeta) setTableReady(true); }, [loadingMeta]);
+  useResizableColumns(tableRef, tableReady, [60, 150, 150, 110, 110, 130, 120, 110, 80]);
 
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
@@ -1095,17 +954,6 @@ export default function LandPaymentPage() {
   const handleSave = (record, isNew) => {
     if (isNew) setPayments(prev => [record, ...prev]);
     else setPayments(prev => prev.map(p => p.landPaymentID === record.landPaymentID ? record : p));
-  };
-
-  const handleDelete = async (id) => {
-    try {
-      await apiService.deleteLandPayment(id);
-      setPayments(prev => prev.filter(p => p.landPaymentID !== id));
-    } catch (err) {
-      console.error('Delete failed:', err);
-    } finally {
-      setDeleteTarget(null);
-    }
   };
 
   /* ── Derived table rows ── */
@@ -1308,7 +1156,7 @@ export default function LandPaymentPage() {
         {/* Desktop Table */}
         {!loadingMeta && payments.length > 0 && (
           <div className="pg-desktop-table">
-            <table className="pg-table">
+            <table className="pg-table" ref={tableRef}>
               <thead>
                 <tr>
                   {COLS.map(col => (
@@ -1365,22 +1213,10 @@ export default function LandPaymentPage() {
                       <td className="pg-td">
                         <div className="pg-action-wrap">
                           <button
-                            className="pg-btn-view" title="View"
-                            onClick={() => setViewTarget(r._raw)}
-                          >
-                            <Eye size={13} />
-                          </button>
-                          <button
                             className="pg-btn-view" title="Edit"
                             onClick={() => { setFormMode('edit'); setEditTarget(r._raw); setView('form'); }}
                           >
                             <Edit2 size={13} />
-                          </button>
-                          <button
-                            className="exp-btn-delete" title="Delete"
-                            onClick={() => setDeleteTarget(r._raw)}
-                          >
-                            <Trash2 size={13} />
                           </button>
                         </div>
                       </td>
@@ -1412,9 +1248,7 @@ export default function LandPaymentPage() {
                       <div className="pg-card__subtitle">{r.hoardingLabel}</div>
                     </div>
                     <div className="pg-card__actions">
-                      <button className="pg-card__btn-edit"  onClick={() => setViewTarget(r._raw)}                                               title="View"><Eye    size={13} /></button>
-                      <button className="pg-card__btn-view"  onClick={() => { setFormMode('edit'); setEditTarget(r._raw); setView('form'); }}     title="Edit"><Edit2  size={13} /></button>
-                      <button className="exp-btn-delete"     onClick={() => setDeleteTarget(r._raw)}                                             title="Delete"><Trash2 size={13} /></button>
+                      <button className="pg-card__btn-view" onClick={() => { setFormMode('edit'); setEditTarget(r._raw); setView('form'); }} title="Edit"><Edit2 size={13} /></button>
                     </div>
                   </div>
                   <div className="pg-card__body">
@@ -1472,26 +1306,6 @@ export default function LandPaymentPage() {
         )}
       </div>
 
-      {/* View Modal */}
-      {viewTarget && (
-        <PaymentViewModal
-          payment={viewTarget}
-          owners={owners}
-          hoardings={hoardings}
-          contracts={contracts}
-          onClose={() => setViewTarget(null)}
-          onEdit={() => { setFormMode('edit'); setEditTarget(viewTarget); setView('form'); setViewTarget(null); }}
-        />
-      )}
-
-      {/* Delete Modal */}
-      {deleteTarget && (
-        <DeleteConfirmModal
-          payment={deleteTarget}
-          onConfirm={() => handleDelete(deleteTarget.landPaymentID)}
-          onCancel={() => setDeleteTarget(null)}
-        />
-      )}
     </div>
   );
 }

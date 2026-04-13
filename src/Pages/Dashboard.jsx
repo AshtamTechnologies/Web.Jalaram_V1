@@ -118,7 +118,7 @@ export default function Dashboard({ onLogout }) {
 
   const dropRef = useRef(null);
   const width   = useWindowWidth();
-  const isMobile = width < 768;
+const isMobile = width < 1024;
 
   useEffect(() => {
     const s = JSON.parse(localStorage.getItem('userData') || '{}');

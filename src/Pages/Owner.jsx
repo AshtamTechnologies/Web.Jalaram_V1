@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef  } from 'react';
+import ReactDOM from 'react-dom';
 import {
   UserCircle, Plus, Phone, Home, Globe,
   Building2, MapPin, Search, Users, RefreshCw,
@@ -8,7 +9,7 @@ import {
 } from 'lucide-react';
 import './Common1.css';
 import { apiService } from '../api/api';
-
+import { useResizableColumns } from '../hooks/useResizableColumns';
 /* ─────────────────────────────────────────
    CONSTANTS & HELPERS
 ───────────────────────────────────────── */
@@ -699,23 +700,25 @@ function OwnerModal({ onClose, onSaved, editData }) {
     return e;
   };
 
-const handleChange = (key, val) => {
-  const updated = { ...form, [key]: val };
-  if (key === 'state') updated.district = '';          // reset district
-  setForm(updated);
-  if (touched[key]) {
+  const handleChange = (key, val) => {
+    const updated = { ...form, [key]: val };
+    if (key === 'state') updated.district = '';
+    setForm(updated);
+    if (touched[key]) {
+      const field = FIELDS.find(f => f.key === key);
+      const err = validateField(key, val, field.type, field.required);
+      setErrors(p => ({ ...p, [key]: err }));
+      if (key === 'state') setErrors(p => ({ ...p, district: '' }));
+    }
+  };
+
+  const handleComboBlur = (key) => {
+    setTouched(p => ({ ...p, [key]: true }));
     const field = FIELDS.find(f => f.key === key);
-    const err = validateField(key, val, field.type, field.required);
+    const err = validateField(key, form[key], field.type, field.required);
     setErrors(p => ({ ...p, [key]: err }));
-    if (key === 'state') setErrors(p => ({ ...p, district: '' })); // clear district error too
-  }
-};
-const handleComboBlur = (key) => {
-  setTouched(p => ({ ...p, [key]: true }));
-  const field = FIELDS.find(f => f.key === key);
-  const err = validateField(key, form[key], field.type, field.required);
-  setErrors(p => ({ ...p, [key]: err }));
-};
+  };
+
   const handleBlur = (key) => {
     setTouched(p => ({ ...p, [key]: true }));
     const field = FIELDS.find(f => f.key === key);
@@ -747,16 +750,13 @@ const handleComboBlur = (key) => {
       let saved;
 
       if (isEdit) {
-        // PUT /Owner/{ownerID}  — ownerID is also injected into the body by apiService.updateOwner
         console.log(`Updating owner ID: ${editData._id}`, payload);
         const response = await apiService.updateOwner(editData._id, payload);
-        // API may return the updated object or just a success message
         const raw = response?.data ?? response;
         saved = (raw && typeof raw === 'object' && (raw.ownerID ?? raw.ownerId ?? raw.id))
           ? normalizeOwner(raw)
-          : { ...editData, ...form }; // fallback: merge edits locally
+          : { ...editData, ...form };
       } else {
-        // POST /Owner
         const response = await apiService.createOwner(payload);
         const raw = response?.data ?? response;
         saved = normalizeOwner(raw);
@@ -781,7 +781,7 @@ const handleComboBlur = (key) => {
     }
   };
 
-  return (
+  return ReactDOM.createPortal(
     <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="pg-modal">
 
@@ -799,8 +799,8 @@ const handleComboBlur = (key) => {
 
         {/* API error banner */}
         {apiError && (
-          <div className="pg-api-error">
-            <AlertCircle size={14} style={{ flexShrink: 0 }} />
+          <div style={{margin:'0 24px 4px',padding:'10px 14px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:11,color:'#dc2626',fontSize:12.5,fontWeight:600,display:'flex',gap:8,alignItems:'flex-start'}}>
+            <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>{apiError}</span>
           </div>
         )}
@@ -808,67 +808,67 @@ const handleComboBlur = (key) => {
         {/* Form */}
         <div className="pg-modal__body">
           <div className="row g-3">
-          {FIELDS.map(({ key, label, icon: Icon, placeholder, col, required, type }) => {
-  const isReadonly     = type === 'readonly';
-  const isComboState   = type === 'combo-state';
-  const isComboDistrict= type === 'combo-district';
-  const hasError       = !!errors[key];
-  const wrapClass      = `pg-field-wrap ${isReadonly ? 'pg-field-wrap--readonly' : hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`;
+            {FIELDS.map(({ key, label, icon: Icon, placeholder, col, required, type }) => {
+              const isReadonly      = type === 'readonly';
+              const isComboState    = type === 'combo-state';
+              const isComboDistrict = type === 'combo-district';
+              const hasError        = !!errors[key];
+              const wrapClass       = `pg-field-wrap ${isReadonly ? 'pg-field-wrap--readonly' : hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`;
 
-  return (
-    <div key={key} className={`col-12 col-sm-${col}`}>
-      <label className="pg-field-label">
-        {label}{' '}
-        {isReadonly
-          ? <span className="pg-field-label__fixed">🔒 Fixed</span>
-          : required
-            ? <span className="pg-field-label__required">*</span>
-            : <span className="pg-field-label__optional">(optional)</span>}
-      </label>
+              return (
+                <div key={key} className={`col-12 col-sm-${col}`}>
+                  <label className="pg-field-label">
+                    {label}{' '}
+                    {isReadonly
+                      ? <span className="pg-field-label__fixed">🔒 Fixed</span>
+                      : required
+                        ? <span className="pg-field-label__required">*</span>
+                        : <span className="pg-field-label__optional">(optional)</span>}
+                  </label>
 
-      {isComboState ? (
-        <StateCombo
-          value={form.state ?? ''}
-          onChange={val => handleChange('state', val)}
-          onBlur={() => handleComboBlur('state')}
-          hasError={hasError}
-        />
-      ) : isComboDistrict ? (
-        <DistrictCombo
-          value={form.district ?? ''}
-          onChange={val => handleChange('district', val)}
-          onBlur={() => handleComboBlur('district')}
-          hasError={hasError}
-          stateValue={form.state}
-        />
-      ) : (
-        <div className={wrapClass}>
-          <Icon size={14} color={hasError ? '#ef4444' : isReadonly ? '#049edf' : '#c0c0d8'} style={{ flexShrink: 0 }} />
-          <input
-            readOnly={isReadonly}
-            placeholder={placeholder}
-            value={form[key] ?? ''}
-            onChange={e => !isReadonly && handleChange(key, e.target.value)}
-            onBlur={() => !isReadonly && handleBlur(key)}
-            className={`pg-field-input${isReadonly ? ' pg-field-input--readonly' : ''}`}
-          />
-        </div>
-      )}
+                  {isComboState ? (
+                    <StateCombo
+                      value={form.state ?? ''}
+                      onChange={val => handleChange('state', val)}
+                      onBlur={() => handleComboBlur('state')}
+                      hasError={hasError}
+                    />
+                  ) : isComboDistrict ? (
+                    <DistrictCombo
+                      value={form.district ?? ''}
+                      onChange={val => handleChange('district', val)}
+                      onBlur={() => handleComboBlur('district')}
+                      hasError={hasError}
+                      stateValue={form.state}
+                    />
+                  ) : (
+                    <div className={wrapClass}>
+                      <Icon size={14} color={hasError ? '#ef4444' : isReadonly ? '#049edf' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+                      <input
+                        readOnly={isReadonly}
+                        placeholder={placeholder}
+                        value={form[key] ?? ''}
+                        onChange={e => !isReadonly && handleChange(key, e.target.value)}
+                        onBlur={() => !isReadonly && handleBlur(key)}
+                        className={`pg-field-input${isReadonly ? ' pg-field-input--readonly' : ''}`}
+                      />
+                    </div>
+                  )}
 
-      {hasError && (
-        <div className="pg-field-error">
-          <AlertCircle size={11} style={{ flexShrink: 0, marginTop: '1px' }} />
-          <span>{errors[key]}</span>
-        </div>
-      )}
-      {type === 'phone' && !hasError && touched[key] && (
-        <div className="pg-field-hint">
-          Mobile: +91 98765 43210 &nbsp;|&nbsp; Landline: 079-27650000
-        </div>
-      )}
-    </div>
-  );
-})}
+                  {hasError && (
+                    <div className="pg-field-error">
+                      <AlertCircle size={11} style={{ flexShrink: 0, marginTop: '1px' }} />
+                      <span>{errors[key]}</span>
+                    </div>
+                  )}
+                  {type === 'phone' && !hasError && touched[key] && (
+                    <div className="pg-field-hint">
+                      Mobile: +91 98765 43210 &nbsp;|&nbsp; Landline: 079-27650000
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
           <p className="pg-form__note">
             <span className="pg-field-label__required">*</span> Required fields &nbsp;·&nbsp; Fields marked optional may be left blank
@@ -886,8 +886,10 @@ const handleComboBlur = (key) => {
                 : <><Plus size={14} /> {isEdit ? 'Save Changes' : 'Add Owner'}</>}
           </button>
         </div>
+
       </div>
-    </div>
+    </div>,
+    document.body   // ← escapes sidebar stacking context
   );
 }
 
@@ -970,6 +972,10 @@ export default function OwnerPage() {
   const [sortDir, setSortDir]   = useState('asc');
   const [page, setPage]         = useState(1);
   const [pageSize, setPageSize] = useState(12);
+  const tableRef = useRef(null);
+  const [tableReady, setTableReady] = useState(false);
+  useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
+  useResizableColumns(tableRef, tableReady, [150, 150, 120, 110, 90, 90, 90, 120, 80]);
 
   /* ── Fetch all owners ── */
   const fetchOwners = useCallback(async () => {
@@ -1136,7 +1142,7 @@ export default function OwnerPage() {
 
           {/* Desktop Table */}
           <div className="pg-desktop-table">
-            <table className="pg-table">
+            <table className="pg-table" ref={tableRef}>
               <thead>
                 <tr>
                   {COLS.map(col => (

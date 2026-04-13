@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { apiService } from '../api/api';
 import './Common1.css';
-
+import { useResizableColumns } from '../hooks/useResizableColumns';
 /* ─────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────── */
@@ -857,12 +857,20 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
    MAIN PAGE
 ───────────────────────────────────────── */
 export default function HoardingExpensePage() {
-  const [hoardings, setHoardings]     = useState([]);
+const [hoardings, setHoardings]     = useState([]);
   const [sites, setSites]             = useState([]);
   const [expenses, setExpenses]       = useState([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadingExp, setLoadingExp]   = useState(true);
   const [loadError, setLoadError]     = useState('');
+
+  // ✅ ADD HERE — steps 2, 3, 4
+  const tableRef = useRef(null);
+  const [tableReady, setTableReady] = useState(false);
+  const isLoading = loadingMeta || loadingExp;
+  useEffect(() => { if (!isLoading) setTableReady(true); }, [isLoading]);
+  useResizableColumns(tableRef, tableReady, [300, 200, 80]);
+
 
   const [view, setView]             = useState(() => sessionStorage.getItem('exp_view') || 'grid');
   const [formMode, setFormMode]     = useState(() => sessionStorage.getItem('exp_formMode') || null);
@@ -963,7 +971,7 @@ export default function HoardingExpensePage() {
     { key: '_action',      label: 'Actions', noSort: true },
   ];
 
-  const isLoading = loadingMeta || loadingExp;
+  // const isLoading = loadingMeta || loadingExp;
 
   if (view === 'form') {
     return <ExpenseForm mode={formMode} expense={editTarget} hoardings={hoardings} sites={sites} allExpenses={expenses} onBack={handleFormBack} />;
@@ -1036,7 +1044,7 @@ export default function HoardingExpensePage() {
 
         {!isLoading && expenses.length > 0 && (
           <div className="pg-desktop-table">
-            <table className="pg-table">
+            <table className="pg-table" ref={tableRef}>
               <thead>
                 <tr>
                   {COLS.map(col => (

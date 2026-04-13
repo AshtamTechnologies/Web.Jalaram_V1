@@ -298,6 +298,30 @@ body { margin: 0; font-family: 'Nunito', sans-serif; }
   display: flex;
   z-index: 1;
 }
+@media (max-width: 1280px) and (min-width: 1024px) {
+  .sidebar-desktop {
+    width: 210px;
+  }
+  .main-area {
+    margin-left: 210px;
+  }
+}
+.pg-table {
+  table-layout: auto !important;
+}
+
+.pg-table th {
+  position: relative !important;
+  overflow: visible !important;
+  white-space: nowrap;
+}
+
+.pg-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ═══════════════════════════════════════════
    SIDEBAR SUBMENU  — append to Common1.css
 ═══════════════════════════════════════════ */

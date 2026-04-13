@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import './Common1.css';
 import { apiService } from '../api/api';
+import { useResizableColumns } from '../hooks/useResizableColumns';
 
 /* ─────────────────────────────────────────
    CONSTANTS
@@ -87,9 +88,11 @@ function useOutsideClick(wrapRef, panelRef, open, onClose) {
 function normalizeSite(raw) {
   const rawStatus = raw.status ?? raw.Status;
   const statusStr =
-    rawStatus === 1 || rawStatus === '1' ? 'Active'
-    : rawStatus === 0 || rawStatus === '0' ? 'Inactive'
-    : rawStatus ?? '';
+    rawStatus === true  || rawStatus === 1 || rawStatus === '1' ? 'Active'
+    : rawStatus === false || rawStatus === 0 || rawStatus === '0' ? 'Inactive'
+    : typeof rawStatus === 'string' ? rawStatus
+    : '';
+
   return {
     siteID:       raw.siteID       ?? raw.SiteID       ?? raw.id    ?? raw.Id,
     addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? '',
@@ -98,7 +101,9 @@ function normalizeSite(raw) {
     landmark:     raw.landmark     ?? raw.Landmark     ?? '',
     city:         raw.city         ?? raw.City         ?? '',
     district:     raw.district     ?? raw.District     ?? '',
-    siteType:     raw.siteType     ?? raw.SiteType     ?? '',
+    siteType:     SITE_TYPE_OPTIONS.includes(raw.siteType ?? raw.SiteType ?? '')
+                    ? (raw.siteType ?? raw.SiteType)
+                    : '',
     country:      raw.country      ?? raw.Country      ?? 'India',
     ownerID:      raw.ownerID      ?? raw.OwnerID      ?? raw.ownerId ?? raw.OwnerId ?? null,
     status:       statusStr,
@@ -241,16 +246,40 @@ function SiteTypeDropdown({ value, onChange, onBlur, hasError }) {
   const clear  = (e) => { e.stopPropagation(); onChange(''); setOpen(false); setWasOpened(false); onBlur?.(); };
   const openDD = () => { setOpen(o=>!o); setWasOpened(true); setTimeout(()=>listRef.current?.querySelectorAll('.pg-combo-option')?.[0]?.focus(),0); };
   const nav    = (e) => { const items=listRef.current?.querySelectorAll('.pg-combo-option');const idx=Array.from(items||[]).indexOf(document.activeElement);if(e.key==='ArrowDown'){e.preventDefault();(items[idx+1]||items[0])?.focus();}else if(e.key==='ArrowUp'){e.preventDefault();(items[idx-1]||items[items.length-1])?.focus();}else if(e.key==='Escape')close(); };
+
+  // ← SAFE lookup
+  const colors = (value && TYPE_COLORS[value]) ? TYPE_COLORS[value] : null;
+
   return (
     <div className="pg-combo-wrap" ref={wrapRef}>
       <div ref={triggerRef} className={`pg-field-wrap pg-combo-trigger ${hasError?'pg-field-wrap--error':'pg-field-wrap--normal'}`} onClick={openDD} tabIndex={0} onKeyDown={e=>{if(!open){if(e.key==='ArrowDown'||e.key==='Enter'||e.key===' '){e.preventDefault();openDD();}}else nav(e);}}>
         <Layers size={14} color={hasError?'#ef4444':'#c0c0d8'} style={{flexShrink:0}}/>
-        {value?<span className="pg-sitetype-pill" style={{color:TYPE_COLORS[value].color}}>{value}</span>:<span className="pg-combo-display pg-combo-display--placeholder">Select site type…</span>}
-        {value?<X size={13} className="pg-combo-clear" onClick={clear}/>:<ChevronDown size={13} color="#c0c0d8" style={{flexShrink:0}}/>}
+        {/* ← only render pill if both value AND colors exist */}
+        {value && colors
+          ? <span className="pg-sitetype-pill" style={{color:colors.color}}>{value}</span>
+          : <span className="pg-combo-display pg-combo-display--placeholder">{value || 'Select site type…'}</span>
+        }
+        {value
+          ? <X size={13} className="pg-combo-clear" onClick={clear}/>
+          : <ChevronDown size={13} color="#c0c0d8" style={{flexShrink:0}}/>
+        }
       </div>
       <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
         <div className="pg-combo-panel pg-combo-panel--sm" style={{position:'static'}}>
-          <div className="pg-combo-list" ref={listRef}>{SITE_TYPE_OPTIONS.map(opt=><div key={opt} className={`pg-combo-option${opt===value?' pg-combo-option--active':''}`} onClick={()=>select(opt)} tabIndex={0} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(opt);}else nav(e);}}><span className="pg-sitetype-pill" style={{color:TYPE_COLORS[opt].color}}>{opt}</span>{opt===value&&<Check size={12} color="#049edf" style={{marginLeft:'auto',flexShrink:0}}/>}</div>)}</div>
+          <div className="pg-combo-list" ref={listRef}>
+            {SITE_TYPE_OPTIONS.map(opt => (
+              <div
+                key={opt}
+                className={`pg-combo-option${opt===value?' pg-combo-option--active':''}`}
+                onClick={()=>select(opt)}
+                tabIndex={0}
+                onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(opt);}else nav(e);}}
+              >
+                <span className="pg-sitetype-pill" style={{color:TYPE_COLORS[opt].color}}>{opt}</span>
+                {opt===value && <Check size={12} color="#049edf" style={{marginLeft:'auto',flexShrink:0}}/>}
+              </div>
+            ))}
+          </div>
         </div>
       </PortalDropdown>
     </div>
@@ -270,17 +299,40 @@ function StatusDropdown({ value, onChange, onBlur, hasError }) {
   const clear  = (e) => { e.stopPropagation(); onChange(''); setOpen(false); setWasOpened(false); onBlur?.(); };
   const openDD = () => { setOpen(o=>!o); setWasOpened(true); setTimeout(()=>listRef.current?.querySelectorAll('.pg-combo-option')?.[0]?.focus(),0); };
   const nav    = (e) => { const items=listRef.current?.querySelectorAll('.pg-combo-option');const idx=Array.from(items||[]).indexOf(document.activeElement);if(e.key==='ArrowDown'){e.preventDefault();(items[idx+1]||items[0])?.focus();}else if(e.key==='ArrowUp'){e.preventDefault();(items[idx-1]||items[items.length-1])?.focus();}else if(e.key==='Escape')close(); };
-  const colors = value ? STATUS_COLORS[value] : null;
+
+  // ← SAFE lookup: only use colors if value is a known key
+  const colors = (value && STATUS_COLORS[value]) ? STATUS_COLORS[value] : null;
+
   return (
     <div className="pg-combo-wrap" ref={wrapRef}>
       <div ref={triggerRef} className={`pg-field-wrap pg-combo-trigger ${hasError?'pg-field-wrap--error':'pg-field-wrap--normal'}`} onClick={openDD} tabIndex={0} onKeyDown={e=>{if(!open){if(e.key==='ArrowDown'||e.key==='Enter'||e.key===' '){e.preventDefault();openDD();}}else nav(e);}}>
         <ToggleLeft size={14} color={hasError?'#ef4444':'#c0c0d8'} style={{flexShrink:0}}/>
-        {value?<span className="pg-sitetype-pill" style={{color:colors.color}}>{value}</span>:<span className="pg-combo-display pg-combo-display--placeholder">Select status…</span>}
-        {value?<X size={13} className="pg-combo-clear" onClick={clear}/>:<ChevronDown size={13} color="#c0c0d8" style={{flexShrink:0}}/>}
+        {/* ← only render pill if both value AND colors exist */}
+        {value && colors
+          ? <span className="pg-sitetype-pill" style={{color:colors.color}}>{value}</span>
+          : <span className="pg-combo-display pg-combo-display--placeholder">{value || 'Select status…'}</span>
+        }
+        {value
+          ? <X size={13} className="pg-combo-clear" onClick={clear}/>
+          : <ChevronDown size={13} color="#c0c0d8" style={{flexShrink:0}}/>
+        }
       </div>
       <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
         <div className="pg-combo-panel pg-combo-panel--sm" style={{position:'static'}}>
-          <div className="pg-combo-list" ref={listRef}>{STATUS_OPTIONS.map(opt=><div key={opt} className={`pg-combo-option${opt===value?' pg-combo-option--active':''}`} onClick={()=>select(opt)} tabIndex={0} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(opt);}else nav(e);}}><span className="pg-sitetype-pill" style={{color:STATUS_COLORS[opt].color}}>{opt}</span>{opt===value&&<Check size={12} color="#049edf" style={{marginLeft:'auto',flexShrink:0}}/>}</div>)}</div>
+          <div className="pg-combo-list" ref={listRef}>
+            {STATUS_OPTIONS.map(opt=>(
+              <div
+                key={opt}
+                className={`pg-combo-option${opt===value?' pg-combo-option--active':''}`}
+                onClick={()=>select(opt)}
+                tabIndex={0}
+                onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(opt);}else nav(e);}}
+              >
+                <span className="pg-sitetype-pill" style={{color:STATUS_COLORS[opt].color}}>{opt}</span>
+                {opt===value && <Check size={12} color="#049edf" style={{marginLeft:'auto',flexShrink:0}}/>}
+              </div>
+            ))}
+          </div>
         </div>
       </PortalDropdown>
     </div>
@@ -371,10 +423,8 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
   const [success, setSuccess]       = useState(false);
   const [apiError, setApiError]     = useState('');
 
-  /* ── Inactive confirmation ── */
   const [showWarning, setShowWarning] = useState(false);
 
-  /* ─── Field change ─── */
   const applyChange = (key, val) => {
     setForm(p => ({ ...p, [key]: val }));
     if (touched[key]) {
@@ -385,22 +435,19 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
     }
   };
 
-  /* Intercept Active → Inactive in edit mode — show warning first */
   const handleChange = (key, val) => {
     if (key === 'status' && isEdit && originalStatus === 'Active' && val === 'Inactive') {
-      setShowWarning(true);   // show portal modal; do NOT update form yet
+      setShowWarning(true);
       return;
     }
     applyChange(key, val);
   };
 
-  /* User confirmed inactivation → apply the status change */
   const handleConfirmInactive = () => {
     setShowWarning(false);
     applyChange('status', 'Inactive');
   };
 
-  /* User cancelled → do nothing (status stays as-is) */
   const handleCancelInactive = () => setShowWarning(false);
 
   const handleTextBlur = (key) => {
@@ -408,11 +455,12 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
     const tf = TEXT_FIELDS.find(f => f.key===key);
     if (tf) setErrors(p => ({ ...p, [key]: validateTextField(key, form[key], tf.type, tf.required) }));
   };
+
   const handleDropdownBlur = (key) => {
     setTouched(p => ({ ...p, [key]: true }));
-    if (key==='district') setErrors(p=>({...p,district:form.district?'':'Please select a district'}));
-    if (key==='ownerID')  setErrors(p=>({...p,ownerID: form.ownerID ?'':'Please select an owner'  }));
-    if (key==='status')   setErrors(p=>({...p,status:  form.status  ?'':'Please select a status'  }));
+    if (key==='district') setErrors(p=>({...p, district: form.district?'':'Please select a district'}));
+    if (key==='ownerID')  setErrors(p=>({...p, ownerID:  form.ownerID ?'':'Please select an owner'  }));
+    if (key==='status')   setErrors(p=>({...p, status:   form.status  ?'':'Please select a status'  }));
   };
 
   const runValidate = (f) => {
@@ -426,7 +474,7 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
 
   const handleSubmit = async () => {
     const allTouched = {};
-    [...TEXT_FIELDS.map(f=>f.key),'district','siteType','ownerID','status'].forEach(k=>{allTouched[k]=true;});
+    [...TEXT_FIELDS.map(f=>f.key),'district','siteType','ownerID','status'].forEach(k=>{ allTouched[k]=true; });
     setTouched(allTouched);
     const e = runValidate(form);
     if (Object.keys(e).length) { setErrors(e); return; }
@@ -434,11 +482,9 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
 
     setSubmitting(true); setApiError('');
     try {
-      /* 1 — Save site */
       if (isEdit) await apiService.updateSite(editData.siteID, form);
       else        await apiService.createSite(form);
 
-      /* 2 — If Active → Inactive, cascade to linked hoardings */
       if (isEdit && originalStatus === 'Active' && form.status === 'Inactive') {
         try {
           const flat = await apiService.getAllHoardings();
@@ -461,23 +507,21 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
           }
         } catch (hErr) {
           console.error('Hoarding cascade failed:', hErr);
-          /* Site was saved OK; show a soft warning but don't block */
           setApiError(`Site saved. But ${hErr?.response?.data?.message || hErr?.message || 'some hoardings could not be inactivated'}.`);
         }
       }
 
       setSuccess(true);
       await new Promise(r => setTimeout(r, 600));
-      onSaved();   // ← just triggers a refetch; no need to pass data
+      onSaved();
       onClose();
     } catch (err) {
       setApiError(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Something went wrong.');
     } finally { setSubmitting(false); }
   };
 
-  return (
+  return ReactDOM.createPortal(
     <>
-      {/* ── Inactive warning — portal, always above everything ── */}
       {showWarning && (
         <InactiveWarningModal
           onConfirm={handleConfirmInactive}
@@ -513,34 +557,70 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
                 const hasErr = !!errors[key];
                 return (
                   <div key={key} className={`col-12 col-sm-${col}`}>
-                    <label className="pg-field-label">{label} {required?<span className="pg-field-label__required">*</span>:<span className="pg-field-label__optional">(optional)</span>}</label>
+                    <label className="pg-field-label">
+                      {label} {required
+                        ? <span className="pg-field-label__required">*</span>
+                        : <span className="pg-field-label__optional">(optional)</span>}
+                    </label>
                     <div className={`pg-field-wrap ${hasErr?'pg-field-wrap--error':'pg-field-wrap--normal'}`}>
                       <Icon size={14} color={hasErr?'#ef4444':'#c0c0d8'} style={{flexShrink:0}}/>
-                      <input placeholder={placeholder} value={form[key]} className="pg-field-input" onChange={e=>handleChange(key,e.target.value)} onBlur={()=>handleTextBlur(key)}/>
+                      <input
+                        placeholder={placeholder}
+                        value={form[key]}
+                        className="pg-field-input"
+                        onChange={e=>handleChange(key,e.target.value)}
+                        onBlur={()=>handleTextBlur(key)}
+                      />
                     </div>
-                    {hasErr && <div className="pg-field-error"><AlertCircle size={11} style={{flexShrink:0,marginTop:1}}/><span>{errors[key]}</span></div>}
+                    {hasErr && (
+                      <div className="pg-field-error">
+                        <AlertCircle size={11} style={{flexShrink:0,marginTop:1}}/><span>{errors[key]}</span>
+                      </div>
+                    )}
                   </div>
                 );
               })}
 
               <div className="col-12 col-sm-6">
                 <label className="pg-field-label">District <span className="pg-field-label__required">*</span></label>
-                <DistrictCombo value={form.district} onChange={v=>handleChange('district',v)} onBlur={()=>handleDropdownBlur('district')} hasError={!!errors.district}/>
-                {errors.district && <div className="pg-field-error"><AlertCircle size={11} style={{flexShrink:0,marginTop:1}}/><span>{errors.district}</span></div>}
+                <DistrictCombo
+                  value={form.district}
+                  onChange={v=>handleChange('district',v)}
+                  onBlur={()=>handleDropdownBlur('district')}
+                  hasError={!!errors.district}
+                />
+                {errors.district && (
+                  <div className="pg-field-error">
+                    <AlertCircle size={11} style={{flexShrink:0,marginTop:1}}/><span>{errors.district}</span>
+                  </div>
+                )}
               </div>
 
               <div className="col-12 col-sm-6">
                 <label className="pg-field-label">Site Type <span className="pg-field-label__optional">(optional)</span></label>
-                <SiteTypeDropdown value={form.siteType} onChange={v=>handleChange('siteType',v)} onBlur={()=>handleDropdownBlur('siteType')} hasError={!!errors.siteType}/>
+                <SiteTypeDropdown
+                  value={form.siteType}
+                  onChange={v=>handleChange('siteType',v)}
+                  onBlur={()=>handleDropdownBlur('siteType')}
+                  hasError={!!errors.siteType}
+                />
               </div>
 
               <div className="col-12 col-sm-6">
                 <label className="pg-field-label">
                   Status <span className="pg-field-label__required">*</span>
                 </label>
-                <StatusDropdown value={form.status} onChange={v=>handleChange('status',v)} onBlur={()=>handleDropdownBlur('status')} hasError={!!errors.status}/>
-                {errors.status && <div className="pg-field-error"><AlertCircle size={11} style={{flexShrink:0,marginTop:1}}/><span>{errors.status}</span></div>}
-                {/* Reminder banner once Inactive is confirmed */}
+                <StatusDropdown
+                  value={form.status}
+                  onChange={v=>handleChange('status',v)}
+                  onBlur={()=>handleDropdownBlur('status')}
+                  hasError={!!errors.status}
+                />
+                {errors.status && (
+                  <div className="pg-field-error">
+                    <AlertCircle size={11} style={{flexShrink:0,marginTop:1}}/><span>{errors.status}</span>
+                  </div>
+                )}
                 {isEdit && form.status === 'Inactive' && originalStatus === 'Active' && (
                   <div style={{marginTop:6,display:'flex',alignItems:'flex-start',gap:6,padding:'8px 11px',background:'#fffbeb',border:'1px solid #fde68a',borderRadius:9,fontSize:11.5,fontWeight:600,color:'#92400e',fontFamily:'Nunito,sans-serif'}}>
                     <AlertTriangle size={13} color="#d97706" style={{flexShrink:0,marginTop:1}}/>
@@ -558,34 +638,56 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
               </div>
 
               <div className="col-12">
-                <label className="pg-field-label">Owner <span className="pg-field-label__required">*</span><span className="pg-field-label__hint"> — search by name or ID</span></label>
-                <OwnerCombo value={form.ownerID} onChange={v=>handleChange('ownerID',v)} onBlur={()=>handleDropdownBlur('ownerID')} hasError={!!errors.ownerID} owners={owners}/>
-                {errors.ownerID && <div className="pg-field-error"><AlertCircle size={11} style={{flexShrink:0,marginTop:1}}/><span>{errors.ownerID}</span></div>}
-                {form.ownerID && !errors.ownerID && <div className="pg-field-hint">Owner ID stored: <strong>{form.ownerID}</strong></div>}
+                <label className="pg-field-label">
+                  Owner <span className="pg-field-label__required">*</span>
+                  <span className="pg-field-label__hint"> — search by name or ID</span>
+                </label>
+                <OwnerCombo
+                  value={form.ownerID}
+                  onChange={v=>handleChange('ownerID',v)}
+                  onBlur={()=>handleDropdownBlur('ownerID')}
+                  hasError={!!errors.ownerID}
+                  owners={owners}
+                />
+                {errors.ownerID && (
+                  <div className="pg-field-error">
+                    <AlertCircle size={11} style={{flexShrink:0,marginTop:1}}/><span>{errors.ownerID}</span>
+                  </div>
+                )}
+                {form.ownerID && !errors.ownerID && (
+                  <div className="pg-field-hint">Owner ID stored: <strong>{form.ownerID}</strong></div>
+                )}
               </div>
 
             </div>
-            <p className="pg-form__note"><span className="pg-field-label__required">*</span> Required fields &nbsp;·&nbsp; Optional fields may be left blank</p>
+            <p className="pg-form__note">
+              <span className="pg-field-label__required">*</span> Required fields &nbsp;·&nbsp; Optional fields may be left blank
+            </p>
           </div>
 
           <div className="pg-modal__foot">
             <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
             <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
-              {success ? <><Check size={14}/> {isEdit?'Saved!':'Added!'}</>
-                : submitting ? <><RefreshCw size={13} className="pg-spin"/> Saving…</>
-                : <><Plus size={14}/> {isEdit?'Save Changes':'Add Site'}</>}
+              {success
+                ? <><Check size={14}/> {isEdit?'Saved!':'Added!'}</>
+                : submitting
+                  ? <><RefreshCw size={13} className="pg-spin"/> Saving…</>
+                  : <><Plus size={14}/> {isEdit?'Save Changes':'Add Site'}</>
+              }
             </button>
           </div>
+
         </div>
       </div>
-    </>
+    </>,
+    document.body
   );
 }
 
 /* ─── Mobile Site Card ─── */
 function SiteCard({ s, onEdit, owners }) {
-  const typeColors   = s.siteType ? TYPE_COLORS[s.siteType]   : null;
-  const statusColors = s.status   ? STATUS_COLORS[s.status]   : null;
+const typeColors   = (s.siteType && TYPE_COLORS[s.siteType])   ? TYPE_COLORS[s.siteType]   : null;
+const statusColors = (s.status   && STATUS_COLORS[s.status])   ? STATUS_COLORS[s.status]   : null;
   const owner        = owners.find(o => o._id===s.ownerID || o._id===Number(s.ownerID));
   return (
     <div className="pg-card">
@@ -624,6 +726,10 @@ export default function SitePage() {
   const [sortDir, setSortDir]       = useState('asc');
   const [page, setPage]             = useState(1);
   const [pageSize, setPageSize]     = useState(12);
+  const tableRef = useRef(null);
+  const [tableReady, setTableReady] = useState(false);
+  useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
+  useResizableColumns(tableRef, tableReady, [180, 130, 110, 120, 100, 90, 130, 70, 70]);
 
   /* ── Fetch from server (called on mount AND after every save) ── */
   const fetchData = useCallback(async () => {
@@ -722,7 +828,7 @@ export default function SitePage() {
           </div>
 
           <div className="pg-desktop-table">
-            <table className="pg-table">
+            <table className="pg-table" ref={tableRef}>
               <thead>
                 <tr>
                   {COLS.map(col=>(

@@ -189,35 +189,35 @@ export const apiService = {
   getSiteById: (siteId) =>
     api.get(`/Site/${siteId}`),
 
-  createSite: (siteData) =>
-    api.post('/Site', {
-      siteID: 0,
-      addressLine1: siteData.addressLine1,
-      addressLine2: siteData.addressLine2 || '',
-      addressLine3: siteData.addressLine3 || '',
-      landmark: siteData.landmark || '',
-      city: siteData.city,
-      district: siteData.district,
-      siteType: siteData.siteType || '',
-      country: siteData.country,
-      status: statusToNum(siteData.status),   // ← ADD
-      ownerID: Number(siteData.ownerID),
-    }),
+createSite: (siteData) =>
+  api.post('/Site', {
+    siteID:       0,
+    addressLine1: siteData.addressLine1,
+    addressLine2: siteData.addressLine2 || '',
+    addressLine3: siteData.addressLine3 || '',
+    landmark:     siteData.landmark    || '',
+    city:         siteData.city,
+    district:     siteData.district,
+    siteType:     siteData.siteType    || '',
+    country:      siteData.country,
+    status:       siteData.status === 'Active',   // ← true/false
+    ownerID:      Number(siteData.ownerID),
+  }),
 
-  updateSite: (siteId, siteData) =>
-    api.put(`/Site/${siteId}`, {
-      siteID: Number(siteId),
-      addressLine1: siteData.addressLine1,
-      addressLine2: siteData.addressLine2 || '',
-      addressLine3: siteData.addressLine3 || '',
-      landmark: siteData.landmark || '',
-      city: siteData.city,
-      district: siteData.district,
-      siteType: siteData.siteType || '',
-      country: siteData.country,
-      status: statusToNum(siteData.status),   // ← ADD
-      ownerID: Number(siteData.ownerID),
-    }),
+updateSite: (siteId, siteData) =>
+  api.put(`/Site/${siteId}`, {
+    siteID:       Number(siteId),
+    addressLine1: siteData.addressLine1,
+    addressLine2: siteData.addressLine2 || '',
+    addressLine3: siteData.addressLine3 || '',
+    landmark:     siteData.landmark    || '',
+    city:         siteData.city,
+    district:     siteData.district,
+    siteType:     siteData.siteType    || '',
+    country:      siteData.country,
+    status:       siteData.status === 'Active',   // ← true/false
+    ownerID:      Number(siteData.ownerID),
+  }),
 
   deleteSite: (siteId) =>
     api.delete(`/Site/${siteId}`),
@@ -455,8 +455,7 @@ updateLandContract: async (data) => {
 
 
   // ─────────────────────────────────────────────────────────────────────────────
-// LAND PAYMENTS
-// Add these methods inside the `apiService` object in your existing api.js file
+// LAND PAYMENTS — paste these methods inside `apiService` in api.js
 // Place them after the `deleteLandContract` method
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -469,8 +468,15 @@ updateLandContract: async (data) => {
     api.get(`/LandPayment/${id}`),
 
   // POST /api/LandPayment  — create a new payment
-  createLandPayment: (data) =>
-    api.post('/LandPayment', {
+  createLandPayment: (data) => {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const lastUpdatedBy =
+      userData?.name      || userData?.Name      ||
+      userData?.email     || userData?.Email     ||
+      userData?.userName  || userData?.UserName  ||
+      'Admin';
+
+    return api.post('/LandPayment', {
       landPaymentID:   0,
       ownerID:         Number(data.ownerID),
       landContractID:  Number(data.landContractID),
@@ -488,11 +494,20 @@ updateLandContract: async (data) => {
       referenceNumber: data.referenceNumber || '',
       paidBy:          data.paidBy          || '',
       comments:        data.comments        || '',
-    }),
+      lastUpdatedBy,
+    });
+  },
 
   // PUT /api/LandPayment/{id}  — update an existing payment
-  updateLandPayment: (id, data) =>
-    api.put(`/LandPayment/${id}`, {
+  updateLandPayment: (id, data) => {
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+    const lastUpdatedBy =
+      userData?.name      || userData?.Name      ||
+      userData?.email     || userData?.Email     ||
+      userData?.userName  || userData?.UserName  ||
+      'Admin';
+
+    return api.put(`/LandPayment/${id}`, {
       landPaymentID:   Number(id),
       ownerID:         Number(data.ownerID),
       landContractID:  Number(data.landContractID),
@@ -510,12 +525,13 @@ updateLandContract: async (data) => {
       referenceNumber: data.referenceNumber || '',
       paidBy:          data.paidBy          || '',
       comments:        data.comments        || '',
-    }),
+      lastUpdatedBy,
+    });
+  },
 
   // DELETE /api/LandPayment/{id}  — permanently remove a payment
   deleteLandPayment: (id) =>
-    api.delete(`/LandPayment/${id}`),
-};
+    api.delete(`/LandPayment/${id}`),};
 
 
 
