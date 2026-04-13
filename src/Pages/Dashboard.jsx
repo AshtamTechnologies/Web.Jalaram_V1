@@ -62,7 +62,7 @@ const MENU = [
       { id: 'hoarding-expense', icon: Receipt,    label: 'Hoarding Expense'  },
     ],
   },
-  { id: 'bookings', icon: CalendarCheck, label: 'Bookings', badge: null },
+  // { id: 'bookings', icon: CalendarCheck, label: 'Bookings', badge: null },
   { id: 'sites',    icon: MapPin,        label: 'Sites',    badge: null },
   {
     id: 'land-contract', icon: FileText, label: 'Land Contracts', badge: null,
@@ -71,9 +71,9 @@ const MENU = [
       { id: 'land-payment',   icon: Banknote, label: 'Land Payment'   },  // ← NEW page
     ],
   },
-  { id: 'clients', icon: Users,       label: 'Clients', badge: null },
+  // { id: 'clients', icon: Users,       label: 'Clients', badge: null },
   { id: 'owners',  icon: UserCircle,  label: 'Owners',  badge: null },
-  { id: 'payments',icon: CreditCard,  label: 'Payments',badge: null },
+  // { id: 'payments',icon: CreditCard,  label: 'Payments',badge: null },
 ];
 
 const CHILD_TO_PARENT = {};

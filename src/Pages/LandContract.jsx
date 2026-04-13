@@ -38,7 +38,7 @@ const ALLOWED_TYPES = [
   'image/png',
 ];
 const ALLOWED_LABEL = 'PDF, Word (.doc/.docx), JPG or PNG';
-const MAX_SIZE_MB = 5;
+const MAX_SIZE_MB = 30;
 
 /* ─────────────────────────────────────────
    HELPERS
@@ -1377,9 +1377,6 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                             </div>
                             <div style={{ fontSize: 12, fontWeight: 600, color: '#b45309', lineHeight: 1.6 }}>
                               {fileSizeWarn}
-                            </div>
-                            <div style={{ fontSize: 11, fontWeight: 600, color: '#d97706', marginTop: 6 }}>
-                              💡 Tip: Compress the file using a free online tool and try again.
                             </div>
                           </div>
                           <button onClick={() => setFileSizeWarn('')}

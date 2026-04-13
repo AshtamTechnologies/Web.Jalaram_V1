@@ -38,7 +38,7 @@ function toSafeISO(effdt) {
   // Date-only string "YYYY-MM-DD"
   const d = new Date(effdt + 'T00:00:00.000Z');
   return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
-} 
+}
 // ── Helper: decode JWT to extract claims ────────────────────
 const decodeJWT = (token) => {
   try {
@@ -189,35 +189,35 @@ export const apiService = {
   getSiteById: (siteId) =>
     api.get(`/Site/${siteId}`),
 
-createSite: (siteData) =>
-  api.post('/Site', {
-    siteID:       0,
-    addressLine1: siteData.addressLine1,
-    addressLine2: siteData.addressLine2 || '',
-    addressLine3: siteData.addressLine3 || '',
-    landmark:     siteData.landmark    || '',
-    city:         siteData.city,
-    district:     siteData.district,
-    siteType:     siteData.siteType    || '',
-    country:      siteData.country,
-    status:       siteData.status === 'Active',   // ← true/false
-    ownerID:      Number(siteData.ownerID),
-  }),
+  createSite: (siteData) =>
+    api.post('/Site', {
+      siteID: 0,
+      addressLine1: siteData.addressLine1,
+      addressLine2: siteData.addressLine2 || '',
+      addressLine3: siteData.addressLine3 || '',
+      landmark: siteData.landmark || '',
+      city: siteData.city,
+      district: siteData.district,
+      siteType: siteData.siteType || '',
+      country: siteData.country,
+      status: siteData.status === 'Active',   // ← true/false
+      ownerID: Number(siteData.ownerID),
+    }),
 
-updateSite: (siteId, siteData) =>
-  api.put(`/Site/${siteId}`, {
-    siteID:       Number(siteId),
-    addressLine1: siteData.addressLine1,
-    addressLine2: siteData.addressLine2 || '',
-    addressLine3: siteData.addressLine3 || '',
-    landmark:     siteData.landmark    || '',
-    city:         siteData.city,
-    district:     siteData.district,
-    siteType:     siteData.siteType    || '',
-    country:      siteData.country,
-    status:       siteData.status === 'Active',   // ← true/false
-    ownerID:      Number(siteData.ownerID),
-  }),
+  updateSite: (siteId, siteData) =>
+    api.put(`/Site/${siteId}`, {
+      siteID: Number(siteId),
+      addressLine1: siteData.addressLine1,
+      addressLine2: siteData.addressLine2 || '',
+      addressLine3: siteData.addressLine3 || '',
+      landmark: siteData.landmark || '',
+      city: siteData.city,
+      district: siteData.district,
+      siteType: siteData.siteType || '',
+      country: siteData.country,
+      status: siteData.status === 'Active',   // ← true/false
+      ownerID: Number(siteData.ownerID),
+    }),
 
   deleteSite: (siteId) =>
     api.delete(`/Site/${siteId}`),
@@ -238,13 +238,12 @@ updateSite: (siteId, siteData) =>
 
   getHoardingById: (hoardingID) =>
     api.get(`/Hoarding/${hoardingID}`),
-
   createHoarding: (data) =>
     api.post('/Hoarding', {
       hoardingID: 0,
       effdt: data.effdt
-        ? new Date(data.effdt + 'T00:00:00.000Z').toISOString()
-        : new Date().toISOString(),
+        ? data.effdt   // ✅ already in YYYY-MM-DD format from input type="date"
+        : new Date().toISOString().split('T')[0], // ✅ fallback today date
       hoardingCode: data.hoardingCode,
       material: data.material,
       hoardingType: Number(data.hoardingType),
@@ -254,13 +253,12 @@ updateSite: (siteId, siteData) =>
       height: Number(data.height),
       siteID: Number(data.siteID),
     }),
-
   addHoardingEffdt: (hoardingCode, data) =>
     api.post('/Hoarding', {
       hoardingID: 0,
       effdt: data.effdt
-        ? new Date(data.effdt + 'T00:00:00.000Z').toISOString()
-        : new Date().toISOString(),
+        ? data.effdt
+        : new Date().toISOString().split('T')[0],
       hoardingCode: hoardingCode,
       material: data.material,
       hoardingType: Number(data.hoardingType),
@@ -271,19 +269,19 @@ updateSite: (siteId, siteData) =>
       siteID: Number(data.siteID),
     }),
 
-updateHoarding: (hoardingID, data) =>
-  api.put(`/Hoarding/${hoardingID}`, {
-    hoardingID: Number(hoardingID),
-    effdt: toSafeISO(data.effdt),   // ← use helper
-    hoardingCode: data.hoardingCode,
-    material: data.material,
-    hoardingType: Number(data.hoardingType),
-    status: data.status,
-    monthlyRent: Number(data.monthlyRent),
-    width: Number(data.width),
-    height: Number(data.height),
-    siteID: Number(data.siteID),
-  }),
+  updateHoarding: (hoardingID, data) =>
+    api.put(`/Hoarding/${hoardingID}`, {
+      hoardingID: Number(hoardingID),
+      effdt: data.effdt ? data.effdt.split('T')[0] : new Date().toISOString().split('T')[0],  // ✅ always date-only
+      hoardingCode: data.hoardingCode,
+      material: data.material,
+      hoardingType: Number(data.hoardingType),
+      status: data.status,
+      monthlyRent: Number(data.monthlyRent),
+      width: Number(data.width),
+      height: Number(data.height),
+      siteID: Number(data.siteID),
+    }),
   deleteHoarding: (hoardingID) =>
     api.delete(`/Hoarding/${hoardingID}`),
 
@@ -302,35 +300,34 @@ updateHoarding: (hoardingID, data) =>
 
   // POST /api/HoardingExpense
   // Body: { expenseID: 0, hoardingID, expenseDate (ISO), expenseType, expenseDTL, amount, paidBy, comments }
-  createExpense: (data) =>
-    api.post('/HoardingExpense', {
-      expenseID: 0,
-      hoardingID: Number(data.hoardingID),
-      expenseDate: data.expenseDate
-        ? new Date(data.expenseDate).toISOString()
-        : new Date().toISOString(),
-      expenseType: data.expenseType,
-      expenseDTL: data.expenseDTL,
-      amount: Number(data.amount),
-      paidBy: data.paidBy,
-      comments: data.comments || '',
-    }),
-
+createExpense: (data) =>
+  api.post('/HoardingExpense', {
+    expenseID: 0,
+    hoardingID: Number(data.hoardingID),
+    expenseDate: data.expenseDate
+      ? data.expenseDate
+      : new Date().toISOString().split('T')[0],
+    expenseType: data.expenseType,
+    expenseDTL: data.expenseDTL,
+    amount: Number(data.amount),
+    paidBy: data.paidBy,
+    comments: data.comments || '',
+  }),
   // PUT /api/HoardingExpense/{expenseID}
   // Body: { expenseID, hoardingID, expenseDate (ISO), expenseType, expenseDTL, amount, paidBy, comments }
-  updateExpense: (expenseID, data) =>
-    api.put(`/HoardingExpense/${expenseID}`, {
-      expenseID: Number(expenseID),
-      hoardingID: Number(data.hoardingID),
-      expenseDate: data.expenseDate
-        ? new Date(data.expenseDate).toISOString()
-        : new Date().toISOString(),
-      expenseType: data.expenseType,
-      expenseDTL: data.expenseDTL,
-      amount: Number(data.amount),
-      paidBy: data.paidBy,
-      comments: data.comments || '',
-    }),
+updateExpense: (expenseID, data) =>
+  api.put(`/HoardingExpense/${expenseID}`, {
+    expenseID: Number(expenseID),
+    hoardingID: Number(data.hoardingID),
+    expenseDate: data.expenseDate
+      ? data.expenseDate
+      : new Date().toISOString().split('T')[0],
+    expenseType: data.expenseType,
+    expenseDTL: data.expenseDTL,
+    amount: Number(data.amount),
+    paidBy: data.paidBy,
+    comments: data.comments || '',
+  }),
 
   // DELETE /api/HoardingExpense/{expenseID}
   deleteExpense: (expenseID) =>
@@ -380,8 +377,8 @@ updateHoarding: (hoardingID, data) =>
   // ─────────────────────────────────────
   // LAND CONTRACTS
   // ─────────────────────────────────────
-getAllPaymentFreqs: () =>
-  api.get('/PaymentFreq/GetAll'),
+  getAllPaymentFreqs: () =>
+    api.get('/PaymentFreq/GetAll'),
 
   getAllLandContracts: () =>
     api.get('/LandContract/GetAll'),
@@ -408,44 +405,44 @@ getAllPaymentFreqs: () =>
     });
   },
 
-updateLandContract: async (data) => {
-  const fd = new FormData();
-  fd.append('landContractID',     data.landContractID);
-  fd.append('ownerID',            data.ownerID);
-  fd.append('hoardingID',         data.hoardingID);
-  fd.append('startDate',          data.startDate);
-  fd.append('endDate',            data.endDate);
-  fd.append('totalContractValue', data.totalContractValue);
-  fd.append('paymentFreqID',      data.paymentFreqID);
-  fd.append('amountPerFreq',      data.amountPerFreq);
-  if (data.advancePaid != null && data.advancePaid !== '')
-    fd.append('advancePaid', data.advancePaid);
-  fd.append('status',   data.status);
-  fd.append('comments', data.comments || '');
+  updateLandContract: async (data) => {
+    const fd = new FormData();
+    fd.append('landContractID', data.landContractID);
+    fd.append('ownerID', data.ownerID);
+    fd.append('hoardingID', data.hoardingID);
+    fd.append('startDate', data.startDate);
+    fd.append('endDate', data.endDate);
+    fd.append('totalContractValue', data.totalContractValue);
+    fd.append('paymentFreqID', data.paymentFreqID);
+    fd.append('amountPerFreq', data.amountPerFreq);
+    if (data.advancePaid != null && data.advancePaid !== '')
+      fd.append('advancePaid', data.advancePaid);
+    fd.append('status', data.status);
+    fd.append('comments', data.comments || '');
 
-  if (data.landContractdocument instanceof File) {
-    // User uploaded a new file — send it directly
-    fd.append('landContractdocument', data.landContractdocument);
-    fd.append('DocumentPath', 'pending');
-  } else if (typeof data.documentPath === 'string' && data.documentPath.trim()) {
-    // No new file — re-fetch existing document from URL and re-send
-    try {
-      const res  = await fetch(data.documentPath);
-      const blob = await res.blob();
-      const name = data.documentPath.split('/').pop() || 'document';
-      fd.append('landContractdocument', new File([blob], name, { type: blob.type }));
-      fd.append('DocumentPath', data.documentPath);
-    } catch {
-      fd.append('DocumentPath', data.documentPath);
+    if (data.landContractdocument instanceof File) {
+      // User uploaded a new file — send it directly
+      fd.append('landContractdocument', data.landContractdocument);
+      fd.append('DocumentPath', 'pending');
+    } else if (typeof data.documentPath === 'string' && data.documentPath.trim()) {
+      // No new file — re-fetch existing document from URL and re-send
+      try {
+        const res = await fetch(data.documentPath);
+        const blob = await res.blob();
+        const name = data.documentPath.split('/').pop() || 'document';
+        fd.append('landContractdocument', new File([blob], name, { type: blob.type }));
+        fd.append('DocumentPath', data.documentPath);
+      } catch {
+        fd.append('DocumentPath', data.documentPath);
+      }
+    } else {
+      fd.append('DocumentPath', 'none');
     }
-  } else {
-    fd.append('DocumentPath', 'none');
-  }
 
-  return api.put('/LandContract/Update', fd, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
-},
+    return api.put('/LandContract/Update', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 
   deleteLandContract: (landContractID) =>
     api.delete(`/LandContract/Delete/${landContractID}`),
@@ -455,9 +452,9 @@ updateLandContract: async (data) => {
 
 
   // ─────────────────────────────────────────────────────────────────────────────
-// LAND PAYMENTS — paste these methods inside `apiService` in api.js
-// Place them after the `deleteLandContract` method
-// ─────────────────────────────────────────────────────────────────────────────
+  // LAND PAYMENTS — paste these methods inside `apiService` in api.js
+  // Place them after the `deleteLandContract` method
+  // ─────────────────────────────────────────────────────────────────────────────
 
   // GET /api/LandPayment  — fetch all payments
   getAllLandPayments: () =>
@@ -467,71 +464,54 @@ updateLandContract: async (data) => {
   getLandPaymentById: (id) =>
     api.get(`/LandPayment/${id}`),
 
-  // POST /api/LandPayment  — create a new payment
-  createLandPayment: (data) => {
-    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-    const lastUpdatedBy =
-      userData?.name      || userData?.Name      ||
-      userData?.email     || userData?.Email     ||
-      userData?.userName  || userData?.UserName  ||
-      'Admin';
+createLandPayment: (data) => {
+  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+  const lastUpdatedBy = userData?.name || userData?.email || userData?.userName || 'Admin';
 
-    return api.post('/LandPayment', {
-      landPaymentID:   0,
-      ownerID:         Number(data.ownerID),
-      landContractID:  Number(data.landContractID),
-      hoardingID:      Number(data.hoardingID) || 0,
-      paymentDate:     data.paymentDate
-        ? new Date(data.paymentDate + 'T00:00:00.000Z').toISOString()
-        : new Date().toISOString(),
-      paymentPurpose:  data.paymentPurpose  || '',
-      amountPaid:      Number(data.amountPaid),
-      paymentMode:     data.paymentMode     || '',
-      nextDueDate:     data.nextDueDate
-        ? new Date(data.nextDueDate + 'T00:00:00.000Z').toISOString()
-        : null,
-      bankName:        data.bankName        || '',
-      referenceNumber: data.referenceNumber || '',
-      paidBy:          data.paidBy          || '',
-      comments:        data.comments        || '',
-      lastUpdatedBy,
-    });
-  },
+  return api.post('/LandPayment', {
+    landPaymentID:   0,
+    ownerID:         Number(data.ownerID),
+    landContractID:  Number(data.landContractID),
+    hoardingID:      Number(data.hoardingID) || 0,
+    paymentDate:     data.paymentDate ? data.paymentDate.split('T')[0] : new Date().toISOString().split('T')[0],
+    paymentPurpose:  data.paymentPurpose  || '',
+    amountPaid:      Number(data.amountPaid),
+    paymentMode:     data.paymentMode     || '',
+    nextDueDate:     data.nextDueDate     ? data.nextDueDate.split('T')[0] : null,
+    bankName:        data.bankName        || null,   // ✅ null not ""
+    referenceNumber: data.referenceNumber || null,   // ✅ null not ""
+    paidBy:          data.paidBy          || '',
+    comments:        data.comments        || null,   // ✅ null not ""
+    lastUpdatedBy,
+  });
+},
 
-  // PUT /api/LandPayment/{id}  — update an existing payment
-  updateLandPayment: (id, data) => {
-    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
-    const lastUpdatedBy =
-      userData?.name      || userData?.Name      ||
-      userData?.email     || userData?.Email     ||
-      userData?.userName  || userData?.UserName  ||
-      'Admin';
+updateLandPayment: (id, data) => {
+  const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+  const lastUpdatedBy = userData?.name || userData?.email || userData?.userName || 'Admin';
 
-    return api.put(`/LandPayment/${id}`, {
-      landPaymentID:   Number(id),
-      ownerID:         Number(data.ownerID),
-      landContractID:  Number(data.landContractID),
-      hoardingID:      Number(data.hoardingID) || 0,
-      paymentDate:     data.paymentDate
-        ? new Date(data.paymentDate + 'T00:00:00.000Z').toISOString()
-        : new Date().toISOString(),
-      paymentPurpose:  data.paymentPurpose  || '',
-      amountPaid:      Number(data.amountPaid),
-      paymentMode:     data.paymentMode     || '',
-      nextDueDate:     data.nextDueDate
-        ? new Date(data.nextDueDate + 'T00:00:00.000Z').toISOString()
-        : null,
-      bankName:        data.bankName        || '',
-      referenceNumber: data.referenceNumber || '',
-      paidBy:          data.paidBy          || '',
-      comments:        data.comments        || '',
-      lastUpdatedBy,
-    });
-  },
+  return api.put(`/LandPayment/${id}`, {
+    landPaymentID:   Number(id),
+    ownerID:         Number(data.ownerID),
+    landContractID:  Number(data.landContractID),
+    hoardingID:      Number(data.hoardingID) || 0,
+    paymentDate:     data.paymentDate ? data.paymentDate.split('T')[0] : new Date().toISOString().split('T')[0],
+    paymentPurpose:  data.paymentPurpose  || '',
+    amountPaid:      Number(data.amountPaid),
+    paymentMode:     data.paymentMode     || '',
+    nextDueDate:     data.nextDueDate     ? data.nextDueDate.split('T')[0] : null,
+    bankName:        data.bankName        || null,   // ✅ null not ""
+    referenceNumber: data.referenceNumber || null,   // ✅ null not ""
+    paidBy:          data.paidBy          || '',
+    comments:        data.comments        || null,   // ✅ null not ""
+    lastUpdatedBy,
+  });
+},
 
   // DELETE /api/LandPayment/{id}  — permanently remove a payment
   deleteLandPayment: (id) =>
-    api.delete(`/LandPayment/${id}`),};
+    api.delete(`/LandPayment/${id}`),
+};
 
 
 

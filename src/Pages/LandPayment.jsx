@@ -18,23 +18,23 @@ import { useResizableColumns } from '../hooks/useResizableColumns';
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
 
 const PAYMENT_MODE_OPTIONS = [
-  { value: 'Cash',          label: 'Cash' },
-  { value: 'Cheque',        label: 'Cheque' },
-  { value: 'NEFT',          label: 'NEFT' },
-  { value: 'RTGS',          label: 'RTGS' },
-  { value: 'UPI',           label: 'UPI' },
+  { value: 'Cash', label: 'Cash' },
+  { value: 'Cheque', label: 'Cheque' },
+  { value: 'NEFT', label: 'NEFT' },
+  { value: 'RTGS', label: 'RTGS' },
+  { value: 'UPI', label: 'UPI' },
   { value: 'Bank Transfer', label: 'Bank Transfer' },
-  { value: 'Demand Draft',  label: 'Demand Draft' },
+  { value: 'Demand Draft', label: 'Demand Draft' },
 ];
 
 const PAYMENT_PURPOSE_OPTIONS = [
-  { value: 'Monthly Rent',       label: 'Monthly Rent' },
-  { value: 'Quarterly Rent',     label: 'Quarterly Rent' },
-  { value: 'Advance Payment',    label: 'Advance Payment' },
-  { value: 'Security Deposit',   label: 'Security Deposit' },
-  { value: 'Half-Yearly Rent',   label: 'Half-Yearly Rent' },
-  { value: 'Yearly Rent',        label: 'Yearly Rent' },
-  { value: 'Other',              label: 'Other' },
+  { value: 'Monthly Rent', label: 'Monthly Rent' },
+  { value: 'Quarterly Rent', label: 'Quarterly Rent' },
+  { value: 'Advance Payment', label: 'Advance Payment' },
+  { value: 'Security Deposit', label: 'Security Deposit' },
+  { value: 'Half-Yearly Rent', label: 'Half-Yearly Rent' },
+  { value: 'Yearly Rent', label: 'Yearly Rent' },
+  { value: 'Other', label: 'Other' },
 ];
 
 const EMPTY_FORM = {
@@ -77,49 +77,49 @@ function fmtCurrency(v) {
 
 function paymentModeStyle(mode) {
   switch (mode) {
-    case 'Cash':          return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
-    case 'Cheque':        return { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' };
-    case 'NEFT':          return { bg: '#faf5ff', color: '#7c3aed', border: '#ddd6fe' };
-    case 'RTGS':          return { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' };
-    case 'UPI':           return { bg: '#ecfdf5', color: '#059669', border: '#a7f3d0' };
+    case 'Cash': return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+    case 'Cheque': return { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' };
+    case 'NEFT': return { bg: '#faf5ff', color: '#7c3aed', border: '#ddd6fe' };
+    case 'RTGS': return { bg: '#fff7ed', color: '#c2410c', border: '#fed7aa' };
+    case 'UPI': return { bg: '#ecfdf5', color: '#059669', border: '#a7f3d0' };
     case 'Bank Transfer': return { bg: '#f0f9ff', color: '#0284c7', border: '#bae6fd' };
-    case 'Demand Draft':  return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
-    default:              return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
+    case 'Demand Draft': return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
+    default: return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
   }
 }
 
 function normalizePayment(raw) {
   return {
-    landPaymentID:   raw.landPaymentID   ?? raw.LandPaymentID   ?? 0,
-    ownerID:         raw.ownerID         ?? raw.OwnerID         ?? '',
-    landContractID:  raw.landContractID  ?? raw.LandContractID  ?? '',
-    hoardingID:      raw.hoardingID      ?? raw.HoardingID      ?? '',
-    paymentDate:     (raw.paymentDate    ?? raw.PaymentDate     ?? '').split('T')[0],
-    paymentPurpose:  raw.paymentPurpose  ?? raw.PaymentPurpose  ?? '',
-    amountPaid:      raw.amountPaid      ?? raw.AmountPaid      ?? '',
-    paymentMode:     raw.paymentMode     ?? raw.PaymentMode     ?? '',
-    nextDueDate:     (raw.nextDueDate    ?? raw.NextDueDate     ?? '').split('T')[0],
-    bankName:        raw.bankName        ?? raw.BankName        ?? '',
+    landPaymentID: raw.landPaymentID ?? raw.LandPaymentID ?? 0,
+    ownerID: raw.ownerID ?? raw.OwnerID ?? '',
+    landContractID: raw.landContractID ?? raw.LandContractID ?? '',
+    hoardingID: raw.hoardingID ?? raw.HoardingID ?? '',
+    paymentDate: (raw.paymentDate ?? raw.PaymentDate ?? '').split('T')[0],
+    paymentPurpose: raw.paymentPurpose ?? raw.PaymentPurpose ?? '',
+    amountPaid: raw.amountPaid ?? raw.AmountPaid ?? '',
+    paymentMode: raw.paymentMode ?? raw.PaymentMode ?? '',
+    nextDueDate: (raw.nextDueDate ?? raw.NextDueDate ?? '').split('T')[0],
+    bankName: raw.bankName ?? raw.BankName ?? '',
     referenceNumber: raw.referenceNumber ?? raw.ReferenceNumber ?? '',
-    paidBy:          raw.paidBy          ?? raw.PaidBy          ?? '',
-    comments:        raw.comments        ?? raw.Comments        ?? '',
-    lastUpdatedBy:   raw.lastUpdatedBy   ?? raw.LastUpdatedBy   ?? '',
-    lastUpdateDttm:  raw.lastUpdateDttm  ?? raw.LastUpdateDttm  ?? '',
+    paidBy: raw.paidBy ?? raw.PaidBy ?? '',
+    comments: raw.comments ?? raw.Comments ?? '',
+    lastUpdatedBy: raw.lastUpdatedBy ?? raw.LastUpdatedBy ?? '',
+    lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
   };
 }
 
 function validateForm(form) {
   const e = {};
-  if (!form.ownerID)        e.ownerID        = 'Owner is required';
-  if (!form.landContractID) e.landContractID  = 'Contract is required';
-  if (!form.paymentDate)    e.paymentDate     = 'Payment date is required';
-  if (!form.paymentPurpose) e.paymentPurpose  = 'Payment purpose is required';
+  if (!form.ownerID) e.ownerID = 'Owner is required';
+  if (!form.landContractID) e.landContractID = 'Contract is required';
+  if (!form.paymentDate) e.paymentDate = 'Payment date is required';
+  if (!form.paymentPurpose) e.paymentPurpose = 'Payment purpose is required';
   if (form.amountPaid === '' || form.amountPaid == null)
     e.amountPaid = 'Amount paid is required';
   else if (isNaN(Number(form.amountPaid)) || Number(form.amountPaid) <= 0)
     e.amountPaid = 'Must be a valid positive number';
-  if (!form.paymentMode)    e.paymentMode     = 'Payment mode is required';
-  if (!form.paidBy)         e.paidBy          = 'Paid by is required';
+  if (!form.paymentMode) e.paymentMode = 'Payment mode is required';
+  if (!form.paidBy) e.paidBy = 'Paid by is required';
   if (form.nextDueDate && form.paymentDate && form.nextDueDate < form.paymentDate)
     e.nextDueDate = 'Next due date must be after payment date';
   return e;
@@ -140,7 +140,7 @@ function SortIcon({ col, sortKey, sortDir }) {
   const active = sortKey === col;
   return (
     <span className="pg-sort-icon">
-      <ChevronUp  size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"   />
+      <ChevronUp size={10} color={active && sortDir === 'asc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
       <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
     </span>
   );
@@ -210,10 +210,10 @@ function ComboDropdown({
   value, onChange, onBlur, hasError, placeholder,
   icon: Icon, options, searchable = false, emptyText = 'No options', disabled = false,
 }) {
-  const [open, setOpen]               = useState(false);
-  const [query, setQuery]             = useState('');
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [focusedIndex, setFocusedIndex] = useState(-1);
-  const wrapRef  = useRef(null);
+  const wrapRef = useRef(null);
   const inputRef = useRef(null);
 
   const selected = options.find(o => String(o.value) === String(value));
@@ -325,9 +325,9 @@ function ComboDropdown({
    OWNER SEARCH WIDGET
 ═══════════════════════════════════════════ */
 function OwnerSearchWidget({ owners, value, onChange, error, disabled }) {
-  const [query, setQuery]             = useState('');
-  const [open, setOpen]               = useState(false);
-  const [results, setResults]         = useState([]);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState([]);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const wrapRef = useRef(null);
 
@@ -339,8 +339,8 @@ function OwnerSearchWidget({ owners, value, onChange, error, disabled }) {
     setResults(
       owners.filter(o =>
         (o.ownerName || '').toLowerCase().includes(q) ||
-        (o.phone1    || '').toLowerCase().includes(q) ||
-        (o.phone     || '').toLowerCase().includes(q) ||
+        (o.phone1 || '').toLowerCase().includes(q) ||
+        (o.phone || '').toLowerCase().includes(q) ||
         String(o.ownerID).includes(q)
       ).slice(0, 10)
     );
@@ -446,37 +446,214 @@ function OwnerSearchWidget({ owners, value, onChange, error, disabled }) {
 /* ═══════════════════════════════════════════
    CONTRACT DROPDOWN (filtered by owner)
 ═══════════════════════════════════════════ */
-function ContractDropdown({ contracts, ownerID, value, onChange, error, disabled }) {
+function ContractDropdown({ contracts, hoardings, ownerID, value, onChange, error, disabled }) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [focusedIndex, setFocusedIndex] = useState(-1);
+  const wrapRef = useRef(null);
+
   const ownerContracts = ownerID
     ? contracts.filter(c => String(c.ownerID) === String(ownerID))
     : [];
 
-  const options = ownerContracts.map(c => ({
-    value: c.landContractID,
-    label: `Contract #${c.landContractID} — ${fmtDate(c.startDate)} to ${fmtDate(c.endDate)} (${c.status})`,
-    _raw: c,
-  }));
+  const enriched = ownerContracts.map(c => {
+    const h = hoardings.find(h => h.hoardingID === Number(c.hoardingID) || h.hoardingID === c.hoardingID);
+    const parts = [];
+    if (h?.hoardingCode) parts.push(h.hoardingCode);
+    if (h?.width && h?.height) parts.push(`${h.width}×${h.height} ft`);
+    if (h?.material) parts.push(h.material);
+    return {
+      ...c,
+      hoardingCode: h?.hoardingCode || '',
+      hoardingInfo: parts.join(' · ') || `Hoarding #${c.hoardingID}`,
+      dateRange: `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`,
+      statusLabel: c.status || 'Unknown',
+    };
+  });
+
+  const filtered = query.trim()
+    ? enriched.filter(c =>
+      c.hoardingCode.toLowerCase().includes(query.toLowerCase()) ||
+      c.hoardingInfo.toLowerCase().includes(query.toLowerCase()) ||
+      c.statusLabel.toLowerCase().includes(query.toLowerCase()) ||
+      String(c.landContractID).includes(query)
+    )
+    : enriched;
+
+  const selected = enriched.find(c => String(c.landContractID) === String(value));
+
+  useEffect(() => {
+    const h = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false); setFocusedIndex(-1);
+      }
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, []);
 
   const isDisabled = disabled || !ownerID;
   const placeholder = !ownerID
     ? 'Select an owner first...'
     : ownerContracts.length === 0
       ? 'No contracts for this owner'
-      : 'Select a contract...';
+      : 'Search by hoarding code, size, material...';
+
+  const handleKeyDown = (e) => {
+    if (!open || filtered.length === 0) return;
+    if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedIndex(i => Math.min(i + 1, filtered.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setFocusedIndex(i => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (focusedIndex >= 0 && filtered[focusedIndex]) {
+        onChange(filtered[focusedIndex].landContractID);
+        setQuery(''); setOpen(false); setFocusedIndex(-1);
+      }
+    } else if (e.key === 'Escape') { setOpen(false); setFocusedIndex(-1); }
+  };
+
+  const statusStyle = (s) => {
+    if (!s) return { color: '#9090a8', background: '#f0f0f8' };
+    const lower = s.toLowerCase();
+    if (lower === 'active') return { color: '#16a34a', background: '#f0fdf4' };
+    if (lower === 'inactive') return { color: '#dc2626', background: '#fef2f2' };
+    if (lower === 'expired') return { color: '#d97706', background: '#fffbeb' };
+    return { color: '#7c3aed', background: '#faf5ff' };
+  };
 
   return (
-    <ComboDropdown
-      value={value}
-      onChange={onChange}
-      onBlur={() => {}}
-      hasError={!!error}
-      placeholder={placeholder}
-      icon={FileText}
-      options={options}
-      searchable={options.length > 5}
-      emptyText="No contracts found"
-      disabled={isDisabled}
-    />
+    <div className="lc-search-widget" ref={wrapRef}>
+      {/* Search Input */}
+      {!isDisabled && (
+        <div
+          className={`pg-field-wrap ${error ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
+          style={{ cursor: 'text' }}
+          onClick={() => { if (!isDisabled) setOpen(true); }}
+        >
+          <Search size={14} color={error ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+          <input
+            className="pg-field-input"
+            placeholder={placeholder}
+            value={query}
+            onChange={e => { setQuery(e.target.value); setOpen(true); }}
+            onFocus={() => setOpen(true)}
+            onKeyDown={handleKeyDown}
+            autoComplete="off"
+            disabled={isDisabled}
+          />
+          {query && (
+            <X size={12} style={{ cursor: 'pointer', color: '#c0c0d8', flexShrink: 0 }}
+              onClick={e => { e.stopPropagation(); setQuery(''); setFocusedIndex(-1); }} />
+          )}
+        </div>
+      )}
+
+      {/* Disabled placeholder */}
+      {isDisabled && (
+        <div className="pg-field-wrap pg-field-wrap--readonly">
+          <FileText size={14} color="#c0c0d8" style={{ flexShrink: 0 }} />
+          <span style={{ fontSize: 13, color: '#c0c0d8', fontFamily: 'Nunito, sans-serif', fontWeight: 500 }}>
+            {placeholder}
+          </span>
+        </div>
+      )}
+
+      {/* Dropdown list */}
+      {open && !isDisabled && (
+        <div className="lc-dropdown">
+          {filtered.length === 0 ? (
+            <div className="lc-dropdown-empty">
+              <FileText size={18} />
+              <span>{query ? 'No contracts match your search' : 'No contracts for this owner'}</span>
+            </div>
+          ) : filtered.map((c, idx) => {
+            const st = statusStyle(c.statusLabel);
+            return (
+              <div
+                key={c.landContractID}
+                className={`lc-dropdown-option${idx === focusedIndex ? ' lc-dropdown-option--focused' : ''}`}
+                onMouseEnter={() => setFocusedIndex(idx)}
+                onMouseDown={() => {
+                  onChange(c.landContractID);
+                  setQuery(''); setOpen(false); setFocusedIndex(-1);
+                }}
+              >
+                {/* Row 1: hoarding info + status badge */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="lc-dropdown-option__name" style={{
+                    color: String(c.landContractID) === String(value) ? '#049edf' : '#1a1a2e',
+                    flex: 1,
+                  }}>
+                    <Building2 size={12} style={{ marginRight: 4, flexShrink: 0 }} />
+                    {c.hoardingInfo}
+                    <span style={{ color: '#b0b0c8', fontWeight: 600, fontSize: 11, marginLeft: 8 }}>
+                      #{c.landContractID}
+                    </span>
+                  </div>
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, padding: '2px 7px',
+                    borderRadius: 20, ...st,
+                  }}>
+                    {c.statusLabel}
+                  </span>
+                  {String(c.landContractID) === String(value) && (
+                    <Check size={12} color="#049edf" style={{ flexShrink: 0 }} />
+                  )}
+                </div>
+                {/* Row 2: date range */}
+                <div className="lc-dropdown-option__sub" style={{ marginTop: 3 }}>
+                  <Calendar size={10} style={{ marginRight: 4 }} />
+                  {c.dateRange}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Selected card */}
+      {value && selected && (
+        <div className="lc-selected-card">
+          <div className="lc-selected-card__icon"><FileText size={15} color="#049edf" /></div>
+          <div className="lc-selected-card__info">
+            <div className="lc-selected-card__name">{selected.hoardingInfo}
+              <span style={{ color: '#b0b0c8', fontWeight: 600, fontSize: 11, marginLeft: 8 }}>
+                #{selected.landContractID}
+              </span>
+            </div>
+            <div className="lc-selected-card__sub">
+              <Calendar size={10} style={{ marginRight: 3 }} />
+              {selected.dateRange}
+              <span style={{
+                marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px',
+                borderRadius: 20, ...statusStyle(selected.statusLabel),
+              }}>
+                {selected.statusLabel}
+              </span>
+            </div>
+          </div>
+          {!disabled && (
+            <button className="lc-selected-card__clear"
+              onClick={() => { onChange(''); setQuery(''); }}
+              title="Clear">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      )}
+
+      {value && !selected && (
+        <div className="lc-selected-card">
+          <div className="lc-selected-card__icon"><FileText size={15} color="#049edf" /></div>
+          <div className="lc-selected-card__info">
+            <div className="lc-selected-card__name">Contract ID: {value}</div>
+          </div>
+          {!disabled && (
+            <button className="lc-selected-card__clear" onClick={() => onChange('')}><X size={12} /></button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -488,25 +665,25 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
 
   const [form, setForm] = useState(() =>
     isAdd ? { ...EMPTY_FORM } : {
-      ownerID:         payment?.ownerID         ?? '',
-      landContractID:  payment?.landContractID  ?? '',
-      hoardingID:      payment?.hoardingID      ?? '',
-      paymentDate:     payment?.paymentDate     ?? '',
-      paymentPurpose:  payment?.paymentPurpose  ?? '',
-      amountPaid:      payment?.amountPaid      ?? '',
-      paymentMode:     payment?.paymentMode     ?? '',
-      nextDueDate:     payment?.nextDueDate     ?? '',
-      bankName:        payment?.bankName        ?? '',
+      ownerID: payment?.ownerID ?? '',
+      landContractID: payment?.landContractID ?? '',
+      hoardingID: payment?.hoardingID ?? '',
+      paymentDate: payment?.paymentDate ?? '',
+      paymentPurpose: payment?.paymentPurpose ?? '',
+      amountPaid: payment?.amountPaid ?? '',
+      paymentMode: payment?.paymentMode ?? '',
+      nextDueDate: payment?.nextDueDate ?? '',
+      bankName: payment?.bankName ?? '',
       referenceNumber: payment?.referenceNumber ?? '',
-      paidBy:          payment?.paidBy          ?? '',
-      comments:        payment?.comments        ?? '',
+      paidBy: payment?.paidBy ?? '',
+      comments: payment?.comments ?? '',
     }
   );
 
-  const [errors, setErrors]   = useState({});
-  const [saving, setSaving]   = useState(false);
-  const [saveOk, setSaveOk]   = useState(false);
-  const [apiErr, setApiErr]   = useState('');
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [saveOk, setSaveOk] = useState(false);
+  const [apiErr, setApiErr] = useState('');
 
   // When contract changes, auto-fill hoardingID
   useEffect(() => {
@@ -523,7 +700,7 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
       const updated = { ...prev, [key]: val };
       if (key === 'ownerID') {
         updated.landContractID = '';
-        updated.hoardingID     = '';
+        updated.hoardingID = '';
       }
       if (key === 'landContractID') {
         updated.hoardingID = '';
@@ -543,19 +720,19 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
     setSaving(true); setApiErr('');
     try {
       const payload = {
-        landPaymentID:   isAdd ? 0 : payment.landPaymentID,
-        ownerID:         Number(form.ownerID),
-        landContractID:  Number(form.landContractID),
-        hoardingID:      Number(form.hoardingID) || 0,
-        paymentDate:     form.paymentDate,
-        paymentPurpose:  form.paymentPurpose,
-        amountPaid:      Number(form.amountPaid),
-        paymentMode:     form.paymentMode,
-        nextDueDate:     form.nextDueDate || null,
-        bankName:        form.bankName        || '',
+        landPaymentID: isAdd ? 0 : payment.landPaymentID,
+        ownerID: Number(form.ownerID),
+        landContractID: Number(form.landContractID),
+        hoardingID: Number(form.hoardingID) || 0,
+        paymentDate: form.paymentDate,
+        paymentPurpose: form.paymentPurpose,
+        amountPaid: Number(form.amountPaid),
+        paymentMode: form.paymentMode,
+        nextDueDate: form.nextDueDate || null,
+        bankName: form.bankName || '',
         referenceNumber: form.referenceNumber || '',
-        paidBy:          form.paidBy,
-        comments:        form.comments        || '',
+        paidBy: form.paidBy,
+        comments: form.comments || '',
       };
 
       let saved;
@@ -645,6 +822,7 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
                       <FieldLabel label="Land Contract" required />
                       <ContractDropdown
                         contracts={contracts}
+                        hoardings={hoardings}
                         ownerID={form.ownerID}
                         value={form.landContractID}
                         onChange={val => set('landContractID', val)}
@@ -655,7 +833,7 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
                     </div>
 
                     {/* Hoarding (auto-filled, read-only display) */}
-                    {selectedHoarding && (
+                    {/* {selectedHoarding && (
                       <div className="col-12">
                         <div className="lc-selected-card" style={{ margin: 0 }}>
                           <div className="lc-selected-card__icon"><Building2 size={15} color="#6c63ff" /></div>
@@ -675,7 +853,7 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
                           </div>
                         </div>
                       </div>
-                    )}
+                    )} */}
                   </div>
                 </div>
               </div>
@@ -740,7 +918,7 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
                       <ComboDropdown
                         value={form.paymentPurpose}
                         onChange={val => set('paymentPurpose', val)}
-                        onBlur={() => {}}
+                        onBlur={() => { }}
                         hasError={!!errors.paymentPurpose}
                         placeholder="Select purpose…"
                         icon={Receipt}
@@ -755,7 +933,7 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
                       <ComboDropdown
                         value={form.paymentMode}
                         onChange={val => set('paymentMode', val)}
-                        onBlur={() => {}}
+                        onBlur={() => { }}
                         hasError={!!errors.paymentMode}
                         placeholder="Select mode…"
                         icon={CreditCard}
@@ -886,23 +1064,23 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
    MAIN PAGE
 ═══════════════════════════════════════════ */
 export default function LandPaymentPage() {
-  const [owners,    setOwners]    = useState([]);
+  const [owners, setOwners] = useState([]);
   const [hoardings, setHoardings] = useState([]);
   const [contracts, setContracts] = useState([]);
-  const [payments,  setPayments]  = useState([]);
+  const [payments, setPayments] = useState([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
-  const [loadError,   setLoadError]   = useState('');
+  const [loadError, setLoadError] = useState('');
 
-  const [view,       setView]       = useState('grid');
-  const [formMode,   setFormMode]   = useState(null);
+  const [view, setView] = useState('grid');
+  const [formMode, setFormMode] = useState(null);
   const [editTarget, setEditTarget] = useState(null);
 
-  const [search,       setSearch]       = useState('');
-  const [modeFilter,   setModeFilter]   = useState('');
-  const [sortKey,      setSortKey]      = useState('paymentDate');
-  const [sortDir,      setSortDir]      = useState('desc');
-  const [page,         setPage]         = useState(1);
-  const [pageSize,     setPageSize]     = useState(10);
+  const [search, setSearch] = useState('');
+  const [modeFilter, setModeFilter] = useState('');
+  const [sortKey, setSortKey] = useState('paymentDate');
+  const [sortDir, setSortDir] = useState('desc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
@@ -931,11 +1109,11 @@ export default function LandPaymentPage() {
         : Array.isArray(rawContracts?.data) ? rawContracts.data : [];
       setContracts(contractList.map(c => ({
         landContractID: c.landContractID ?? c.LandContractID,
-        ownerID:        c.ownerID        ?? c.OwnerID,
-        hoardingID:     c.hoardingID     ?? c.HoardingID,
-        startDate:      (c.startDate     ?? c.StartDate ?? '').split('T')[0],
-        endDate:        (c.endDate       ?? c.EndDate   ?? '').split('T')[0],
-        status:         c.status         ?? c.Status    ?? '',
+        ownerID: c.ownerID ?? c.OwnerID,
+        hoardingID: c.hoardingID ?? c.HoardingID,
+        startDate: (c.startDate ?? c.StartDate ?? '').split('T')[0],
+        endDate: (c.endDate ?? c.EndDate ?? '').split('T')[0],
+        status: c.status ?? c.Status ?? '',
       })));
 
       const list = Array.isArray(rawPayments)
@@ -958,19 +1136,19 @@ export default function LandPaymentPage() {
 
   /* ── Derived table rows ── */
   const tableRows = payments.map(p => {
-    const owner    = owners.find(o => o.ownerID === Number(p.ownerID) || o.ownerID === p.ownerID);
+    const owner = owners.find(o => o.ownerID === Number(p.ownerID) || o.ownerID === p.ownerID);
     const hoarding = hoardings.find(h => h.hoardingID === Number(p.hoardingID) || h.hoardingID === p.hoardingID);
     return {
-      landPaymentID:  p.landPaymentID,
-      ownerName:      owner?.ownerName || `Owner ID ${p.ownerID}`,
-      hoardingLabel:  hoarding ? hoardingLabel(hoarding) : `Hoarding ID ${p.hoardingID}`,
+      landPaymentID: p.landPaymentID,
+      ownerName: owner?.ownerName || `Owner ID ${p.ownerID}`,
+      hoardingLabel: hoarding ? hoardingLabel(hoarding) : `Hoarding ID ${p.hoardingID}`,
       landContractID: p.landContractID,
-      paymentDate:    p.paymentDate || '',
-      nextDueDate:    p.nextDueDate || '',
+      paymentDate: p.paymentDate || '',
+      nextDueDate: p.nextDueDate || '',
       paymentPurpose: p.paymentPurpose || '',
-      amountPaid:     p.amountPaid ?? 0,
-      paymentMode:    p.paymentMode || '',
-      paidBy:         p.paidBy || '',
+      amountPaid: p.amountPaid ?? 0,
+      paymentMode: p.paymentMode || '',
+      paidBy: p.paidBy || '',
       _raw: p,
     };
   });
@@ -978,12 +1156,12 @@ export default function LandPaymentPage() {
   const filtered = tableRows.filter(r => {
     const q = search.toLowerCase();
     const matchQ =
-      r.ownerName.toLowerCase().includes(q)     ||
+      r.ownerName.toLowerCase().includes(q) ||
       r.hoardingLabel.toLowerCase().includes(q) ||
-      r.paymentPurpose.toLowerCase().includes(q)||
-      r.paymentMode.toLowerCase().includes(q)   ||
-      r.paidBy.toLowerCase().includes(q)        ||
-      String(r.landPaymentID).includes(q)       ||
+      r.paymentPurpose.toLowerCase().includes(q) ||
+      r.paymentMode.toLowerCase().includes(q) ||
+      r.paidBy.toLowerCase().includes(q) ||
+      String(r.landPaymentID).includes(q) ||
       String(r.landContractID).includes(q);
     return matchQ && (!modeFilter || r.paymentMode === modeFilter);
   });
@@ -997,7 +1175,7 @@ export default function LandPaymentPage() {
   });
 
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
-  const paginated  = sortedRows.slice((page - 1) * pageSize, page * pageSize);
+  const paginated = sortedRows.slice((page - 1) * pageSize, page * pageSize);
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -1006,8 +1184,8 @@ export default function LandPaymentPage() {
   };
 
   /* ── Stats ── */
-  const totalPaid   = payments.reduce((s, p) => s + (Number(p.amountPaid) || 0), 0);
-  const cashCount   = payments.filter(p => p.paymentMode === 'Cash').length;
+  const totalPaid = payments.reduce((s, p) => s + (Number(p.amountPaid) || 0), 0);
+  const cashCount = payments.filter(p => p.paymentMode === 'Cash').length;
   const onlineCount = payments.filter(p => ['NEFT', 'RTGS', 'UPI', 'Bank Transfer'].includes(p.paymentMode)).length;
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -1019,15 +1197,15 @@ export default function LandPaymentPage() {
     }, []);
 
   const COLS = [
-    { key: 'landPaymentID',  label: '#ID' },
-    { key: 'ownerName',      label: 'Owner' },
-    { key: 'hoardingLabel',  label: 'Hoarding',   tabletHide: true },
-    { key: 'paymentDate',    label: 'Pay Date' },
-    { key: 'nextDueDate',    label: 'Next Due',   tabletHide: true },
-    { key: 'paymentPurpose', label: 'Purpose',    tabletHide: true },
-    { key: 'amountPaid',     label: 'Amount' },
-    { key: 'paymentMode',    label: 'Mode' },
-    { key: '_action',        label: 'Actions',    noSort: true },
+    { key: 'landPaymentID', label: '#ID' },
+    { key: 'ownerName', label: 'Owner' },
+    { key: 'hoardingLabel', label: 'Hoarding', tabletHide: true },
+    { key: 'paymentDate', label: 'Pay Date' },
+    { key: 'nextDueDate', label: 'Next Due', tabletHide: true },
+    { key: 'paymentPurpose', label: 'Purpose', tabletHide: true },
+    { key: 'amountPaid', label: 'Amount' },
+    { key: 'paymentMode', label: 'Mode' },
+    { key: '_action', label: 'Actions', noSort: true },
   ];
 
   /* ── Form view ── */
@@ -1069,10 +1247,10 @@ export default function LandPaymentPage() {
       {!loadingMeta && payments.length > 0 && (
         <div className="exp-stats-strip">
           {[
-            { icon: <Receipt size={16} color="#049edf" />,      bg: 'rgba(4,158,223,0.1)',    label: 'Total Payments',  val: payments.length },
-            { icon: <IndianRupee size={16} color="#16a34a" />,  bg: 'rgba(22,163,74,0.1)',    label: 'Total Paid',      val: fmtCurrency(totalPaid) },
-            { icon: <Banknote size={16} color="#d97706" />,     bg: 'rgba(217,119,6,0.08)',   label: 'Cash Payments',   val: cashCount },
-            { icon: <CheckCircle2 size={16} color="#7c3aed" />, bg: 'rgba(124,58,237,0.08)',  label: 'Online Payments', val: onlineCount },
+            { icon: <Receipt size={16} color="#049edf" />, bg: 'rgba(4,158,223,0.1)', label: 'Total Payments', val: payments.length },
+            { icon: <IndianRupee size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)', label: 'Total Paid', val: fmtCurrency(totalPaid) },
+            { icon: <Banknote size={16} color="#d97706" />, bg: 'rgba(217,119,6,0.08)', label: 'Cash Payments', val: cashCount },
+            { icon: <CheckCircle2 size={16} color="#7c3aed" />, bg: 'rgba(124,58,237,0.08)', label: 'Online Payments', val: onlineCount },
           ].map(s => (
             <div key={s.label} className="exp-stat-item">
               <div className="exp-stat-item__icon" style={{ background: s.bg }}>{s.icon}</div>
@@ -1281,8 +1459,8 @@ export default function LandPaymentPage() {
         {!loadingMeta && payments.length > 0 && (
           <div className="pg-pagination">
             <div className="pg-pagination__left">
-              <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(1)}><ChevronsLeft  size={13} /></button>
-              <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(p => p - 1)}><ChevronLeft  size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}><ChevronsLeft size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={13} /></button>
               {pageNums.map((p, i) =>
                 p === '...'
                   ? <span key={`e${i}`} className="pg-pg-ellipsis">...</span>

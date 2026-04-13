@@ -164,7 +164,6 @@
   flex-direction: column;
   justify-content: center;
   padding: 60px 56px;
-  /* background: rgba(255, 255, 255, 0.55); */
   backdrop-filter: blur(22px) saturate(160%);
   -webkit-backdrop-filter: blur(22px) saturate(160%);
   border-right: 1.5px solid rgba(255, 255, 255, 0.7);
@@ -181,7 +180,7 @@
   to { opacity: 1; transform: translateX(0); }
 }
 
-/* ── Logo (center-aligned) ── */
+/* ── Logo ── */
 .lp-logo {
   display: flex;
   justify-content: center;
@@ -365,8 +364,39 @@
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Field label & errors ── */
+.lp-field-label {
+  display: block;
+  font-family: 'Nunito', sans-serif;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #4a5568;
+  letter-spacing: 0.3px;
+  margin-bottom: 6px;
+}
+
+.lp-field-err {
+  font-family: 'Nunito', sans-serif;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #ef4444;
+  margin: 0 0 4px 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lp-input--error {
+  border-color: rgba(239, 68, 68, 0.55) !important;
+  background: rgba(239, 68, 68, 0.03) !important;
+}
+
+.lp-input--error:focus {
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
+}
+
 /* ════════════════════════════════════════
-   TAGLINE  — right of form (desktop)
+   TAGLINE — right side
 ════════════════════════════════════════ */
 .lp-tagline-wrap {
   position: absolute;
@@ -384,10 +414,6 @@
   transform: translateX(20px);
 }
 
-@media (min-width: 860px) {
-  .lp-tagline-wrap { display: flex; }
-}
-
 .lp-tagline-wrap--in {
   animation: tagIn 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.22s forwards;
 }
@@ -397,17 +423,17 @@
 }
 
 .lp-tagline {
-  font-size: clamp(32px, 3.8vw, 58px);
+  font-size: clamp(22px, 3.2vw, 58px);
   font-weight: 900;
   color: #1a1a2e;
   line-height: 1.16;
-  letter-spacing: -1.5px;
-  margin-bottom: 20px;
+  letter-spacing: -1px;
+  margin-bottom: 16px;
   font-style: normal;
 }
 
 .lp-tagline-sub {
-  font-size: 16px;
+  font-size: clamp(13px, 1.4vw, 16px);
   font-weight: 600;
   color: #6868a0;
   line-height: 1.75;
@@ -417,15 +443,83 @@
    RESPONSIVE
 ════════════════════════════════════════ */
 
-/* Tablet */
-@media (min-width: 701px) and (max-width: 900px) {
-  .lp-panel { padding: 48px 40px; max-width: 420px; }
-  .lp-tagline-wrap { left: 420px; padding: 0 50px; }
-  .lp-tagline { font-size: clamp(26px, 3.2vw, 44px); }
+/* ── Large Desktop (1024px+) ── */
+@media (min-width: 1024px) {
+  .lp-panel {
+    max-width: 580px;
+    padding: 60px 56px;
+  }
+  .lp-tagline-wrap {
+    display: flex;
+    left: 580px;
+    padding: 0 80px;
+  }
+  .lp-tagline {
+    font-size: clamp(32px, 3.8vw, 58px);
+    letter-spacing: -1.5px;
+    margin-bottom: 20px;
+  }
+  .lp-tagline-sub { font-size: 16px; }
 }
 
-/* Mobile */
-@media (max-width: 700px) {
+/* ── Tablet (700px – 1023px) ── */
+@media (min-width: 700px) and (max-width: 1023px) {
+  .lp-panel {
+    max-width: 360px;
+    min-height: 100vh;
+    padding: 40px 32px;
+  }
+
+  .lp-tagline-wrap {
+    display: flex;
+    left: 360px;
+    right: 0;
+    padding: 0 32px;
+  }
+
+  .lp-logo { margin-bottom: 20px; }
+  .lp-logo-img { height: 60px; }
+  .lp-title { font-size: 22px; margin-bottom: 16px; }
+
+  .lp-input {
+    padding: 11px 14px;
+    font-size: 13.5px;
+    margin-bottom: 10px;
+    border-radius: 10px;
+  }
+
+  .lp-opts { margin-top: 10px; margin-bottom: 16px; }
+  .lp-check { font-size: 12.5px; }
+  .lp-forgot { font-size: 12.5px; }
+
+  .lp-submit {
+    font-size: 14px;
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 16px;
+  }
+
+  .lp-tagline {
+    font-size: clamp(18px, 2.8vw, 34px);
+    letter-spacing: -0.8px;
+    margin-bottom: 12px;
+    line-height: 1.2;
+  }
+
+  .lp-tagline-sub {
+    font-size: clamp(12px, 1.3vw, 14px);
+    line-height: 1.65;
+  }
+
+  /* Adjust background shapes for tablet */
+  .s-blue    { width: 260px; height: 260px; top: -130px; }
+  .s-purple  { width: 260px; height: 260px; top: -130px; }
+  .s-coral   { width: 180px; height: 180px; top: -70px; right: -40px; }
+  .s-lavender { right: -80px; }
+}
+
+/* ── Mobile (below 700px) ── */
+@media (max-width: 699px) {
 
   .lp-root {
     align-items: center;
@@ -445,6 +539,7 @@
   .lp-tagline-wrap { display: none !important; }
 
   .lp-panel {
+    position: relative;
     max-width: 100%;
     width: 100%;
     min-height: unset;
@@ -458,45 +553,13 @@
     -webkit-backdrop-filter: blur(28px) saturate(180%);
   }
 
-  .s-coral   { width: 180px; height: 180px; top: -75px; right: -50px; }
-  .s-blue    { width: 280px; height: 280px; top: -140px; left: calc(38% - 280px); }
-  .s-purple  { width: 280px; height: 280px; top: -140px; left: 38%; }
-  .s-tri     { right: 10px; bottom: 40px; width: 110px; height: 100px; }
+  .s-coral    { width: 180px; height: 180px; top: -75px; right: -50px; }
+  .s-blue     { width: 280px; height: 280px; top: -140px; left: calc(38% - 280px); }
+  .s-purple   { width: 280px; height: 280px; top: -140px; left: 38%; }
+  .s-tri      { right: 10px; bottom: 40px; width: 110px; height: 100px; }
   .s-lavender { display: none; }
 
+  .lp-logo { margin-bottom: 20px; }
   .lp-logo-img { height: 72px; }
-  .lp-title    { font-size: 26px; }
+  .lp-title { font-size: 26px; }
 }
-/* Field-level label above inputs (force-change screen) */
-.lp-field-label {
-  display: block;
-  font-family: 'Nunito', sans-serif;
-  font-size: 11.5px;
-  font-weight: 800;
-  color: #4a5568;
-  letter-spacing: 0.3px;
-  margin-bottom: 6px;
-}
- 
-/* Inline field validation error */
-.lp-field-err {
-  font-family: 'Nunito', sans-serif;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: #ef4444;
-  margin: 0 0 4px 2px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
- 
-/* Error-state border on lp-input */
-.lp-input--error {
-  border-color: rgba(239, 68, 68, 0.55) !important;
-  background: rgba(239, 68, 68, 0.03) !important;
-}
- 
-.lp-input--error:focus {
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
-}
- 
