@@ -7,14 +7,14 @@ import {
   Loader2, FileText, Eye, ArrowLeft, Building2, User,
   IndianRupee, Clock, Upload, Trash2,
   ShieldCheck, MessageSquare, CreditCard, TrendingUp,
-  Download, ExternalLink, MapPin, Maximize2, Tag,
+  Download, ExternalLink, MapPin, Tag, Paperclip,
 } from 'lucide-react';
 import { apiService } from '../api/api';
 import './Common1.css';
 import { useResizableColumns } from '../hooks/useResizableColumns';
 
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
-const STATUS_OPTIONS = ['Active', 'Expired', 'Terminated', 'Pending'];
+const STATUS_OPTIONS    = ['Active', 'Expired', 'Terminated', 'Pending'];
 
 const PAYMENT_FREQ_FALLBACK = [
   { value: 1, label: 'Monthly' },
@@ -23,22 +23,48 @@ const PAYMENT_FREQ_FALLBACK = [
   { value: 4, label: 'Yearly' },
 ];
 
+/* EMPTY_FORM — no document field; documents handled via LandContractAttach */
 const EMPTY_FORM = {
   ownerID: '', hoardingID: '', startDate: '', endDate: '',
   totalContractValue: '', paymentFreqID: '', amountPerFreq: '',
-  advancePaid: '', status: 'Active', landContractdocument: null, comments: '',
+  advancePaid: '', status: 'Active', comments: '',
 };
 
-/* File validation constants */
-const ALLOWED_TYPES = [
+/* Attachment file validation */
+const ATTACH_ALLOWED_TYPES = [
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   'image/jpeg',
   'image/png',
 ];
-const ALLOWED_LABEL = 'PDF, Word (.doc/.docx), JPG or PNG';
-const MAX_SIZE_MB = 30;
+const ATTACH_ALLOWED_LABEL = 'PDF, Word (.doc/.docx), JPG or PNG';
+const ATTACH_MAX_MB        = 30;
+
+const ATTACH_BASE_URL = 'https://api.jalaram-ad.ashtamtechnologies.com';
+
+/* ── Persist original filenames in localStorage so they survive page reloads ── */
+const ATTACH_NAME_KEY = 'lc_attach_names'; // { [attachId]: originalFilename }
+function saveAttachName(attachId, name) {
+  try {
+    const map = JSON.parse(localStorage.getItem(ATTACH_NAME_KEY) || '{}');
+    map[String(attachId)] = name;
+    localStorage.setItem(ATTACH_NAME_KEY, JSON.stringify(map));
+  } catch { /* ignore */ }
+}
+function getAttachName(attachId) {
+  try {
+    const map = JSON.parse(localStorage.getItem(ATTACH_NAME_KEY) || '{}');
+    return map[String(attachId)] || null;
+  } catch { return null; }
+}
+function deleteAttachName(attachId) {
+  try {
+    const map = JSON.parse(localStorage.getItem(ATTACH_NAME_KEY) || '{}');
+    delete map[String(attachId)];
+    localStorage.setItem(ATTACH_NAME_KEY, JSON.stringify(map));
+  } catch { /* ignore */ }
+}
 
 /* ─────────────────────────────────────────
    HELPERS
@@ -68,26 +94,6 @@ function statusStyle(s) {
     default:           return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
   }
 }
-function openDocument(doc) {
-  if (!doc) return;
-  if (doc instanceof File) {
-    const url = URL.createObjectURL(doc);
-    window.open(url, '_blank');
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  } else if (typeof doc === 'string' && doc.trim()) {
-    window.open(doc, '_blank');
-  }
-}
-function downloadDocument(doc, defaultName = 'contract-document') {
-  if (!doc) return;
-  if (doc instanceof File) {
-    const url = URL.createObjectURL(doc);
-    const a = document.createElement('a'); a.href = url; a.download = doc.name || defaultName; a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  } else if (typeof doc === 'string' && doc.trim()) {
-    const a = document.createElement('a'); a.href = doc; a.download = defaultName; a.target = '_blank'; a.click();
-  }
-}
 function deduplicateHoardings(hoardings) {
   const map = new Map();
   for (const h of hoardings) {
@@ -110,8 +116,6 @@ function hoardingLabel(h) {
   return parts.filter(Boolean).join(' - ');
 }
 function normalizeContract(raw) {
-  const doc     = raw.landContractdocument ?? raw.LandContractDocument ?? null;
-  const docPath = raw.documentPath         ?? raw.DocumentPath         ?? null;
   return {
     landContractID:      raw.landContractID      ?? raw.LandContractID,
     ownerID:             raw.ownerID             ?? raw.OwnerID,
@@ -123,11 +127,45 @@ function normalizeContract(raw) {
     amountPerFreq:       raw.amountPerFreq       ?? raw.AmountPerFreq      ?? '',
     advancePaid:         raw.advancePaid         ?? raw.AdvancePaid        ?? '',
     status:              raw.status              ?? raw.Status             ?? '',
-    landContractdocument: doc || (docPath ? `https://api.jalaram-ad.ashtamtechnologies.com${docPath}` : null),
-    documentPath:        docPath ?? '',
     comments:            raw.comments            ?? raw.Comments           ?? '',
     lastUpdatedBy:       raw.lastUpdatedBy       ?? raw.LastUpdatedBy      ?? '',
     lastUpdateDttm:      raw.lastUpdateDttm      ?? raw.LastUpdateDttm     ?? '',
+  };
+}
+function normalizeAttachment(raw) {
+  // ── DEBUG: log all keys so we can identify exact field names from API ──
+  console.log('[Attach raw keys]', Object.keys(raw), raw);
+
+  const filePath = raw.contractFilePath ?? raw.ContractFilePath ?? '';
+  // Trim + treat empty string as null so display falls back correctly
+  const rawName = raw.contractFilename ?? raw.ContractFilename ?? raw.fileName ?? raw.FileName ?? '';
+  const fileName = rawName.trim() || null;
+
+  // Try every casing/naming variation the API might return for the PK
+  const attachID =
+    raw.landContractAttachID ??
+    raw.LandContractAttachID ??
+    raw.landContractAttachId ??
+    raw.LandContractAttachId ??
+    raw.attachID             ??
+    raw.AttachID             ??
+    raw.id                   ??
+    raw.Id                   ??
+    null;
+
+  console.log('[Attach parsed] id=', attachID, 'filename=', fileName, 'filePath=', filePath);
+
+  return {
+    landContractAttachID: attachID,
+    landContractID:       raw.landContractID ?? raw.LandContractID,
+    ownerID:              raw.ownerID        ?? raw.OwnerID,
+    hoardingID:           raw.hoardingID     ?? raw.HoardingID,
+    contractFilePath:     filePath,
+    contractFilename:     fileName,
+    fileUrl: filePath
+      ? (filePath.startsWith('http') ? filePath : `${ATTACH_BASE_URL}${filePath}`)
+      : null,
+    lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
   };
 }
 function validateForm(form) {
@@ -386,8 +424,6 @@ function OwnerSearchWidget({ owners, value, onChange, error, disabled }) {
 
 /* ═══════════════════════════════════════════════════════════
    HOARDING LOOKUP MODAL
-   A full popup that shows hoardings filtered by the selected
-   owner. Supports search by code, material, address, status.
 ═══════════════════════════════════════════════════════════ */
 function HoardingLookupModal({ hoardings, sites, ownerID, onSelect, onClose }) {
   const [query, setQuery]   = useState('');
@@ -395,24 +431,18 @@ function HoardingLookupModal({ hoardings, sites, ownerID, onSelect, onClose }) {
   const [sortD, setSortD]   = useState('asc');
   const inputRef            = useRef(null);
 
-  // Build a siteID set for this owner
   const ownerSiteIds = new Set(
     sites.filter(s => ownerID && (s.ownerID === Number(ownerID) || s.ownerID === ownerID)).map(s => s.siteID)
   );
   const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
 
-  // Filter hoardings to owner's sites
-  const ownerHoardings = ownerID
-    ? hoardings.filter(h => ownerSiteIds.has(h.siteID))
-    : hoardings;
+  const ownerHoardings = ownerID ? hoardings.filter(h => ownerSiteIds.has(h.siteID)) : hoardings;
 
-  // Apply search filter
   const filtered = ownerHoardings.filter(h => {
     if (!query.trim()) return true;
     const q    = query.toLowerCase();
     const site = siteMap[h.siteID];
-    const addr = [site?.addressLine1, site?.addressLine2, site?.city, site?.district]
-      .filter(Boolean).join(' ').toLowerCase();
+    const addr = [site?.addressLine1, site?.addressLine2, site?.city, site?.district].filter(Boolean).join(' ').toLowerCase();
     return (
       (h.hoardingCode || '').toLowerCase().includes(q) ||
       (h.material     || '').toLowerCase().includes(q) ||
@@ -422,7 +452,6 @@ function HoardingLookupModal({ hoardings, sites, ownerID, onSelect, onClose }) {
     );
   });
 
-  // Sort
   const sorted = [...filtered].sort((a, b) => {
     const av = String(a[sortK] ?? '').toLowerCase();
     const bv = String(b[sortK] ?? '').toLowerCase();
@@ -434,10 +463,7 @@ function HoardingLookupModal({ hoardings, sites, ownerID, onSelect, onClose }) {
     else { setSortK(key); setSortD('asc'); }
   };
 
-  // Focus search on open
   useEffect(() => { setTimeout(() => inputRef.current?.focus(), 80); }, []);
-
-  // Close on Escape
   useEffect(() => {
     const h = (e) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', h);
@@ -446,150 +472,65 @@ function HoardingLookupModal({ hoardings, sites, ownerID, onSelect, onClose }) {
 
   const hoardingStatusStyle = (s) => {
     switch (s) {
-      case 'Active':           return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
-      case 'Inactive':         return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+      case 'Active':            return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+      case 'Inactive':          return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
       case 'Under Maintenance': return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
-      default:                 return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
+      default:                  return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
     }
   };
 
   return ReactDOM.createPortal(
-    <div
-      onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 99997,
-        background: 'rgba(15,23,42,0.55)',
-        backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: 16,
-      }}
-    >
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{
-          background: '#fff',
-          borderRadius: 20,
-          width: '100%',
-          maxWidth: 820,
-          maxHeight: '85vh',
-          display: 'flex',
-          flexDirection: 'column',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.22)',
-          overflow: 'hidden',
-          animation: 'modalIn 0.22s cubic-bezier(0.22,1,0.36,1) both',
-        }}
-      >
-        {/* ── Header ── */}
-        <div style={{
-          background: 'linear-gradient(135deg,#049edf,#0284c7)',
-          padding: '20px 24px 16px',
-          display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0,
-        }}>
-          <div style={{
-            width: 42, height: 42, borderRadius: 12,
-            background: 'rgba(255,255,255,0.2)',
-            border: '2px solid rgba(255,255,255,0.35)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 99997, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 820, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', overflow: 'hidden', animation: 'modalIn 0.22s cubic-bezier(0.22,1,0.36,1) both' }}>
+        {/* Header */}
+        <div style={{ background: 'linear-gradient(135deg,#049edf,#0284c7)', padding: '20px 24px 16px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
+          <div style={{ width: 42, height: 42, borderRadius: 12, background: 'rgba(255,255,255,0.2)', border: '2px solid rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Building2 size={20} color="#fff" />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: 17, color: '#fff' }}>
-              Select Hoarding
-            </div>
+            <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: 17, color: '#fff' }}>Select Hoarding</div>
             <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>
               {ownerHoardings.length} hoarding{ownerHoardings.length !== 1 ? 's' : ''} available for this owner
             </div>
           </div>
-          <button onClick={onClose} style={{
-            width: 32, height: 32, borderRadius: '50%', border: 'none',
-            background: 'rgba(255,255,255,0.2)', color: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', flexShrink: 0,
-          }}>
+          <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.2)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
             <X size={15} />
           </button>
         </div>
-
-        {/* ── Search bar ── */}
+        {/* Search */}
         <div style={{ padding: '14px 20px 10px', borderBottom: '1px solid #f0f0f8', flexShrink: 0, background: '#fafafe' }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            background: '#fff', border: '1.5px solid #e8e8f4',
-            borderRadius: 10, padding: '9px 14px',
-          }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1.5px solid #e8e8f4', borderRadius: 10, padding: '9px 14px' }}>
             <Search size={14} color="#c0c0d8" style={{ flexShrink: 0 }} />
-            <input
-              ref={inputRef}
-              style={{ flex: 1, border: 'none', outline: 'none', fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 600, color: '#1a1a2e', background: 'none' }}
-              placeholder="Search by code, material, address, city or status…"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
-            {query && (
-              <X size={13} style={{ cursor: 'pointer', color: '#c0c0d8', flexShrink: 0 }}
-                onClick={() => setQuery('')} />
-            )}
+            <input ref={inputRef} style={{ flex: 1, border: 'none', outline: 'none', fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 600, color: '#1a1a2e', background: 'none' }}
+              placeholder="Search by code, material, address, city or status…" value={query} onChange={e => setQuery(e.target.value)} />
+            {query && <X size={13} style={{ cursor: 'pointer', color: '#c0c0d8', flexShrink: 0 }} onClick={() => setQuery('')} />}
           </div>
-          {query && (
-            <div style={{ marginTop: 6, fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600 }}>
-              {sorted.length} result{sorted.length !== 1 ? 's' : ''} for "{query}"
-            </div>
-          )}
+          {query && <div style={{ marginTop: 6, fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600 }}>{sorted.length} result{sorted.length !== 1 ? 's' : ''} for "{query}"</div>}
         </div>
-
-        {/* ── Empty state ── */}
+        {/* Empty states */}
         {ownerHoardings.length === 0 && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 }}>
             <Building2 size={40} color="#d0d0e8" />
             <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 700, color: '#9090a8', fontSize: 14 }}>No hoardings found for this owner</div>
-            <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 600, color: '#b0b0c8', fontSize: 12 }}>The selected owner has no sites or hoardings linked.</div>
           </div>
         )}
-
-        {/* ── No search results ── */}
         {ownerHoardings.length > 0 && sorted.length === 0 && (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, gap: 12 }}>
             <Search size={36} color="#d0d0e8" />
             <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 700, color: '#9090a8', fontSize: 14 }}>No hoardings match "{query}"</div>
           </div>
         )}
-
-        {/* ── Table ── */}
+        {/* Table */}
         {sorted.length > 0 && (
           <div style={{ flex: 1, overflowY: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                 <tr style={{ background: '#f8f8fd' }}>
-                  {[
-                    { key: 'hoardingCode', label: 'Code' },
-                    { key: 'material',     label: 'Material' },
-                    { key: null,           label: 'Size' },
-                    { key: null,           label: 'Site / Address' },
-                    { key: 'status',       label: 'Status' },
-                    { key: 'monthlyRent',  label: 'Monthly Rent' },
-                    { key: null,           label: '' },
-                  ].map((col, i) => (
-                    <th key={i}
-                      onClick={() => col.key && handleSort(col.key)}
-                      style={{
-                        padding: '10px 14px', textAlign: 'left', fontSize: 11,
-                        fontFamily: 'Nunito, sans-serif', fontWeight: 800,
-                        color: '#7878a0', textTransform: 'uppercase', letterSpacing: '0.06em',
-                        borderBottom: '1.5px solid #e8e8f4',
-                        cursor: col.key ? 'pointer' : 'default',
-                        userSelect: 'none',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
+                  {[{ key: 'hoardingCode', label: 'Code' }, { key: 'material', label: 'Material' }, { key: null, label: 'Size' }, { key: null, label: 'Site / Address' }, { key: 'status', label: 'Status' }, { key: 'monthlyRent', label: 'Monthly Rent' }, { key: null, label: '' }].map((col, i) => (
+                    <th key={i} onClick={() => col.key && handleSort(col.key)} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 11, fontFamily: 'Nunito, sans-serif', fontWeight: 800, color: '#7878a0', textTransform: 'uppercase', letterSpacing: '0.06em', borderBottom: '1.5px solid #e8e8f4', cursor: col.key ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                         {col.label}
-                        {col.key && (
-                          <span style={{ display: 'flex', flexDirection: 'column' }}>
-                            <ChevronUp   size={9} color={sortK === col.key && sortD === 'asc'  ? '#049edf' : '#d0d0e4'} />
-                            <ChevronDown size={9} color={sortK === col.key && sortD === 'desc' ? '#049edf' : '#d0d0e4'} style={{ marginTop: -2 }} />
-                          </span>
-                        )}
+                        {col.key && (<span style={{ display: 'flex', flexDirection: 'column' }}><ChevronUp size={9} color={sortK === col.key && sortD === 'asc' ? '#049edf' : '#d0d0e4'} /><ChevronDown size={9} color={sortK === col.key && sortD === 'desc' ? '#049edf' : '#d0d0e4'} style={{ marginTop: -2 }} /></span>)}
                       </div>
                     </th>
                   ))}
@@ -598,90 +539,30 @@ function HoardingLookupModal({ hoardings, sites, ownerID, onSelect, onClose }) {
               <tbody>
                 {sorted.map((h, idx) => {
                   const site = siteMap[h.siteID];
-                  const addr = site
-                    ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ')
-                    : `Site ${h.siteID}`;
+                  const addr = site ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ') : `Site ${h.siteID}`;
                   const st = hoardingStatusStyle(h.status);
                   return (
-                    <tr key={h.hoardingID}
-                      onClick={() => onSelect(h)}
-                      style={{
-                        cursor: 'pointer',
-                        background: idx % 2 === 0 ? '#fff' : '#fafafe',
-                        transition: 'background 0.12s',
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.background = '#f0f8ff'}
-                      onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#fafafe'}
-                    >
-                      {/* Code */}
+                    <tr key={h.hoardingID} onClick={() => onSelect(h)} style={{ cursor: 'pointer', background: idx % 2 === 0 ? '#fff' : '#fafafe', transition: 'background 0.12s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f0f8ff'} onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#fafafe'}>
                       <td style={{ padding: '11px 14px', borderBottom: '1px solid #f0f0f8' }}>
-                        <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 13, color: '#049edf' }}>
-                          {h.hoardingCode}
-                        </div>
-                        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#b0b0c8', fontWeight: 600, marginTop: 1 }}>
-                          ID: {h.hoardingID}
-                        </div>
+                        <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 13, color: '#049edf' }}>{h.hoardingCode}</div>
+                        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#b0b0c8', fontWeight: 600, marginTop: 1 }}>ID: {h.hoardingID}</div>
                       </td>
-                      {/* Material */}
-                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #f0f0f8' }}>
-                        <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#4a5568' }}>
-                          {h.material || '—'}
-                        </span>
-                      </td>
-                      {/* Size */}
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #f0f0f8' }}><span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#4a5568' }}>{h.material || '—'}</span></td>
                       <td style={{ padding: '11px 14px', borderBottom: '1px solid #f0f0f8', whiteSpace: 'nowrap' }}>
-                        {h.width && h.height ? (
-                          <>
-                            <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#4a5568' }}>
-                              {h.width} × {h.height} ft
-                            </div>
-                            <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#b0b0c8', fontWeight: 600 }}>
-                              {h.width * h.height} sq ft
-                            </div>
-                          </>
-                        ) : <span style={{ color: '#c0c0d8' }}>—</span>}
+                        {h.width && h.height ? (<><div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#4a5568' }}>{h.width} × {h.height} ft</div><div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#b0b0c8', fontWeight: 600 }}>{h.width * h.height} sq ft</div></>) : <span style={{ color: '#c0c0d8' }}>—</span>}
                       </td>
-                      {/* Site */}
                       <td style={{ padding: '11px 14px', borderBottom: '1px solid #f0f0f8', maxWidth: 220 }}>
-                        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#4a5568', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                          title={addr}>
-                          <MapPin size={11} color="#c0c0d8" style={{ marginRight: 4, verticalAlign: 'middle' }} />
-                          {addr}
+                        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#4a5568', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={addr}>
+                          <MapPin size={11} color="#c0c0d8" style={{ marginRight: 4, verticalAlign: 'middle' }} />{addr}
                         </div>
                       </td>
-                      {/* Status */}
                       <td style={{ padding: '11px 14px', borderBottom: '1px solid #f0f0f8' }}>
-                        <span style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                          padding: '3px 9px', borderRadius: 20,
-                          background: st.bg, color: st.color,
-                          border: `1px solid ${st.border}`,
-                          fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {h.status || '—'}
-                        </span>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 20, background: st.bg, color: st.color, border: `1px solid ${st.border}`, fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>{h.status || '—'}</span>
                       </td>
-                      {/* Rent */}
-                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #f0f0f8', whiteSpace: 'nowrap' }}>
-                        <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: '#1a1a2e' }}>
-                          {h.monthlyRent ? fmtCurrency(h.monthlyRent) : '—'}
-                        </span>
-                      </td>
-                      {/* Select button */}
+                      <td style={{ padding: '11px 14px', borderBottom: '1px solid #f0f0f8', whiteSpace: 'nowrap' }}><span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: '#1a1a2e' }}>{h.monthlyRent ? fmtCurrency(h.monthlyRent) : '—'}</span></td>
                       <td style={{ padding: '11px 14px', borderBottom: '1px solid #f0f0f8', textAlign: 'right' }}>
-                        <button
-                          onClick={() => onSelect(h)}
-                          style={{
-                            padding: '6px 14px', borderRadius: 8,
-                            background: 'linear-gradient(135deg,#049edf,#0284c7)',
-                            color: '#fff', border: 'none', cursor: 'pointer',
-                            fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800,
-                            display: 'flex', alignItems: 'center', gap: 5,
-                            boxShadow: '0 2px 8px rgba(4,158,223,0.3)',
-                            whiteSpace: 'nowrap',
-                          }}
-                        >
+                        <button onClick={() => onSelect(h)} style={{ padding: '6px 14px', borderRadius: 8, background: 'linear-gradient(135deg,#049edf,#0284c7)', color: '#fff', border: 'none', cursor: 'pointer', fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 5, boxShadow: '0 2px 8px rgba(4,158,223,0.3)', whiteSpace: 'nowrap' }}>
                           <Check size={12} /> Select
                         </button>
                       </td>
@@ -692,16 +573,9 @@ function HoardingLookupModal({ hoardings, sites, ownerID, onSelect, onClose }) {
             </table>
           </div>
         )}
-
-        {/* ── Footer ── */}
-        <div style={{
-          padding: '12px 20px', borderTop: '1px solid #f0f0f8',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          background: '#fafafe', flexShrink: 0,
-        }}>
-          <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
-            Click a row or <strong>Select</strong> to choose a hoarding
-          </span>
+        {/* Footer */}
+        <div style={{ padding: '12px 20px', borderTop: '1px solid #f0f0f8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafe', flexShrink: 0 }}>
+          <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>Click a row or <strong>Select</strong> to choose a hoarding</span>
           <button onClick={onClose} className="pg-btn-cancel" style={{ fontSize: 12 }}>Cancel</button>
         </div>
       </div>
@@ -712,7 +586,6 @@ function HoardingLookupModal({ hoardings, sites, ownerID, onSelect, onClose }) {
 
 /* ═══════════════════════════════════════════
    HOARDING PICKER FIELD
-   Trigger button + selected card + lookup modal
 ═══════════════════════════════════════════ */
 function HoardingPickerField({ hoardings, sites, ownerID, value, onChange, error, disabled }) {
   const [modalOpen, setModalOpen] = useState(false);
@@ -726,155 +599,346 @@ function HoardingPickerField({ hoardings, sites, ownerID, value, onChange, error
 
   const hSt = selected?.status ? (() => {
     switch (selected.status) {
-      case 'Active':           return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
-      case 'Inactive':         return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+      case 'Active':            return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+      case 'Inactive':          return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
       case 'Under Maintenance': return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
-      default:                 return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
+      default:                  return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
     }
   })() : null;
 
   return (
     <div>
-      {/* Trigger */}
       {!disabled && (
-        <button
-          type="button"
-          onClick={() => { if (!isDisabled) setModalOpen(true); }}
-          style={{
-            width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-            padding: '10px 14px', borderRadius: 10,
-            border: `1.5px solid ${error ? '#ef4444' : isDisabled ? '#e8e8f4' : '#e8e8f4'}`,
-            background: isDisabled ? '#f8f8fd' : '#fff',
-            cursor: isDisabled ? 'not-allowed' : 'pointer',
-            fontFamily: 'Nunito, sans-serif', fontSize: 13,
-            color: isDisabled ? '#b0b0c8' : value ? '#1a1a2e' : '#b0b0c8',
-            fontWeight: value ? 700 : 500,
-            transition: 'border-color 0.15s, box-shadow 0.15s',
-            boxShadow: error ? '0 0 0 3px rgba(239,68,68,0.1)' : 'none',
-          }}
+        <button type="button" onClick={() => { if (!isDisabled) setModalOpen(true); }}
+          style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${error ? '#ef4444' : isDisabled ? '#e8e8f4' : '#e8e8f4'}`, background: isDisabled ? '#f8f8fd' : '#fff', cursor: isDisabled ? 'not-allowed' : 'pointer', fontFamily: 'Nunito, sans-serif', fontSize: 13, color: isDisabled ? '#b0b0c8' : value ? '#1a1a2e' : '#b0b0c8', fontWeight: value ? 700 : 500, transition: 'border-color 0.15s, box-shadow 0.15s', boxShadow: error ? '0 0 0 3px rgba(239,68,68,0.1)' : 'none' }}
           onMouseEnter={e => { if (!isDisabled) e.currentTarget.style.borderColor = '#049edf'; }}
-          onMouseLeave={e => { if (!isDisabled) e.currentTarget.style.borderColor = error ? '#ef4444' : '#e8e8f4'; }}
-        >
+          onMouseLeave={e => { if (!isDisabled) e.currentTarget.style.borderColor = error ? '#ef4444' : '#e8e8f4'; }}>
           <Building2 size={14} color={error ? '#ef4444' : isDisabled ? '#d0d0e0' : '#c0c0d8'} style={{ flexShrink: 0 }} />
           <span style={{ flex: 1, textAlign: 'left' }}>
-            {isDisabled
-              ? (disabled ? 'Fixed in edit mode' : 'Select an owner first…')
-              : value
-                ? (selected ? `${selected.hoardingCode}${selected.width && selected.height ? ` · ${selected.width}×${selected.height} ft` : ''}` : `Hoarding ID: ${value}`)
-                : 'Click to browse & select hoarding…'
-            }
+            {isDisabled ? (disabled ? 'Fixed in edit mode' : 'Select an owner first…') : value ? (selected ? `${selected.hoardingCode}${selected.width && selected.height ? ` · ${selected.width}×${selected.height} ft` : ''}` : `Hoarding ID: ${value}`) : 'Click to browse & select hoarding…'}
           </span>
-          {!isDisabled && (
-            value
-              ? <X size={13} color="#c0c0d8" style={{ flexShrink: 0 }}
-                  onClick={e => { e.stopPropagation(); handleClear(); }} />
-              : <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
-          )}
+          {!isDisabled && (value ? <X size={13} color="#c0c0d8" style={{ flexShrink: 0 }} onClick={e => { e.stopPropagation(); handleClear(); }} /> : <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />)}
         </button>
       )}
-
-      {/* Selected card */}
       {value && selected && (() => {
         const site = siteMap[selected.siteID];
-        const addr = site
-          ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ')
-          : '';
+        const addr = site ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ') : '';
         return (
           <div className="lc-selected-card" style={{ marginTop: 8 }}>
             <div className="lc-selected-card__icon"><Building2 size={15} color="#6c63ff" /></div>
             <div className="lc-selected-card__info" style={{ flex: 1 }}>
               <div className="lc-selected-card__name" style={{ color: '#6c63ff' }}>
                 {selected.hoardingCode}
-                {selected.width && selected.height && (
-                  <span style={{ color: '#9090a8', fontWeight: 500, marginLeft: 8, fontSize: 12 }}>
-                    {selected.width}×{selected.height} ft · {selected.width * selected.height} sq ft
-                  </span>
-                )}
+                {selected.width && selected.height && (<span style={{ color: '#9090a8', fontWeight: 500, marginLeft: 8, fontSize: 12 }}>{selected.width}×{selected.height} ft · {selected.width * selected.height} sq ft</span>)}
               </div>
               <div className="lc-selected-card__sub" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 3 }}>
-                {selected.material && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: '#7878a0' }}>
-                    <Tag size={10} /> {selected.material}
-                  </span>
-                )}
-                {hSt && (
-                  <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 10, background: hSt.bg, color: hSt.color, border: `1px solid ${hSt.border}`, fontSize: 10.5, fontWeight: 800 }}>
-                    {selected.status}
-                  </span>
-                )}
-                {selected.monthlyRent && (
-                  <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a' }}>
-                    {fmtCurrency(selected.monthlyRent)}/mo
-                  </span>
-                )}
-                {addr && (
-                  <span style={{ fontSize: 11, color: '#9090a8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
-                    <MapPin size={10} /> {addr}
-                  </span>
-                )}
+                {selected.material && (<span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 700, color: '#7878a0' }}><Tag size={10} /> {selected.material}</span>)}
+                {hSt && (<span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 7px', borderRadius: 10, background: hSt.bg, color: hSt.color, border: `1px solid ${hSt.border}`, fontSize: 10.5, fontWeight: 800 }}>{selected.status}</span>)}
+                {selected.monthlyRent && (<span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a' }}>{fmtCurrency(selected.monthlyRent)}/mo</span>)}
+                {addr && (<span style={{ fontSize: 11, color: '#9090a8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}><MapPin size={10} /> {addr}</span>)}
               </div>
             </div>
-            {!disabled && (
-              <button
-                onClick={() => setModalOpen(true)}
-                style={{ background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.2)', borderRadius: 7, padding: '4px 10px', cursor: 'pointer', color: '#049edf', fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}
-              >
-                <RefreshCw size={11} /> Change
-              </button>
-            )}
-            {!disabled && (
-              <button className="lc-selected-card__clear" onClick={handleClear} title="Clear"><X size={12} /></button>
-            )}
+            {!disabled && (<button onClick={() => setModalOpen(true)} style={{ background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.2)', borderRadius: 7, padding: '4px 10px', cursor: 'pointer', color: '#049edf', fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}><RefreshCw size={11} /> Change</button>)}
+            {!disabled && (<button className="lc-selected-card__clear" onClick={handleClear} title="Clear"><X size={12} /></button>)}
           </div>
         );
       })()}
-
-      {/* No-owner hint */}
-      {!value && !isDisabled && (
-        <div style={{ marginTop: 6, fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600 }}>
-          Click the button above to open the hoarding browser
-        </div>
-      )}
-
-      {/* Modal */}
-      {modalOpen && (
-        <HoardingLookupModal
-          hoardings={hoardings}
-          sites={sites}
-          ownerID={ownerID}
-          onSelect={handleSelect}
-          onClose={() => setModalOpen(false)}
-        />
-      )}
+      {!value && !isDisabled && (<div style={{ marginTop: 6, fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600 }}>Click the button above to open the hoarding browser</div>)}
+      {modalOpen && (<HoardingLookupModal hoardings={hoardings} sites={sites} ownerID={ownerID} onSelect={handleSelect} onClose={() => setModalOpen(false)} />)}
     </div>
   );
 }
 
-/* ─────────────────────────────────────────
-   DOCUMENT ATTACHMENT
-───────────────────────────────────────── */
-function DocumentAttachment({ doc, onRemove, contractId }) {
-  const isFile = doc instanceof File;
-  const isUrl  = typeof doc === 'string' && doc.trim();
-  const name   = isFile ? doc.name : (isUrl ? doc.split('/').pop() || 'contract-document' : '');
-  if (!doc) return null;
+/* ═══════════════════════════════════════════════════════════
+   CONTRACT ATTACHMENTS SECTION
+   Manages multiple documents via LandContractAttach API.
+   Works independently of contract save — used both in edit
+   mode (loaded on mount) and in add mode (after contract saved).
+═══════════════════════════════════════════════════════════ */
+function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
+  const [attachments, setAttachments] = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [uploading,   setUploading]   = useState(false);
+  const [fileError,   setFileError]   = useState('');
+  const [apiError,    setApiError]    = useState('');
+  const [replacingId, setReplacingId] = useState(null); // attachId currently being replaced
+  const [deletingId,  setDeletingId]  = useState(null); // attachId being deleted
+  const uploadRef  = useRef(null);
+  const replaceRef = useRef(null);
+
+  /* ── Load attachments ── */
+  const loadAttachments = useCallback(async () => {
+    if (!contractId) { setLoading(false); return; }
+    setLoading(true);
+    try {
+      const raw  = await apiService.getLandContractAttachments(contractId);
+      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
+      setAttachments(list.map(item => {
+        const norm = normalizeAttachment(item);
+        // Restore original filename from localStorage if available
+        const saved = getAttachName(norm.landContractAttachID);
+        if (saved) norm.contractFilename = saved;
+        return norm;
+      }));
+    } catch { setAttachments([]); }
+    finally { setLoading(false); }
+  }, [contractId]);
+
+  useEffect(() => { loadAttachments(); }, [loadAttachments]);
+
+  /* ── File validation ── */
+  const validateFile = (file) => {
+    if (!ATTACH_ALLOWED_TYPES.includes(file.type))
+      return `Invalid type "${file.name}". Allowed: ${ATTACH_ALLOWED_LABEL}.`;
+    if (file.size > ATTACH_MAX_MB * 1024 * 1024)
+      return `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — exceeds ${ATTACH_MAX_MB} MB limit.`;
+    return null;
+  };
+
+  /* ── Upload new attachment ── */
+  const handleUpload = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const err = validateFile(file);
+    if (err) { setFileError(err); return; }
+    setFileError(''); setUploading(true); setApiError('');
+    try {
+      // Snapshot existing IDs before upload so we can identify the new attachment after reload
+      const existingIds = new Set(attachments.map(a => a.landContractAttachID));
+
+      await apiService.uploadLandContractAttach(contractId, ownerID, hoardingID, file);
+
+      // Reload from server to get the real attachment record with its ID
+      const rawList  = await apiService.getLandContractAttachments(contractId);
+      const fullList = Array.isArray(rawList) ? rawList : Array.isArray(rawList?.data) ? rawList.data : [];
+      const normed   = fullList.map(item => {
+        const n = normalizeAttachment(item);
+        const saved = getAttachName(n.landContractAttachID);
+        if (saved) n.contractFilename = saved;
+        return n;
+      });
+
+      // Find the newly added attachment (ID not in snapshot) and save original filename
+      const newAttach = normed.find(n => !existingIds.has(n.landContractAttachID));
+      if (newAttach?.landContractAttachID) {
+        saveAttachName(newAttach.landContractAttachID, file.name);
+        newAttach.contractFilename = file.name;
+      }
+
+      setAttachments(normed);
+    } catch (err) {
+      setApiError(err?.response?.data?.message || err?.message || 'Upload failed. Please try again.');
+    } finally { setUploading(false); }
+  };
+
+  /* ── Replace existing attachment file ── */
+  const handleReplace = async (e, attachId) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const err = validateFile(file);
+    if (err) { setFileError(err); setReplacingId(null); return; }
+    setFileError(''); setReplacingId(attachId); setApiError('');
+    try {
+      await apiService.updateLandContractAttach(attachId, file);
+      // Persist new original name and update local state
+      saveAttachName(attachId, file.name);
+      setAttachments(prev => prev.map(a =>
+        a.landContractAttachID === attachId
+          ? { ...a, contractFilename: file.name }
+          : a
+      ));
+    } catch (err) {
+      setApiError(err?.response?.data?.message || err?.message || 'Replace failed. Please try again.');
+    } finally { setReplacingId(null); }
+  };
+
+  /* ── Delete attachment ── */
+  const handleDelete = async (attachId) => {
+    setDeletingId(attachId); setApiError('');
+    try {
+      await apiService.deleteLandContractAttach(attachId);
+      deleteAttachName(attachId); // clean up stored name
+      setAttachments(prev => prev.filter(a => a.landContractAttachID !== attachId));
+    } catch (err) {
+      setApiError(err?.response?.data?.message || err?.message || 'Delete failed.');
+    } finally { setDeletingId(null); }
+  };
+
+  /* ── Render ── */
   return (
-    <div className="lc-file-attached">
-      <FileText size={15} color="#049edf" />
-      <span className="lc-file-attached__name"
-        style={{ cursor: 'pointer', textDecoration: 'underline', color: '#049edf' }}
-        onClick={() => openDocument(doc)}>
-        {name || 'Document attached'}
-      </span>
-      <button onClick={() => openDocument(doc)}
-        style={{ background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.2)', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, color: '#049edf', fontSize: 11, fontWeight: 600 }}>
-        <ExternalLink size={11} /> View
-      </button>
-      <button onClick={() => downloadDocument(doc, `contract-${contractId || 'doc'}`)}
-        style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.2)', borderRadius: 5, padding: '2px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, color: '#16a34a', fontSize: 11, fontWeight: 600 }}>
-        <Download size={11} /> Download
-      </button>
-      {onRemove && <button className="lc-file-attached__remove" onClick={onRemove} title="Remove"><X size={12} /></button>}
+    <div className="hd-section-card">
+      <div className="hd-section-head">
+        <div className="hd-section-icon-wrap"><Paperclip size={14} color="#049edf" /></div>
+        <div>
+          <div className="hd-section-title">Contract Documents</div>
+          <div className="hd-section-sub">Upload and manage multiple contract attachments (PDF, Word, Images)</div>
+        </div>
+      </div>
+      <div className="hd-section-body">
+
+        {/* Hidden file inputs */}
+        <input
+          ref={uploadRef}
+          type="file"
+          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+          style={{ display: 'none' }}
+          onChange={handleUpload}
+        />
+        <input
+          ref={replaceRef}
+          type="file"
+          accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+          style={{ display: 'none' }}
+          onChange={(e) => { if (replacingId) handleReplace(e, replacingId); }}
+        />
+
+        {/* API error */}
+        {apiError && (
+          <div className="pg-field-error" style={{ marginBottom: 12 }}>
+            <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{apiError}</span>
+            <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }} onClick={() => setApiError('')}>✕</button>
+          </div>
+        )}
+
+        {/* File type/size error */}
+        {fileError && (
+          <div className="pg-field-error" style={{ marginBottom: 12 }}>
+            <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>{fileError}</span>
+            <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }} onClick={() => setFileError('')}>✕</button>
+          </div>
+        )}
+
+        {/* Loading spinner */}
+        {loading ? (
+          <div style={{ padding: '28px 0', textAlign: 'center', color: '#9090a8' }}>
+            <Loader2 size={22} className="pg-spin" style={{ marginBottom: 8 }} />
+            <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600 }}>Loading attachments…</div>
+          </div>
+        ) : (
+          <>
+            {/* Attachment list */}
+            {attachments.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+                {attachments.map((att) => {
+                  // Detect server-generated UUID pattern: "10_49001f9f-...-uuid.pdf"
+                  // If matched, show a clean friendly name using the file extension
+                  const uuidPattern = /^\d+_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.([\w]+)$/i;
+                  const rawFilename = att.contractFilename || att.contractFilePath?.split('/').pop() || '';
+                  const uuidMatch   = rawFilename.match(uuidPattern);
+                  const name = uuidMatch
+                    ? `Contract-Document-${att.landContractAttachID}.${uuidMatch[1]}`
+                    : rawFilename || 'Document';
+                  const isDeleting  = deletingId  === att.landContractAttachID;
+                  const isReplacing = replacingId === att.landContractAttachID;
+
+                  return (
+                    <div
+                      key={att.landContractAttachID}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 14px',
+                        background: '#f8f8fd',
+                        border: '1.5px solid #e8e8f4',
+                        borderRadius: 10,
+                        opacity: isDeleting ? 0.5 : 1,
+                        transition: 'opacity 0.2s',
+                      }}
+                    >
+                      <FileText size={16} color="#049edf" style={{ flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: att.fileUrl ? 'pointer' : 'default', textDecoration: att.fileUrl ? 'underline' : 'none' }}
+                          onClick={() => att.fileUrl && window.open(att.fileUrl, '_blank')}>
+                          {name}
+                        </div>
+                        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#b0b0c8', fontWeight: 600, marginTop: 1 }}>
+                          Attachment #{att.landContractAttachID}
+                          {att.lastUpdateDttm && (
+                            <span style={{ marginLeft: 8 }}>
+                              · {fmtDate(att.lastUpdateDttm?.split?.('T')?.[0] ?? '')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* View */}
+                      {att.fileUrl && (
+                        <button
+                          onClick={() => window.open(att.fileUrl, '_blank')}
+                          title="View document"
+                          style={{ background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.2)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#049edf', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'Nunito, sans-serif' }}>
+                          <ExternalLink size={11} /> View
+                        </button>
+                      )}
+
+                      {/* Download */}
+                      {att.fileUrl && (
+                        <button
+                          onClick={() => {
+                            const a = document.createElement('a');
+                            a.href = att.fileUrl; a.download = name; a.target = '_blank'; a.click();
+                          }}
+                          title="Download document"
+                          style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.2)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#16a34a', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'Nunito, sans-serif' }}>
+                          <Download size={11} /> Download
+                        </button>
+                      )}
+
+                      {/* Replace */}
+                      <button
+                        disabled={isReplacing || isDeleting}
+                        onClick={() => { setReplacingId(att.landContractAttachID); replaceRef.current.click(); }}
+                        title="Replace with a new file"
+                        style={{ background: 'rgba(109,99,255,0.08)', border: '1px solid rgba(109,99,255,0.2)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#6c63ff', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'Nunito, sans-serif', opacity: isReplacing || isDeleting ? 0.5 : 1 }}>
+                        {isReplacing ? <Loader2 size={10} className="pg-spin" /> : <RefreshCw size={11} />} Replace
+                      </button>
+
+                      {/* Delete */}
+                      <button
+                        disabled={isDeleting || isReplacing}
+                        onClick={() => handleDelete(att.landContractAttachID)}
+                        title="Delete attachment"
+                        style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#dc2626', opacity: isDeleting || isReplacing ? 0.5 : 1 }}>
+                        {isDeleting ? <Loader2 size={11} className="pg-spin" /> : <Trash2 size={12} />}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Empty state */}
+            {attachments.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '20px 0 14px', color: '#b0b0c8' }}>
+                <Paperclip size={28} color="#d0d0e8" style={{ marginBottom: 8 }} />
+                <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: '#9090a8' }}>No documents attached yet</div>
+                <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, color: '#c0c0d8', marginTop: 3 }}>Click the button below to upload your first document</div>
+              </div>
+            )}
+
+            {/* Upload button */}
+            <button
+              className="lc-upload-btn"
+              onClick={() => { setFileError(''); uploadRef.current.click(); }}
+              disabled={uploading}
+            >
+              {uploading
+                ? <><Loader2 size={14} className="pg-spin" /> Uploading…</>
+                : <><Upload size={14} /> Add Document — {ATTACH_ALLOWED_LABEL} (max {ATTACH_MAX_MB} MB)</>
+              }
+            </button>
+
+            {attachments.length > 0 && (
+              <div style={{ marginTop: 8, fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600 }}>
+                {attachments.length} document{attachments.length !== 1 ? 's' : ''} attached · You can add more or replace/delete existing ones
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -888,9 +952,7 @@ function DeleteConfirmModal({ contract, onConfirm, onCancel }) {
       <div className="exp-delete-modal" onClick={e => e.stopPropagation()}>
         <div className="exp-delete-modal__icon"><Trash2 size={22} color="#dc2626" /></div>
         <div className="exp-delete-modal__title">Delete Contract?</div>
-        <div className="exp-delete-modal__sub">
-          Contract <strong>#{contract.landContractID}</strong> will be permanently removed.
-        </div>
+        <div className="exp-delete-modal__sub">Contract <strong>#{contract.landContractID}</strong> will be permanently removed.</div>
         <div className="exp-delete-modal__actions">
           <button className="pg-btn-cancel" onClick={onCancel}>Cancel</button>
           <button className="exp-btn-delete-confirm" onClick={onConfirm}><Trash2 size={13} /> Delete</button>
@@ -947,12 +1009,12 @@ function ContractViewModal({ contract, owners, hoardings, paymentFreqs, onClose,
               </div>
             )}
             {[
-              { label: 'Start Date',    value: fmtDate(contract.startDate),                    Icon: Calendar    },
-              { label: 'End Date',      value: fmtDate(contract.endDate),                      Icon: Calendar    },
-              { label: 'Total Value',   value: fmtCurrency(contract.totalContractValue),       Icon: IndianRupee },
-              { label: 'Pay Freq',      value: freqLabel(contract.paymentFreqID, paymentFreqs), Icon: CreditCard  },
-              { label: 'Amt/Freq',      value: fmtCurrency(contract.amountPerFreq),            Icon: TrendingUp  },
-              { label: 'Advance Paid',  value: fmtCurrency(contract.advancePaid),              Icon: IndianRupee },
+              { label: 'Start Date',   value: fmtDate(contract.startDate),                     Icon: Calendar    },
+              { label: 'End Date',     value: fmtDate(contract.endDate),                       Icon: Calendar    },
+              { label: 'Total Value',  value: fmtCurrency(contract.totalContractValue),        Icon: IndianRupee },
+              { label: 'Pay Freq',     value: freqLabel(contract.paymentFreqID, paymentFreqs), Icon: CreditCard  },
+              { label: 'Amt/Freq',     value: fmtCurrency(contract.amountPerFreq),             Icon: TrendingUp  },
+              { label: 'Advance Paid', value: fmtCurrency(contract.advancePaid),               Icon: IndianRupee },
             ].map(f => (
               <div key={f.label} className="col-6">
                 <div className="pg-info-row">
@@ -975,19 +1037,6 @@ function ContractViewModal({ contract, owners, hoardings, paymentFreqs, onClose,
                 </div>
               </div>
             </div>
-            {contract.landContractdocument && (
-              <div className="col-12">
-                <div className="pg-info-row">
-                  <div className="pg-info-row__icon"><Upload size={14} color="#9090a8" /></div>
-                  <div className="pg-info-row__content">
-                    <div className="pg-info-row__label">Contract Document</div>
-                    <div className="pg-info-row__value" style={{ marginTop: 4 }}>
-                      <DocumentAttachment doc={contract.landContractdocument} contractId={contract.landContractID} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
             {contract.comments && (
               <div className="col-12">
                 <div className="pg-info-row">
@@ -1031,23 +1080,28 @@ function ContractViewModal({ contract, owners, hoardings, paymentFreqs, onClose,
 
 /* ═══════════════════════════════════════════
    CONTRACT FORM
+   Two-step flow for ADD:
+     Step 1 — "details":    fill & save contract (JSON)
+     Step 2 — "attachments": upload documents (optional)
+   
+   Edit mode shows contract fields + attachment section together.
 ═══════════════════════════════════════════ */
 function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, onBack, onSave }) {
   const isAdd = mode === 'add';
 
+  /* ── form data ── */
   const [form, setForm] = useState(() =>
     isAdd ? { ...EMPTY_FORM } : {
-      ownerID:             contract?.ownerID             ?? '',
-      hoardingID:          contract?.hoardingID          ?? '',
-      startDate:           contract?.startDate           ?? '',
-      endDate:             contract?.endDate             ?? '',
-      totalContractValue:  contract?.totalContractValue  ?? '',
-      paymentFreqID:       contract?.paymentFreqID       ?? '',
-      amountPerFreq:       contract?.amountPerFreq       ?? '',
-      advancePaid:         contract?.advancePaid         ?? '',
-      status:              contract?.status              ?? 'Active',
-      landContractdocument: null,
-      comments:            contract?.comments            ?? '',
+      ownerID:            contract?.ownerID            ?? '',
+      hoardingID:         contract?.hoardingID         ?? '',
+      startDate:          contract?.startDate          ?? '',
+      endDate:            contract?.endDate            ?? '',
+      totalContractValue: contract?.totalContractValue ?? '',
+      paymentFreqID:      contract?.paymentFreqID      ?? '',
+      amountPerFreq:      contract?.amountPerFreq      ?? '',
+      advancePaid:        contract?.advancePaid        ?? '',
+      status:             contract?.status             ?? 'Active',
+      comments:           contract?.comments           ?? '',
     }
   );
 
@@ -1055,9 +1109,10 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
   const [saving,       setSaving]       = useState(false);
   const [saveOk,       setSaveOk]       = useState(false);
   const [apiErr,       setApiErr]       = useState('');
-  const [fileError,    setFileError]    = useState('');
-  const [fileSizeWarn, setFileSizeWarn] = useState('');
-  const fileRef = useRef(null);
+
+  /* ── two-step state (add mode only) ── */
+  const [formStep,       setFormStep]       = useState('details');  // 'details' | 'attachments'
+  const [savedContract,  setSavedContract]  = useState(null);
 
   const freqOptions = paymentFreqs.length ? paymentFreqs : PAYMENT_FREQ_FALLBACK;
 
@@ -1069,27 +1124,6 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
     });
     if (errors[key]) setErrors(p => ({ ...p, [key]: '' }));
     if (key === 'ownerID') setErrors(p => ({ ...p, hoardingID: '' }));
-  };
-
-  /* ── File validation ── */
-  const handleFileChange = (e) => {
-    const file = e.target.files[0];
-    e.target.value = '';
-    if (!file) return;
-    setFileError('');
-    setFileSizeWarn('');
-
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      setFileError(`Invalid file type "${file.name}". Only ${ALLOWED_LABEL} are allowed.`);
-      return;
-    }
-    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      setFileSizeWarn(
-        `"${file.name}" is ${(file.size / 1024 / 1024).toFixed(1)} MB — exceeds the ${MAX_SIZE_MB} MB limit. Please compress or choose a smaller file.`
-      );
-      return;
-    }
-    set('landContractdocument', file);
   };
 
   const handleSave = async () => {
@@ -1106,10 +1140,8 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
         totalContractValue: Number(form.totalContractValue),
         paymentFreqID:      Number(form.paymentFreqID),
         amountPerFreq:      Number(form.amountPerFreq),
-        advancePaid:        form.advancePaid !== '' && form.advancePaid != null ? Number(form.advancePaid) : null,
+        advancePaid:        form.advancePaid !== '' && form.advancePaid != null ? Number(form.advancePaid) : 0,
         status:             form.status,
-        landContractdocument: form.landContractdocument || null,
-        documentPath:       contract?.documentPath || '',
         comments:           form.comments || '',
       };
 
@@ -1123,15 +1155,101 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
       }
 
       setSaveOk(true);
-      await new Promise(r => setTimeout(r, 700));
       onSave(saved, isAdd);
-      onBack();
+      await new Promise(r => setTimeout(r, 700));
+
+      if (isAdd) {
+        /* Transition to attachment step instead of going back */
+        setSavedContract(saved);
+        setFormStep('attachments');
+        setSaveOk(false);
+      } else {
+        onBack();
+      }
     } catch (err) {
       const msg = err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Save failed.';
       setApiErr(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally { setSaving(false); }
   };
 
+  /* ═══════════════════════════════
+     STEP 2: Attachment upload view
+  ═══════════════════════════════ */
+  if (formStep === 'attachments' && savedContract) {
+    return (
+      <div className="hd-form-page">
+        <div className="hd-topbar">
+          <div className="hd-topbar-left">
+            <div>
+              <div className="hd-topbar-title">Contract Saved — Upload Documents</div>
+              <div className="hd-topbar-sub">
+                Contract <strong>#{savedContract.landContractID}</strong> created successfully. You can now attach documents (optional).
+              </div>
+            </div>
+          </div>
+          {/* Success pill */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 14px', background: '#f0fdf4', border: '1.5px solid #bbf7d0', borderRadius: 20, flexShrink: 0 }}>
+            <Check size={13} color="#16a34a" />
+            <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: '#16a34a' }}>Contract #{savedContract.landContractID} Saved</span>
+          </div>
+        </div>
+
+        <div className="hd-form-body">
+          <div className="container-fluid px-0">
+            {/* Summary card */}
+            <div className="hd-section-card" style={{ marginBottom: 0 }}>
+              <div className="hd-section-head">
+                <div className="hd-section-icon-wrap"><FileText size={14} color="#16a34a" /></div>
+                <div>
+                  <div className="hd-section-title" style={{ color: '#16a34a' }}>Contract Summary</div>
+                  <div className="hd-section-sub">Your contract has been recorded</div>
+                </div>
+              </div>
+              <div className="hd-section-body">
+                <div className="row g-2">
+                  {[
+                    { label: 'Contract ID',  value: `#${savedContract.landContractID}` },
+                    { label: 'Period',       value: `${fmtDate(savedContract.startDate)} → ${fmtDate(savedContract.endDate)}` },
+                    { label: 'Total Value',  value: fmtCurrency(savedContract.totalContractValue) },
+                    { label: 'Status',       value: savedContract.status },
+                  ].map(f => (
+                    <div key={f.label} className="col-6 col-md-3">
+                      <div style={{ background: '#f8f8fd', border: '1.5px solid #e8e8f4', borderRadius: 10, padding: '10px 14px' }}>
+                        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 3 }}>{f.label}</div>
+                        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, color: '#1a1a2e', fontWeight: 800 }}>{f.value}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: 16 }} />
+
+            {/* Attachments section */}
+            <ContractAttachmentsSection
+              contractId={savedContract.landContractID}
+              ownerID={savedContract.ownerID}
+              hoardingID={savedContract.hoardingID}
+            />
+          </div>
+        </div>
+
+        <div className="hd-form-footer hd-form-footer--sticky">
+          <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
+            Documents are saved automatically — click Done when finished
+          </div>
+          <button className="pg-btn-save" onClick={onBack}>
+            <Check size={13} /> Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  /* ═══════════════════════════════
+     STEP 1 / EDIT: Details form
+  ═══════════════════════════════ */
   return (
     <div className="hd-form-page">
       <div className="hd-topbar">
@@ -1144,7 +1262,7 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
           <div className="hd-topbar-divider" />
           <div>
             <div className="hd-topbar-title">{isAdd ? 'Add New Land Contract' : `Edit Contract #${contract?.landContractID}`}</div>
-            <div className="hd-topbar-sub">{isAdd ? 'Fill in the details and save the contract' : 'Update land contract details'}</div>
+            <div className="hd-topbar-sub">{isAdd ? 'Fill in the details — documents can be uploaded after saving' : 'Update contract details and manage documents below'}</div>
           </div>
         </div>
       </div>
@@ -1175,7 +1293,6 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                 </div>
                 <div className="hd-section-body">
                   <div className="row g-3">
-                    {/* Owner */}
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Owner" required />
                       <OwnerSearchWidget
@@ -1185,30 +1302,19 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                       />
                       <FieldError msg={errors.ownerID} />
                     </div>
-
-                    {/* Hoarding — new lookup field */}
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Hoarding" required />
-                      {/* Info banner when owner not yet selected */}
                       {isAdd && !form.ownerID && (
-                        <div style={{
-                          display: 'flex', alignItems: 'center', gap: 8,
-                          padding: '9px 13px', background: '#f0f8ff',
-                          border: '1px solid #bae6fd', borderRadius: 9, marginBottom: 8,
-                          fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#0369a1',
-                        }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 13px', background: '#f0f8ff', border: '1px solid #bae6fd', borderRadius: 9, marginBottom: 8, fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#0369a1' }}>
                           <Building2 size={13} color="#0369a1" style={{ flexShrink: 0 }} />
                           Select an owner above to see their available hoardings
                         </div>
                       )}
                       <HoardingPickerField
-                        hoardings={hoardings}
-                        sites={sites}
-                        ownerID={form.ownerID}
-                        value={form.hoardingID}
+                        hoardings={hoardings} sites={sites}
+                        ownerID={form.ownerID} value={form.hoardingID}
                         onChange={val => set('hoardingID', val)}
-                        error={errors.hoardingID}
-                        disabled={!isAdd}
+                        error={errors.hoardingID} disabled={!isAdd}
                       />
                       <FieldError msg={errors.hoardingID} />
                     </div>
@@ -1304,112 +1410,57 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
               </div>
             </div>
 
-            {/* ── Document & Comments ── */}
+            {/* ── Comments ── */}
             <div className="col-12">
               <div className="hd-section-card">
                 <div className="hd-section-head">
-                  <div className="hd-section-icon-wrap"><FileText size={14} color="#049edf" /></div>
+                  <div className="hd-section-icon-wrap"><MessageSquare size={14} color="#049edf" /></div>
                   <div>
-                    <div className="hd-section-title">Document &amp; Notes</div>
-                    <div className="hd-section-sub">Upload contract document and add remarks</div>
+                    <div className="hd-section-title">Notes</div>
+                    <div className="hd-section-sub">Any remarks about this contract</div>
                   </div>
                 </div>
                 <div className="hd-section-body">
-                  <div className="row g-3">
-                    <div className="col-12">
-                      <FieldLabel label="Contract Document" optional />
-                      <input
-                        ref={fileRef} type="file"
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                        style={{ display: 'none' }}
-                        onChange={handleFileChange}
-                      />
+                  <FieldLabel label="Comments" optional />
+                  <InputWrap error={errors.comments} icon={MessageSquare}>
+                    <textarea
+                      className="pg-field-input lc-textarea" rows={3}
+                      placeholder="Any notes or remarks about this contract..."
+                      value={form.comments}
+                      onChange={e => set('comments', e.target.value)}
+                    />
+                  </InputWrap>
+                </div>
+              </div>
+            </div>
 
-                      {form.landContractdocument
-                        ? <DocumentAttachment
-                            doc={form.landContractdocument}
-                            onRemove={() => {
-                              set('landContractdocument', null);
-                              setFileError('');
-                              setFileSizeWarn('');
-                              fileRef.current.value = '';
-                            }}
-                          />
-                        : <button className="lc-upload-btn" onClick={() => fileRef.current.click()}>
-                            <Upload size={15} />
-                            <span>Click to upload — {ALLOWED_LABEL} (max {MAX_SIZE_MB} MB)</span>
-                          </button>
-                      }
+            {/* ── Documents section (EDIT mode only — immediate access) ── */}
+            {!isAdd && contract?.landContractID && (
+              <div className="col-12">
+                <ContractAttachmentsSection
+                  contractId={contract.landContractID}
+                  ownerID={contract.ownerID}
+                  hoardingID={contract.hoardingID}
+                />
+              </div>
+            )}
 
-                      {/* Type error — inline red */}
-                      {fileError && (
-                        <div className="pg-field-error" style={{ marginTop: 8 }}>
-                          <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
-                          <span>{fileError}</span>
-                          <button
-                            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }}
-                            onClick={() => setFileError('')}
-                          >✕</button>
-                        </div>
-                      )}
-
-                      {/* Size warning — prominent amber banner */}
-                      {fileSizeWarn && (
-                        <div style={{
-                          marginTop: 10,
-                          display: 'flex', alignItems: 'flex-start', gap: 12,
-                          padding: '13px 16px',
-                          background: '#fffbeb',
-                          border: '1.5px solid #fde68a',
-                          borderRadius: 12,
-                          fontFamily: 'Nunito, sans-serif',
-                        }}>
-                          <div style={{
-                            width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-                            background: 'rgba(217,119,6,0.12)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          }}>
-                            <AlertCircle size={18} color="#d97706" />
-                          </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontSize: 13, fontWeight: 800, color: '#92400e', marginBottom: 3 }}>
-                              File Too Large
-                            </div>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: '#b45309', lineHeight: 1.6 }}>
-                              {fileSizeWarn}
-                            </div>
-                          </div>
-                          <button onClick={() => setFileSizeWarn('')}
-                            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d97706', fontSize: 16, flexShrink: 0, lineHeight: 1 }}>
-                            ✕
-                          </button>
-                        </div>
-                      )}
-
-                      {!isAdd && !form.landContractdocument && contract?.landContractdocument && (
-                        <div style={{ marginTop: 8 }}>
-                          <div className="pg-field-hint" style={{ marginBottom: 6 }}>Existing document on record:</div>
-                          <DocumentAttachment doc={contract.landContractdocument} contractId={contract.landContractID} />
-                          <div className="pg-field-hint" style={{ marginTop: 4 }}>Upload a new file above to replace it.</div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="col-12">
-                      <FieldLabel label="Comments" optional />
-                      <InputWrap error={errors.comments} icon={MessageSquare}>
-                        <textarea
-                          className="pg-field-input lc-textarea" rows={3}
-                          placeholder="Any notes or remarks about this contract..."
-                          value={form.comments}
-                          onChange={e => set('comments', e.target.value)}
-                        />
-                      </InputWrap>
+            {/* Info hint for ADD mode */}
+            {isAdd && (
+              <div className="col-12">
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '14px 18px', background: '#f0f8ff', border: '1.5px solid #bae6fd', borderRadius: 12 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(4,158,223,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Paperclip size={16} color="#0369a1" />
+                  </div>
+                  <div>
+                    <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 800, color: '#0c4a6e', marginBottom: 3 }}>Documents Attached After Saving</div>
+                    <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#0369a1', lineHeight: 1.6 }}>
+                      After you save this contract, you'll be taken to a document upload screen where you can attach PDF, Word, JPG, or PNG files (up to 30 MB each). You can skip this step by clicking Done.
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
 
           </div>
         </div>
@@ -1472,7 +1523,7 @@ export default function LandContractPage() {
 
       setOwners(Array.isArray(rawOwners) ? rawOwners : Array.isArray(rawOwners?.data) ? rawOwners.data : []);
       setHoardings(
-        Array.isArray(rawHoardings)       ? deduplicateHoardings(rawHoardings)
+        Array.isArray(rawHoardings)         ? deduplicateHoardings(rawHoardings)
         : Array.isArray(rawHoardings?.data) ? deduplicateHoardings(rawHoardings.data) : []
       );
       setSites(Array.isArray(rawSites) ? rawSites : Array.isArray(rawSites?.data) ? rawSites.data : []);
@@ -1532,9 +1583,9 @@ export default function LandContractPage() {
   const filtered = tableRows.filter(r => {
     const q = search.toLowerCase();
     const matchQ =
-      r.ownerName.toLowerCase().includes(q)    ||
+      r.ownerName.toLowerCase().includes(q)     ||
       r.hoardingLabel.toLowerCase().includes(q) ||
-      r.status.toLowerCase().includes(q)        ||
+      r.status.toLowerCase().includes(q)         ||
       String(r.landContractID).includes(q);
     return matchQ && (!statusFilter || r.status === statusFilter);
   });
@@ -1565,14 +1616,14 @@ export default function LandContractPage() {
     .reduce((acc, p, i, arr) => { if (i > 0 && arr[i] - arr[i - 1] > 1) acc.push('...'); acc.push(p); return acc; }, []);
 
   const COLS = [
-    { key: 'landContractID',    label: '#ID' },
-    { key: 'ownerName',         label: 'Owner' },
-    { key: 'hoardingLabel',     label: 'Hoarding',    tabletHide: true },
-    { key: 'startDate',         label: 'Start Date' },
-    { key: 'endDate',           label: 'End Date',    tabletHide: true },
+    { key: 'landContractID',     label: '#ID' },
+    { key: 'ownerName',          label: 'Owner' },
+    { key: 'hoardingLabel',      label: 'Hoarding',    tabletHide: true },
+    { key: 'startDate',          label: 'Start Date' },
+    { key: 'endDate',            label: 'End Date',    tabletHide: true },
     { key: 'totalContractValue', label: 'Total Value' },
-    { key: 'status',            label: 'Status' },
-    { key: '_action',           label: 'Actions',     noSort: true },
+    { key: 'status',             label: 'Status' },
+    { key: '_action',            label: 'Actions',     noSort: true },
   ];
 
   if (view === 'form') {
@@ -1611,10 +1662,10 @@ export default function LandContractPage() {
       {!loadingMeta && contracts.length > 0 && (
         <div className="exp-stats-strip">
           {[
-            { icon: <FileText size={16} color="#049edf" />,    bg: 'rgba(4,158,223,0.1)',   label: 'Total Contracts', val: contracts.length },
-            { icon: <IndianRupee size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)',   label: 'Total Value',     val: fmtCurrency(totalValue) },
-            { icon: <ShieldCheck size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)',   label: 'Active',          val: activeCount },
-            { icon: <Clock size={16} color="#dc2626" />,       bg: 'rgba(220,38,38,0.08)',  label: 'Expired/Ended',   val: expiredCount },
+            { icon: <FileText size={16} color="#049edf" />,    bg: 'rgba(4,158,223,0.1)',  label: 'Total Contracts', val: contracts.length },
+            { icon: <IndianRupee size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)',  label: 'Total Value',     val: fmtCurrency(totalValue) },
+            { icon: <ShieldCheck size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)',  label: 'Active',          val: activeCount },
+            { icon: <Clock size={16} color="#dc2626" />,       bg: 'rgba(220,38,38,0.08)', label: 'Expired/Ended',   val: expiredCount },
           ].map(s => (
             <div key={s.label} className="exp-stat-item">
               <div className="exp-stat-item__icon" style={{ background: s.bg }}>{s.icon}</div>

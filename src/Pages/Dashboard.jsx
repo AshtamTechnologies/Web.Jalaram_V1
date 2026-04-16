@@ -12,12 +12,12 @@ import {
 } from 'recharts';
 import './Common1.css';
 
-import OwnerPage      from './Owner';
-import SitePage       from './Site.jsx';
-import Hoarding       from './Hoarding.jsx';
+import OwnerPage from './Owner';
+import SitePage from './Site.jsx';
+import Hoarding from './Hoarding.jsx';
 import Hoardingexpense from './Hoardingexpense.jsx';
-import LandContract   from './LandContract.jsx';
-import LandPayment    from './LandPayment.jsx';   // ← NEW
+import LandContract from './LandContract.jsx';
+import LandPayment from './LandPayment.jsx';   // ← NEW
 
 /* ─────────────────────────────────────
    MOCK DATA
@@ -32,21 +32,21 @@ const MONTHLY_REVENUE = [
 ];
 
 const BOOKING_STATUS = [
-  { name: 'Active',  value: 62, color: '#049edf' },
+  { name: 'Active', value: 62, color: '#049edf' },
   { name: 'Expired', value: 24, color: '#e84040' },
   { name: 'Pending', value: 14, color: '#f59e0b' },
 ];
 
 const RECENT_BOOKINGS = [
-  { id: '#BK-1041', client: 'Mehta Enterprises',    site: 'NH-48 Ahmedabad',  duration: '30 days', amount: '₹42,000', statusId: 1 },
-  { id: '#BK-1040', client: 'Shah Motors',           site: 'SG Highway, Sola', duration: '15 days', amount: '₹18,500', statusId: 3 },
-  { id: '#BK-1039', client: 'Patel Jewellers',       site: 'Manek Chowk',      duration: '60 days', amount: '₹73,000', statusId: 1 },
-  { id: '#BK-1038', client: 'NeoMart Retail',        site: 'Vastrapur Lake',   duration: '30 days', amount: '₹39,000', statusId: 2 },
-  { id: '#BK-1037', client: 'Desai Constructions',   site: 'Ring Road West',   duration: '45 days', amount: '₹55,500', statusId: 1 },
+  { id: '#BK-1041', client: 'Mehta Enterprises', site: 'NH-48 Ahmedabad', duration: '30 days', amount: '₹42,000', statusId: 1 },
+  { id: '#BK-1040', client: 'Shah Motors', site: 'SG Highway, Sola', duration: '15 days', amount: '₹18,500', statusId: 3 },
+  { id: '#BK-1039', client: 'Patel Jewellers', site: 'Manek Chowk', duration: '60 days', amount: '₹73,000', statusId: 1 },
+  { id: '#BK-1038', client: 'NeoMart Retail', site: 'Vastrapur Lake', duration: '30 days', amount: '₹39,000', statusId: 2 },
+  { id: '#BK-1037', client: 'Desai Constructions', site: 'Ring Road West', duration: '45 days', amount: '₹55,500', statusId: 1 },
 ];
 
 const STATUS_STYLE = {
-  1: { bg: '#e8faf3', color: '#1a9e6e', label: 'Active'  },
+  1: { bg: '#e8faf3', color: '#1a9e6e', label: 'Active' },
   3: { bg: '#fff8e1', color: '#e08a00', label: 'Pending' },
   2: { bg: '#ffeaea', color: '#e84040', label: 'Expired' },
 };
@@ -58,21 +58,21 @@ const MENU = [
   {
     id: 'hoardings', icon: Layers, label: 'Hoardings', badge: null,
     children: [
-      { id: 'new-hoarding',     icon: PlusSquare, label: 'Maintain Hoarding' },
-      { id: 'hoarding-expense', icon: Receipt,    label: 'Hoarding Expense'  },
+      { id: 'new-hoarding', icon: PlusSquare, label: 'Maintain Hoarding' },
+      { id: 'hoarding-expense', icon: Receipt, label: 'Hoarding Expense' },
     ],
   },
   // { id: 'bookings', icon: CalendarCheck, label: 'Bookings', badge: null },
-  { id: 'sites',    icon: MapPin,        label: 'Sites',    badge: null },
+  { id: 'sites', icon: MapPin, label: 'Sites', badge: null },
   {
     id: 'land-contract', icon: FileText, label: 'Land Contracts', badge: null,
     children: [
       { id: 'land-contracts', icon: FileText, label: 'Land Contracts' },  // ← existing page
-      { id: 'land-payment',   icon: Banknote, label: 'Land Payment'   },  // ← NEW page
+      { id: 'land-payment', icon: Banknote, label: 'Land Payment' },  // ← NEW page
     ],
   },
   // { id: 'clients', icon: Users,       label: 'Clients', badge: null },
-  { id: 'owners',  icon: UserCircle,  label: 'Owners',  badge: null },
+  { id: 'owners', icon: UserCircle, label: 'Owners', badge: null },
   // { id: 'payments',icon: CreditCard,  label: 'Payments',badge: null },
 ];
 
@@ -101,10 +101,20 @@ function useWindowWidth() {
 ═══════════════════════════════════════════ */
 export default function Dashboard({ onLogout }) {
   const [tab, setTab] = useState(() => sessionStorage.getItem('dashTab') || 'dashboard');
+  useEffect(() => {
+    const url = new URL(window.location);
+
+    if (url.searchParams.has('session')) {
+      url.searchParams.delete('session');
+
+      // ✅ Clean URL
+      window.history.replaceState({}, document.title, url.pathname);
+    }
+  }, []);
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [dropOpen,   setDropOpen]   = useState(false);
+  const [dropOpen, setDropOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [adminName,  setAdminName]  = useState('Admin');
+  const [adminName, setAdminName] = useState('Admin');
 
   const [expandedMenus, setExpandedMenus] = useState(() => {
     const saved = sessionStorage.getItem('dashTab') || 'dashboard';
@@ -117,8 +127,8 @@ export default function Dashboard({ onLogout }) {
   });
 
   const dropRef = useRef(null);
-  const width   = useWindowWidth();
-const isMobile = width < 1024;
+  const width = useWindowWidth();
+  const isMobile = width < 1024;
 
   useEffect(() => {
     const s = JSON.parse(localStorage.getItem('userData') || '{}');
@@ -161,11 +171,15 @@ const isMobile = width < 1024;
     }
   };
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('dashTab');
-    localStorage.clear();
-    onLogout && onLogout();
-  };
+const handleLogout = () => {
+  sessionStorage.removeItem('dashTab');
+  localStorage.clear();
+
+  // ✅ CLEAN URL
+  window.history.replaceState({}, document.title, '/');
+
+  onLogout && onLogout();
+};
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -196,19 +210,19 @@ const isMobile = width < 1024;
       <nav className="sidebar-nav">
         {MENU.map((item) => {
           const { id, icon: Icon, label, badge, children } = item;
-          const hasChildren  = children?.length > 0;
+          const hasChildren = children?.length > 0;
           const parentActive = isParentActive(item);
           const isSelfActive = tab === id;
-          const isExpanded   = !!expandedMenus[id];
+          const isExpanded = !!expandedMenus[id];
 
           const parentBtnStyle = (parentActive || isSelfActive) ? {
-            background:  'rgba(4,158,223,0.13)',
-            color:       '#049edf',
-            borderLeft:  '3px solid #049edf',
+            background: 'rgba(4,158,223,0.13)',
+            color: '#049edf',
+            borderLeft: '3px solid #049edf',
             paddingLeft: 'calc(1rem - 3px)',
-            fontWeight:  700,
+            fontWeight: 700,
           } : {
-            borderLeft:  '3px solid transparent',
+            borderLeft: '3px solid transparent',
             paddingLeft: 'calc(1rem - 3px)',
           };
 
@@ -232,9 +246,9 @@ const isMobile = width < 1024;
                   <ChevronRight
                     size={13}
                     style={{
-                      transform:  isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                      transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
                       transition: 'transform 0.22s cubic-bezier(0.22,1,0.36,1)',
-                      color:      parentActive ? '#049edf' : '#c0c0d8',
+                      color: parentActive ? '#049edf' : '#c0c0d8',
                       flexShrink: 0,
                     }}
                   />
@@ -246,8 +260,8 @@ const isMobile = width < 1024;
                 <div
                   className="nav-submenu"
                   style={{
-                    maxHeight:  isExpanded ? `${children.length * 48}px` : '0px',
-                    overflow:   'hidden',
+                    maxHeight: isExpanded ? `${children.length * 48}px` : '0px',
+                    overflow: 'hidden',
                     transition: 'max-height 0.28s cubic-bezier(0.22,1,0.36,1)',
                   }}
                 >
@@ -256,7 +270,7 @@ const isMobile = width < 1024;
 
                     const childBtnStyle = isChildActive ? {
                       background: 'rgba(4,158,223,0.10)',
-                      color:      '#049edf',
+                      color: '#049edf',
                       fontWeight: 700,
                     } : {};
 
@@ -270,12 +284,12 @@ const isMobile = width < 1024;
                         <div
                           className="nav-sub-indicator"
                           style={{
-                            background:   isChildActive ? '#049edf' : 'transparent',
-                            width:        '3px',
+                            background: isChildActive ? '#049edf' : 'transparent',
+                            width: '3px',
                             borderRadius: '2px',
-                            alignSelf:    'stretch',
-                            flexShrink:   0,
-                            transition:   'background 0.2s',
+                            alignSelf: 'stretch',
+                            flexShrink: 0,
+                            transition: 'background 0.2s',
                           }}
                         />
                         <div
@@ -313,10 +327,10 @@ const isMobile = width < 1024;
   ══════════════════════════════════════ */
   const DashboardPage = () => {
     const STATS = [
-      { title: 'Total Hoardings',  value: '148',    sub: '+6 added this month',    icon: Layers,        color: '#049edf', bg: 'rgba(4,158,223,0.1)'   },
-      { title: 'Active Bookings',  value: '62',     sub: '14 expiring this week',  icon: CalendarCheck, color: '#1a9e6e', bg: 'rgba(26,158,110,0.1)'  },
-      { title: 'Expired Bookings', value: '24',     sub: '8 pending renewal',      icon: TrendingDown,  color: '#e84040', bg: 'rgba(232,64,64,0.1)'   },
-      { title: 'Total Revenue',    value: '₹16.1L', sub: '+23% vs last month',     icon: DollarSign,    color: '#6c63ff', bg: 'rgba(108,99,255,0.1)'  },
+      { title: 'Total Hoardings', value: '148', sub: '+6 added this month', icon: Layers, color: '#049edf', bg: 'rgba(4,158,223,0.1)' },
+      { title: 'Active Bookings', value: '62', sub: '14 expiring this week', icon: CalendarCheck, color: '#1a9e6e', bg: 'rgba(26,158,110,0.1)' },
+      { title: 'Expired Bookings', value: '24', sub: '8 pending renewal', icon: TrendingDown, color: '#e84040', bg: 'rgba(232,64,64,0.1)' },
+      { title: 'Total Revenue', value: '₹16.1L', sub: '+23% vs last month', icon: DollarSign, color: '#6c63ff', bg: 'rgba(108,99,255,0.1)' },
     ];
 
     return (
@@ -359,8 +373,8 @@ const isMobile = width < 1024;
               <AreaChart data={MONTHLY_REVENUE}>
                 <defs>
                   <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="#049edf" stopOpacity={0.22} />
-                    <stop offset="95%" stopColor="#049edf" stopOpacity={0}    />
+                    <stop offset="5%" stopColor="#049edf" stopOpacity={0.22} />
+                    <stop offset="95%" stopColor="#049edf" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
@@ -454,16 +468,16 @@ const isMobile = width < 1024;
   /* ── Route ── */
   const renderContent = () => {
     switch (tab) {
-      case 'new-hoarding':     return <Hoarding />;
+      case 'new-hoarding': return <Hoarding />;
       case 'hoarding-expense': return <Hoardingexpense />;
-      case 'land-contracts':   return <LandContract />;   // ← child id changed
-      case 'land-payment':     return <LandPayment />;    // ← NEW
-      case 'bookings':         return <Placeholder title="Bookings" Icon={CalendarCheck} />;
-      case 'clients':          return <Placeholder title="Clients"  Icon={Users} />;
-      case 'owners':           return <OwnerPage />;
-      case 'payments':         return <Placeholder title="Payments" Icon={CreditCard} />;
-      case 'sites':            return <SitePage />;
-      default:                 return <DashboardPage />;
+      case 'land-contracts': return <LandContract />;   // ← child id changed
+      case 'land-payment': return <LandPayment />;    // ← NEW
+      case 'bookings': return <Placeholder title="Bookings" Icon={CalendarCheck} />;
+      case 'clients': return <Placeholder title="Clients" Icon={Users} />;
+      case 'owners': return <OwnerPage />;
+      case 'payments': return <Placeholder title="Payments" Icon={CreditCard} />;
+      case 'sites': return <SitePage />;
+      default: return <DashboardPage />;
     }
   };
 
