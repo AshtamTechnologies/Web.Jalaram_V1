@@ -17,7 +17,9 @@ import SitePage from './Site.jsx';
 import Hoarding from './Hoarding.jsx';
 import Hoardingexpense from './Hoardingexpense.jsx';
 import LandContract from './LandContract.jsx';
-import LandPayment from './LandPayment.jsx';   // ← NEW
+import LandPayment from './LandPayment.jsx';
+import CustomerPage from './Customer.jsx';
+// import CustomerContract from './CustomerContract.jsx';
 
 /* ─────────────────────────────────────
    MOCK DATA
@@ -69,6 +71,13 @@ const MENU = [
     children: [
       { id: 'land-contracts', icon: FileText, label: 'Land Contracts' },  // ← existing page
       { id: 'land-payment', icon: Banknote, label: 'Land Payment' },  // ← NEW page
+    ],
+  },
+  {
+    id: 'customer', icon: Users, label: 'Customer', badge: null,  // ← NEW
+    children: [
+      { id: 'customer-details', icon: UserCircle, label: 'Customer Details' },
+      // { id: 'customer-contract', icon: FileText, label: 'Customer Contract' },
     ],
   },
   // { id: 'clients', icon: Users,       label: 'Clients', badge: null },
@@ -171,15 +180,15 @@ export default function Dashboard({ onLogout }) {
     }
   };
 
-const handleLogout = () => {
-  sessionStorage.removeItem('dashTab');
-  localStorage.clear();
+  const handleLogout = () => {
+    sessionStorage.removeItem('dashTab');
+    localStorage.clear();
 
-  // ✅ CLEAN URL
-  window.history.replaceState({}, document.title, '/');
+    // ✅ CLEAN URL
+    window.history.replaceState({}, document.title, '/');
 
-  onLogout && onLogout();
-};
+    onLogout && onLogout();
+  };
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -476,6 +485,8 @@ const handleLogout = () => {
       case 'clients': return <Placeholder title="Clients" Icon={Users} />;
       case 'owners': return <OwnerPage />;
       case 'payments': return <Placeholder title="Payments" Icon={CreditCard} />;
+      case 'customer-details': return <CustomerPage />;
+      // case 'customer-contract': return <CustomerContract />;
       case 'sites': return <SitePage />;
       default: return <DashboardPage />;
     }

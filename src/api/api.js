@@ -138,7 +138,10 @@ export const apiService = {
     }),
 
   logoutUser: () => {
+    // Preserve attachment name map across logout so filenames survive re-login
+    const attachNames = localStorage.getItem('lc_attach_names');
     localStorage.clear();
+    if (attachNames) localStorage.setItem('lc_attach_names', attachNames);
     window.location.replace('/login');
   },
 
@@ -559,6 +562,55 @@ export const apiService = {
 
   deleteLandPayment: (id) =>
     api.delete(`/LandPayment/${id}`),
+
+  // ─────────────────────────────────────
+  // CUSTOMERS
+  // ─────────────────────────────────────
+
+  getAllCustomers: () =>
+    api.get('/CustomerDTL/GetAll'),
+
+  getCustomerById: (id) =>
+    api.get(`/CustomerDTL/${id}`),
+
+  createCustomer: (data) =>
+    api.post('/CustomerDTL/Create', {
+      customerID:     0,
+      customerName:   data.customerName   || '',
+      addressLine1:   data.addressLine1   || '',
+      addressLine2:   data.addressLine2   || '',
+      addressLine3:   data.addressLine3   || '',
+      city:           data.city           || '',
+      district:       data.district       || '',
+      country:        data.country        || '',
+      phone1:         data.phone1         || '',
+      phone2:         data.phone2         || '',
+      authorizedName: data.authorizedName || '',
+      gstNumber:      data.gstNumber      || '',
+      lastUpdateDttm: new Date().toISOString(),
+      lastUpdatedBy:  getLoggedInUserID(),
+    }),
+
+  updateCustomer: (data) =>
+    api.put('/CustomerDTL/Update', {
+      customerID:     Number(data.customerID),
+      customerName:   data.customerName   || '',
+      addressLine1:   data.addressLine1   || '',
+      addressLine2:   data.addressLine2   || '',
+      addressLine3:   data.addressLine3   || '',
+      city:           data.city           || '',
+      district:       data.district       || '',
+      country:        data.country        || '',
+      phone1:         data.phone1         || '',
+      phone2:         data.phone2         || '',
+      authorizedName: data.authorizedName || '',
+      gstNumber:      data.gstNumber      || '',
+      lastUpdateDttm: new Date().toISOString(),
+      lastUpdatedBy:  getLoggedInUserID(),
+    }),
+
+  deleteCustomer: (id) =>
+    api.delete(`/CustomerDTL/Delete/${id}`),
 };
 
 export default api;
