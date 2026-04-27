@@ -1,6 +1,7 @@
 import axios from 'axios';
 
 const API_BASE_URL = 'https://api.jalaram-ad.ashtamtechnologies.com/api';
+export const API_ROOT_URL = 'https://api.jalaram-ad.ashtamtechnologies.com';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -392,21 +393,21 @@ export const apiService = {
    */
   createLandContract: (data) => {
     return api.post('/LandContract/Create', {
-      landContractID:     0,
-      ownerID:            Number(data.ownerID),
-      hoardingID:         Number(data.hoardingID),
-      startDate:          data.startDate,
-      endDate:            data.endDate,
+      landContractID: 0,
+      ownerID: Number(data.ownerID),
+      hoardingID: Number(data.hoardingID),
+      startDate: data.startDate,
+      endDate: data.endDate,
       totalContractValue: Number(data.totalContractValue),
-      paymentFreqID:      Number(data.paymentFreqID),
-      amountPerFreq:      Number(data.amountPerFreq),
-      advancePaid:        data.advancePaid !== '' && data.advancePaid != null
-                            ? Number(data.advancePaid)
-                            : 0,
-      status:             data.status,
-      comments:           data.comments || '',
-      lastUpdateDttm:     new Date().toISOString(),
-      lastUpdatedBy:      getLoggedInUserID(),
+      paymentFreqID: Number(data.paymentFreqID),
+      amountPerFreq: Number(data.amountPerFreq),
+      advancePaid: data.advancePaid !== '' && data.advancePaid != null
+        ? Number(data.advancePaid)
+        : 0,
+      status: data.status,
+      comments: data.comments || '',
+      lastUpdateDttm: new Date().toISOString(),
+      lastUpdatedBy: getLoggedInUserID(),
     });
   },
 
@@ -416,21 +417,21 @@ export const apiService = {
    */
   updateLandContract: (data) => {
     return api.put('/LandContract/Update', {
-      landContractID:     Number(data.landContractID),
-      ownerID:            Number(data.ownerID),
-      hoardingID:         Number(data.hoardingID),
-      startDate:          data.startDate,
-      endDate:            data.endDate,
+      landContractID: Number(data.landContractID),
+      ownerID: Number(data.ownerID),
+      hoardingID: Number(data.hoardingID),
+      startDate: data.startDate,
+      endDate: data.endDate,
       totalContractValue: Number(data.totalContractValue),
-      paymentFreqID:      Number(data.paymentFreqID),
-      amountPerFreq:      Number(data.amountPerFreq),
-      advancePaid:        data.advancePaid !== '' && data.advancePaid != null
-                            ? Number(data.advancePaid)
-                            : 0,
-      status:             data.status,
-      comments:           data.comments || '',
-      lastUpdateDttm:     new Date().toISOString(),
-      lastUpdatedBy:      getLoggedInUserID(),
+      paymentFreqID: Number(data.paymentFreqID),
+      amountPerFreq: Number(data.amountPerFreq),
+      advancePaid: data.advancePaid !== '' && data.advancePaid != null
+        ? Number(data.advancePaid)
+        : 0,
+      status: data.status,
+      comments: data.comments || '',
+      lastUpdateDttm: new Date().toISOString(),
+      lastUpdatedBy: getLoggedInUserID(),
     });
   },
 
@@ -469,16 +470,16 @@ export const apiService = {
   uploadLandContractAttach: (contractId, ownerID, hoardingID, file) => {
     const fd = new FormData();
     fd.append('LandContractAttachID', 0);
-    fd.append('LandContractID',       Number(contractId));
-    fd.append('OwnerID',              Number(ownerID));
-    fd.append('HoardingID',           Number(hoardingID));
+    fd.append('LandContractID', Number(contractId));
+    fd.append('OwnerID', Number(ownerID));
+    fd.append('HoardingID', Number(hoardingID));
     // Append with both casings — .NET model binding is case-insensitive
     // but some servers differ; sending both ensures one binds.
-    fd.append('Files',                file);
-    fd.append('ContractFilePath',     file.name);   // required — non-empty
-    fd.append('ContractFilename',     file.name);
-    fd.append('LastUpdateDttm',       new Date().toISOString());
-    fd.append('LastUpdatedBy',        getLoggedInUserID());
+    fd.append('Files', file);
+    fd.append('ContractFilePath', file.name);   // required — non-empty
+    fd.append('ContractFilename', file.name);
+    fd.append('LastUpdateDttm', new Date().toISOString());
+    fd.append('LastUpdatedBy', getLoggedInUserID());
     return api.post('/LandContractAttach/Upload', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
@@ -517,45 +518,45 @@ export const apiService = {
     api.get(`/LandPayment/${id}`),
 
   createLandPayment: (data) => {
-    const userData      = JSON.parse(localStorage.getItem('userData') || '{}');
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
     const lastUpdatedBy = userData?.name || userData?.email || userData?.userName || 'Admin';
 
     return api.post('/LandPayment', {
-      landPaymentID:   0,
-      ownerID:         Number(data.ownerID),
-      landContractID:  Number(data.landContractID),
-      hoardingID:      Number(data.hoardingID) || 0,
-      paymentDate:     data.paymentDate ? data.paymentDate.split('T')[0] : new Date().toISOString().split('T')[0],
-      paymentPurpose:  data.paymentPurpose  || '',
-      amountPaid:      Number(data.amountPaid),
-      paymentMode:     data.paymentMode     || '',
-      nextDueDate:     data.nextDueDate     ? data.nextDueDate.split('T')[0] : null,
-      bankName:        data.bankName        || null,
+      landPaymentID: 0,
+      ownerID: Number(data.ownerID),
+      landContractID: Number(data.landContractID),
+      hoardingID: Number(data.hoardingID) || 0,
+      paymentDate: data.paymentDate ? data.paymentDate.split('T')[0] : new Date().toISOString().split('T')[0],
+      paymentPurpose: data.paymentPurpose || '',
+      amountPaid: Number(data.amountPaid),
+      paymentMode: data.paymentMode || '',
+      nextDueDate: data.nextDueDate ? data.nextDueDate.split('T')[0] : null,
+      bankName: data.bankName || null,
       referenceNumber: data.referenceNumber || null,
-      paidBy:          data.paidBy          || '',
-      comments:        data.comments        || null,
+      paidBy: data.paidBy || '',
+      comments: data.comments || null,
       lastUpdatedBy,
     });
   },
 
   updateLandPayment: (id, data) => {
-    const userData      = JSON.parse(localStorage.getItem('userData') || '{}');
+    const userData = JSON.parse(localStorage.getItem('userData') || '{}');
     const lastUpdatedBy = userData?.name || userData?.email || userData?.userName || 'Admin';
 
     return api.put(`/LandPayment/${id}`, {
-      landPaymentID:   Number(id),
-      ownerID:         Number(data.ownerID),
-      landContractID:  Number(data.landContractID),
-      hoardingID:      Number(data.hoardingID) || 0,
-      paymentDate:     data.paymentDate ? data.paymentDate.split('T')[0] : new Date().toISOString().split('T')[0],
-      paymentPurpose:  data.paymentPurpose  || '',
-      amountPaid:      Number(data.amountPaid),
-      paymentMode:     data.paymentMode     || '',
-      nextDueDate:     data.nextDueDate     ? data.nextDueDate.split('T')[0] : null,
-      bankName:        data.bankName        || null,
+      landPaymentID: Number(id),
+      ownerID: Number(data.ownerID),
+      landContractID: Number(data.landContractID),
+      hoardingID: Number(data.hoardingID) || 0,
+      paymentDate: data.paymentDate ? data.paymentDate.split('T')[0] : new Date().toISOString().split('T')[0],
+      paymentPurpose: data.paymentPurpose || '',
+      amountPaid: Number(data.amountPaid),
+      paymentMode: data.paymentMode || '',
+      nextDueDate: data.nextDueDate ? data.nextDueDate.split('T')[0] : null,
+      bankName: data.bankName || null,
       referenceNumber: data.referenceNumber || null,
-      paidBy:          data.paidBy          || '',
-      comments:        data.comments        || null,
+      paidBy: data.paidBy || '',
+      comments: data.comments || null,
       lastUpdatedBy,
     });
   },
@@ -575,42 +576,292 @@ export const apiService = {
 
   createCustomer: (data) =>
     api.post('/CustomerDTL/Create', {
-      customerID:     0,
-      customerName:   data.customerName   || '',
-      addressLine1:   data.addressLine1   || '',
-      addressLine2:   data.addressLine2   || '',
-      addressLine3:   data.addressLine3   || '',
-      city:           data.city           || '',
-      district:       data.district       || '',
-      country:        data.country        || '',
-      phone1:         data.phone1         || '',
-      phone2:         data.phone2         || '',
+      customerID: 0,
+      customerName: data.customerName || '',
+      addressLine1: data.addressLine1 || '',
+      addressLine2: data.addressLine2 || '',
+      addressLine3: data.addressLine3 || '',
+      city: data.city || '',
+      district: data.district || '',
+      country: data.country || '',
+      phone1: data.phone1 || '',
+      phone2: data.phone2 || '',
       authorizedName: data.authorizedName || '',
-      gstNumber:      data.gstNumber      || '',
+      gstNumber: data.gstNumber || '',
       lastUpdateDttm: new Date().toISOString(),
-      lastUpdatedBy:  getLoggedInUserID(),
+      lastUpdatedBy: getLoggedInUserID(),
     }),
 
   updateCustomer: (data) =>
     api.put('/CustomerDTL/Update', {
-      customerID:     Number(data.customerID),
-      customerName:   data.customerName   || '',
-      addressLine1:   data.addressLine1   || '',
-      addressLine2:   data.addressLine2   || '',
-      addressLine3:   data.addressLine3   || '',
-      city:           data.city           || '',
-      district:       data.district       || '',
-      country:        data.country        || '',
-      phone1:         data.phone1         || '',
-      phone2:         data.phone2         || '',
+      customerID: Number(data.customerID),
+      customerName: data.customerName || '',
+      addressLine1: data.addressLine1 || '',
+      addressLine2: data.addressLine2 || '',
+      addressLine3: data.addressLine3 || '',
+      city: data.city || '',
+      district: data.district || '',
+      country: data.country || '',
+      phone1: data.phone1 || '',
+      phone2: data.phone2 || '',
       authorizedName: data.authorizedName || '',
-      gstNumber:      data.gstNumber      || '',
+      gstNumber: data.gstNumber || '',
       lastUpdateDttm: new Date().toISOString(),
-      lastUpdatedBy:  getLoggedInUserID(),
+      lastUpdatedBy: getLoggedInUserID(),
     }),
 
   deleteCustomer: (id) =>
     api.delete(`/CustomerDTL/Delete/${id}`),
+
+  // ─────────────────────────────────────
+  // CUSTOMER CONTRACTS
+  // ─────────────────────────────────────
+
+  getAllCustomerContracts: () =>
+    api.get('/CustomerContract/GetAll'),
+
+  createCustomerContract: (data) =>
+    api.post('/CustomerContract/Create', {
+      customerContractID: 0,
+      customerID: Number(data.customerID),
+      hoardingID: Number(data.hoardingID),
+      startDate: data.startDate,
+      endDate: data.endDate,
+      contractOrigValue: Number(data.contractOrigValue) || 0,
+      paymentFreqID: Number(data.paymentFreqID),
+      amountPerFreq: Number(data.amountPerFreq) || 0,
+      advancePaid: Number(data.advancePaid) || 0,
+      status: data.status,
+      discountAmount: Number(data.discountAmount) || 0,
+      adjustmentAmount: Number(data.adjustmentAmount) || 0,
+      contractFinalValue: Number(data.contractFinalValue) || 0,
+      comments: data.comments || '',
+      lastUpdateDttm: new Date().toISOString(),
+      lastUpdatedBy: getLoggedInUserID(),
+    }),
+
+  updateCustomerContract: (data) =>
+    api.put('/CustomerContract/Update', {
+      customerContractID: Number(data.customerContractID),
+      customerID: Number(data.customerID),
+      hoardingID: Number(data.hoardingID),
+      startDate: data.startDate,
+      endDate: data.endDate,
+      contractOrigValue: Number(data.contractOrigValue) || 0,
+      paymentFreqID: Number(data.paymentFreqID),
+      amountPerFreq: Number(data.amountPerFreq) || 0,
+      advancePaid: Number(data.advancePaid) || 0,
+      status: data.status,
+      discountAmount: Number(data.discountAmount) || 0,
+      adjustmentAmount: Number(data.adjustmentAmount) || 0,
+      contractFinalValue: Number(data.contractFinalValue) || 0,
+      comments: data.comments || '',
+      lastUpdateDttm: new Date().toISOString(),
+      lastUpdatedBy: getLoggedInUserID(),
+    }),
+
+  deleteCustomerContract: (id) =>
+    api.delete(`/CustomerContract/Delete/${id}`),
+  createExpenseAttach: (expenseID, hoardingID, file) => {
+    const fd = new FormData();
+    fd.append('HoardingExpenseAttachID', 0);
+    fd.append('ExpenseID', Number(expenseID));
+    fd.append('HoardingID', Number(hoardingID));
+    fd.append('File', file);
+    fd.append('HoradingExpenseFilename', file.name);
+    fd.append('HoradingExpenseFilePath', file.name);
+    fd.append('LastUpdateDttm', new Date().toISOString());
+    fd.append('LastUpdatedBy', getLoggedInUserID());
+    return api.post('/HoardingExpenseAttach/Create', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  getExpenseAttachByExpenseId: async (expenseID) => {
+    try {
+      const all = await api.get('/HoardingExpenseAttach/GetAll');
+      const list = Array.isArray(all) ? all : [];
+
+      console.log('📋 All attaches sample:', list[0]); // shows real field names — remove after fix
+
+      const found = list.find(a =>
+        Number(a.expenseID) === Number(expenseID) ||
+        Number(a.ExpenseID) === Number(expenseID) ||
+        Number(a.expenseId) === Number(expenseID)
+      );
+      return found || null;
+    } catch (err) {
+      console.error('getExpenseAttachByExpenseId failed:', err);
+      return null;
+    }
+  },
+
+
+  /**
+   * POST /api/HoardingExpenseAttach/Create  (multipart/form-data)
+   *
+   * NOTE: Server model uses "HoradingExpense..." (typo — missing 'a')
+   * These field names MUST match exactly or the API returns 400.
+   *
+   * @param {number} expenseID
+   * @param {number} hoardingID
+   * @param {File}   file
+   */
+  // REPLACE your existing updateExpenseAttachment (if any) with this:
+  updateExpenseAttach: (attachObj, hoardingID, expenseID, file) => {
+    const fd = new FormData();
+    fd.append('HoradingExpenseAttachID', Number(attachObj.hoardingExpenseAttachID || attachObj.horadingExpenseAttachID || 0));
+    fd.append('ExpenseID', Number(expenseID));
+    fd.append('HoardingID', Number(hoardingID));
+    fd.append('File', file);
+    fd.append('HoradingExpenseFilePath', file.name);
+    fd.append('HoradingExpenseFilename', file.name);
+    fd.append('LastUpdateDttm', new Date().toISOString());
+    fd.append('LastUpdatedBy', getLoggedInUserID());
+    return api.put('/HoardingExpenseAttach/Update', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  // ══════════════════════════════════════════════════════════════
+  //  ADD TO YOUR EXISTING api.js  —  paste inside apiService { }
+  // ══════════════════════════════════════════════════════════════
+
+  // ─────────────────────────────────────
+  // HOARDING MERGE
+  // ─────────────────────────────────────
+
+  getAllHoardingMerges: () =>
+    api.get('/HoardingMerge/GetAll'),
+
+  getHoardingMergeById: (id) =>
+    api.get(`/HoardingMerge/${id}`),
+
+  createHoardingMerge: (data) =>
+    api.post('/HoardingMerge/Create', {
+      hoardingMergeID: 0,
+      hoardingID: Number(data.hoardingID),
+      customerContractID: Number(data.customerContractID),
+      mergeAlongFlag: data.mergeAlongFlag,   // 'W' = Width, 'H' = Height
+    }),
+
+  updateHoardingMerge: (id, data) =>
+    api.put(`/HoardingMerge/Update/${id}`, {
+      hoardingMergeID: Number(id),
+      hoardingID: Number(data.hoardingID),
+      customerContractID: Number(data.customerContractID),
+      mergeAlongFlag: data.mergeAlongFlag,
+    }),
+
+  deleteHoardingMerge: (id) =>
+    api.delete(`/HoardingMerge/Delete/${id}`),
+  // ─────────────────────────────────────
+// HOARDING EXPENSE ATTACHMENTS
+// ─────────────────────────────────────
+
+getExpenseAttachByExpenseId: async (expenseID) => {
+  try {
+    const all = await api.get('/HoardingExpenseAttach/GetAll');
+    const list = Array.isArray(all) ? all : [];
+    const found = list.find(a =>
+      Number(a.expenseID)  === Number(expenseID) ||
+      Number(a.ExpenseID)  === Number(expenseID) ||
+      Number(a.expenseId)  === Number(expenseID)
+    );
+    return found || null;
+  } catch (err) {
+    console.error('getExpenseAttachByExpenseId failed:', err);
+    return null;
+  }
+},
+
+createExpenseAttach: (expenseID, hoardingID, file) => {
+  const fd = new FormData();
+  fd.append('HoardingExpenseAttachID', 0);
+  fd.append('ExpenseID',               Number(expenseID));
+  fd.append('HoardingID',              Number(hoardingID));
+  fd.append('File',                    file);
+  fd.append('HoradingExpenseFilename', file.name);
+  fd.append('HoradingExpenseFilePath', file.name);
+  fd.append('LastUpdateDttm',          new Date().toISOString());
+  fd.append('LastUpdatedBy',           getLoggedInUserID());
+  return api.post('/HoardingExpenseAttach/Create', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+},
+
+updateExpenseAttach: (attachObj, hoardingID, expenseID, file) => {
+  const fd = new FormData();
+  fd.append('HoradingExpenseAttachID', Number(
+    attachObj.hoardingExpenseAttachID ||
+    attachObj.horadingExpenseAttachID || 0
+  ));
+  fd.append('ExpenseID',               Number(expenseID));
+  fd.append('HoardingID',              Number(hoardingID));
+  fd.append('File',                    file);
+  fd.append('HoradingExpenseFilePath', file.name);
+  fd.append('HoradingExpenseFilename', file.name);
+  fd.append('LastUpdateDttm',          new Date().toISOString());
+  fd.append('LastUpdatedBy',           getLoggedInUserID());
+  return api.put('/HoardingExpenseAttach/Update', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+},
+
+// ─────────────────────────────────────
+// LAND PAYMENT ATTACHMENTS
+// ─────────────────────────────────────
+
+getLandPaymentAttachByPaymentId: async (landPaymentID) => {
+  try {
+    const all = await api.get('/LandPaymentAttach/GetAll');
+    const list = Array.isArray(all) ? all : [];
+    const found = list.find(a =>
+      Number(a.landPaymentID)  === Number(landPaymentID) ||
+      Number(a.LandPaymentID)  === Number(landPaymentID)
+    );
+    return found || null;
+  } catch (err) {
+    console.error('getLandPaymentAttachByPaymentId failed:', err);
+    return null;
+  }
+},
+
+createLandPaymentAttach: (landPaymentID, ownerID, landContractID, hoardingID, file) => {
+  const fd = new FormData();
+  fd.append('LandPaymentAttachID', 0);
+  fd.append('LandPaymentID',       Number(landPaymentID));
+  fd.append('OwnerID',             Number(ownerID));
+  fd.append('LandContractID',      Number(landContractID));
+  fd.append('HoardingID',          Number(hoardingID));
+  fd.append('File',                file);
+  fd.append('LandPymntFilePath',   file.name);
+  fd.append('LandPymntFilename',   file.name);
+  fd.append('LastUpdateDttm',      new Date().toISOString());
+  fd.append('LastUpdatedBy',       getLoggedInUserID());
+  return api.post('/LandPaymentAttach/Create', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+},
+
+updateLandPaymentAttach: (attachObj, landPaymentID, ownerID, landContractID, hoardingID, file) => {
+  const fd = new FormData();
+  fd.append('LandPaymentAttachID', Number(
+    attachObj.landPaymentAttachID ||
+    attachObj.LandPaymentAttachID || 0
+  ));
+  fd.append('LandPaymentID',       Number(landPaymentID));
+  fd.append('OwnerID',             Number(ownerID));
+  fd.append('LandContractID',      Number(landContractID));
+  fd.append('HoardingID',          Number(hoardingID));
+  fd.append('File',                file);
+  fd.append('LandPymntFilePath',   file.name);
+  fd.append('LandPymntFilename',   file.name);
+  fd.append('LastUpdateDttm',      new Date().toISOString());
+  fd.append('LastUpdatedBy',       getLoggedInUserID());
+  return api.put('/LandPaymentAttach/Update', fd, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+},
 };
 
 export default api;

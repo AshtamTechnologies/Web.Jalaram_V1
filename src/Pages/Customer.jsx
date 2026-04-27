@@ -917,18 +917,18 @@ export default function CustomerPage() {
                     {/* Actions */}
                     <td className="pg-td">
                       <div className="pg-action-wrap">
-                        <button className="pg-btn-view" title="View"
+                        {/* <button className="pg-btn-view" title="View"
                           onClick={() => setViewTarget(c)}>
                           <Eye size={13} />
-                        </button>
+                        </button> */}
                         <button className="pg-btn-view" title="Edit"
                           onClick={() => { setFormMode('edit'); setEditTarget(c); setView('form'); }}>
                           <Edit2 size={13} />
                         </button>
-                        <button className="exp-btn-delete" title="Delete"
+                        {/* <button className="exp-btn-delete" title="Delete"
                           onClick={() => setDeleteTarget(c)}>
                           <Trash2 size={13} />
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                   </tr>

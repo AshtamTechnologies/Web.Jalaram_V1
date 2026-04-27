@@ -19,7 +19,8 @@ import Hoardingexpense from './Hoardingexpense.jsx';
 import LandContract from './LandContract.jsx';
 import LandPayment from './LandPayment.jsx';
 import CustomerPage from './Customer.jsx';
-// import CustomerContract from './CustomerContract.jsx';
+import CustomerContract from './CustomerContract.jsx';
+import HoardingMerge from './Hoardingmerge.jsx';
 
 /* ─────────────────────────────────────
    MOCK DATA
@@ -62,6 +63,7 @@ const MENU = [
     children: [
       { id: 'new-hoarding', icon: PlusSquare, label: 'Maintain Hoarding' },
       { id: 'hoarding-expense', icon: Receipt, label: 'Hoarding Expense' },
+      { id: 'hoarding-merge', icon: Layers, label: 'Hoarding Merge' },
     ],
   },
   // { id: 'bookings', icon: CalendarCheck, label: 'Bookings', badge: null },
@@ -77,7 +79,7 @@ const MENU = [
     id: 'customer', icon: Users, label: 'Customer', badge: null,  // ← NEW
     children: [
       { id: 'customer-details', icon: UserCircle, label: 'Customer Details' },
-      // { id: 'customer-contract', icon: FileText, label: 'Customer Contract' },
+      { id: 'customer-contract', icon: FileText, label: 'Customer Contract' },
     ],
   },
   // { id: 'clients', icon: Users,       label: 'Clients', badge: null },
@@ -479,6 +481,7 @@ export default function Dashboard({ onLogout }) {
     switch (tab) {
       case 'new-hoarding': return <Hoarding />;
       case 'hoarding-expense': return <Hoardingexpense />;
+      case 'hoarding-merge': return <HoardingMerge />;
       case 'land-contracts': return <LandContract />;   // ← child id changed
       case 'land-payment': return <LandPayment />;    // ← NEW
       case 'bookings': return <Placeholder title="Bookings" Icon={CalendarCheck} />;
@@ -486,7 +489,7 @@ export default function Dashboard({ onLogout }) {
       case 'owners': return <OwnerPage />;
       case 'payments': return <Placeholder title="Payments" Icon={CreditCard} />;
       case 'customer-details': return <CustomerPage />;
-      // case 'customer-contract': return <CustomerContract />;
+      case 'customer-contract': return <CustomerContract />;
       case 'sites': return <SitePage />;
       default: return <DashboardPage />;
     }

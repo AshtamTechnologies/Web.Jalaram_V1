@@ -4,11 +4,12 @@ import {
   RefreshCw, Calendar, ChevronUp, ChevronDown,
   ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
   Loader2, FileText, ArrowLeft, Building2, User,
-  IndianRupee, ShieldCheck, MessageSquare,
-  CreditCard, TrendingUp, Hash, Landmark, Banknote,
-  Receipt, Clock, CheckCircle2,
+  IndianRupee, MessageSquare,
+  CreditCard, Hash, Landmark, Trash2,
+  Receipt, Clock, CheckCircle2, Banknote,
+  Paperclip, FileCheck, Eye, Download, Image as ImageIcon,
 } from 'lucide-react';
-import { apiService } from '../api/api';
+import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
 import { useResizableColumns } from '../hooks/useResizableColumns';
 
@@ -37,10 +38,8 @@ const PAYMENT_PURPOSE_OPTIONS = [
   { value: 'Other', label: 'Other' },
 ];
 
-const EMPTY_FORM = {
-  ownerID: '',
-  landContractID: '',
-  hoardingID: '',
+const EMPTY_ROW = {
+  _rowId: '',
   paymentDate: '',
   paymentPurpose: '',
   amountPaid: '',
@@ -65,14 +64,13 @@ function fmtDate(d) {
   } catch { return d; }
 }
 
-function fmtNumber(v) {
-  if (v === '' || v == null || isNaN(Number(v))) return '—';
-  return Number(v).toLocaleString('en-IN');
-}
-
 function fmtCurrency(v) {
   if (v === '' || v == null || isNaN(Number(v))) return '—';
   return '₹' + Number(v).toLocaleString('en-IN');
+}
+
+function makeRowId() {
+  return `row_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 }
 
 function paymentModeStyle(mode) {
@@ -108,23 +106,145 @@ function normalizePayment(raw) {
   };
 }
 
-function validateForm(form) {
+function validateRow(row) {
   const e = {};
-  if (!form.ownerID) e.ownerID = 'Owner is required';
-  if (!form.landContractID) e.landContractID = 'Contract is required';
-  if (!form.paymentDate) e.paymentDate = 'Payment date is required';
-  if (!form.paymentPurpose) e.paymentPurpose = 'Payment purpose is required';
-  if (form.amountPaid === '' || form.amountPaid == null)
-    e.amountPaid = 'Amount paid is required';
-  else if (isNaN(Number(form.amountPaid)) || Number(form.amountPaid) <= 0)
-    e.amountPaid = 'Must be a valid positive number';
-  if (!form.paymentMode) e.paymentMode = 'Payment mode is required';
-  if (!form.paidBy) e.paidBy = 'Paid by is required';
-  if (form.nextDueDate && form.paymentDate && form.nextDueDate < form.paymentDate)
-    e.nextDueDate = 'Next due date must be after payment date';
+  if (!row.paymentDate) e.paymentDate = 'Required';
+  if (!row.paymentPurpose) e.paymentPurpose = 'Required';
+  if (row.amountPaid === '' || row.amountPaid == null) e.amountPaid = 'Required';
+  else if (isNaN(Number(row.amountPaid)) || Number(row.amountPaid) <= 0) e.amountPaid = 'Must be positive';
+  if (!row.paymentMode) e.paymentMode = 'Required';
+  if (!row.paidBy) e.paidBy = 'Required';
+  if (row.nextDueDate && row.paymentDate && row.nextDueDate < row.paymentDate)
+    e.nextDueDate = 'Must be after payment date';
   return e;
 }
+/* ─────────────────────────────────────────
+   LAND PAYMENT ATTACHMENT HELPERS
+───────────────────────────────────────── */
+const LP_IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+function lpIsImage(name = '') {
+  return LP_IMAGE_EXTS.includes(name.split('.').pop().toLowerCase());
+}
+function lpGetUrl(attach) {
+  if (!attach) return null;
+  const raw =
+    attach.landPymntFilePath ||
+    attach.LandPymntFilePath ||
+    attach.fileUrl ||
+    attach.filePath ||
+    attach.url ||
+    attach.path ||
+    null;
+  if (!raw) return null;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  return `${API_ROOT_URL}/${raw.replace(/^\/+/, '')}`;
+}
+function lpGetName(attach) {
+  return (
+    attach?.landPymntFilename ||
+    attach?.LandPymntFilename ||
+    attach?.fileName ||
+    attach?.name ||
+    'Attachment'
+  );
+}
 
+function LPAttachCell({ rowId, selectedFile, existingAttach, isUploading, onFileSelect, onFileClear }) {
+  const inputRef = useRef(null);
+  const trigger = () => inputRef.current?.click();
+  const onPick = (e) => {
+    const f = e.target.files?.[0];
+    if (f) onFileSelect(rowId, f);
+    e.target.value = '';
+  };
+  const fileInput = (
+    <input ref={inputRef} type="file" style={{ display: 'none' }}
+      onChange={onPick} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" />
+  );
+
+  /* uploading */
+  if (isUploading) return (
+    <div className="ea-cell">
+      <div className="ea-uploading">
+        <Loader2 size={12} className="pg-spin" style={{ flexShrink: 0 }} />
+        <span>Uploading…</span>
+      </div>
+    </div>
+  );
+
+  /* new file staged */
+  if (selectedFile) return (
+    <div className="ea-cell">
+      {fileInput}
+      <div className="ea-new-file">
+        <div className="ea-new-file__name">
+          <Paperclip size={11} color="#049edf" style={{ flexShrink: 0 }} />
+          <span className="ea-new-file__text" title={selectedFile.name}>{selectedFile.name}</span>
+          <button className="ea-new-file__remove" onClick={() => onFileClear(rowId)}>
+            <X size={11} />
+          </button>
+        </div>
+        <div className="ea-new-file__footer">
+          <button className="ea-new-file__change" onClick={trigger}>
+            <RefreshCw size={9} /> Change file
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* saved on server */
+  if (existingAttach) {
+    const name = lpGetName(existingAttach);
+    const url = lpGetUrl(existingAttach);
+    return (
+      <div className="ea-cell">
+        {fileInput}
+        <div className="ea-saved-card">
+          <div className="ea-saved-card__name" title={name}>
+            <div className="ea-saved-card__icon">
+              {lpIsImage(name)
+                ? <ImageIcon size={12} color="#15803d" style={{ flexShrink: 0 }} />
+                : <FileCheck size={12} color="#15803d" style={{ flexShrink: 0 }} />}
+            </div>
+            <span className="ea-saved-card__text">{name}</span>
+          </div>
+          <div className="ea-saved-card__actions">
+            <button className="ea-saved-card__btn ea-saved-card__btn--view"
+              onClick={() => url && window.open(url, '_blank', 'noopener,noreferrer')}
+              disabled={!url} title={url ? 'Open in new tab' : 'URL not available'}>
+              <Eye size={10} /> View
+            </button>
+            <button className="ea-saved-card__btn ea-saved-card__btn--download"
+              onClick={() => {
+                if (!url) return;
+                const a = document.createElement('a');
+                a.href = url; a.download = name;
+                a.target = '_blank'; a.rel = 'noopener noreferrer';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+              }}
+              disabled={!url}>
+              <Download size={10} /> Download
+            </button>
+            <button className="ea-saved-card__btn ea-saved-card__btn--replace" onClick={trigger}>
+              <RefreshCw size={10} /> Replace
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* empty */
+  return (
+    <div className="ea-cell">
+      {fileInput}
+      <button className="ea-btn-attach" onClick={trigger}>
+        <Paperclip size={11} /> Attach file
+      </button>
+    </div>
+  );
+}
 function hoardingLabel(h) {
   if (!h) return '';
   const parts = [h.hoardingCode];
@@ -523,7 +643,6 @@ function ContractDropdown({ contracts, hoardings, ownerID, value, onChange, erro
 
   return (
     <div className="lc-search-widget" ref={wrapRef}>
-      {/* Search Input */}
       {!isDisabled && (
         <div
           className={`pg-field-wrap ${error ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
@@ -548,7 +667,6 @@ function ContractDropdown({ contracts, hoardings, ownerID, value, onChange, erro
         </div>
       )}
 
-      {/* Disabled placeholder */}
       {isDisabled && (
         <div className="pg-field-wrap pg-field-wrap--readonly">
           <FileText size={14} color="#c0c0d8" style={{ flexShrink: 0 }} />
@@ -558,7 +676,6 @@ function ContractDropdown({ contracts, hoardings, ownerID, value, onChange, erro
         </div>
       )}
 
-      {/* Dropdown list */}
       {open && !isDisabled && (
         <div className="lc-dropdown">
           {filtered.length === 0 ? (
@@ -578,7 +695,6 @@ function ContractDropdown({ contracts, hoardings, ownerID, value, onChange, erro
                   setQuery(''); setOpen(false); setFocusedIndex(-1);
                 }}
               >
-                {/* Row 1: hoarding info + status badge */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div className="lc-dropdown-option__name" style={{
                     color: String(c.landContractID) === String(value) ? '#049edf' : '#1a1a2e',
@@ -600,7 +716,6 @@ function ContractDropdown({ contracts, hoardings, ownerID, value, onChange, erro
                     <Check size={12} color="#049edf" style={{ flexShrink: 0 }} />
                   )}
                 </div>
-                {/* Row 2: date range */}
                 <div className="lc-dropdown-option__sub" style={{ marginTop: 3 }}>
                   <Calendar size={10} style={{ marginRight: 4 }} />
                   {c.dateRange}
@@ -611,7 +726,6 @@ function ContractDropdown({ contracts, hoardings, ownerID, value, onChange, erro
         </div>
       )}
 
-      {/* Selected card */}
       {value && selected && (
         <div className="lc-selected-card">
           <div className="lc-selected-card__icon"><FileText size={15} color="#049edf" /></div>
@@ -658,113 +772,691 @@ function ContractDropdown({ contracts, hoardings, ownerID, value, onChange, erro
 }
 
 /* ═══════════════════════════════════════════
-   PAYMENT FORM
+   DELETE ROW CONFIRM MODAL
 ═══════════════════════════════════════════ */
-function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSave }) {
-  const isAdd = mode === 'add';
-
-  const [form, setForm] = useState(() =>
-    isAdd ? { ...EMPTY_FORM } : {
-      ownerID: payment?.ownerID ?? '',
-      landContractID: payment?.landContractID ?? '',
-      hoardingID: payment?.hoardingID ?? '',
-      paymentDate: payment?.paymentDate ?? '',
-      paymentPurpose: payment?.paymentPurpose ?? '',
-      amountPaid: payment?.amountPaid ?? '',
-      paymentMode: payment?.paymentMode ?? '',
-      nextDueDate: payment?.nextDueDate ?? '',
-      bankName: payment?.bankName ?? '',
-      referenceNumber: payment?.referenceNumber ?? '',
-      paidBy: payment?.paidBy ?? '',
-      comments: payment?.comments ?? '',
-    }
+function DeleteRowModal({ row, onConfirm, onCancel, deleting }) {
+  return (
+    <div className="pg-overlay" style={{ zIndex: 99998 }} onClick={onCancel}>
+      <div className="exp-delete-modal" onClick={e => e.stopPropagation()}>
+        <div className="exp-delete-modal__icon"><Trash2 size={22} color="#dc2626" /></div>
+        <div className="exp-delete-modal__title">Delete Payment?</div>
+        <div className="exp-delete-modal__sub">
+          {row._paymentID
+            ? <>This will permanently delete <strong>Payment #{row._paymentID}</strong> from the server. This cannot be undone.</>
+            : <>This will remove this unsaved row from the list.</>}
+        </div>
+        <div className="exp-delete-modal__actions">
+          <button className="pg-btn-cancel" onClick={onCancel} disabled={deleting}>Cancel</button>
+          <button className="exp-btn-delete-confirm" onClick={onConfirm} disabled={deleting}>
+            {deleting
+              ? <><Loader2 size={13} className="pg-spin" /> Deleting…</>
+              : <><Trash2 size={13} /> Delete</>}
+          </button>
+        </div>
+      </div>
+    </div>
   );
+}
 
-  const [errors, setErrors] = useState({});
+/* ═══════════════════════════════════════════
+   PAYMENT ROWS TABLE  (inline editable)
+═══════════════════════════════════════════ */
+function PaymentRowsTable({
+  rows, rowErrors, onChangeRow, onDeleteRow, deletingRowId,
+  attachFiles, existingAttaches, uploadingRowIds, onFileSelect, onFileClear,
+}) {
+  if (rows.length === 0) return null;
+  const total = rows.reduce((s, r) => s + (Number(r.amountPaid) || 0), 0);
+
+  const DeleteBtn = ({ rowId }) => {
+    const isDeleting = deletingRowId === rowId;
+    return (
+      <button className="exp-del-row-btn"
+        onClick={() => !isDeleting && onDeleteRow(rowId)}
+        title={isDeleting ? 'Deleting…' : 'Delete'}
+        disabled={isDeleting} style={{ opacity: isDeleting ? 0.6 : 1 }}>
+        {isDeleting ? <Loader2 size={13} className="pg-spin" /> : <Trash2 size={13} />}
+      </button>
+    );
+  };
+
+  return (
+    <div className="exp-rows-wrap">
+      <div className="exp-rows-header">
+        <div className="exp-rows-header__left">
+          <Receipt size={14} color="#049edf" />
+          <span>Payment Entries ({rows.length})</span>
+        </div>
+        <div className="exp-rows-header__total">Total: <strong>{fmtCurrency(total)}</strong></div>
+      </div>
+
+      {/* ─── Desktop ─── */}
+      <div className="exp-rows-desktop">
+        <div className="exp-rows-scroll">
+          <table className="exp-rows-tbl">
+            <thead>
+              <tr>
+                <th className="exp-col-idx">#</th>
+                <th>Pay Date <span className="exp-req">*</span></th>
+                <th>Purpose <span className="exp-req">*</span></th>
+                <th>Amount (₹) <span className="exp-req">*</span></th>
+                <th>Mode <span className="exp-req">*</span></th>
+                <th>Paid By <span className="exp-req">*</span></th>
+                <th>Next Due</th>
+                <th>Bank</th>
+                <th>Reference</th>
+                <th>Comments</th>
+                <th>
+                  <span className="ea-col-head">
+                    <Paperclip size={11} /> Photo / Doc
+                  </span>
+                </th>
+                <th className="exp-col-del"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, idx) => {
+                const errs = rowErrors[row._rowId] || {};
+                const isDeleting = deletingRowId === row._rowId;
+                const isUploading = uploadingRowIds?.has(row._rowId);
+                const selFile = attachFiles?.[row._rowId] || null;
+                const existing = row._paymentID
+                  ? (existingAttaches?.[row._paymentID] || null)
+                  : null;
+                const showBank = ['Cheque', 'NEFT', 'RTGS', 'Bank Transfer', 'Demand Draft']
+                  .includes(row.paymentMode);
+
+                return (
+                  <tr key={row._rowId}
+                    className={`${Object.keys(errs).length ? 'exp-tbl-row exp-tbl-row--err' : 'exp-tbl-row'}${isDeleting ? ' exp-tbl-row--deleting' : ''}`}
+                    style={{ opacity: isDeleting ? 0.5 : 1, pointerEvents: isDeleting ? 'none' : 'auto' }}>
+
+                    <td className="exp-td exp-td-idx">{idx + 1}</td>
+
+                    {/* Pay Date */}
+                    <td className="exp-td">
+                      <input type="date"
+                        className={`exp-cell-input${errs.paymentDate ? ' exp-cell-input--err' : ''}`}
+                        value={row.paymentDate}
+                        onChange={e => onChangeRow(row._rowId, 'paymentDate', e.target.value)} />
+                      {errs.paymentDate && <div className="exp-cell-err">{errs.paymentDate}</div>}
+                    </td>
+
+                    {/* Purpose */}
+                    <td className="exp-td">
+                      <select
+                        className={`exp-cell-input${errs.paymentPurpose ? ' exp-cell-input--err' : ''}`}
+                        value={row.paymentPurpose}
+                        onChange={e => onChangeRow(row._rowId, 'paymentPurpose', e.target.value)}>
+                        <option value="">Select…</option>
+                        {PAYMENT_PURPOSE_OPTIONS.map(o =>
+                          <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      {errs.paymentPurpose && <div className="exp-cell-err">{errs.paymentPurpose}</div>}
+                    </td>
+
+                    {/* Amount */}
+                    <td className="exp-td">
+                      <input type="number" min="0"
+                        className={`exp-cell-input${errs.amountPaid ? ' exp-cell-input--err' : ''}`}
+                        placeholder="0" value={row.amountPaid}
+                        onChange={e => onChangeRow(row._rowId, 'amountPaid', e.target.value)} />
+                      {errs.amountPaid && <div className="exp-cell-err">{errs.amountPaid}</div>}
+                    </td>
+
+                    {/* Mode */}
+                    <td className="exp-td">
+                      <select
+                        className={`exp-cell-input${errs.paymentMode ? ' exp-cell-input--err' : ''}`}
+                        value={row.paymentMode}
+                        onChange={e => onChangeRow(row._rowId, 'paymentMode', e.target.value)}>
+                        <option value="">Select…</option>
+                        {PAYMENT_MODE_OPTIONS.map(o =>
+                          <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                      {errs.paymentMode && <div className="exp-cell-err">{errs.paymentMode}</div>}
+                    </td>
+
+                    {/* Paid By */}
+                    <td className="exp-td">
+                      <input
+                        className={`exp-cell-input${errs.paidBy ? ' exp-cell-input--err' : ''}`}
+                        placeholder="Name…" value={row.paidBy}
+                        onChange={e => onChangeRow(row._rowId, 'paidBy', e.target.value)} />
+                      {errs.paidBy && <div className="exp-cell-err">{errs.paidBy}</div>}
+                    </td>
+
+                    {/* Next Due */}
+                    <td className="exp-td">
+                      <input type="date"
+                        className={`exp-cell-input${errs.nextDueDate ? ' exp-cell-input--err' : ''}`}
+                        value={row.nextDueDate} min={row.paymentDate || undefined}
+                        onChange={e => onChangeRow(row._rowId, 'nextDueDate', e.target.value)} />
+                      {errs.nextDueDate && <div className="exp-cell-err">{errs.nextDueDate}</div>}
+                    </td>
+
+                    {/* Bank */}
+                    <td className="exp-td">
+                      <input className="exp-cell-input"
+                        placeholder={showBank ? 'Bank name…' : 'N/A'}
+                        value={row.bankName}
+                        onChange={e => onChangeRow(row._rowId, 'bankName', e.target.value)}
+                        disabled={!showBank}
+                        style={!showBank ? { color: '#b0b0c8', cursor: 'not-allowed' } : {}} />
+                    </td>
+
+                    {/* Reference */}
+                    <td className="exp-td">
+                      <input className="exp-cell-input"
+                        placeholder={showBank ? 'Ref / Cheque no…' : 'N/A'}
+                        value={row.referenceNumber}
+                        onChange={e => onChangeRow(row._rowId, 'referenceNumber', e.target.value)}
+                        disabled={!showBank}
+                        style={!showBank ? { color: '#b0b0c8', cursor: 'not-allowed' } : {}} />
+                    </td>
+
+                    {/* Comments */}
+                    <td className="exp-td">
+                      <textarea className="exp-cell-input exp-cell-scroll"
+                        placeholder="Optional…" value={row.comments}
+                        style={{ resize: 'none', minHeight: 38 }}
+                        onChange={e => onChangeRow(row._rowId, 'comments', e.target.value)} />
+                    </td>
+
+                    {/* Photo / Doc */}
+                    <td className="exp-td" style={{ verticalAlign: 'top', paddingTop: 8 }}>
+                      <LPAttachCell
+                        rowId={row._rowId}
+                        selectedFile={selFile}
+                        existingAttach={existing}
+                        isUploading={isUploading}
+                        onFileSelect={onFileSelect}
+                        onFileClear={onFileClear}
+                      />
+                    </td>
+
+                    <td className="exp-td exp-td-del">
+                      <DeleteBtn rowId={row._rowId} />
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ─── Mobile ─── */}
+      <div className="exp-rows-mobile">
+        {rows.map((row, idx) => {
+          const errs = rowErrors[row._rowId] || {};
+          const isDeleting = deletingRowId === row._rowId;
+          const isUploading = uploadingRowIds?.has(row._rowId);
+          const selFile = attachFiles?.[row._rowId] || null;
+          const existing = row._paymentID
+            ? (existingAttaches?.[row._paymentID] || null) : null;
+          const showBank = ['Cheque', 'NEFT', 'RTGS', 'Bank Transfer', 'Demand Draft']
+            .includes(row.paymentMode);
+
+          return (
+            <div key={row._rowId}
+              className={`exp-mob-card${Object.keys(errs).length ? ' exp-mob-card--err' : ''}`}
+              style={{ opacity: isDeleting ? 0.5 : 1, pointerEvents: isDeleting ? 'none' : 'auto' }}>
+              <div className="exp-mob-card__top">
+                <span className="exp-mob-card__num">#{idx + 1}</span>
+                <button className="exp-del-row-btn" onClick={() => onDeleteRow(row._rowId)}>
+                  <Trash2 size={13} />
+                </button>
+              </div>
+              <div className="row g-2">
+                <div className="col-6">
+                  <div className="exp-mob-label">Pay Date <span className="exp-req">*</span></div>
+                  <input type="date"
+                    className={`exp-cell-input${errs.paymentDate ? ' exp-cell-input--err' : ''}`}
+                    value={row.paymentDate}
+                    onChange={e => onChangeRow(row._rowId, 'paymentDate', e.target.value)} />
+                </div>
+                <div className="col-6">
+                  <div className="exp-mob-label">Amount <span className="exp-req">*</span></div>
+                  <input type="number" min="0"
+                    className={`exp-cell-input${errs.amountPaid ? ' exp-cell-input--err' : ''}`}
+                    placeholder="0" value={row.amountPaid}
+                    onChange={e => onChangeRow(row._rowId, 'amountPaid', e.target.value)} />
+                </div>
+                <div className="col-12">
+                  <div className="exp-mob-label">Purpose <span className="exp-req">*</span></div>
+                  <select className={`exp-cell-input${errs.paymentPurpose ? ' exp-cell-input--err' : ''}`}
+                    value={row.paymentPurpose}
+                    onChange={e => onChangeRow(row._rowId, 'paymentPurpose', e.target.value)}>
+                    <option value="">Select…</option>
+                    {PAYMENT_PURPOSE_OPTIONS.map(o =>
+                      <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div className="col-12">
+                  <div className="exp-mob-label">Mode <span className="exp-req">*</span></div>
+                  <select className={`exp-cell-input${errs.paymentMode ? ' exp-cell-input--err' : ''}`}
+                    value={row.paymentMode}
+                    onChange={e => onChangeRow(row._rowId, 'paymentMode', e.target.value)}>
+                    <option value="">Select…</option>
+                    {PAYMENT_MODE_OPTIONS.map(o =>
+                      <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div className="col-6">
+                  <div className="exp-mob-label">Paid By <span className="exp-req">*</span></div>
+                  <input className={`exp-cell-input${errs.paidBy ? ' exp-cell-input--err' : ''}`}
+                    placeholder="Name…" value={row.paidBy}
+                    onChange={e => onChangeRow(row._rowId, 'paidBy', e.target.value)} />
+                </div>
+                <div className="col-6">
+                  <div className="exp-mob-label">Next Due</div>
+                  <input type="date" className="exp-cell-input"
+                    value={row.nextDueDate} min={row.paymentDate || undefined}
+                    onChange={e => onChangeRow(row._rowId, 'nextDueDate', e.target.value)} />
+                </div>
+                {showBank && (<>
+                  <div className="col-6">
+                    <div className="exp-mob-label">Bank</div>
+                    <input className="exp-cell-input" placeholder="Bank name…"
+                      value={row.bankName}
+                      onChange={e => onChangeRow(row._rowId, 'bankName', e.target.value)} />
+                  </div>
+                  <div className="col-6">
+                    <div className="exp-mob-label">Reference</div>
+                    <input className="exp-cell-input" placeholder="Ref / Cheque no…"
+                      value={row.referenceNumber}
+                      onChange={e => onChangeRow(row._rowId, 'referenceNumber', e.target.value)} />
+                  </div>
+                </>)}
+                <div className="col-12">
+                  <div className="exp-mob-label">Comments</div>
+                  <textarea className="exp-cell-input exp-cell-scroll" placeholder="Optional…"
+                    value={row.comments}
+                    onChange={e => onChangeRow(row._rowId, 'comments', e.target.value)} />
+                </div>
+                <div className="col-12">
+                  <div className="exp-mob-label" style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                    <Paperclip size={11} color="#9090a8" /> Photo / Doc
+                    <span style={{ fontSize: 10, color: '#b0b0c8' }}>(optional)</span>
+                  </div>
+                  <LPAttachCell
+                    rowId={row._rowId}
+                    selectedFile={selFile}
+                    existingAttach={existing}
+                    isUploading={isUploading}
+                    onFileSelect={onFileSelect}
+                    onFileClear={onFileClear}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────
+   QUICK-ADD PANEL  (single new row form)
+───────────────────────────────────────── */
+function QuickAddPanel({ row, errors, onChange }) {
+  const showBank = ['Cheque', 'NEFT', 'RTGS', 'Bank Transfer', 'Demand Draft'].includes(row.paymentMode);
+  return (
+    <div className="exp-entry-panel">
+      <div className="row g-3">
+        <div className="col-12 col-md-4">
+          <FieldLabel label="Payment Date" required />
+          <InputWrap error={errors.paymentDate} icon={Calendar}>
+            <input className="pg-field-input" type="date" value={row.paymentDate}
+              onChange={e => onChange('paymentDate', e.target.value)} />
+          </InputWrap>
+          <FieldError msg={errors.paymentDate} />
+        </div>
+        <div className="col-12 col-md-4">
+          <FieldLabel label="Next Due Date" optional />
+          <InputWrap error={errors.nextDueDate} icon={Calendar}>
+            <input className="pg-field-input" type="date" value={row.nextDueDate}
+              min={row.paymentDate || undefined}
+              onChange={e => onChange('nextDueDate', e.target.value)} />
+          </InputWrap>
+          <FieldError msg={errors.nextDueDate} />
+        </div>
+        <div className="col-12 col-md-4">
+          <FieldLabel label="Amount Paid (Rs.)" required />
+          <InputWrap error={errors.amountPaid} icon={IndianRupee}>
+            <CurrencyInput value={row.amountPaid} onChange={val => onChange('amountPaid', val)} placeholder="e.g. 25,000" />
+          </InputWrap>
+          <FieldError msg={errors.amountPaid} />
+        </div>
+        <div className="col-12 col-md-4">
+          <FieldLabel label="Payment Purpose" required />
+          <ComboDropdown
+            value={row.paymentPurpose} onChange={val => onChange('paymentPurpose', val)}
+            onBlur={() => { }} hasError={!!errors.paymentPurpose}
+            placeholder="Select purpose…" icon={Receipt} options={PAYMENT_PURPOSE_OPTIONS}
+          />
+          <FieldError msg={errors.paymentPurpose} />
+        </div>
+        <div className="col-12 col-md-4">
+          <FieldLabel label="Payment Mode" required />
+          <ComboDropdown
+            value={row.paymentMode} onChange={val => onChange('paymentMode', val)}
+            onBlur={() => { }} hasError={!!errors.paymentMode}
+            placeholder="Select mode…" icon={CreditCard} options={PAYMENT_MODE_OPTIONS}
+          />
+          <FieldError msg={errors.paymentMode} />
+        </div>
+        <div className="col-12 col-md-4">
+          <FieldLabel label="Paid By" required />
+          <InputWrap error={errors.paidBy} icon={User}>
+            <input className="pg-field-input" placeholder="Name of person / company"
+              value={row.paidBy} onChange={e => onChange('paidBy', e.target.value)} autoComplete="off" />
+          </InputWrap>
+          <FieldError msg={errors.paidBy} />
+        </div>
+        {showBank && (
+          <>
+            <div className="col-12 col-md-6">
+              <FieldLabel label="Bank Name" optional />
+              <InputWrap icon={Landmark}>
+                <input className="pg-field-input" placeholder="e.g. State Bank of India"
+                  value={row.bankName} onChange={e => onChange('bankName', e.target.value)} autoComplete="off" />
+              </InputWrap>
+            </div>
+            <div className="col-12 col-md-6">
+              <FieldLabel label="Reference / Cheque Number" optional />
+              <InputWrap icon={Hash}>
+                <input className="pg-field-input" placeholder="Transaction / Cheque number"
+                  value={row.referenceNumber} onChange={e => onChange('referenceNumber', e.target.value)} autoComplete="off" />
+              </InputWrap>
+            </div>
+          </>
+        )}
+        <div className="col-12">
+          <FieldLabel label="Comments" optional />
+          <InputWrap icon={MessageSquare}>
+            <textarea className="pg-field-input lc-textarea" rows={2}
+              placeholder="Any notes or remarks about this payment..."
+              value={row.comments} onChange={e => onChange('comments', e.target.value)} />
+          </InputWrap>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   PAYMENT FORM  (Add / Edit — grouped design)
+═══════════════════════════════════════════ */
+function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts, onBack, onRefresh }) {
+  const isAdd = mode === 'add';
+  /* ── Attachment state ── */
+  const [attachFiles, setAttachFiles] = useState({});
+  const [existingAttaches, setExistingAttaches] = useState({});
+  const [uploadingRowIds, setUploadingRowIds] = useState(new Set());
+  const [attachLoadDone, setAttachLoadDone] = useState(isAdd);
+  // ownerID + landContractID selection (only changeable in add mode)
+  const [ownerID, setOwnerID] = useState(() => {
+    if (isAdd) return '';
+    return String(allPayments.find(p => `${p.ownerID}_${p.landContractID}` === groupKey)?.ownerID || '');
+  });
+  const [landContractID, setLandContractID] = useState(() => {
+    if (isAdd) return '';
+    return String(allPayments.find(p => `${p.ownerID}_${p.landContractID}` === groupKey)?.landContractID || '');
+  });
+  const [ownerError, setOwnerError] = useState('');
+  const [contractError, setContractError] = useState('');
+
+  // Build initial rows from existing payments for this group
+  const [rows, setRows] = useState(() => {
+    if (isAdd) return [];
+    return allPayments
+      .filter(p => `${p.ownerID}_${p.landContractID}` === groupKey)
+      .map(p => ({
+        ...EMPTY_ROW,
+        _rowId: makeRowId(),
+        _paymentID: p.landPaymentID,
+        paymentDate: p.paymentDate || '',
+        paymentPurpose: p.paymentPurpose || '',
+        amountPaid: p.amountPaid ?? '',
+        paymentMode: p.paymentMode || '',
+        nextDueDate: p.nextDueDate || '',
+        bankName: p.bankName || '',
+        referenceNumber: p.referenceNumber || '',
+        paidBy: p.paidBy || '',
+        comments: p.comments || '',
+      }));
+  });
+  /* ── Load attachments on edit mount ── */
+  useEffect(() => {
+    if (isAdd || rows.length === 0) { setAttachLoadDone(true); return; }
+    const ids = rows.map(r => r._paymentID).filter(Boolean);
+    if (!ids.length) { setAttachLoadDone(true); return; }
+    let cancelled = false;
+    Promise.allSettled(ids.map(id => apiService.getLandPaymentAttachByPaymentId(id)))
+      .then(results => {
+        if (cancelled) return;
+        const map = {};
+        results.forEach((res, i) => {
+          if (res.status === 'fulfilled' && res.value) map[ids[i]] = res.value;
+        });
+        setExistingAttaches(map);
+        setAttachLoadDone(true);
+      });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /* ── File handlers ── */
+  const handleFileSelect = useCallback(async (rowId, file) => {
+    const row = rows.find(r => r._rowId === rowId);
+    const paymentID = row?._paymentID;
+    const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
+    const hID = Number(contract?.hoardingID || 0);
+
+    if (paymentID && existingAttaches[paymentID]) {
+      const attach = existingAttaches[paymentID];
+      setUploadingRowIds(prev => new Set(prev).add(rowId));
+      try {
+        await apiService.updateLandPaymentAttach(
+          attach, Number(paymentID), Number(ownerID),
+          Number(landContractID), hID, file
+        );
+        const updated = await apiService.getLandPaymentAttachByPaymentId(paymentID);
+        setExistingAttaches(prev => ({ ...prev, [paymentID]: updated }));
+      } catch (err) {
+        setApiErr(err?.response?.data?.message || err?.message || 'Failed to replace attachment.');
+      } finally {
+        setUploadingRowIds(prev => { const n = new Set(prev); n.delete(rowId); return n; });
+      }
+    } else {
+      setAttachFiles(prev => ({ ...prev, [rowId]: file }));
+    }
+  }, [rows, existingAttaches, ownerID, landContractID, contracts]);
+
+  const handleFileClear = useCallback((rowId) => {
+    setAttachFiles(prev => { const n = { ...prev }; delete n[rowId]; return n; });
+  }, []);
+  const [rowErrors, setRowErrors] = useState({});
+  const emptyCurrentRow = () => ({ ...EMPTY_ROW, _rowId: makeRowId() });
+  const [currentRow, setCurrentRow] = useState(emptyCurrentRow);
+  const [currentErrors, setCurrentErrors] = useState({});
+  const [showEntryForm, setShowEntryForm] = useState(isAdd);
+
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
   const [apiErr, setApiErr] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingRowId, setDeletingRowId] = useState(null);
 
-  // When contract changes, auto-fill hoardingID
-  useEffect(() => {
-    if (form.landContractID) {
-      const contract = contracts.find(c => String(c.landContractID) === String(form.landContractID));
-      if (contract?.hoardingID) {
-        setForm(prev => ({ ...prev, hoardingID: contract.hoardingID }));
-      }
-    }
-  }, [form.landContractID, contracts]);
-
-  const set = (key, val) => {
-    setForm(prev => {
-      const updated = { ...prev, [key]: val };
-      if (key === 'ownerID') {
-        updated.landContractID = '';
-        updated.hoardingID = '';
-      }
-      if (key === 'landContractID') {
-        updated.hoardingID = '';
-      }
-      return updated;
-    });
-    if (errors[key]) setErrors(prev => ({ ...prev, [key]: '' }));
-    if (key === 'ownerID') setErrors(prev => ({ ...prev, landContractID: '', hoardingID: '' }));
+  // auto-fill hoardingID from contract
+  const getHoardingIDForContract = (cid) => {
+    const c = contracts.find(c => String(c.landContractID) === String(cid));
+    return c?.hoardingID || 0;
   };
 
-  // Determine if bank/reference fields should show
-  const showBankFields = ['Cheque', 'NEFT', 'RTGS', 'Bank Transfer', 'Demand Draft'].includes(form.paymentMode);
+  const handleCurrentChange = (key, val) => {
+    setCurrentRow(p => ({ ...p, [key]: val }));
+    if (currentErrors[key]) setCurrentErrors(p => ({ ...p, [key]: '' }));
+  };
 
-  const handleSave = async () => {
-    const errs = validateForm(form);
-    if (Object.keys(errs).length) { setErrors(errs); return; }
-    setSaving(true); setApiErr('');
+  const handleAddRow = () => {
+    const errs = validateRow(currentRow);
+    if (Object.keys(errs).length) { setCurrentErrors(errs); return; }
+    setRows(prev => [...prev, { ...currentRow }]);
+    setCurrentRow(emptyCurrentRow());
+    setCurrentErrors({});
+    if (!isAdd) setShowEntryForm(false);
+  };
+
+  const handleChangeRow = (rowId, key, val) => {
+    setRows(prev => prev.map(r => r._rowId === rowId ? { ...r, [key]: val } : r));
+    if (rowErrors[rowId]?.[key]) setRowErrors(prev => ({ ...prev, [rowId]: { ...prev[rowId], [key]: '' } }));
+  };
+
+  const handleDeleteRow = (rowId) => {
+    const row = rows.find(r => r._rowId === rowId);
+    if (!row) return;
+    setDeleteTarget(row);
+  };
+
+  const confirmDeleteRow = async () => {
+    if (!deleteTarget) return;
+    const row = deleteTarget;
+    setDeleteTarget(null);
+    setDeletingRowId(row._rowId);
+    setApiErr('');
     try {
-      const payload = {
-        landPaymentID: isAdd ? 0 : payment.landPaymentID,
-        ownerID: Number(form.ownerID),
-        landContractID: Number(form.landContractID),
-        hoardingID: Number(form.hoardingID) || 0,
-        paymentDate: form.paymentDate,
-        paymentPurpose: form.paymentPurpose,
-        amountPaid: Number(form.amountPaid),
-        paymentMode: form.paymentMode,
-        nextDueDate: form.nextDueDate || null,
-        bankName: form.bankName || '',
-        referenceNumber: form.referenceNumber || '',
-        paidBy: form.paidBy,
-        comments: form.comments || '',
-      };
+      if (row._paymentID) {
+        await apiService.deleteLandPayment(row._paymentID);
+      }
+      setRows(prev => prev.filter(r => r._rowId !== row._rowId));
+      setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Failed to delete payment.';
+      setApiErr(msg);
+    } finally {
+      setDeletingRowId(null);
+    }
+  };
 
-      let saved;
-      if (isAdd) {
-        const res = await apiService.createLandPayment(payload);
-        saved = normalizePayment(res?.data ?? res ?? payload);
-      } else {
-        const res = await apiService.updateLandPayment(payment.landPaymentID, payload);
-        saved = normalizePayment(res?.data ?? res ?? { ...payload, landPaymentID: payment.landPaymentID });
+  const handleSave = () => {
+    let hasHeaderErr = false;
+    if (!ownerID) { setOwnerError('Owner is required'); hasHeaderErr = true; }
+    else setOwnerError('');
+    if (!landContractID) { setContractError('Contract is required'); hasHeaderErr = true; }
+    else setContractError('');
+    if (hasHeaderErr) return;
+
+    const newRowErrors = {};
+    let hasErr = false;
+    rows.forEach(r => { const e = validateRow(r); if (Object.keys(e).length) { newRowErrors[r._rowId] = e; hasErr = true; } });
+
+    const entryHasData = Object.entries(currentRow)
+      .filter(([k]) => k !== '_rowId')
+      .some(([, v]) => v !== '');
+
+    if (showEntryForm && entryHasData) {
+      const errs = validateRow(currentRow);
+      if (Object.keys(errs).length) { setCurrentErrors(errs); return; }
+      if (hasErr) { setRowErrors(newRowErrors); return; }
+      _doSave([...rows, { ...currentRow }]);
+      return;
+    }
+
+    if (rows.length === 0) { setApiErr('Please add at least one payment row.'); return; }
+    if (hasErr) { setRowErrors(newRowErrors); return; }
+    _doSave(rows);
+  };
+
+  const _doSave = async (allRows) => {
+    setSaving(true); setApiErr('');
+    const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
+    const hoardingID = Number(contract?.hoardingID || 0);
+    const attachErrors = [];
+    try {
+      for (const row of allRows) {
+        const payload = {
+          ownerID: Number(ownerID),
+          landContractID: Number(landContractID),
+          hoardingID,
+          paymentDate: row.paymentDate,
+          paymentPurpose: row.paymentPurpose,
+          amountPaid: Number(row.amountPaid),
+          paymentMode: row.paymentMode,
+          nextDueDate: row.nextDueDate || null,
+          bankName: row.bankName || '',
+          referenceNumber: row.referenceNumber || '',
+          paidBy: row.paidBy,
+          comments: row.comments || '',
+        };
+
+        let resolvedID = row._paymentID;
+        if (!row._paymentID) {
+          const created = await apiService.createLandPayment(payload);
+          resolvedID = created?.landPaymentID ?? created?.id ?? null;
+        } else {
+          await apiService.updateLandPayment(row._paymentID, payload);
+        }
+
+        const file = attachFiles[row._rowId];
+        if (file && resolvedID) {
+          setUploadingRowIds(prev => new Set(prev).add(row._rowId));
+          try {
+            await apiService.createLandPaymentAttach(
+              resolvedID, Number(ownerID),
+              Number(landContractID), hoardingID, file
+            );
+          } catch (e) {
+            attachErrors.push(e?.response?.data?.message || e?.message || 'Upload failed');
+          } finally {
+            setUploadingRowIds(prev => { const n = new Set(prev); n.delete(row._rowId); return n; });
+          }
+        }
       }
 
-      setSaveOk(true);
-      await new Promise(r => setTimeout(r, 700));
-      onSave(saved, isAdd);
-      onBack();
+      if (attachErrors.length) {
+        setApiErr(`Payments saved, but ${attachErrors.length} attachment(s) failed: ${attachErrors[0]}`);
+        setSaveOk(true);
+        setTimeout(() => { onRefresh(); onBack(); }, 2500);
+      } else {
+        setSaveOk(true);
+        setTimeout(() => { onRefresh(); onBack(); }, 700);
+      }
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Save failed.';
-      setApiErr(typeof msg === 'string' ? msg : JSON.stringify(msg));
+      setApiErr(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Save failed.');
     } finally {
       setSaving(false);
     }
   };
 
-  const selectedHoarding = hoardings.find(h =>
-    h.hoardingID === Number(form.hoardingID) || h.hoardingID === form.hoardingID
-  );
+  const totalAmount = rows.reduce((s, r) => s + (Number(r.amountPaid) || 0), 0);
+  const saveLabel = `Save ${rows.length > 0 ? rows.length : ''} Payment${rows.length !== 1 ? 's' : ''}`.trim();
+
+  // resolve display info
+  const owner = owners.find(o => o.ownerID === Number(ownerID) || String(o.ownerID) === String(ownerID));
+  const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
+  const hoarding = hoardings.find(h => h.hoardingID === Number(contract?.hoardingID));
+  const editTitle = owner && contract
+    ? `${owner.ownerName} — Contract #${contract.landContractID}${hoarding ? ` · ${hoardingLabel(hoarding)}` : ''}`
+    : `Group: ${groupKey}`;
 
   return (
     <div className="hd-form-page">
+      {deleteTarget && (
+        <DeleteRowModal
+          row={deleteTarget}
+          onConfirm={confirmDeleteRow}
+          onCancel={() => setDeleteTarget(null)}
+          deleting={!!deletingRowId}
+        />
+      )}
+
       <div className="hd-topbar">
         <div className="hd-topbar-left">
-          <button className="hd-back-btn" onClick={onBack}>
+          <button className="hd-back-btn" onClick={onBack} disabled={saving}>
             <ArrowLeft size={14} />
             <span className="d-none d-sm-inline">Back to Payments</span>
             <span className="d-inline d-sm-none">Back</span>
@@ -772,10 +1464,12 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
           <div className="hd-topbar-divider" />
           <div>
             <div className="hd-topbar-title">
-              {isAdd ? 'Record New Land Payment' : `Edit Payment #${payment?.landPaymentID}`}
+              {isAdd ? 'Record New Land Payments' : `Edit Payments — ${editTitle}`}
             </div>
             <div className="hd-topbar-sub">
-              {isAdd ? 'Enter payment details and save' : 'Update land payment details'}
+              {isAdd
+                ? 'Select owner & contract, then add one or more payment rows'
+                : `${rows.length} payment row${rows.length !== 1 ? 's' : ''} · ${fmtCurrency(totalAmount)}`}
             </div>
           </div>
         </div>
@@ -786,258 +1480,129 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
           {apiErr && (
             <div className="pg-field-error hd-api-error mb-3">
               <AlertCircle size={14} /><span>{apiErr}</span>
+              <button
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}
+                onClick={() => setApiErr('')}
+              >✕</button>
             </div>
           )}
 
           <div className="row g-4">
 
-            {/* ── Owner & Contract ── */}
+            {/* ── Owner & Contract (locked in edit mode) ── */}
             <div className="col-12">
               <div className="hd-section-card">
                 <div className="hd-section-head">
                   <div className="hd-section-icon-wrap"><User size={14} color="#049edf" /></div>
                   <div>
                     <div className="hd-section-title">Owner &amp; Contract</div>
-                    <div className="hd-section-sub">Link this payment to an owner and land contract</div>
+                    <div className="hd-section-sub">
+                      {isAdd
+                        ? 'All payment rows will be linked to this owner and contract'
+                        : 'Owner and contract are locked for existing payment group'}
+                    </div>
                   </div>
                 </div>
                 <div className="hd-section-body">
                   <div className="row g-3">
-
-                    {/* Owner */}
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Owner" required />
                       <OwnerSearchWidget
                         owners={owners}
-                        value={form.ownerID}
-                        onChange={val => set('ownerID', val)}
-                        error={errors.ownerID}
+                        value={ownerID}
+                        onChange={val => {
+                          setOwnerID(val);
+                          setLandContractID('');
+                          if (val) setOwnerError('');
+                        }}
+                        error={ownerError}
                         disabled={!isAdd}
                       />
-                      <FieldError msg={errors.ownerID} />
+                      <FieldError msg={ownerError} />
                     </div>
-
-                    {/* Contract */}
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Land Contract" required />
                       <ContractDropdown
                         contracts={contracts}
                         hoardings={hoardings}
-                        ownerID={form.ownerID}
-                        value={form.landContractID}
-                        onChange={val => set('landContractID', val)}
-                        error={errors.landContractID}
+                        ownerID={ownerID}
+                        value={landContractID}
+                        onChange={val => {
+                          setLandContractID(val);
+                          if (val) setContractError('');
+                        }}
+                        error={contractError}
                         disabled={!isAdd}
                       />
-                      <FieldError msg={errors.landContractID} />
+                      <FieldError msg={contractError} />
                     </div>
-
-                    {/* Hoarding (auto-filled, read-only display) */}
-                    {/* {selectedHoarding && (
-                      <div className="col-12">
-                        <div className="lc-selected-card" style={{ margin: 0 }}>
-                          <div className="lc-selected-card__icon"><Building2 size={15} color="#6c63ff" /></div>
-                          <div className="lc-selected-card__info">
-                            <div className="lc-selected-card__name" style={{ color: '#6c63ff' }}>
-                              {selectedHoarding.hoardingCode}
-                              {selectedHoarding.width && selectedHoarding.height && (
-                                <span style={{ color: '#9090a8', fontWeight: 500, marginLeft: 8 }}>
-                                  {selectedHoarding.width}x{selectedHoarding.height} ft
-                                </span>
-                              )}
-                            </div>
-                            <div className="lc-selected-card__sub">
-                              {[selectedHoarding.material, selectedHoarding.status].filter(Boolean).join(' · ')}
-                              <span style={{ color: '#b0b0c8', fontSize: 11, marginLeft: 8 }}>Auto-filled from contract</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )} */}
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* ── Payment Details ── */}
+            {/* ── Payment Entries ── */}
             <div className="col-12">
               <div className="hd-section-card">
                 <div className="hd-section-head">
-                  <div className="hd-section-icon-wrap"><IndianRupee size={14} color="#049edf" /></div>
-                  <div>
-                    <div className="hd-section-title">Payment Details</div>
-                    <div className="hd-section-sub">Date, amount, purpose and payment method</div>
-                  </div>
-                </div>
-                <div className="hd-section-body">
-                  <div className="row g-3">
-
-                    {/* Payment Date */}
-                    <div className="col-12 col-md-6">
-                      <FieldLabel label="Payment Date" required />
-                      <InputWrap error={errors.paymentDate} icon={Calendar}>
-                        <input
-                          className="pg-field-input" type="date"
-                          value={form.paymentDate}
-                          onChange={e => set('paymentDate', e.target.value)}
-                        />
-                      </InputWrap>
-                      <FieldError msg={errors.paymentDate} />
-                    </div>
-
-                    {/* Next Due Date */}
-                    <div className="col-12 col-md-6">
-                      <FieldLabel label="Next Due Date" optional />
-                      <InputWrap error={errors.nextDueDate} icon={Calendar}>
-                        <input
-                          className="pg-field-input" type="date"
-                          value={form.nextDueDate}
-                          min={form.paymentDate || undefined}
-                          onChange={e => set('nextDueDate', e.target.value)}
-                        />
-                      </InputWrap>
-                      <FieldError msg={errors.nextDueDate} />
-                    </div>
-
-                    {/* Amount Paid */}
-                    <div className="col-12 col-md-6">
-                      <FieldLabel label="Amount Paid (Rs.)" required />
-                      <InputWrap error={errors.amountPaid} icon={IndianRupee}>
-                        <CurrencyInput
-                          value={form.amountPaid}
-                          onChange={val => set('amountPaid', val)}
-                          placeholder="e.g. 25,000"
-                        />
-                      </InputWrap>
-                      <FieldError msg={errors.amountPaid} />
-                    </div>
-
-                    {/* Payment Purpose */}
-                    <div className="col-12 col-md-6">
-                      <FieldLabel label="Payment Purpose" required />
-                      <ComboDropdown
-                        value={form.paymentPurpose}
-                        onChange={val => set('paymentPurpose', val)}
-                        onBlur={() => { }}
-                        hasError={!!errors.paymentPurpose}
-                        placeholder="Select purpose…"
-                        icon={Receipt}
-                        options={PAYMENT_PURPOSE_OPTIONS}
-                      />
-                      <FieldError msg={errors.paymentPurpose} />
-                    </div>
-
-                    {/* Payment Mode */}
-                    <div className="col-12 col-md-6">
-                      <FieldLabel label="Payment Mode" required />
-                      <ComboDropdown
-                        value={form.paymentMode}
-                        onChange={val => set('paymentMode', val)}
-                        onBlur={() => { }}
-                        hasError={!!errors.paymentMode}
-                        placeholder="Select mode…"
-                        icon={CreditCard}
-                        options={PAYMENT_MODE_OPTIONS}
-                      />
-                      <FieldError msg={errors.paymentMode} />
-                    </div>
-
-                    {/* Paid By */}
-                    <div className="col-12 col-md-6">
-                      <FieldLabel label="Paid By" required />
-                      <InputWrap error={errors.paidBy} icon={User}>
-                        <input
-                          className="pg-field-input"
-                          placeholder="Name of person / company who paid"
-                          value={form.paidBy}
-                          onChange={e => set('paidBy', e.target.value)}
-                          autoComplete="off"
-                        />
-                      </InputWrap>
-                      <FieldError msg={errors.paidBy} />
-                    </div>
-
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Bank & Reference (conditional) ── */}
-            <div className="col-12">
-              <div className="hd-section-card">
-                <div className="hd-section-head">
-                  <div className="hd-section-icon-wrap"><Landmark size={14} color="#049edf" /></div>
-                  <div>
-                    <div className="hd-section-title">Bank &amp; Reference Details</div>
+                  <div className="hd-section-icon-wrap"><Receipt size={14} color="#049edf" /></div>
+                  <div style={{ flex: 1 }}>
+                    <div className="hd-section-title">Payment Entries</div>
                     <div className="hd-section-sub">
-                      {showBankFields
-                        ? 'Fill bank and reference info for this payment mode'
-                        : 'Applicable for Cheque, NEFT, RTGS, Bank Transfer, DD'}
+                      {isAdd
+                        ? 'Add one or more payment rows for this contract'
+                        : `${rows.length} payment row${rows.length !== 1 ? 's' : ''} · ${fmtCurrency(totalAmount)}`}
                     </div>
                   </div>
+                  {!isAdd && (
+                    <button
+                      className={`exp-toggle-btn${showEntryForm ? ' exp-toggle-btn--cancel' : ''}`}
+                      onClick={() => { setShowEntryForm(v => !v); setCurrentErrors({}); }}
+                    >
+                      {showEntryForm ? <><X size={13} /> Cancel</> : <><Plus size={13} /> Add Payment Row</>}
+                    </button>
+                  )}
                 </div>
                 <div className="hd-section-body">
-                  <div className="row g-3">
-                    <div className="col-12 col-md-6">
-                      <FieldLabel label="Bank Name" optional />
-                      <InputWrap error={errors.bankName} icon={Landmark}>
-                        <input
-                          className="pg-field-input"
-                          placeholder={showBankFields ? 'e.g. State Bank of India' : 'N/A for this payment mode'}
-                          value={form.bankName}
-                          onChange={e => set('bankName', e.target.value)}
-                          autoComplete="off"
-                          disabled={!showBankFields}
-                          style={!showBankFields ? { color: '#b0b0c8', cursor: 'not-allowed' } : {}}
-                        />
-                      </InputWrap>
-                      <FieldError msg={errors.bankName} />
+                  {showEntryForm && (
+                    <>
+                      <QuickAddPanel row={currentRow} errors={currentErrors} onChange={handleCurrentChange} />
+                      <div className="exp-addrow-bar">
+                        <button className="exp-btn-addrow" onClick={handleAddRow}>
+                          <Plus size={14} /> Add Payment Row
+                        </button>
+                        {rows.length > 0 && (
+                          <span className="exp-addrow-hint">
+                            {rows.length} row{rows.length !== 1 ? 's' : ''} queued · {fmtCurrency(totalAmount)}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                  {!attachLoadDone && (
+                    <div className="ea-loading-bar">
+                      <Loader2 size={13} className="pg-spin" /> Loading existing attachments…
                     </div>
+                  )}
+                  <PaymentRowsTable
+                    rows={rows}
+                    rowErrors={rowErrors}
+                    onChangeRow={handleChangeRow}
+                    onDeleteRow={handleDeleteRow}
+                    deletingRowId={deletingRowId}
+                    attachFiles={attachFiles}
+                    existingAttaches={existingAttaches}
+                    uploadingRowIds={uploadingRowIds}
+                    onFileSelect={handleFileSelect}
+                    onFileClear={handleFileClear}
+                  />
 
-                    <div className="col-12 col-md-6">
-                      <FieldLabel label="Reference / Cheque Number" optional />
-                      <InputWrap error={errors.referenceNumber} icon={Hash}>
-                        <input
-                          className="pg-field-input"
-                          placeholder={showBankFields ? 'Transaction / Cheque number' : 'N/A for this payment mode'}
-                          value={form.referenceNumber}
-                          onChange={e => set('referenceNumber', e.target.value)}
-                          autoComplete="off"
-                          disabled={!showBankFields}
-                          style={!showBankFields ? { color: '#b0b0c8', cursor: 'not-allowed' } : {}}
-                        />
-                      </InputWrap>
-                      <FieldError msg={errors.referenceNumber} />
+                  {!isAdd && rows.length === 0 && !showEntryForm && (
+                    <div className="exp-edit-empty">
+                      <Receipt size={28} color="#d0d0e8" />
+                      <span>No payment rows. Click <strong>Add Payment Row</strong> above to add one.</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Comments ── */}
-            <div className="col-12">
-              <div className="hd-section-card">
-                <div className="hd-section-head">
-                  <div className="hd-section-icon-wrap"><MessageSquare size={14} color="#049edf" /></div>
-                  <div>
-                    <div className="hd-section-title">Notes</div>
-                    <div className="hd-section-sub">Any additional remarks about this payment</div>
-                  </div>
-                </div>
-                <div className="hd-section-body">
-                  <div className="row g-3">
-                    <div className="col-12">
-                      <FieldLabel label="Comments" optional />
-                      <InputWrap icon={MessageSquare}>
-                        <textarea
-                          className="pg-field-input lc-textarea" rows={3}
-                          placeholder="Any notes or remarks about this payment..."
-                          value={form.comments}
-                          onChange={e => set('comments', e.target.value)}
-                        />
-                      </InputWrap>
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1048,12 +1613,15 @@ function PaymentForm({ mode, payment, owners, hoardings, contracts, onBack, onSa
 
       <div className="hd-form-footer hd-form-footer--sticky">
         <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
-        <button className="pg-btn-save" onClick={handleSave} disabled={saving}>
+        <button className="pg-btn-save" onClick={handleSave}
+          disabled={saving || !!deletingRowId || uploadingRowIds.size > 0}>
           {saveOk
             ? <><Check size={13} /> Saved!</>
             : saving
-              ? <><Loader2 size={13} className="pg-spin" /> Saving...</>
-              : <><Check size={13} /> {isAdd ? 'Save Payment' : 'Update Payment'}</>}
+              ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
+              : uploadingRowIds.size > 0
+                ? <><Loader2 size={13} className="pg-spin" /> Uploading…</>
+                : <><Check size={13} /> {saveLabel}</>}
         </button>
       </div>
     </div>
@@ -1073,19 +1641,19 @@ export default function LandPaymentPage() {
 
   const [view, setView] = useState('grid');
   const [formMode, setFormMode] = useState(null);
-  const [editTarget, setEditTarget] = useState(null);
+  const [editGroupKey, setEditGroupKey] = useState(null); // "ownerID_contractID"
 
   const [search, setSearch] = useState('');
   const [modeFilter, setModeFilter] = useState('');
-  const [sortKey, setSortKey] = useState('paymentDate');
-  const [sortDir, setSortDir] = useState('desc');
+  const [sortKey, setSortKey] = useState('ownerName');
+  const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loadingMeta) setTableReady(true); }, [loadingMeta]);
-  useResizableColumns(tableRef, tableReady, [60, 150, 150, 110, 110, 130, 120, 110, 80]);
+  useResizableColumns(tableRef, tableReady, [200, 180, 100, 110, 80]);
 
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
@@ -1097,12 +1665,8 @@ export default function LandPaymentPage() {
         apiService.getAllLandPayments(),
       ]);
 
-      setOwners(
-        Array.isArray(rawOwners) ? rawOwners : Array.isArray(rawOwners?.data) ? rawOwners.data : []
-      );
-      setHoardings(
-        Array.isArray(rawHoardings) ? rawHoardings : Array.isArray(rawHoardings?.data) ? rawHoardings.data : []
-      );
+      setOwners(Array.isArray(rawOwners) ? rawOwners : Array.isArray(rawOwners?.data) ? rawOwners.data : []);
+      setHoardings(Array.isArray(rawHoardings) ? rawHoardings : Array.isArray(rawHoardings?.data) ? rawHoardings.data : []);
 
       const contractList = Array.isArray(rawContracts)
         ? rawContracts
@@ -1129,46 +1693,55 @@ export default function LandPaymentPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const handleSave = (record, isNew) => {
-    if (isNew) setPayments(prev => [record, ...prev]);
-    else setPayments(prev => prev.map(p => p.landPaymentID === record.landPaymentID ? record : p));
-  };
+  /* ── Group payments by ownerID + landContractID ── */
+  const groupedRows = React.useMemo(() => {
+    const map = {};
+    payments.forEach(p => {
+      const key = `${p.ownerID}_${p.landContractID}`;
+      if (!map[key]) {
+        const owner = owners.find(o => o.ownerID === Number(p.ownerID) || o.ownerID === p.ownerID);
+        const hoarding = hoardings.find(h => h.hoardingID === Number(p.hoardingID) || h.hoardingID === p.hoardingID);
+        const contract = contracts.find(c => String(c.landContractID) === String(p.landContractID));
+        map[key] = {
+          groupKey: key,
+          ownerID: p.ownerID,
+          landContractID: p.landContractID,
+          ownerName: owner?.ownerName || `Owner ID ${p.ownerID}`,
+          hoardingLabel: hoarding ? hoardingLabel(hoarding) : `Hoarding ID ${p.hoardingID}`,
+          contractStatus: contract?.status || '',
+          totalAmount: 0,
+          count: 0,
+          modes: new Set(),
+          lastPaymentDate: '',
+          _firstPayment: p,
+        };
+      }
+      map[key].totalAmount += Number(p.amountPaid) || 0;
+      map[key].count += 1;
+      if (p.paymentMode) map[key].modes.add(p.paymentMode);
+      if (p.paymentDate && p.paymentDate > map[key].lastPaymentDate) {
+        map[key].lastPaymentDate = p.paymentDate;
+      }
+    });
+    return Object.values(map);
+  }, [payments, owners, hoardings, contracts]);
 
-  /* ── Derived table rows ── */
-  const tableRows = payments.map(p => {
-    const owner = owners.find(o => o.ownerID === Number(p.ownerID) || o.ownerID === p.ownerID);
-    const hoarding = hoardings.find(h => h.hoardingID === Number(p.hoardingID) || h.hoardingID === p.hoardingID);
-    return {
-      landPaymentID: p.landPaymentID,
-      ownerName: owner?.ownerName || `Owner ID ${p.ownerID}`,
-      hoardingLabel: hoarding ? hoardingLabel(hoarding) : `Hoarding ID ${p.hoardingID}`,
-      landContractID: p.landContractID,
-      paymentDate: p.paymentDate || '',
-      nextDueDate: p.nextDueDate || '',
-      paymentPurpose: p.paymentPurpose || '',
-      amountPaid: p.amountPaid ?? 0,
-      paymentMode: p.paymentMode || '',
-      paidBy: p.paidBy || '',
-      _raw: p,
-    };
-  });
-
-  const filtered = tableRows.filter(r => {
+  const filtered = groupedRows.filter(r => {
     const q = search.toLowerCase();
     const matchQ =
       r.ownerName.toLowerCase().includes(q) ||
       r.hoardingLabel.toLowerCase().includes(q) ||
-      r.paymentPurpose.toLowerCase().includes(q) ||
-      r.paymentMode.toLowerCase().includes(q) ||
-      r.paidBy.toLowerCase().includes(q) ||
-      String(r.landPaymentID).includes(q) ||
-      String(r.landContractID).includes(q);
-    return matchQ && (!modeFilter || r.paymentMode === modeFilter);
+      String(r.landContractID).includes(q) ||
+      String(r.ownerID).includes(q);
+    const matchMode = !modeFilter || r.modes.has(modeFilter);
+    return matchQ && matchMode;
   });
 
   const sortedRows = [...filtered].sort((a, b) => {
-    if (sortKey === 'amountPaid')
-      return sortDir === 'asc' ? a.amountPaid - b.amountPaid : b.amountPaid - a.amountPaid;
+    if (sortKey === 'totalAmount')
+      return sortDir === 'asc' ? a.totalAmount - b.totalAmount : b.totalAmount - a.totalAmount;
+    if (sortKey === 'count')
+      return sortDir === 'asc' ? a.count - b.count : b.count - a.count;
     const av = String(a[sortKey] ?? '').toLowerCase();
     const bv = String(b[sortKey] ?? '').toLowerCase();
     return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
@@ -1197,28 +1770,34 @@ export default function LandPaymentPage() {
     }, []);
 
   const COLS = [
-    { key: 'landPaymentID', label: '#ID' },
     { key: 'ownerName', label: 'Owner' },
     { key: 'hoardingLabel', label: 'Hoarding', tabletHide: true },
-    { key: 'paymentDate', label: 'Pay Date' },
-    { key: 'nextDueDate', label: 'Next Due', tabletHide: true },
-    { key: 'paymentPurpose', label: 'Purpose', tabletHide: true },
-    { key: 'amountPaid', label: 'Amount' },
-    { key: 'paymentMode', label: 'Mode' },
+    { key: 'totalAmount', label: 'Total Paid' },
+    { key: 'count', label: 'Payments', tabletHide: true },
     { key: '_action', label: 'Actions', noSort: true },
   ];
+
+  const contractStatusStyle = (s) => {
+    if (!s) return { color: '#9090a8', background: '#f0f0f8' };
+    const l = s.toLowerCase();
+    if (l === 'active') return { color: '#16a34a', background: '#f0fdf4' };
+    if (l === 'inactive') return { color: '#dc2626', background: '#fef2f2' };
+    if (l === 'expired') return { color: '#d97706', background: '#fffbeb' };
+    return { color: '#7c3aed', background: '#faf5ff' };
+  };
 
   /* ── Form view ── */
   if (view === 'form') {
     return (
       <PaymentForm
         mode={formMode}
-        payment={editTarget}
+        groupKey={editGroupKey}
+        allPayments={payments}
         owners={owners}
         hoardings={hoardings}
         contracts={contracts}
-        onBack={() => { setView('grid'); setEditTarget(null); }}
-        onSave={handleSave}
+        onBack={() => { setView('grid'); setEditGroupKey(null); }}
+        onRefresh={fetchAll}
       />
     );
   }
@@ -1236,7 +1815,7 @@ export default function LandPaymentPage() {
         </div>
         <button
           className="pg-btn-add"
-          onClick={() => { setFormMode('add'); setEditTarget(null); setView('form'); }}
+          onClick={() => { setFormMode('add'); setEditGroupKey(null); setView('form'); }}
           disabled={loadingMeta}
         >
           <Plus size={14} /> Record Payment
@@ -1279,13 +1858,16 @@ export default function LandPaymentPage() {
         <div className="pg-toolbar">
           <div className="pg-toolbar__inner">
             <div className="pg-toolbar__count">
-              <Receipt size={14} color="#9090a8" />
-              <span><strong>{loadingMeta ? '...' : filtered.length}</strong> payment{filtered.length !== 1 ? 's' : ''}</span>
+              <User size={14} color="#9090a8" />
+              <span>
+                <strong>{loadingMeta ? '...' : filtered.length}</strong> owner–contract
+                {filtered.length !== 1 ? 's' : ''}
+              </span>
             </div>
             <div className="pg-search-box">
               <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
               <input
-                placeholder="Search owner, hoarding, purpose, ref..."
+                placeholder="Search owner, hoarding, contract ID..."
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
               />
@@ -1331,7 +1913,7 @@ export default function LandPaymentPage() {
           </div>
         )}
 
-        {/* Desktop Table */}
+        {/* Desktop Table — grouped rows */}
         {!loadingMeta && payments.length > 0 && (
           <div className="pg-desktop-table">
             <table className="pg-table" ref={tableRef}>
@@ -1362,37 +1944,74 @@ export default function LandPaymentPage() {
                     </td>
                   </tr>
                 ) : paginated.map(r => {
-                  const mst = paymentModeStyle(r.paymentMode);
+                  const cst = contractStatusStyle(r.contractStatus);
+                  const modesArr = Array.from(r.modes).slice(0, 3);
                   return (
-                    <tr key={r.landPaymentID} className="pg-tr">
-                      <td className="pg-td"><span className="lc-id-badge">#{r.landPaymentID}</span></td>
+                    <tr key={r.groupKey} className="pg-tr">
+                      {/* Owner */}
                       <td className="pg-td">
                         <div className="pg-td__primary">{r.ownerName}</div>
-                        <div style={{ fontSize: 11, color: '#9090a8', marginTop: 1 }}>Contract #{r.landContractID}</div>
+                        <div style={{ fontSize: 11, color: '#9090a8', marginTop: 1 }}>
+                          Contract #{r.landContractID}
+                          {r.contractStatus && (
+                            <span style={{
+                              marginLeft: 6, fontSize: 10, fontWeight: 700,
+                              padding: '1px 6px', borderRadius: 20, ...cst,
+                            }}>
+                              {r.contractStatus}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="pg-td pg-td--overflow pg-tablet-hide">
+
+                      {/* Hoarding */}
+                      <td className="pg-td pg-tablet-hide">
                         <span className="pg-td__ellipsis" title={r.hoardingLabel}>{r.hoardingLabel}</span>
+                        {r.lastPaymentDate && (
+                          <div style={{ fontSize: 11, color: '#9090a8', marginTop: 1 }}>
+                            Last: {fmtDate(r.lastPaymentDate)}
+                          </div>
+                        )}
                       </td>
-                      <td className="pg-td"><span className="pg-td__primary">{fmtDate(r.paymentDate)}</span></td>
-                      <td className="pg-td pg-tablet-hide">
-                        <span className="pg-td__primary">{fmtDate(r.nextDueDate)}</span>
-                      </td>
-                      <td className="pg-td pg-tablet-hide">
-                        <span style={{ fontSize: 12, color: '#5a5a7a', fontWeight: 600 }}>{r.paymentPurpose || '—'}</span>
-                      </td>
+
+                      {/* Total Amount */}
                       <td className="pg-td">
-                        <span className="lc-amount-val">{fmtCurrency(r.amountPaid)}</span>
+                        <span className="exp-amount-val">{fmtCurrency(r.totalAmount)}</span>
                       </td>
-                      <td className="pg-td">
-                        <span className="lc-status-badge" style={{ background: mst.bg, color: mst.color, borderColor: mst.border }}>
-                          {r.paymentMode || '—'}
-                        </span>
+
+                      {/* Count + modes */}
+                      <td className="pg-td pg-tablet-hide">
+                        <div style={{ fontSize: 12, color: '#5a5a7a', fontWeight: 700 }}>
+                          {r.count} payment{r.count !== 1 ? 's' : ''}
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 3 }}>
+                          {modesArr.map(m => {
+                            const mst = paymentModeStyle(m);
+                            return (
+                              <span key={m} className="lc-status-badge"
+                                style={{ background: mst.bg, color: mst.color, borderColor: mst.border, fontSize: 10 }}>
+                                {m}
+                              </span>
+                            );
+                          })}
+                          {r.modes.size > 3 && (
+                            <span style={{ fontSize: 10, color: '#9090a8', alignSelf: 'center' }}>
+                              +{r.modes.size - 3} more
+                            </span>
+                          )}
+                        </div>
                       </td>
+
+                      {/* Actions */}
                       <td className="pg-td">
                         <div className="pg-action-wrap">
                           <button
-                            className="pg-btn-view" title="Edit"
-                            onClick={() => { setFormMode('edit'); setEditTarget(r._raw); setView('form'); }}
+                            className="pg-btn-view" title="View / Edit"
+                            onClick={() => {
+                              setFormMode('edit');
+                              setEditGroupKey(r.groupKey);
+                              setView('form');
+                            }}
                           >
                             <Edit2 size={13} />
                           </button>
@@ -1415,39 +2034,58 @@ export default function LandPaymentPage() {
                 <span className="pg-empty__label">No payments match</span>
               </div>
             ) : paginated.map(r => {
-              const mst = paymentModeStyle(r.paymentMode);
+              const modesArr = Array.from(r.modes).slice(0, 2);
               return (
-                <div key={r.landPaymentID} className="pg-card">
+                <div key={r.groupKey} className="pg-card">
                   <div className="pg-card__header">
                     <div className="pg-card__title-wrap">
-                      <div className="pg-card__title">
-                        <span className="lc-id-badge">#{r.landPaymentID}</span>&nbsp; {r.ownerName}
-                      </div>
+                      <div className="pg-card__title">{r.ownerName}</div>
                       <div className="pg-card__subtitle">{r.hoardingLabel}</div>
                     </div>
                     <div className="pg-card__actions">
-                      <button className="pg-card__btn-view" onClick={() => { setFormMode('edit'); setEditTarget(r._raw); setView('form'); }} title="Edit"><Edit2 size={13} /></button>
+                      <button
+                        className="pg-card__btn-view"
+                        onClick={() => { setFormMode('edit'); setEditGroupKey(r.groupKey); setView('form'); }}
+                        title="Edit"
+                      >
+                        <Edit2 size={13} />
+                      </button>
                     </div>
                   </div>
                   <div className="pg-card__body">
                     <div className="pg-card__row">
-                      <Calendar size={12} color="#c0c0d8" className="pg-card__row-icon" />
-                      <span className="pg-card__row-text">{fmtDate(r.paymentDate)}</span>
-                      {r.nextDueDate && (
-                        <span style={{ color: '#9090a8', fontSize: 11, marginLeft: 4 }}>→ Due: {fmtDate(r.nextDueDate)}</span>
-                      )}
-                    </div>
-                    <div className="pg-card__row">
                       <IndianRupee size={12} color="#c0c0d8" className="pg-card__row-icon" />
-                      <span className="pg-card__row-text" style={{ fontWeight: 800, color: '#1a1a2e' }}>{fmtCurrency(r.amountPaid)}</span>
-                      <span style={{ color: '#9090a8', fontSize: 11, marginLeft: 4 }}>{r.paymentPurpose}</span>
-                    </div>
-                    <div className="pg-card__row">
-                      <CreditCard size={12} color="#c0c0d8" className="pg-card__row-icon" />
-                      <span className="lc-status-badge" style={{ background: mst.bg, color: mst.color, borderColor: mst.border }}>
-                        {r.paymentMode || '—'}
+                      <span className="pg-card__row-text" style={{ fontWeight: 800, color: '#1a1a2e' }}>
+                        {fmtCurrency(r.totalAmount)}
+                      </span>
+                      <span style={{ color: '#9090a8', fontSize: 11, marginLeft: 4 }}>
+                        {r.count} payment{r.count !== 1 ? 's' : ''}
                       </span>
                     </div>
+                    <div className="pg-card__row">
+                      <FileText size={12} color="#c0c0d8" className="pg-card__row-icon" />
+                      <span className="pg-card__row-text">Contract #{r.landContractID}</span>
+                    </div>
+                    {r.lastPaymentDate && (
+                      <div className="pg-card__row">
+                        <Calendar size={12} color="#c0c0d8" className="pg-card__row-icon" />
+                        <span className="pg-card__row-text">Last: {fmtDate(r.lastPaymentDate)}</span>
+                      </div>
+                    )}
+                    {modesArr.length > 0 && (
+                      <div className="pg-card__row" style={{ flexWrap: 'wrap', gap: 4 }}>
+                        <CreditCard size={12} color="#c0c0d8" className="pg-card__row-icon" />
+                        {modesArr.map(m => {
+                          const mst = paymentModeStyle(m);
+                          return (
+                            <span key={m} className="lc-status-badge"
+                              style={{ background: mst.bg, color: mst.color, borderColor: mst.border, fontSize: 10 }}>
+                              {m}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               );
@@ -1483,7 +2121,6 @@ export default function LandPaymentPage() {
           </div>
         )}
       </div>
-
     </div>
   );
 }

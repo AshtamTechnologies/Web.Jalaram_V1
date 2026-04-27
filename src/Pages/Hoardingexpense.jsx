@@ -7,10 +7,14 @@ import {
   ChevronLeft, ChevronRight, MapPin, Loader2,
   FileText, ArrowLeft,
   Building2, Tag, MessageSquare, User, IndianRupee, Trash2,
+  Paperclip, FileCheck, UploadCloud, Eye, Download,
+  Image as ImageIcon,
 } from 'lucide-react';
-import { apiService } from '../api/api';
+import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
+// import './expense-attach.css';
 import { useResizableColumns } from '../hooks/useResizableColumns';
+
 /* ─────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────── */
@@ -21,13 +25,57 @@ const EXPENSE_TYPE_OPTIONS = [
   'LABOUR', 'Concrete', 'CISSOR STRUCTURE', 'FITTING STUFF', 'VARI PATRI',
   'NUT - BOLT', 'WOODEN PATTI', 'ANGLE FOR SUPPORT',
 ];
-
 const EXPENSE_TYPE_COMBO_OPTIONS = EXPENSE_TYPE_OPTIONS.map(t => ({ value: t, label: t }));
 
 const EMPTY_ROW = {
   _rowId: '', expenseDate: '', expenseType: '',
   expenseDTL: '', amount: '', paidBy: '', comments: '',
 };
+
+/* ─────────────────────────────────────────
+   ATTACHMENT HELPERS  (URL from api.js root)
+───────────────────────────────────────── */
+// In HoardingExpensePage.jsx — replace getAttachUrl:
+function getAttachUrl(attach) {
+  if (!attach) return null;
+  const raw =
+    attach.horadingExpenseFilePath ||  // server typo, camelCase
+    attach.HoradingExpenseFilePath ||  // server typo, PascalCase (some serializers)
+    attach.fileUrl                 ||
+    attach.filePath                ||
+    attach.horadingExpenseFilePath ||
+    attach.attachFilePath          ||
+    attach.url                     ||
+    attach.path                    ||
+    null;
+  if (!raw) return null;
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  return `${API_ROOT_URL}/${raw.replace(/^\/+/, '')}`;
+}
+
+// Also fix getAttachName:
+function getAttachName(attach) {
+  return (
+    attach?.horadingExpenseFilename ||  // camelCase
+    attach?.HoradingExpenseFilename ||  // PascalCase
+    attach?.horadingExpenseFilename ||
+    attach?.attachFilename          ||
+    attach?.fileName                ||
+    attach?.name                    ||
+    'Attachment'
+  );
+}
+
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'];
+function isImageFile(name = '') {
+  return IMAGE_EXTS.includes(name.split('.').pop().toLowerCase());
+}
+
+function AttachFileIcon({ name, size = 11, color }) {
+  return isImageFile(name)
+    ? <ImageIcon size={size} color={color || '#15803d'} style={{ flexShrink: 0 }} />
+    : <FileCheck size={size} color={color || '#15803d'} style={{ flexShrink: 0 }} />;
+}
 
 /* ─────────────────────────────────────────
    HELPERS
@@ -57,11 +105,10 @@ function toDateInputValue(isoStr) {
 }
 
 /* ═══════════════════════════════════════════════════════
-   PORTAL DROPDOWN  — escapes overflow / backdrop-filter
+   PORTAL DROPDOWN
 ═══════════════════════════════════════════════════════ */
 function PortalDropdown({ open, triggerRef, panelRef, children }) {
   const [style, setStyle] = useState({ position: 'fixed', top: 0, left: 0, width: 0, zIndex: 99999 });
-
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
     const update = () => {
@@ -77,7 +124,6 @@ function PortalDropdown({ open, triggerRef, panelRef, children }) {
     window.addEventListener('resize', update);
     return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); };
   }, [open, triggerRef, panelRef]);
-
   if (!open) return null;
   return ReactDOM.createPortal(<div ref={panelRef} style={style}>{children}</div>, document.body);
 }
@@ -135,7 +181,7 @@ function FieldError({ msg }) {
 }
 
 /* ═══════════════════════════════════════════
-   COMBO DROPDOWN  (portal-based)
+   COMBO DROPDOWN
 ═══════════════════════════════════════════ */
 function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: Icon, options, searchable = false, emptyText = 'No options' }) {
   const [open, setOpen]           = useState(false);
@@ -155,11 +201,15 @@ function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: I
 
   const openDD = () => {
     setOpen(true); setWasOpened(true); setQuery('');
-    setTimeout(() => { if (searchable) { inputRef.current?.focus(); return; } const items = listRef.current?.querySelectorAll('.pg-combo-option'); if (items?.length) { const ai = Array.from(items).findIndex(el => el.classList.contains('pg-combo-option--active')); (ai >= 0 ? items[ai] : items[0])?.focus(); } }, 0);
+    setTimeout(() => {
+      if (searchable) { inputRef.current?.focus(); return; }
+      const items = listRef.current?.querySelectorAll('.pg-combo-option');
+      if (items?.length) { const ai = Array.from(items).findIndex(el => el.classList.contains('pg-combo-option--active')); (ai >= 0 ? items[ai] : items[0])?.focus(); }
+    }, 0);
   };
-  const select = (opt) => { onChange(opt.value); setOpen(false); setQuery(''); setWasOpened(false); };
-  const clear  = (e)   => { e.stopPropagation(); onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.(); };
-  const arrowNav = (e) => {
+  const select   = (opt) => { onChange(opt.value); setOpen(false); setQuery(''); setWasOpened(false); };
+  const clear    = (e)   => { e.stopPropagation(); onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.(); };
+  const arrowNav = (e)   => {
     const items = listRef.current?.querySelectorAll('.pg-combo-option');
     const idx   = Array.from(items || []).indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
@@ -173,9 +223,7 @@ function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: I
         onClick={openDD} tabIndex={0}
         onKeyDown={e => { if (!open) { if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDD(); } } else arrowNav(e); }}>
         {Icon && <Icon size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />}
-        <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`}>
-          {selected ? selected.label : placeholder}
-        </span>
+        <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`}>{selected ? selected.label : placeholder}</span>
         {selected ? <X size={13} className="pg-combo-clear" onClick={clear} /> : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
       </div>
       <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
@@ -207,7 +255,7 @@ function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: I
 }
 
 /* ═══════════════════════════════════════════
-   CELL COMBO DROPDOWN  (portal-based, table cells)
+   CELL COMBO DROPDOWN
 ═══════════════════════════════════════════ */
 function CellComboDropdown({ value, onChange, options, hasError, placeholder = 'Select…' }) {
   const [open, setOpen] = useState(false);
@@ -216,14 +264,14 @@ function CellComboDropdown({ value, onChange, options, hasError, placeholder = '
   const panelRef   = useRef(null);
   const listRef    = useRef(null);
 
-  const close = useCallback(() => setOpen(false), []);
+  const close    = useCallback(() => setOpen(false), []);
   useOutsideClick(wrapRef, panelRef, open, close);
 
   const selected = options.find(o => String(o.value) === String(value));
   const openDD   = () => { setOpen(v => !v); setTimeout(() => { const items = listRef.current?.querySelectorAll('.exp-cell-combo-option'); if (items?.length) { const ai = Array.from(items).findIndex(el => el.classList.contains('exp-cell-combo-option--active')); (ai >= 0 ? items[ai] : items[0])?.focus(); } }, 0); };
   const select   = (opt) => { onChange(opt.value); setOpen(false); };
   const clear    = (e)   => { e.stopPropagation(); onChange(''); setOpen(false); };
-  const arrowNav = (e) => {
+  const arrowNav = (e)   => {
     const items = listRef.current?.querySelectorAll('.exp-cell-combo-option');
     const idx   = Array.from(items || []).indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
@@ -276,7 +324,7 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
     const q = query.toLowerCase();
     const matched = hoardings.filter(h => {
       const latest = getLatest(h);
-      const site = sites.find(s => s.siteID === latest?.siteID);
+      const site   = sites.find(s => s.siteID === latest?.siteID);
       if (!site) return false;
       return ['addressLine1','addressLine2','addressLine3','landmark','city','district']
         .some(k => (site[k]||'').toLowerCase().includes(q)) ||
@@ -285,10 +333,7 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
     setResults(matched.slice(0, 12)); setFocusedIdx(-1);
   }, [query, hoardings, sites]);
 
-  useEffect(() => {
-    if (focusedIdx < 0 || !listRef.current) return;
-    listRef.current.querySelectorAll('.exp-hoarding-option')[focusedIdx]?.scrollIntoView({ block: 'nearest' });
-  }, [focusedIdx]);
+  useEffect(() => { if (focusedIdx < 0 || !listRef.current) return; listRef.current.querySelectorAll('.exp-hoarding-option')[focusedIdx]?.scrollIntoView({ block: 'nearest' }); }, [focusedIdx]);
 
   useEffect(() => {
     const handler = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) { setOpen(false); setFocusedIdx(-1); } };
@@ -319,8 +364,7 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
             onFocus={() => setOpen(true)}
             onKeyDown={handleInputKeyDown}
           />
-          {query && <X size={12} style={{ cursor: 'pointer', color: '#c0c0d8', flexShrink: 0 }}
-            onClick={e => { e.stopPropagation(); setQuery(''); setResults([]); setFocusedIdx(-1); }} />}
+          {query && <X size={12} style={{ cursor: 'pointer', color: '#c0c0d8', flexShrink: 0 }} onClick={e => { e.stopPropagation(); setQuery(''); setResults([]); setFocusedIdx(-1); }} />}
         </div>
       )}
       {open && results.length > 0 && (
@@ -374,7 +418,6 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
 
 /* ═══════════════════════════════════════════
    DELETE ROW CONFIRM MODAL
-   — Used for individual expense row deletion
 ═══════════════════════════════════════════ */
 function DeleteRowModal({ row, onConfirm, onCancel, deleting }) {
   return (
@@ -390,9 +433,7 @@ function DeleteRowModal({ row, onConfirm, onCancel, deleting }) {
         <div className="exp-delete-modal__actions">
           <button className="pg-btn-cancel" onClick={onCancel} disabled={deleting}>Cancel</button>
           <button className="exp-btn-delete-confirm" onClick={onConfirm} disabled={deleting}>
-            {deleting
-              ? <><Loader2 size={13} className="pg-spin" /> Deleting…</>
-              : <><Trash2 size={13} /> Delete</>}
+            {deleting ? <><Loader2 size={13} className="pg-spin" /> Deleting…</> : <><Trash2 size={13} /> Delete</>}
           </button>
         </div>
       </div>
@@ -400,10 +441,169 @@ function DeleteRowModal({ row, onConfirm, onCancel, deleting }) {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   ATTACH CELL  (table column)
+   4 states: empty | new file | saved on server | uploading
+═══════════════════════════════════════════════════════════════ */
+function AttachCell({ rowId, expenseID, selectedFile, existingAttach, isUploading, onFileSelect, onFileClear }) {
+  const inputRef = useRef(null);
+  const trigger  = () => inputRef.current?.click();
+  const onPick   = (e) => { const f = e.target.files?.[0]; if (f) onFileSelect(rowId, f); e.target.value = ''; };
+
+  const fileInput = (
+    <input ref={inputRef} type="file" style={{ display: 'none' }}
+      onChange={onPick} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" />
+  );
+
+  /* STATE 4 — uploading */
+  if (isUploading) {
+    return (
+      <div className="ea-cell">
+        <div className="ea-uploading">
+          <Loader2 size={12} className="pg-spin" style={{ flexShrink: 0 }} />
+          <span>Uploading…</span>
+        </div>
+      </div>
+    );
+  }
+
+  /* STATE 2 — new file selected, not yet saved */
+  if (selectedFile) {
+    return (
+      <div className="ea-cell">
+        {fileInput}
+        <div className="ea-new-file">
+          <div className="ea-new-file__name">
+            <Paperclip size={11} color="#049edf" style={{ flexShrink: 0 }} />
+            <span className="ea-new-file__text" title={selectedFile.name}>{selectedFile.name}</span>
+            <button className="ea-new-file__remove" onClick={() => onFileClear(rowId)} title="Remove file"><X size={11} /></button>
+          </div>
+          <div className="ea-new-file__footer">
+            <button className="ea-new-file__change" onClick={trigger}><RefreshCw size={9} /> Change file</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* STATE 3 — attachment already on server */
+  if (existingAttach) {
+    const name    = getAttachName(existingAttach);
+    const fileUrl = getAttachUrl(existingAttach);
+
+    const handleView = () => {
+      if (fileUrl) window.open(fileUrl, '_blank', 'noopener,noreferrer');
+    };
+    const handleDownload = () => {
+      if (!fileUrl) return;
+      const a = document.createElement('a');
+      a.href     = fileUrl;
+      a.download = name;
+      a.target   = '_blank';
+      a.rel      = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+
+    return (
+      <div className="ea-cell">
+        {fileInput}
+        <div className="ea-saved-card">
+          {/* filename */}
+          <div className="ea-saved-card__name" title={name}>
+            <div className="ea-saved-card__icon">
+              <AttachFileIcon name={name} size={12} />
+            </div>
+            <span className="ea-saved-card__text">{name}</span>
+          </div>
+          {/* action bar */}
+          <div className="ea-saved-card__actions">
+            <button
+              className="ea-saved-card__btn ea-saved-card__btn--view"
+              onClick={handleView}
+              disabled={!fileUrl}
+              title={fileUrl ? 'Open in new tab' : 'URL not available'}
+            >
+              <Eye size={10} /> View
+            </button>
+            <button
+              className="ea-saved-card__btn ea-saved-card__btn--download"
+              onClick={handleDownload}
+              disabled={!fileUrl}
+              title={fileUrl ? 'Download file' : 'URL not available'}
+            >
+              <Download size={10} /> Download
+            </button>
+            <button
+              className="ea-saved-card__btn ea-saved-card__btn--replace"
+              onClick={trigger}
+              title="Replace with a new file"
+            >
+              <RefreshCw size={10} /> Replace
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* STATE 1 — nothing attached */
+  return (
+    <div className="ea-cell">
+      {fileInput}
+      <button className="ea-btn-attach" onClick={trigger}>
+        <Paperclip size={11} /> Attach file
+      </button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ENTRY ATTACH FIELD  (inside add-expense form)
+═══════════════════════════════════════════════════════════════ */
+function EntryAttachField({ rowId, selectedFile, onFileSelect, onFileClear }) {
+  const inputRef = useRef(null);
+  const trigger  = () => inputRef.current?.click();
+  const onPick   = (e) => { const f = e.target.files?.[0]; if (f) onFileSelect(rowId, f); e.target.value = ''; };
+
+  return (
+    <div className={`ea-entry-section${selectedFile ? ' ea-entry-section--filled' : ''}`}>
+      <input ref={inputRef} type="file" style={{ display: 'none' }}
+        onChange={onPick} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" />
+
+      <div className="ea-entry-section__label">
+        <Paperclip size={12} color="#049edf" />
+        <strong>Photo / Document</strong>
+        <span className="ea-entry-optional">(optional)</span>
+      </div>
+
+      {selectedFile ? (
+        <>
+          <div className="ea-entry-filled">
+            <AttachFileIcon name={selectedFile.name} size={14} color="#049edf" />
+            <span className="ea-entry-filled__name" title={selectedFile.name}>{selectedFile.name}</span>
+            <div className="ea-entry-filled__actions">
+              <button className="ea-entry-filled__btn" onClick={trigger}><RefreshCw size={10} /> Change</button>
+              <button className="ea-entry-filled__btn ea-entry-filled__btn--remove" onClick={() => onFileClear(rowId)}><X size={10} /> Remove</button>
+            </div>
+          </div>
+          <div className="ea-entry-hint">Will upload automatically when you save the expense.</div>
+        </>
+      ) : (
+        <button className="ea-entry-zone" onClick={trigger}>
+          <UploadCloud size={16} />
+          <span>Click to attach a photo or document</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ─────────────────────────────────────────
    EXPENSE ENTRY PANEL
 ───────────────────────────────────────── */
-function ExpenseEntryPanel({ row, errors, onChange }) {
+function ExpenseEntryPanel({ row, errors, onChange, attachFile, onFileSelect, onFileClear }) {
   return (
     <div className="exp-entry-panel">
       <div className="row g-3">
@@ -457,18 +657,23 @@ function ExpenseEntryPanel({ row, errors, onChange }) {
           </InputWrap>
           <FieldError msg={errors.comments} />
         </div>
+        <div className="col-12">
+          <EntryAttachField
+            rowId={row._rowId}
+            selectedFile={attachFile}
+            onFileSelect={onFileSelect}
+            onFileClear={onFileClear}
+          />
+        </div>
       </div>
     </div>
   );
 }
 
 /* ─────────────────────────────────────────
-   INLINE ROWS TABLE
-   — Delete button shows spinner while deleting
-   — Saved rows (with _expenseID) call the API
-   — Unsaved rows (no _expenseID) removed locally
+   EXPENSE ROWS TABLE
 ───────────────────────────────────────── */
-function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingRowId }) {
+function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingRowId, attachFiles, existingAttaches, onFileSelect, onFileClear, uploadingRowIds }) {
   if (rows.length === 0) return null;
   const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
@@ -490,7 +695,7 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
         <div className="exp-rows-header__total">Total: <strong>{fmtCurrency(total)}</strong></div>
       </div>
 
-      {/* Desktop */}
+      {/* ─── Desktop ─── */}
       <div className="exp-rows-desktop">
         <div className="exp-rows-scroll">
           <table className="exp-rows-tbl">
@@ -503,13 +708,19 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
                 <th className="exp-col-amt">Amount (₹) <span className="exp-req">*</span></th>
                 <th className="exp-col-paid">Paid By <span className="exp-req">*</span></th>
                 <th className="exp-col-cmt">Comments</th>
+                <th style={{ minWidth: 170, width: 170 }}>
+                  <span className="ea-col-head"><Paperclip size={11} /> Photo / Doc</span>
+                </th>
                 <th className="exp-col-del"></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row, idx) => {
-                const errs      = rowErrors[row._rowId] || {};
+                const errs       = rowErrors[row._rowId] || {};
                 const isDeleting = deletingRowId === row._rowId;
+                const isUploading = uploadingRowIds?.has(row._rowId);
+                const selFile    = attachFiles[row._rowId] || null;
+                const existing   = row._expenseID ? (existingAttaches[row._expenseID] || null) : null;
                 return (
                   <tr key={row._rowId}
                     className={`${Object.keys(errs).length ? 'exp-tbl-row exp-tbl-row--err' : 'exp-tbl-row'}${isDeleting ? ' exp-tbl-row--deleting' : ''}`}
@@ -547,6 +758,14 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
                       <textarea className="exp-cell-input exp-cell-scroll" placeholder="Optional…"
                         value={row.comments} onChange={e => onChangeRow(row._rowId, 'comments', e.target.value)} />
                     </td>
+                    <td className="exp-td" style={{ verticalAlign: 'top', paddingTop: 8 }}>
+                      <AttachCell
+                        rowId={row._rowId} expenseID={row._expenseID}
+                        selectedFile={selFile} existingAttach={existing}
+                        isUploading={isUploading}
+                        onFileSelect={onFileSelect} onFileClear={onFileClear}
+                      />
+                    </td>
                     <td className="exp-td exp-td-del"><DeleteBtn rowId={row._rowId} /></td>
                   </tr>
                 );
@@ -556,11 +775,14 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
         </div>
       </div>
 
-      {/* Mobile */}
+      {/* ─── Mobile ─── */}
       <div className="exp-rows-mobile">
         {rows.map((row, idx) => {
-          const errs      = rowErrors[row._rowId] || {};
+          const errs       = rowErrors[row._rowId] || {};
           const isDeleting = deletingRowId === row._rowId;
+          const isUploading = uploadingRowIds?.has(row._rowId);
+          const selFile    = attachFiles[row._rowId] || null;
+          const existing   = row._expenseID ? (existingAttaches[row._expenseID] || null) : null;
           return (
             <div key={row._rowId} className={`exp-mob-card${Object.keys(errs).length ? ' exp-mob-card--err' : ''}`}
               style={{ opacity: isDeleting ? 0.5 : 1, pointerEvents: isDeleting ? 'none' : 'auto' }}>
@@ -606,6 +828,17 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
                   <textarea className="exp-cell-input exp-cell-scroll" placeholder="Optional…"
                     value={row.comments} onChange={e => onChangeRow(row._rowId, 'comments', e.target.value)} />
                 </div>
+                <div className="col-12">
+                  <div className="exp-mob-label" style={{ display:'flex', alignItems:'center', gap:4, marginBottom:4 }}>
+                    <Paperclip size={11} color="#9090a8" /> Photo / Doc <span style={{ fontSize:10, color:'#b0b0c8' }}>(optional)</span>
+                  </div>
+                  <AttachCell
+                    rowId={row._rowId} expenseID={row._expenseID}
+                    selectedFile={selFile} existingAttach={existing}
+                    isUploading={isUploading}
+                    onFileSelect={onFileSelect} onFileClear={onFileClear}
+                  />
+                </div>
               </div>
             </div>
           );
@@ -631,7 +864,7 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
     return source.map(e => ({
       ...EMPTY_ROW, _rowId: makeRowId(), _expenseID: e.expenseID,
       expenseDate: toDateInputValue(e.expenseDate),
-      expenseType: e.expenseType || '', expenseDTL: e.expenseDTL  || '',
+      expenseType: e.expenseType || '', expenseDTL: e.expenseDTL || '',
       amount: e.amount ?? '', paidBy: e.paidBy || '', comments: e.comments || '',
     }));
   });
@@ -642,15 +875,81 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
   const [currentErrors, setCurrentErrors] = useState({});
   const [showEntryForm, setShowEntryForm] = useState(isAdd);
 
-  const [saving, setSaving]             = useState(false);
-  const [saveOk, setSaveOk]             = useState(false);
-  const [apiErr, setApiErr]             = useState('');
+  const [saving, setSaving]   = useState(false);
+  const [saveOk, setSaveOk]   = useState(false);
+  const [apiErr, setApiErr]   = useState('');
+
+  /* ── Attachment state ── */
+  const [attachFiles, setAttachFiles]           = useState({});
+  const [existingAttaches, setExistingAttaches] = useState({});
+  const [uploadingRowIds, setUploadingRowIds]   = useState(new Set());
+  const [attachLoadDone, setAttachLoadDone]     = useState(isAdd);
 
   /* ── Per-row delete state ── */
-  const [deleteTarget, setDeleteTarget] = useState(null);  // row object pending confirmation
-  const [deletingRowId, setDeletingRowId] = useState(null); // rowId currently being deleted
+  const [deleteTarget, setDeleteTarget]   = useState(null);
+  const [deletingRowId, setDeletingRowId] = useState(null);
 
-  /* ─── Row change / delete handlers ─── */
+  /* ── Load existing attachments for all saved rows on edit mount ── */
+useEffect(() => {
+  if (isAdd || rows.length === 0) { setAttachLoadDone(true); return; }
+  const ids = rows.map(r => r._expenseID).filter(Boolean);
+  if (!ids.length) { setAttachLoadDone(true); return; }
+  
+  console.log('🔍 Loading attachments for expense IDs:', ids); // ADD THIS
+  
+  let cancelled = false;
+  Promise.allSettled(ids.map(id => apiService.getExpenseAttachByExpenseId(id))).then(results => {
+    if (cancelled) return;
+    
+    console.log('📦 Attach results:', results); // ADD THIS
+    
+    const map = {};
+    results.forEach((res, i) => { 
+      if (res.status === 'fulfilled' && res.value) map[ids[i]] = res.value; 
+    });
+    
+    console.log('🗺️ Attach map built:', map); // ADD THIS
+    
+    setExistingAttaches(map);
+    setAttachLoadDone(true);
+  });
+  return () => { cancelled = true; };
+}, []);
+
+  /* ── File handlers ── */
+const handleFileSelect = useCallback(async (rowId, file) => {
+  const row = rows.find(r => r._rowId === rowId);
+  const expenseID = row?._expenseID;
+
+  // REPLACE CASE — attachment already exists on server
+  if (expenseID && existingAttaches[expenseID]) {
+    const attach = existingAttaches[expenseID];
+    setUploadingRowIds(prev => new Set(prev).add(rowId));
+    try {
+      await apiService.updateExpenseAttach(
+        attach,           // full attach object (we read the ID from it inside api.js)
+        Number(hoardingID),
+        Number(expenseID),
+        file
+      );
+      // Refresh so the saved card shows the new filename
+      const updated = await apiService.getExpenseAttachByExpenseId(expenseID);
+      setExistingAttaches(prev => ({ ...prev, [expenseID]: updated }));
+    } catch (err) {
+      setApiErr(err?.response?.data?.message || err?.message || 'Failed to replace attachment.');
+    } finally {
+      setUploadingRowIds(prev => { const n = new Set(prev); n.delete(rowId); return n; });
+    }
+  } else {
+    // NEW FILE CASE — queue for upload when Save is clicked
+    setAttachFiles(prev => ({ ...prev, [rowId]: file }));
+  }
+}, [rows, existingAttaches, hoardingID]);
+  const handleFileClear = useCallback((rowId) => {
+    setAttachFiles(prev => { const n = { ...prev }; delete n[rowId]; return n; });
+  }, []);
+
+  /* ── Row handlers ── */
   const handleCurrentChange = (key, val) => {
     setCurrentRow(p => ({ ...p, [key]: val }));
     if (currentErrors[key]) setCurrentErrors(p => ({ ...p, [key]: '' }));
@@ -670,38 +969,26 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
     if (rowErrors[rowId]?.[key]) setRowErrors(prev => ({ ...prev, [rowId]: { ...prev[rowId], [key]: '' } }));
   };
 
-  /* ── Request confirmation before deleting ── */
   const handleDeleteRow = (rowId) => {
     const row = rows.find(r => r._rowId === rowId);
-    if (!row) return;
-    setDeleteTarget(row);          // open confirm modal
+    if (row) setDeleteTarget(row);
   };
 
-  /* ── Confirmed: delete from API (if saved) then remove from state ── */
   const confirmDeleteRow = async () => {
     if (!deleteTarget) return;
     const row = deleteTarget;
-    setDeleteTarget(null);
-    setDeletingRowId(row._rowId);
-    setApiErr('');
-
+    setDeleteTarget(null); setDeletingRowId(row._rowId); setApiErr('');
     try {
-      if (row._expenseID) {
-        // Saved record — call DELETE /api/HoardingExpense/{expenseID}
-        await apiService.deleteExpense(row._expenseID);
-      }
-      // Remove from local state after successful API call (or for unsaved rows)
+      if (row._expenseID) await apiService.deleteExpense(row._expenseID);
       setRows(prev => prev.filter(r => r._rowId !== row._rowId));
       setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
+      setAttachFiles(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
     } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Failed to delete expense. Please try again.';
-      setApiErr(msg);
-    } finally {
-      setDeletingRowId(null);
-    }
+      setApiErr(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Failed to delete expense.');
+    } finally { setDeletingRowId(null); }
   };
 
-  /* ── Save all rows ── */
+  /* ── Save ── */
   const handleSave = () => {
     if (!hoardingID) { setHoardingError('Required'); return; }
     setHoardingError('');
@@ -722,18 +1009,48 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
 
   const _doSave = async (allRows) => {
     setSaving(true); setApiErr('');
+    const attachErrors = [];
     try {
       for (const row of allRows) {
         const payload = {
-          hoardingID: Number(hoardingID), expenseDate: row.expenseDate,
-          expenseType: row.expenseType, expenseDTL: row.expenseDTL,
-          amount: Number(row.amount), paidBy: row.paidBy, comments: row.comments || '',
+          hoardingID:  Number(hoardingID),
+          expenseDate: row.expenseDate,
+          expenseType: row.expenseType,
+          expenseDTL:  row.expenseDTL,
+          amount:      Number(row.amount),
+          paidBy:      row.paidBy,
+          comments:    row.comments || '',
         };
-        if (!row._expenseID) await apiService.createExpense(payload);
-        else await apiService.updateExpense(row._expenseID, payload);
+
+        let resolvedID = row._expenseID;
+        if (!row._expenseID) {
+          const created = await apiService.createExpense(payload);
+          resolvedID = created?.expenseID ?? created?.id ?? null;
+        } else {
+          await apiService.updateExpense(row._expenseID, payload);
+        }
+
+        const file = attachFiles[row._rowId];
+        if (file && resolvedID) {
+          setUploadingRowIds(prev => new Set(prev).add(row._rowId));
+          try {
+            await apiService.createExpenseAttach(resolvedID, Number(hoardingID), file);
+          } catch (e) {
+            attachErrors.push(e?.response?.data?.message || e?.message || 'Upload failed');
+          } finally {
+            setUploadingRowIds(prev => { const n = new Set(prev); n.delete(row._rowId); return n; });
+          }
+        }
       }
-      setSaveOk(true);
-      setTimeout(() => onBack(), 700);
+
+      if (attachErrors.length) {
+        setApiErr(`Expenses saved, but ${attachErrors.length} attachment(s) failed: ${attachErrors[0]}`);
+        setSaveOk(true);
+        setTimeout(() => onBack(), 2500);
+      } else {
+        setSaveOk(true);
+        setTimeout(() => onBack(), 700);
+      }
     } catch (err) {
       setApiErr(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Save failed.');
     } finally { setSaving(false); }
@@ -744,14 +1061,9 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
 
   return (
     <div className="hd-form-page">
-      {/* Delete confirm modal */}
       {deleteTarget && (
-        <DeleteRowModal
-          row={deleteTarget}
-          onConfirm={confirmDeleteRow}
-          onCancel={() => setDeleteTarget(null)}
-          deleting={!!deletingRowId}
-        />
+        <DeleteRowModal row={deleteTarget} onConfirm={confirmDeleteRow}
+          onCancel={() => setDeleteTarget(null)} deleting={!!deletingRowId} />
       )}
 
       <div className="hd-topbar">
@@ -774,10 +1086,13 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
           {apiErr && (
             <div className="pg-field-error hd-api-error mb-3">
               <AlertCircle size={14} /><span>{apiErr}</span>
-              <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }} onClick={() => setApiErr('')}>✕</button>
+              <button style={{ marginLeft:'auto', background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:12 }} onClick={() => setApiErr('')}>✕</button>
             </div>
           )}
+
           <div className="row g-4">
+
+            {/* ── Hoarding Selection ── */}
             <div className="col-12">
               <div className="hd-section-card">
                 <div className="hd-section-head">
@@ -797,13 +1112,18 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
               </div>
             </div>
 
+            {/* ── Expense Entry ── */}
             <div className="col-12">
               <div className="hd-section-card">
                 <div className="hd-section-head">
                   <div className="hd-section-icon-wrap"><FileText size={14} color="#049edf" /></div>
                   <div style={{ flex: 1 }}>
                     <div className="hd-section-title">Expense Entry</div>
-                    <div className="hd-section-sub">{isAdd ? 'Add one or more expense rows for this hoarding' : `${rows.length} expense row${rows.length !== 1 ? 's' : ''} · ${fmtCurrency(totalAmount)}`}</div>
+                    <div className="hd-section-sub">
+                      {isAdd
+                        ? 'Add one or more expense rows for this hoarding'
+                        : `${rows.length} expense row${rows.length !== 1 ? 's' : ''} · ${fmtCurrency(totalAmount)}`}
+                    </div>
                   </div>
                   {!isAdd && (
                     <button className={`exp-toggle-btn${showEntryForm ? ' exp-toggle-btn--cancel' : ''}`}
@@ -812,22 +1132,47 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
                     </button>
                   )}
                 </div>
+
+                {/* Hint banner */}
+                <div className="ea-hint-banner">
+                  <Paperclip size={12} color="#049edf" />
+                  Each expense row has an optional <strong>Photo / Doc</strong> attachment — leave blank if not needed.
+                </div>
+
                 <div className="hd-section-body">
                   {showEntryForm && (
                     <>
-                      <ExpenseEntryPanel row={currentRow} errors={currentErrors} onChange={handleCurrentChange} />
+                      <ExpenseEntryPanel
+                        row={currentRow}
+                        errors={currentErrors}
+                        onChange={handleCurrentChange}
+                        attachFile={attachFiles[currentRow._rowId] || null}
+                        onFileSelect={handleFileSelect}
+                        onFileClear={handleFileClear}
+                      />
                       <div className="exp-addrow-bar">
                         <button className="exp-btn-addrow" onClick={handleAddRow}><Plus size={14} /> Add Expense Row</button>
                         {rows.length > 0 && <span className="exp-addrow-hint">{rows.length} row{rows.length !== 1 ? 's' : ''} queued · {fmtCurrency(totalAmount)}</span>}
                       </div>
                     </>
                   )}
+
+                  {!attachLoadDone && (
+                    <div className="ea-loading-bar"><Loader2 size={13} className="pg-spin" /> Loading existing attachments…</div>
+                  )}
+
                   <ExpenseRowsTable
                     rows={rows} rowErrors={rowErrors}
                     onChangeRow={handleChangeRow}
                     onDeleteRow={handleDeleteRow}
                     deletingRowId={deletingRowId}
+                    attachFiles={attachFiles}
+                    existingAttaches={existingAttaches}
+                    onFileSelect={handleFileSelect}
+                    onFileClear={handleFileClear}
+                    uploadingRowIds={uploadingRowIds}
                   />
+
                   {!isAdd && rows.length === 0 && !showEntryForm && (
                     <div className="exp-edit-empty">
                       <FileText size={28} color="#d0d0e8" />
@@ -837,15 +1182,21 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
                 </div>
               </div>
             </div>
+
           </div>
         </div>
       </div>
 
       <div className="hd-form-footer hd-form-footer--sticky">
         <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
-        <button className="pg-btn-save" onClick={handleSave} disabled={saving || !!deletingRowId}>
-          {saveOk ? <><Check size={13} /> Saved!</>
-            : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
+        <button className="pg-btn-save" onClick={handleSave}
+          disabled={saving || !!deletingRowId || uploadingRowIds.size > 0}>
+          {saveOk
+            ? <><Check size={13} /> Saved!</>
+            : saving
+            ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
+            : uploadingRowIds.size > 0
+            ? <><Loader2 size={13} className="pg-spin" /> Uploading…</>
             : <><Check size={13} /> {saveLabel}</>}
         </button>
       </div>
@@ -857,24 +1208,24 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
    MAIN PAGE
 ───────────────────────────────────────── */
 export default function HoardingExpensePage() {
-const [hoardings, setHoardings]     = useState([]);
+  const [hoardings, setHoardings]     = useState([]);
   const [sites, setSites]             = useState([]);
   const [expenses, setExpenses]       = useState([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadingExp, setLoadingExp]   = useState(true);
   const [loadError, setLoadError]     = useState('');
 
-  // ✅ ADD HERE — steps 2, 3, 4
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   const isLoading = loadingMeta || loadingExp;
   useEffect(() => { if (!isLoading) setTableReady(true); }, [isLoading]);
   useResizableColumns(tableRef, tableReady, [300, 200, 80]);
 
-
-  const [view, setView]             = useState(() => sessionStorage.getItem('exp_view') || 'grid');
-  const [formMode, setFormMode]     = useState(() => sessionStorage.getItem('exp_formMode') || null);
-  const [editTarget, setEditTarget] = useState(() => { try { return JSON.parse(sessionStorage.getItem('exp_editTarget')) || null; } catch { return null; } });
+  const [view, setView]         = useState(() => sessionStorage.getItem('exp_view') || 'grid');
+  const [formMode, setFormMode] = useState(() => sessionStorage.getItem('exp_formMode') || null);
+  const [editTarget, setEditTarget] = useState(() => {
+    try { return JSON.parse(sessionStorage.getItem('exp_editTarget')) || null; } catch { return null; }
+  });
 
   const [search, setSearch]     = useState('');
   const [sortKey, setSortKey]   = useState('hoardingCode');
@@ -934,14 +1285,14 @@ const [hoardings, setHoardings]     = useState([]);
         const latest   = hoarding ? getLatest(hoarding) : null;
         const site     = latest   ? sites.find(s => s.siteID === latest.siteID) : null;
         map[key] = {
-          hoardingID: key,
+          hoardingID:   key,
           hoardingCode: hoarding?.hoardingCode || `ID ${key}`,
-          siteLabel: site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : `Hoarding ID ${key}`,
+          siteLabel:    site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : `Hoarding ID ${key}`,
           totalAmount: 0, count: 0, _firstExpense: exp,
         };
       }
       map[key].totalAmount += Number(exp.amount) || 0;
-      map[key].count += 1;
+      map[key].count       += 1;
     });
     return Object.values(map);
   }, [expenses, hoardings, sites]);
@@ -971,10 +1322,14 @@ const [hoardings, setHoardings]     = useState([]);
     { key: '_action',      label: 'Actions', noSort: true },
   ];
 
-  // const isLoading = loadingMeta || loadingExp;
-
   if (view === 'form') {
-    return <ExpenseForm mode={formMode} expense={editTarget} hoardings={hoardings} sites={sites} allExpenses={expenses} onBack={handleFormBack} />;
+    return (
+      <ExpenseForm
+        mode={formMode} expense={editTarget}
+        hoardings={hoardings} sites={sites}
+        allExpenses={expenses} onBack={handleFormBack}
+      />
+    );
   }
 
   return (
@@ -1010,7 +1365,7 @@ const [hoardings, setHoardings]     = useState([]);
       {loadError && (
         <div className="pg-field-error hd-api-error mb-3" style={{ margin: '0 0 16px 0' }}>
           <AlertCircle size={14} /><span>{loadError}</span>
-          <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}
+          <button style={{ marginLeft:'auto', background:'none', border:'none', color:'#ef4444', cursor:'pointer', fontSize:12 }}
             onClick={() => { fetchMeta(); fetchExpenses(); }}>Retry</button>
         </div>
       )}
@@ -1018,26 +1373,36 @@ const [hoardings, setHoardings]     = useState([]);
       <div className="pg-container">
         <div className="pg-toolbar">
           <div className="pg-toolbar__inner">
-            <div className="pg-toolbar__count"><Building2 size={14} color="#9090a8" /><span><strong>{isLoading ? '…' : filtered.length}</strong> hoarding{filtered.length !== 1 ? 's' : ''}</span></div>
+            <div className="pg-toolbar__count">
+              <Building2 size={14} color="#9090a8" />
+              <span><strong>{isLoading ? '…' : filtered.length}</strong> hoarding{filtered.length !== 1 ? 's' : ''}</span>
+            </div>
             <div className="pg-search-box">
               <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
-              <input placeholder="Search hoarding code or site…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
+              <input placeholder="Search hoarding code or site…" value={search}
+                onChange={e => { setSearch(e.target.value); setPage(1); }} />
               {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
             </div>
-            <button className="pg-pg-btn" onClick={() => { fetchMeta(); fetchExpenses(); }} title="Refresh" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
+            <button className="pg-pg-btn" onClick={() => { fetchMeta(); fetchExpenses(); }} title="Refresh"
+              style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:4 }}>
               <RefreshCw size={13} className={isLoading ? 'pg-spin' : ''} />
             </button>
           </div>
         </div>
 
-        {isLoading && <div style={{ padding: '60px 0', textAlign: 'center', color: '#9090a8' }}><Loader2 size={28} className="pg-spin" style={{ marginBottom: 10 }} /><div style={{ fontSize: 13 }}>Loading expenses…</div></div>}
+        {isLoading && (
+          <div style={{ padding:'60px 0', textAlign:'center', color:'#9090a8' }}>
+            <Loader2 size={28} className="pg-spin" style={{ marginBottom:10 }} />
+            <div style={{ fontSize:13 }}>Loading expenses…</div>
+          </div>
+        )}
 
         {!isLoading && expenses.length === 0 && (
-          <div className="pg-empty" style={{ padding: '70px 20px' }}>
+          <div className="pg-empty" style={{ padding:'70px 20px' }}>
             <div className="pg-empty__inner">
               <FileText size={42} color="#d0d0e8" />
               <span className="pg-empty__label">No expenses recorded yet</span>
-              <span style={{ fontSize: 12, color: '#b0b0c8', fontFamily: 'Nunito, sans-serif' }}>Click <strong>Add Expense</strong> to record the first one</span>
+              <span style={{ fontSize:12, color:'#b0b0c8', fontFamily:'Nunito, sans-serif' }}>Click <strong>Add Expense</strong> to record the first one</span>
             </div>
           </div>
         )}
@@ -1049,7 +1414,11 @@ const [hoardings, setHoardings]     = useState([]);
                 <tr>
                   {COLS.map(col => (
                     <th key={col.key} className={['pg-th', !col.noSort && 'pg-th--sort'].filter(Boolean).join(' ')}
-                      onClick={() => !col.noSort && (() => { if (sortKey === col.key) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortKey(col.key); setSortDir('asc'); } setPage(1); })()}>
+                      onClick={() => !col.noSort && (() => {
+                        if (sortKey === col.key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                        else { setSortKey(col.key); setSortDir('asc'); }
+                        setPage(1);
+                      })()}>
                       <div className="pg-th__inner">{col.label}{!col.noSort && <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />}</div>
                     </th>
                   ))}
@@ -1057,18 +1426,23 @@ const [hoardings, setHoardings]     = useState([]);
               </thead>
               <tbody>
                 {paginated.length === 0 ? (
-                  <tr><td colSpan={COLS.length} className="pg-td pg-empty"><div className="pg-empty__inner"><FileText size={36} color="#d0d0e8" /><span className="pg-empty__label">No hoardings match your search</span></div></td></tr>
+                  <tr><td colSpan={COLS.length} className="pg-td pg-empty">
+                    <div className="pg-empty__inner"><FileText size={36} color="#d0d0e8" /><span className="pg-empty__label">No hoardings match your search</span></div>
+                  </td></tr>
                 ) : paginated.map(r => (
                   <tr key={r.hoardingID} className="pg-tr">
                     <td className="pg-td">
                       <div className="pg-td__primary hd-code-cell">{r.hoardingCode}</div>
-                      <div style={{ fontSize: 11, color: '#9090a8', marginTop: 2 }}>{r.siteLabel}</div>
-                      <div style={{ fontSize: 11, color: '#b0b0c8', marginTop: 1 }}>{r.count} expense{r.count !== 1 ? 's' : ''}</div>
+                      <div style={{ fontSize:11, color:'#9090a8', marginTop:2 }}>{r.siteLabel}</div>
+                      <div style={{ fontSize:11, color:'#b0b0c8', marginTop:1 }}>{r.count} expense{r.count !== 1 ? 's' : ''}</div>
                     </td>
                     <td className="pg-td"><span className="exp-amount-val">{fmtCurrency(r.totalAmount)}</span></td>
                     <td className="pg-td">
                       <div className="pg-action-wrap">
-                        <button className="pg-btn-view" title="Edit" onClick={() => { setFormMode('edit'); setEditTarget(r._firstExpense); setView('form'); }}><Edit2 size={13} /></button>
+                        <button className="pg-btn-view" title="Edit"
+                          onClick={() => { setFormMode('edit'); setEditTarget(r._firstExpense); setView('form'); }}>
+                          <Edit2 size={13} />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1088,12 +1462,20 @@ const [hoardings, setHoardings]     = useState([]);
                     <div className="pg-card__subtitle">{r.siteLabel}</div>
                   </div>
                   <div className="pg-card__actions">
-                    <button className="pg-card__btn-view" onClick={() => { setFormMode('edit'); setEditTarget(r._firstExpense); setView('form'); }} title="Edit"><Edit2 size={13} /></button>
+                    <button className="pg-card__btn-view"
+                      onClick={() => { setFormMode('edit'); setEditTarget(r._firstExpense); setView('form'); }}
+                      title="Edit"><Edit2 size={13} /></button>
                   </div>
                 </div>
                 <div className="pg-card__body">
-                  <div className="pg-card__row"><IndianRupee size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text" style={{ fontWeight: 800, color: '#1a1a2e' }}>{fmtCurrency(r.totalAmount)}</span></div>
-                  <div className="pg-card__row"><FileText size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.count} expense{r.count !== 1 ? 's' : ''}</span></div>
+                  <div className="pg-card__row">
+                    <IndianRupee size={12} color="#c0c0d8" className="pg-card__row-icon" />
+                    <span className="pg-card__row-text" style={{ fontWeight:800, color:'#1a1a2e' }}>{fmtCurrency(r.totalAmount)}</span>
+                  </div>
+                  <div className="pg-card__row">
+                    <FileText size={12} color="#c0c0d8" className="pg-card__row-icon" />
+                    <span className="pg-card__row-text">{r.count} expense{r.count !== 1 ? 's' : ''}</span>
+                  </div>
                 </div>
               </div>
             ))}
@@ -1105,7 +1487,11 @@ const [hoardings, setHoardings]     = useState([]);
             <div className="pg-pagination__left">
               <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}><ChevronsLeft size={13} /></button>
               <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={13} /></button>
-              {pageNums.map((p, i) => p === '…' ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span> : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>)}
+              {pageNums.map((p, i) =>
+                p === '…'
+                  ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
+                  : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>
+              )}
               <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight size={13} /></button>
               <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}><ChevronsRight size={13} /></button>
             </div>
