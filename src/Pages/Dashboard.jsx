@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Users, CalendarCheck, LogOut,
-  Menu, X, ChevronDown, RefreshCw, DollarSign,
+  Menu, X, ChevronDown, RefreshCw, DollarSign,IndianRupee,
   Bell, Search, TrendingUp, ArrowUpRight,
   MapPin, CreditCard, Layers, TrendingDown, UserCircle,
   ChevronRight, Receipt, FileText, PlusSquare, Banknote
@@ -62,7 +62,7 @@ const MENU = [
     id: 'hoardings', icon: Layers, label: 'Hoardings', badge: null,
     children: [
       { id: 'new-hoarding', icon: PlusSquare, label: 'Maintain Hoarding' },
-      { id: 'hoarding-expense', icon: Receipt, label: 'Hoarding Expense' },
+      { id: 'hoarding-expense', icon: IndianRupee , label: 'Hoarding Expense' },
       { id: 'hoarding-merge', icon: Layers, label: 'Hoarding Merge' },
     ],
   },

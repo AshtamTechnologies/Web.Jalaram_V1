@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom';
 import {
   MapPin, Plus, Home, Globe,
   Building2, Search, RefreshCw,
-  X, AlertCircle, Check, Edit2, Eye, ChevronDown,
+  X, AlertCircle, Check, Edit2, Eye, ChevronDown,ShieldCheck ,
   ChevronUp, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
   Filter, Layers, Navigation, UserCircle, Loader2, ToggleLeft,
   AlertTriangle,
@@ -306,7 +306,7 @@ function StatusDropdown({ value, onChange, onBlur, hasError }) {
   return (
     <div className="pg-combo-wrap" ref={wrapRef}>
       <div ref={triggerRef} className={`pg-field-wrap pg-combo-trigger ${hasError?'pg-field-wrap--error':'pg-field-wrap--normal'}`} onClick={openDD} tabIndex={0} onKeyDown={e=>{if(!open){if(e.key==='ArrowDown'||e.key==='Enter'||e.key===' '){e.preventDefault();openDD();}}else nav(e);}}>
-        <ToggleLeft size={14} color={hasError?'#ef4444':'#c0c0d8'} style={{flexShrink:0}}/>
+       <ShieldCheck size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
         {/* ← only render pill if both value AND colors exist */}
         {value && colors
           ? <span className="pg-sitetype-pill" style={{color:colors.color}}>{value}</span>

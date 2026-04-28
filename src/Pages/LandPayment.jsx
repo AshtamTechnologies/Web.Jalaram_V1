@@ -5,8 +5,8 @@ import {
   ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
   Loader2, FileText, ArrowLeft, Building2, User,
   IndianRupee, MessageSquare,
-  CreditCard, Hash, Landmark, Trash2,
-  Receipt, Clock, CheckCircle2, Banknote,
+  CreditCard, Hash, Landmark, Trash2, UploadCloud,
+  Receipt, Clock, CheckCircle2, Banknote, ListChecks,
   Paperclip, FileCheck, Eye, Download, Image as ImageIcon,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
@@ -1101,7 +1101,7 @@ function PaymentRowsTable({
 /* ─────────────────────────────────────────
    QUICK-ADD PANEL  (single new row form)
 ───────────────────────────────────────── */
-function QuickAddPanel({ row, errors, onChange }) {
+function QuickAddPanel({ row, errors, onChange, attachFile, onFileSelect, onFileClear }) {
   const showBank = ['Cheque', 'NEFT', 'RTGS', 'Bank Transfer', 'Demand Draft'].includes(row.paymentMode);
   return (
     <div className="exp-entry-panel">
@@ -1135,7 +1135,7 @@ function QuickAddPanel({ row, errors, onChange }) {
           <ComboDropdown
             value={row.paymentPurpose} onChange={val => onChange('paymentPurpose', val)}
             onBlur={() => { }} hasError={!!errors.paymentPurpose}
-            placeholder="Select purpose…" icon={Receipt} options={PAYMENT_PURPOSE_OPTIONS}
+            placeholder="Select purpose…" icon={ListChecks} options={PAYMENT_PURPOSE_OPTIONS}
           />
           <FieldError msg={errors.paymentPurpose} />
         </div>
@@ -1182,7 +1182,54 @@ function QuickAddPanel({ row, errors, onChange }) {
               value={row.comments} onChange={e => onChange('comments', e.target.value)} />
           </InputWrap>
         </div>
+        <div className="col-12">
+          <EntryAttachField
+            rowId={row._rowId}
+            selectedFile={attachFile}
+            onFileSelect={onFileSelect}
+            onFileClear={onFileClear}
+          />
+        </div>
       </div>
+    </div>
+  );
+}
+function EntryAttachField({ rowId, selectedFile, onFileSelect, onFileClear }) {
+  const inputRef = useRef(null);
+  const trigger = () => inputRef.current?.click();
+  const onPick = (e) => { const f = e.target.files?.[0]; if (f) onFileSelect(rowId, f); e.target.value = ''; };
+
+  return (
+    <div className={`ea-entry-section${selectedFile ? ' ea-entry-section--filled' : ''}`}>
+      <input ref={inputRef} type="file" style={{ display: 'none' }}
+        onChange={onPick} accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" />
+
+      <div className="ea-entry-section__label">
+        <Paperclip size={12} color="#049edf" />
+        <strong>Photo / Document</strong>
+        <span className="ea-entry-optional">(optional)</span>
+      </div>
+
+      {selectedFile ? (
+        <>
+          <div className="ea-entry-filled">
+            {lpIsImage(selectedFile.name)
+              ? <ImageIcon size={14} color="#049edf" style={{ flexShrink: 0 }} />
+              : <FileCheck size={14} color="#049edf" style={{ flexShrink: 0 }} />}
+            <span className="ea-entry-filled__name" title={selectedFile.name}>{selectedFile.name}</span>
+            <div className="ea-entry-filled__actions">
+              <button className="ea-entry-filled__btn" onClick={trigger}><RefreshCw size={10} /> Change</button>
+              <button className="ea-entry-filled__btn ea-entry-filled__btn--remove" onClick={() => onFileClear(rowId)}><X size={10} /> Remove</button>
+            </div>
+          </div>
+          <div className="ea-entry-hint">Will upload automatically when you save the payment.</div>
+        </>
+      ) : (
+        <button className="ea-entry-zone" onClick={trigger}>
+          <UploadCloud size={16} />
+          <span>Click to attach a photo or document</span>
+        </button>
+      )}
     </div>
   );
 }
@@ -1503,6 +1550,10 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                     </div>
                   </div>
                 </div>
+                <div className="ea-hint-banner">
+                  <Paperclip size={12} color="#049edf" />
+                  Each payment row has an optional <strong>Photo / Doc</strong> attachment — leave blank if not needed.
+                </div>
                 <div className="hd-section-body">
                   <div className="row g-3">
                     <div className="col-12 col-md-6">
@@ -1566,7 +1617,14 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                 <div className="hd-section-body">
                   {showEntryForm && (
                     <>
-                      <QuickAddPanel row={currentRow} errors={currentErrors} onChange={handleCurrentChange} />
+                      <QuickAddPanel
+                        row={currentRow}
+                        errors={currentErrors}
+                        onChange={handleCurrentChange}
+                        attachFile={attachFiles[currentRow._rowId] || null}
+                        onFileSelect={handleFileSelect}
+                        onFileClear={handleFileClear}
+                      />
                       <div className="exp-addrow-bar">
                         <button className="exp-btn-addrow" onClick={handleAddRow}>
                           <Plus size={14} /> Add Payment Row
@@ -1606,7 +1664,6 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                 </div>
               </div>
             </div>
-
           </div>
         </div>
       </div>

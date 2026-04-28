@@ -2,9 +2,9 @@ import React, { useState, useRef, useEffect, useCallback, useLayoutEffect } from
 import ReactDOM from 'react-dom';
 import {
   Plus, Search, X, AlertCircle, Check, Edit2,
-  RefreshCw, Calendar, DollarSign,
+  RefreshCw, Calendar, IndianRupee,
   Maximize2, Image as ImageIcon, Upload, Trash2,
-  ZoomIn, ArrowLeft, Hash, Clock, Info,
+  ZoomIn, ArrowLeft, Hash, Clock, Info,ShieldCheck,
   ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight,
   ChevronLeft, ChevronRight, MapPin, Layers,
   CheckCircle, Wrench, Eye, Replace, Loader2
@@ -481,6 +481,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
           onBlur={() => {}}
           hasError={!!errors.status}
           placeholder="Select status…"
+          icon={ShieldCheck}
           options={statusOptions}
         />
         <FieldError msg={errors.status} />
@@ -489,7 +490,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
       {/* Monthly Rent */}
       <div className="col-12 col-md-4">
         <FieldLabel label="Monthly Rent (₹)" required />
-        <InputWrap error={errors.monthlyRent} icon={DollarSign}>
+        <InputWrap error={errors.monthlyRent} icon={IndianRupee}>
           <input
             className="pg-field-input"
             type="number" min="0" placeholder="e.g. 25000"
@@ -1597,7 +1598,7 @@ useResizableColumns(tableRef, tableReady);
                 </div>
                 <div className="pg-card__body">
                   <div className="pg-card__row"><Layers     size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.material}</span></div>
-                  <div className="pg-card__row"><DollarSign size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{fmtCurrency(r.monthlyRent)} / month</span></div>
+                  <div className="pg-card__row"><IndianRupee  size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{fmtCurrency(r.monthlyRent)} / month</span></div>
                   <div className="pg-card__row"><Maximize2  size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.width && r.height ? `${r.width} × ${r.height} ft (${r.width * r.height} sq ft)` : '—'}</span></div>
                   <div className="pg-card__row"><StatusBadge status={r.status} /></div>
                 </div>

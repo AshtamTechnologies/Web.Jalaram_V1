@@ -817,7 +817,7 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
                     </div>
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Amount per Frequency (Rs.)" required />
-                      <InputWrap error={errors.amountPerFreq} icon={TrendingUp}>
+                      <InputWrap error={errors.amountPerFreq} icon={IndianRupee}>
                         <CurrencyInput value={form.amountPerFreq} onChange={val => set('amountPerFreq', val)} placeholder="e.g. 25,000" />
                       </InputWrap>
                       <FieldError msg={errors.amountPerFreq} />
@@ -830,13 +830,13 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
                     </div>
                     <div className="col-12 col-md-4">
                       <FieldLabel label="Discount Amount (Rs.)" optional />
-                      <InputWrap icon={Percent}>
+                      <InputWrap icon={IndianRupee}>
                         <CurrencyInput value={form.discountAmount} onChange={val => set('discountAmount', val)} placeholder="e.g. 10,000" />
                       </InputWrap>
                     </div>
                     <div className="col-12 col-md-4">
                       <FieldLabel label="Adjustment Amount (Rs.)" optional />
-                      <InputWrap icon={SlidersHorizontal}>
+                      <InputWrap icon={IndianRupee}>
                         <CurrencyInput value={form.adjustmentAmount} onChange={val => set('adjustmentAmount', val)} placeholder="e.g. 5,000" />
                       </InputWrap>
                     </div>

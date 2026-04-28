@@ -1393,7 +1393,7 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                     </div>
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Amount per Frequency (Rs.)" required />
-                      <InputWrap error={errors.amountPerFreq} icon={TrendingUp}>
+                      <InputWrap error={errors.amountPerFreq} icon={IndianRupee}>
                         <CurrencyInput value={form.amountPerFreq} onChange={val => set('amountPerFreq', val)} placeholder="e.g. 25,000" />
                       </InputWrap>
                       <FieldError msg={errors.amountPerFreq} />
