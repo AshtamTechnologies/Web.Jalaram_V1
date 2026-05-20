@@ -566,7 +566,7 @@ function OwnerSearchWidget({ owners, value, onChange, error, disabled }) {
 /* ═══════════════════════════════════════════
    CONTRACT DROPDOWN (filtered by owner)
 ═══════════════════════════════════════════ */
-function ContractDropdown({ contracts, hoardings, ownerID, value, onChange, error, disabled }) {
+function ContractDropdown({ contracts, hoardings, hoardingMaps = [], ownerID, value, onChange, error, disabled }) {
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
@@ -576,20 +576,34 @@ function ContractDropdown({ contracts, hoardings, ownerID, value, onChange, erro
     ? contracts.filter(c => String(c.ownerID) === String(ownerID))
     : [];
 
-  const enriched = ownerContracts.map(c => {
-    const h = hoardings.find(h => h.hoardingID === Number(c.hoardingID) || h.hoardingID === c.hoardingID);
-    const parts = [];
-    if (h?.hoardingCode) parts.push(h.hoardingCode);
-    if (h?.width && h?.height) parts.push(`${h.width}×${h.height} ft`);
-    if (h?.material) parts.push(h.material);
-    return {
-      ...c,
-      hoardingCode: h?.hoardingCode || '',
-      hoardingInfo: parts.join(' · ') || `Hoarding #${c.hoardingID}`,
-      dateRange: `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`,
-      statusLabel: c.status || 'Unknown',
-    };
-  });
+const enriched = ownerContracts.map(c => {
+  // Try direct hoardingID on contract first
+  let h = hoardings.find(hh => Number(hh.hoardingID) === Number(c.hoardingID));
+
+  // If not found, look up via hoarding map table
+  if (!h) {
+    const map = hoardingMaps.find(m =>
+      Number(m.landContractID ?? m.LandContractID) === Number(c.landContractID)
+    );
+    if (map) {
+      const mapHID = map.hoardingID ?? map.HoardingID;
+      h = hoardings.find(hh => Number(hh.hoardingID) === Number(mapHID));
+    }
+  }
+
+  const parts = [];
+  if (h?.hoardingCode) parts.push(h.hoardingCode);
+  if (h?.width && h?.height) parts.push(`${h.width}×${h.height} ft`);
+  if (h?.material) parts.push(h.material);
+
+  return {
+    ...c,
+    hoardingCode: h?.hoardingCode || '',
+    hoardingInfo: parts.join(' · ') || `Contract #${c.landContractID}`,
+    dateRange: `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`,
+    statusLabel: c.status || 'Unknown',
+  };
+});
 
   const filtered = query.trim()
     ? enriched.filter(c =>
@@ -1237,7 +1251,7 @@ function EntryAttachField({ rowId, selectedFile, onFileSelect, onFileClear }) {
 /* ═══════════════════════════════════════════
    PAYMENT FORM  (Add / Edit — grouped design)
 ═══════════════════════════════════════════ */
-function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts, onBack, onRefresh }) {
+function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts, hoardingMaps = [], onBack, onRefresh }) {
   const isAdd = mode === 'add';
   /* ── Attachment state ── */
   const [attachFiles, setAttachFiles] = useState({});
@@ -1576,6 +1590,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                       <ContractDropdown
                         contracts={contracts}
                         hoardings={hoardings}
+                        hoardingMaps={hoardingMaps}
                         ownerID={ownerID}
                         value={landContractID}
                         onChange={val => {
@@ -1658,7 +1673,6 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                   {!isAdd && rows.length === 0 && !showEntryForm && (
                     <div className="exp-edit-empty">
                       <Receipt size={28} color="#d0d0e8" />
-                      <span>No payment rows. Click <strong>Add Payment Row</strong> above to add one.</span>
                     </div>
                   )}
                 </div>
@@ -1692,6 +1706,7 @@ export default function LandPaymentPage() {
   const [owners, setOwners] = useState([]);
   const [hoardings, setHoardings] = useState([]);
   const [contracts, setContracts] = useState([]);
+  const [hoardingMaps, setHoardingMaps] = useState([]);
   const [payments, setPayments] = useState([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -1715,12 +1730,13 @@ export default function LandPaymentPage() {
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
     try {
-      const [rawOwners, rawHoardings, rawContracts, rawPayments] = await Promise.all([
-        apiService.getAllOwners(),
-        apiService.getAllHoardings(),
-        apiService.getAllLandContracts(),
-        apiService.getAllLandPayments(),
-      ]);
+const [rawOwners, rawHoardings, rawContracts, rawPayments, rawMaps] = await Promise.all([
+  apiService.getAllOwners(),
+  apiService.getAllHoardings(),
+  apiService.getAllLandContracts(),
+  apiService.getAllLandPayments(),
+  apiService.getAllLandContractHoardingMaps(),
+]);
 
       setOwners(Array.isArray(rawOwners) ? rawOwners : Array.isArray(rawOwners?.data) ? rawOwners.data : []);
       setHoardings(Array.isArray(rawHoardings) ? rawHoardings : Array.isArray(rawHoardings?.data) ? rawHoardings.data : []);
@@ -1741,6 +1757,10 @@ export default function LandPaymentPage() {
         ? rawPayments
         : Array.isArray(rawPayments?.data) ? rawPayments.data : [];
       setPayments(list.map(normalizePayment));
+      setPayments(list.map(normalizePayment));
+
+const mapList = Array.isArray(rawMaps) ? rawMaps : Array.isArray(rawMaps?.data) ? rawMaps.data : [];  // ← add
+setHoardingMaps(mapList);  // ← add
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally {
@@ -1846,16 +1866,17 @@ export default function LandPaymentPage() {
   /* ── Form view ── */
   if (view === 'form') {
     return (
-      <PaymentForm
-        mode={formMode}
-        groupKey={editGroupKey}
-        allPayments={payments}
-        owners={owners}
-        hoardings={hoardings}
-        contracts={contracts}
-        onBack={() => { setView('grid'); setEditGroupKey(null); }}
-        onRefresh={fetchAll}
-      />
+<PaymentForm
+  mode={formMode}
+  groupKey={editGroupKey}
+  allPayments={payments}
+  owners={owners}
+  hoardings={hoardings}
+  contracts={contracts}
+hoardingMaps={hoardingMaps}
+  onBack={() => { setView('grid'); setEditGroupKey(null); }}
+  onRefresh={fetchAll}
+/>
     );
   }
 

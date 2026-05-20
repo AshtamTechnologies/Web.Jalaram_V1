@@ -7,7 +7,7 @@ import {
   Loader2, FileText, Eye, ArrowLeft, Building2, User,
   IndianRupee, Clock, Trash2, ShieldCheck, MessageSquare,
   CreditCard, TrendingUp, MapPin, Tag, Percent, SlidersHorizontal,
-  Users,
+  Users, Paperclip, Upload, Image, File, Download, AlertTriangle,
 } from 'lucide-react';
 import { apiService } from '../api/api';
 import './Common1.css';
@@ -17,29 +17,35 @@ import { useResizableColumns } from '../hooks/useResizableColumns';
    CONSTANTS
 ───────────────────────────────────────── */
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
-const STATUS_OPTIONS    = ['Active', 'Expired', 'Terminated', 'Pending'];
+const STATUS_OPTIONS = ['Active', 'Expired', 'Terminated', 'Pending'];
+
+const FILE_UPLOAD_TYPE_OPTIONS = [
+  { value: 'Contract', label: 'Contract Document' },
+  { value: 'Banner Design', label: 'Banner Design' },
+  { value: 'Other', label: 'Other' },
+];
 
 const PAYMENT_FREQ_FALLBACK = [
-  { value: 1, label: 'Monthly'    },
-  { value: 2, label: 'Quarterly'  },
-  { value: 3, label: 'Half-Yearly'},
-  { value: 4, label: 'Yearly'     },
+  { value: 1, label: 'Monthly' },
+  { value: 2, label: 'Quarterly' },
+  { value: 3, label: 'Half-Yearly' },
+  { value: 4, label: 'Yearly' },
 ];
 
 const EMPTY_FORM = {
-  customerID:         '',
-  hoardingID:         '',
-  startDate:          '',
-  endDate:            '',
-  contractOrigValue:  '',
-  paymentFreqID:      '',
-  amountPerFreq:      '',
-  advancePaid:        '',
-  status:             'Active',
-  discountAmount:     '',
-  adjustmentAmount:   '',
+  customerID: '',
+  hoardingID: '',
+  startDate: '',
+  endDate: '',
+  contractOrigValue: '',
+  paymentFreqID: '',
+  amountPerFreq: '',
+  advancePaid: '',
+  status: 'Active',
+  discountAmount: '',
+  adjustmentAmount: '',
   contractFinalValue: '',
-  comments:           '',
+  comments: '',
 };
 
 /* ─────────────────────────────────────────
@@ -59,11 +65,11 @@ function freqLabel(id, freqs) {
 }
 function statusStyle(s) {
   switch (s) {
-    case 'Active':     return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
-    case 'Expired':    return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+    case 'Active': return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+    case 'Expired': return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
     case 'Terminated': return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
-    case 'Pending':    return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
-    default:           return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
+    case 'Pending': return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
+    default: return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
   }
 }
 function deduplicateHoardings(hoardings) {
@@ -74,7 +80,7 @@ function deduplicateHoardings(hoardings) {
     else {
       const existing = map.get(code);
       const ed = existing.effdt ? new Date(existing.effdt).getTime() : existing.hoardingID;
-      const cd = h.effdt        ? new Date(h.effdt).getTime()        : h.hoardingID;
+      const cd = h.effdt ? new Date(h.effdt).getTime() : h.hoardingID;
       if (cd > ed) map.set(code, h);
     }
   }
@@ -90,31 +96,87 @@ function hoardingLabel(h) {
 function normalizeContract(raw) {
   return {
     customerContractID: raw.customerContractID ?? raw.CustomerContractID,
-    customerID:         raw.customerID         ?? raw.CustomerID,
-    hoardingID:         raw.hoardingID         ?? raw.HoardingID,
-    startDate:         (raw.startDate          ?? raw.StartDate  ?? '').split('T')[0],
-    endDate:           (raw.endDate            ?? raw.EndDate    ?? '').split('T')[0],
-    contractOrigValue:  raw.contractOrigValue  ?? raw.ContractOrigValue  ?? '',
-    paymentFreqID:      raw.paymentFreqID      ?? raw.PaymentFreqID      ?? '',
-    amountPerFreq:      raw.amountPerFreq      ?? raw.AmountPerFreq      ?? '',
-    advancePaid:        raw.advancePaid        ?? raw.AdvancePaid        ?? '',
-    status:             raw.status             ?? raw.Status             ?? '',
-    discountAmount:     raw.discountAmount     ?? raw.DiscountAmount     ?? '',
-    adjustmentAmount:   raw.adjustmentAmount   ?? raw.AdjustmentAmount   ?? '',
+    customerID: raw.customerID ?? raw.CustomerID,
+    hoardingID: raw.hoardingID ?? raw.HoardingID,
+    startDate: (raw.startDate ?? raw.StartDate ?? '').split('T')[0],
+    endDate: (raw.endDate ?? raw.EndDate ?? '').split('T')[0],
+    contractOrigValue: raw.contractOrigValue ?? raw.ContractOrigValue ?? '',
+    paymentFreqID: raw.paymentFreqID ?? raw.PaymentFreqID ?? '',
+    amountPerFreq: raw.amountPerFreq ?? raw.AmountPerFreq ?? '',
+    advancePaid: raw.advancePaid ?? raw.AdvancePaid ?? '',
+    status: raw.status ?? raw.Status ?? '',
+    discountAmount: raw.discountAmount ?? raw.DiscountAmount ?? '',
+    adjustmentAmount: raw.adjustmentAmount ?? raw.AdjustmentAmount ?? '',
     contractFinalValue: raw.contractFinalValue ?? raw.ContractFinalValue ?? '',
-    comments:           raw.comments           ?? raw.Comments           ?? '',
-    lastUpdatedBy:      raw.lastUpdatedBy      ?? raw.LastUpdatedBy      ?? '',
-    lastUpdateDttm:     raw.lastUpdateDttm     ?? raw.LastUpdateDttm     ?? '',
+    comments: raw.comments ?? raw.Comments ?? '',
+    lastUpdatedBy: raw.lastUpdatedBy ?? raw.LastUpdatedBy ?? '',
+    lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
   };
 }
-function validateForm(form) {
+function normalizeAttach(raw) {
+  return {
+    custContractAttachID: raw.custContractAttachID ?? raw.CustContractAttachID,
+    customerContractID: raw.customerContractID ?? raw.CustomerContractID,
+    ownerID: raw.ownerID ?? raw.OwnerID ?? 0,
+    hoardingID: raw.hoardingID ?? raw.HoardingID ?? 0,
+    fileUploadType: raw.fileUploadType ?? raw.FileUploadType ?? '',
+    contractFilePath: raw.contractFilePath ?? raw.ContractFilePath ?? '',
+    contractFilename: raw.contractFilename ?? raw.ContractFilename ?? '',
+    lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
+  };
+}
+function isImageFile(filename) {
+  return /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(filename || '');
+}
+function isPdfFile(filename) {
+  return /\.pdf$/i.test(filename || '');
+}
+function fileTypeIcon(filename) {
+  if (isImageFile(filename)) return <Image size={16} color="#6c63ff" />;
+  if (isPdfFile(filename)) return <FileText size={16} color="#dc2626" />;
+  return <File size={16} color="#049edf" />;
+}
+function uploadTypeStyle(type) {
+  switch (type) {
+    case 'Contract': return { bg: '#eff6ff', color: '#1d4ed8', border: '#bfdbfe' };
+    case 'Banner Design': return { bg: '#f5f3ff', color: '#6c63ff', border: '#ddd6fe' };
+    default: return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
+  }
+}
+function detectHoardingConflict(form, contracts, currentContractID) {
+  if (!form.hoardingID || !form.startDate || !form.endDate) return null;
+  const fStart = new Date(form.startDate);
+  const fEnd = new Date(form.endDate);
+  const conflict = contracts.find(c => {
+    if (Number(c.hoardingID) !== Number(form.hoardingID)) return false;
+    if (currentContractID && c.customerContractID === currentContractID) return false;
+    if (c.status === 'Expired' || c.status === 'Terminated') return false;
+    const cStart = new Date(c.startDate);
+    const cEnd = new Date(c.endDate);
+    return fStart <= cEnd && fEnd >= cStart;
+  });
+  return conflict || null;
+}
+
+function validateForm(form, contracts = [], currentContractID = null) {
   const e = {};
-  if (!form.customerID)  e.customerID  = 'Customer is required';
-  if (!form.hoardingID)  e.hoardingID  = 'Hoarding is required';
-  if (!form.startDate)   e.startDate   = 'Start date is required';
-  if (!form.endDate)     e.endDate     = 'End date is required';
+  if (!form.customerID) e.customerID = 'Customer is required';
+  if (!form.hoardingID) e.hoardingID = 'Hoarding is required';
+  if (!form.startDate) e.startDate = 'Start date is required';
+  if (!form.endDate) e.endDate = 'End date is required';
   if (form.startDate && form.endDate && form.endDate <= form.startDate)
     e.endDate = 'End date must be after start date';
+
+  // ── Double-booking check ──────────────────────────────────────────
+  if (!e.hoardingID && !e.startDate && !e.endDate) {
+    const conflict = detectHoardingConflict(form, contracts, currentContractID);
+    if (conflict) {
+      e.hoardingID = `Already booked ${fmtDate(conflict.startDate)} → ${fmtDate(conflict.endDate)} (Contract #${conflict.customerContractID})`;
+      e.startDate = 'Overlaps with an existing booking';
+      e.endDate = 'Overlaps with an existing booking';
+    }
+  }
+
   if (form.contractOrigValue === '' || form.contractOrigValue == null)
     e.contractOrigValue = 'Contract value is required';
   else if (isNaN(Number(form.contractOrigValue)) || Number(form.contractOrigValue) < 0)
@@ -135,7 +197,7 @@ function SortIcon({ col, sortKey, sortDir }) {
   const active = sortKey === col;
   return (
     <span className="pg-sort-icon">
-      <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"   />
+      <ChevronUp size={10} color={active && sortDir === 'asc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
       <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
     </span>
   );
@@ -200,7 +262,7 @@ function CurrencyInput({ value, onChange, placeholder, readOnly }) {
    COMBO DROPDOWN
 ═══════════════════════════════════════════ */
 function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: Icon, options }) {
-  const [open,         setOpen]         = useState(false);
+  const [open, setOpen] = useState(false);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const wrapRef = useRef(null);
 
@@ -217,14 +279,14 @@ function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: I
   }, [onBlur]);
 
   const select = (opt) => { onChange(opt.value); setOpen(false); setFocusedIndex(-1); };
-  const clear  = (e)   => { e.stopPropagation(); onChange(''); setOpen(false); setFocusedIndex(-1); onBlur && onBlur(); };
+  const clear = (e) => { e.stopPropagation(); onChange(''); setOpen(false); setFocusedIndex(-1); onBlur && onBlur(); };
 
   const handleKeyDown = (e) => {
     if (!open) { if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(true); } return; }
-    if (e.key === 'ArrowDown')  { e.preventDefault(); setFocusedIndex(i => Math.min(i + 1, options.length - 1)); }
-    else if (e.key === 'ArrowUp')   { e.preventDefault(); setFocusedIndex(i => Math.max(i - 1, 0)); }
-    else if (e.key === 'Enter')     { e.preventDefault(); if (focusedIndex >= 0 && options[focusedIndex]) select(options[focusedIndex]); }
-    else if (e.key === 'Escape')    { setOpen(false); setFocusedIndex(-1); onBlur && onBlur(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedIndex(i => Math.min(i + 1, options.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setFocusedIndex(i => Math.max(i - 1, 0)); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (focusedIndex >= 0 && options[focusedIndex]) select(options[focusedIndex]); }
+    else if (e.key === 'Escape') { setOpen(false); setFocusedIndex(-1); onBlur && onBlur(); }
   };
 
   return (
@@ -260,9 +322,9 @@ function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: I
    CUSTOMER SEARCH WIDGET
 ═══════════════════════════════════════════ */
 function CustomerSearchWidget({ customers, value, onChange, error, disabled }) {
-  const [query,        setQuery]        = useState('');
-  const [open,         setOpen]         = useState(false);
-  const [results,      setResults]      = useState([]);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState([]);
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const wrapRef = useRef(null);
 
@@ -273,7 +335,7 @@ function CustomerSearchWidget({ customers, value, onChange, error, disabled }) {
     const q = query.toLowerCase();
     setResults(customers.filter(c =>
       (c.customerName || '').toLowerCase().includes(q) ||
-      (c.phone1       || '').toLowerCase().includes(q) ||
+      (c.phone1 || '').toLowerCase().includes(q) ||
       String(c.customerID).includes(q)
     ).slice(0, 10));
     setFocusedIndex(-1);
@@ -287,8 +349,8 @@ function CustomerSearchWidget({ customers, value, onChange, error, disabled }) {
 
   const handleKeyDown = (e) => {
     if (!open || results.length === 0) return;
-    if (e.key === 'ArrowDown')  { e.preventDefault(); setFocusedIndex(i => Math.min(i + 1, results.length - 1)); }
-    else if (e.key === 'ArrowUp')   { e.preventDefault(); setFocusedIndex(i => Math.max(i - 1, 0)); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setFocusedIndex(i => Math.min(i + 1, results.length - 1)); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setFocusedIndex(i => Math.max(i - 1, 0)); }
     else if (e.key === 'Enter') {
       e.preventDefault();
       if (focusedIndex >= 0 && results[focusedIndex]) {
@@ -364,22 +426,22 @@ function CustomerSearchWidget({ customers, value, onChange, error, disabled }) {
    HOARDING LOOKUP MODAL
 ═══════════════════════════════════════════ */
 function HoardingLookupModal({ hoardings, sites, onSelect, onClose }) {
-  const [query,  setQuery]  = useState('');
-  const [sortK,  setSortK]  = useState('hoardingCode');
-  const [sortD,  setSortD]  = useState('asc');
+  const [query, setQuery] = useState('');
+  const [sortK, setSortK] = useState('hoardingCode');
+  const [sortD, setSortD] = useState('asc');
   const inputRef = useRef(null);
 
   const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
 
   const filtered = hoardings.filter(h => {
     if (!query.trim()) return true;
-    const q    = query.toLowerCase();
+    const q = query.toLowerCase();
     const site = siteMap[h.siteID];
     const addr = [site?.addressLine1, site?.addressLine2, site?.city, site?.district].filter(Boolean).join(' ').toLowerCase();
     return (
       (h.hoardingCode || '').toLowerCase().includes(q) ||
-      (h.material     || '').toLowerCase().includes(q) ||
-      (h.status       || '').toLowerCase().includes(q) ||
+      (h.material || '').toLowerCase().includes(q) ||
+      (h.status || '').toLowerCase().includes(q) ||
       addr.includes(q) ||
       String(h.hoardingID).includes(q)
     );
@@ -402,17 +464,16 @@ function HoardingLookupModal({ hoardings, sites, onSelect, onClose }) {
 
   const hSt = (s) => {
     switch (s) {
-      case 'Active':            return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
-      case 'Inactive':          return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+      case 'Active': return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+      case 'Inactive': return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
       case 'Under Maintenance': return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
-      default:                  return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
+      default: return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
     }
   };
 
   return ReactDOM.createPortal(
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 99997, background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 820, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', overflow: 'hidden' }}>
-        {/* Header */}
         <div style={{ background: 'linear-gradient(135deg,#049edf,#0284c7)', padding: '20px 24px 16px', display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }}>
           <div style={{ width: 42, height: 42, borderRadius: 12, background: 'rgba(255,255,255,0.2)', border: '2px solid rgba(255,255,255,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <Building2 size={20} color="#fff" />
@@ -425,7 +486,6 @@ function HoardingLookupModal({ hoardings, sites, onSelect, onClose }) {
             <X size={15} />
           </button>
         </div>
-        {/* Search */}
         <div style={{ padding: '14px 20px 10px', borderBottom: '1px solid #f0f0f8', flexShrink: 0, background: '#fafafe' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1.5px solid #e8e8f4', borderRadius: 10, padding: '9px 14px' }}>
             <Search size={14} color="#c0c0d8" style={{ flexShrink: 0 }} />
@@ -460,7 +520,7 @@ function HoardingLookupModal({ hoardings, sites, onSelect, onClose }) {
                 {sorted.map((h, idx) => {
                   const site = siteMap[h.siteID];
                   const addr = site ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ') : `Site ${h.siteID}`;
-                  const st   = hSt(h.status);
+                  const st = hSt(h.status);
                   return (
                     <tr key={h.hoardingID} onClick={() => onSelect(h)} style={{ cursor: 'pointer', background: idx % 2 === 0 ? '#fff' : '#fafafe', transition: 'background 0.12s' }}
                       onMouseEnter={e => e.currentTarget.style.background = '#f0f8ff'} onMouseLeave={e => e.currentTarget.style.background = idx % 2 === 0 ? '#fff' : '#fafafe'}>
@@ -511,14 +571,14 @@ function HoardingLookupModal({ hoardings, sites, onSelect, onClose }) {
 function HoardingPickerField({ hoardings, sites, value, onChange, error, disabled }) {
   const [modalOpen, setModalOpen] = useState(false);
   const selected = hoardings.find(h => h.hoardingID === Number(value) || h.hoardingID === value);
-  const siteMap  = Object.fromEntries(sites.map(s => [s.siteID, s]));
+  const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
 
   const hSt = selected?.status ? (() => {
     switch (selected.status) {
-      case 'Active':            return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
-      case 'Inactive':          return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+      case 'Active': return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+      case 'Inactive': return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
       case 'Under Maintenance': return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
-      default:                  return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
+      default: return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
     }
   })() : null;
 
@@ -593,74 +653,473 @@ function DeleteConfirmModal({ contract, onConfirm, onCancel }) {
   );
 }
 
+/* ═══════════════════════════════════════════
+   ATTACHMENT DELETE CONFIRM MODAL
+═══════════════════════════════════════════ */
+function AttachDeleteModal({ attach, onConfirm, onCancel }) {
+  return ReactDOM.createPortal(
+    <div onClick={onCancel} style={{ position: 'fixed', inset: 0, zIndex: 99998, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, padding: '28px 28px 22px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+        <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#fef2f2', border: '2px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+          <Trash2 size={22} color="#dc2626" />
+        </div>
+        <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: 17, color: '#1a1a2e', marginBottom: 6 }}>Delete Attachment?</div>
+        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, color: '#6b7280', fontWeight: 600, marginBottom: 22, lineHeight: 1.5 }}>
+          <strong style={{ color: '#374151' }}>{attach?.contractFilename || 'This file'}</strong> will be permanently removed.
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button className="pg-btn-cancel" onClick={onCancel}>Cancel</button>
+          <button className="exp-btn-delete-confirm" onClick={onConfirm} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Trash2 size={13} /> Delete</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 
+/* ═══════════════════════════════════════════
+   ATTACHMENT SECTION
+═══════════════════════════════════════════ */
+const API_ROOT_URL = 'https://api.jalaram-ad.ashtamtechnologies.com';
+
+function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachmentsChange }) {
+  const [attachments, setAttachments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [uploadErr, setUploadErr] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  const [newFile, setNewFile] = useState(null);
+  const [newType, setNewType] = useState('');
+  const [typeErr, setTypeErr] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [uploadOk, setUploadOk] = useState(false);
+
+  const [replaceFile, setReplaceFile] = useState(null);
+  const [replaceType, setReplaceType] = useState('');
+  const [replaceErr, setReplaceErr] = useState('');
+  const [replacing, setReplacing] = useState(false);
+
+  const fileInputRef = useRef(null);
+  const replaceInputRef = useRef(null);
+
+  // Use a ref so fetchAttachments never needs onAttachmentsChange in its deps
+  // This prevents the infinite re-render loop
+  const onAttachmentsChangeRef = useRef(onAttachmentsChange);
+  useEffect(() => { onAttachmentsChangeRef.current = onAttachmentsChange; }, [onAttachmentsChange]);
+
+  const fetchAttachments = useCallback(async () => {
+    if (!customerContractID) return;
+    setLoading(true);
+    try {
+      const list = await apiService.getCustContractAttachments(customerContractID);
+      const normalized = (Array.isArray(list) ? list : []).map(normalizeAttach);
+      setAttachments(normalized);
+      onAttachmentsChangeRef.current?.(normalized);
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, [customerContractID]); // ← onAttachmentsChange intentionally NOT here (using ref instead)
+
+  useEffect(() => { fetchAttachments(); }, [fetchAttachments]);
+
+  /* ── Upload new ── */
+  const handleUpload = async () => {
+    setTypeErr(''); setUploadErr('');
+    if (!newFile) return;
+    if (!newType) { setTypeErr('Please select a document type'); return; }
+    setUploading(true);
+    try {
+      await apiService.createCustContractAttach({
+        customerContractID,
+        ownerID: Number(ownerID) || 0,
+        hoardingID: Number(hoardingID) || 0,
+        fileUploadType: newType,
+        file: newFile,
+      });
+      setUploadOk(true);
+      setNewFile(null); setNewType('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      await fetchAttachments();
+      setTimeout(() => setUploadOk(false), 2000);
+    } catch (err) {
+      setUploadErr(err?.response?.data?.message || err?.message || 'Upload failed.');
+    } finally { setUploading(false); }
+  };
+
+  /* ── Replace existing ── */
+  const handleReplace = async () => {
+    setReplaceErr('');
+    if (!replaceFile) return;
+    if (!replaceType) { setReplaceErr('Please select a document type'); return; }
+    setReplacing(true);
+    try {
+      await apiService.updateCustContractAttach({
+        custContractAttachID: editTarget.custContractAttachID,
+        customerContractID,
+        ownerID: Number(ownerID) || editTarget.ownerID || 0,
+        hoardingID: Number(hoardingID) || 0,
+        fileUploadType: replaceType,
+        file: replaceFile,
+      });
+      setEditTarget(null); setReplaceFile(null); setReplaceType('');
+      if (replaceInputRef.current) replaceInputRef.current.value = '';
+      await fetchAttachments();
+    } catch (err) {
+      setReplaceErr(err?.response?.data?.message || err?.message || 'Update failed.');
+    } finally { setReplacing(false); }
+  };
+
+  /* ── Delete ── */
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await apiService.deleteCustContractAttach(deleteTarget.custContractAttachID);
+      setAttachments(prev => {
+        const updated = prev.filter(a => a.custContractAttachID !== deleteTarget.custContractAttachID);
+        onAttachmentsChangeRef.current?.(updated);
+        return updated;
+      });
+    } catch { /* silent */ }
+    finally { setDeleteTarget(null); }
+  };
+
+  const fileUrl = (a) => {
+    const p = a.contractFilePath || a.contractFilename || '';
+    if (!p) return null;
+    if (p.startsWith('http')) return p;
+    return `${API_ROOT_URL}/${p.replace(/^\/?/, '')}`;
+  };
+
+  return (
+    <div className="hd-section-card" style={{ marginTop: 0 }}>
+      <div className="hd-section-head">
+        <div className="hd-section-icon-wrap"><Paperclip size={14} color="#049edf" /></div>
+        <div>
+          <div className="hd-section-title">Attachments</div>
+          <div className="hd-section-sub">Upload contract documents or hoarding images</div>
+        </div>
+        {attachments.length > 0 && (
+          <span style={{ marginLeft: 'auto', background: 'rgba(4,158,223,0.1)', color: '#049edf', border: '1px solid rgba(4,158,223,0.25)', borderRadius: 20, padding: '2px 10px', fontSize: 11.5, fontWeight: 800, fontFamily: 'Nunito, sans-serif' }}>
+            {attachments.length} file{attachments.length !== 1 ? 's' : ''}
+          </span>
+        )}
+      </div>
+
+      <div className="hd-section-body">
+
+        {!customerContractID && (
+          <div style={{ padding: '12px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Nunito, sans-serif', fontSize: 12.5, color: '#92400e', fontWeight: 700 }}>
+            <AlertTriangle size={14} color="#d97706" />
+            Save the contract first, then you can upload attachments.
+          </div>
+        )}
+
+        {customerContractID && (
+          <div style={{ background: '#f8f8fd', border: '1.5px dashed #d0d0e8', borderRadius: 12, padding: '16px 18px', marginBottom: 18 }}>
+            <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: '#7878a0', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Upload size={13} /> Upload New Attachment
+            </div>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <div style={{ flex: '1 1 160px', minWidth: 150 }}>
+                <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, fontWeight: 700, color: '#9090a8', marginBottom: 4 }}>Document Type *</div>
+                <select
+                  value={newType}
+                  onChange={e => { setNewType(e.target.value); setTypeErr(''); }}
+                  style={{ width: '100%', padding: '9px 10px', border: `1.5px solid ${typeErr ? '#ef4444' : '#e0e0f0'}`, borderRadius: 8, fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: newType ? '#1a1a2e' : '#b0b0c8', background: '#fff', cursor: 'pointer', outline: 'none' }}>
+                  <option value="">Select type…</option>
+                  {FILE_UPLOAD_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                {typeErr && <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 4, color: '#ef4444', fontSize: 11, fontFamily: 'Nunito, sans-serif', fontWeight: 700 }}><AlertCircle size={11} />{typeErr}</div>}
+              </div>
+
+              <div style={{ flex: '2 1 220px' }}>
+                <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, fontWeight: 700, color: '#9090a8', marginBottom: 4 }}>File *</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #e0e0f0', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}
+                  onClick={() => fileInputRef.current?.click()}>
+                  <Upload size={13} color="#c0c0d8" />
+                  <span style={{ flex: 1, fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: newFile ? 700 : 500, color: newFile ? '#1a1a2e' : '#b0b0c8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {newFile ? newFile.name : 'Choose file…'}
+                  </span>
+                  {newFile && <X size={12} color="#c0c0d8" onClick={e => { e.stopPropagation(); setNewFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} />}
+                </div>
+                <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={e => setNewFile(e.target.files?.[0] || null)} />
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 0 }}>
+                <button
+                  onClick={handleUpload}
+                  disabled={!newFile || uploading}
+                  style={{ padding: '9px 18px', borderRadius: 8, background: newFile ? 'linear-gradient(135deg,#049edf,#0284c7)' : '#e8e8f4', color: newFile ? '#fff' : '#b0b0c8', border: 'none', cursor: newFile ? 'pointer' : 'not-allowed', fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', boxShadow: newFile ? '0 2px 8px rgba(4,158,223,0.3)' : 'none', transition: 'all 0.15s', marginTop: 20 }}>
+                  {uploadOk
+                    ? <><Check size={13} /> Uploaded!</>
+                    : uploading
+                      ? <><Loader2 size={13} className="pg-spin" /> Uploading…</>
+                      : <><Upload size={13} /> Upload</>}
+                </button>
+              </div>
+            </div>
+            {uploadErr && (
+              <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, color: '#ef4444', fontSize: 12, fontFamily: 'Nunito, sans-serif', fontWeight: 700 }}>
+                <AlertCircle size={13} />{uploadErr}
+              </div>
+            )}
+          </div>
+        )}
+
+        {loading && (
+          <div style={{ textAlign: 'center', padding: '24px 0', color: '#9090a8', fontFamily: 'Nunito, sans-serif', fontSize: 13 }}>
+            <Loader2 size={20} className="pg-spin" style={{ marginBottom: 6 }} /><br />Loading attachments…
+          </div>
+        )}
+
+        {!loading && attachments.length === 0 && customerContractID && (
+          <div style={{ textAlign: 'center', padding: '24px 0', color: '#b0b0c8', fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 600 }}>
+            <Paperclip size={30} color="#d8d8ee" style={{ marginBottom: 8 }} /><br />No attachments yet
+          </div>
+        )}
+
+        {!loading && attachments.length > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, border: '1px solid #f0f0f8', borderRadius: 10, overflow: 'hidden' }}>
+            {attachments.map((a, idx) => {
+              const ts = uploadTypeStyle(a.fileUploadType);
+              const url = fileUrl(a);
+              const isImg = isImageFile(a.contractFilename);
+              const isEditing = editTarget?.custContractAttachID === a.custContractAttachID;
+
+              return (
+                <div key={a.custContractAttachID} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafe', borderBottom: idx < attachments.length - 1 ? '1px solid #f0f0f8' : 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', flexWrap: 'wrap' }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 8, background: isImg ? '#f5f3ff' : '#eff6ff', border: `1px solid ${isImg ? '#ddd6fe' : '#bfdbfe'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {fileTypeIcon(a.contractFilename)}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 13, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {a.contractFilename || 'Unnamed file'}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 12, background: ts.bg, color: ts.color, border: `1px solid ${ts.border}`, fontSize: 10.5, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
+                          {a.fileUploadType || '—'}
+                        </span>
+                        {a.lastUpdateDttm && (
+                          <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#b0b0c8', fontWeight: 600 }}>
+                            {new Date(a.lastUpdateDttm).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                      {isImg && url && (
+                        <button title="Preview" onClick={() => setPreviewUrl(url)}
+                          style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6c63ff' }}>
+                          <Eye size={14} />
+                        </button>
+                      )}
+                      {url && (
+                        <a href={url} target="_blank" rel="noreferrer" title="Download / Open"
+                          style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#049edf', textDecoration: 'none' }}>
+                          <Download size={14} />
+                        </a>
+                      )}
+                      <button title="Replace file" onClick={() => { setEditTarget(a); setReplaceType(a.fileUploadType || ''); setReplaceFile(null); setReplaceErr(''); if (replaceInputRef.current) replaceInputRef.current.value = ''; }}
+                        style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: isEditing ? '#eff6ff' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#049edf' }}>
+                        <Edit2 size={14} />
+                      </button>
+                      <button title="Delete" onClick={() => setDeleteTarget(a)}
+                        style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #fecaca', background: '#fef2f2', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {isEditing && (
+                    <div style={{ padding: '10px 14px 14px', background: '#f0f8ff', borderTop: '1px solid #bfdbfe' }}>
+                      <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#1d4ed8', marginBottom: 10 }}>Replace this file</div>
+                      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                        <div style={{ flex: '1 1 150px' }}>
+                          <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, fontWeight: 700, color: '#9090a8', marginBottom: 4 }}>Document Type *</div>
+                          <select
+                            value={replaceType}
+                            onChange={e => { setReplaceType(e.target.value); setReplaceErr(''); }}
+                            style={{ width: '100%', padding: '8px 10px', border: `1.5px solid ${replaceErr ? '#ef4444' : '#bfdbfe'}`, borderRadius: 8, fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: replaceType ? '#1a1a2e' : '#b0b0c8', background: '#fff', cursor: 'pointer', outline: 'none' }}>
+                            <option value="">Select type…</option>
+                            {FILE_UPLOAD_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                        </div>
+                        <div style={{ flex: '2 1 200px' }}>
+                          <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, fontWeight: 700, color: '#9090a8', marginBottom: 4 }}>New file *</div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #bfdbfe', borderRadius: 8, padding: '7px 10px', cursor: 'pointer' }}
+                            onClick={() => replaceInputRef.current?.click()}>
+                            <Upload size={13} color="#c0c0d8" />
+                            <span style={{ flex: 1, fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: replaceFile ? 700 : 500, color: replaceFile ? '#1a1a2e' : '#b0b0c8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {replaceFile ? replaceFile.name : 'Choose replacement…'}
+                            </span>
+                            {replaceFile && <X size={12} color="#c0c0d8" onClick={e => { e.stopPropagation(); setReplaceFile(null); if (replaceInputRef.current) replaceInputRef.current.value = ''; }} />}
+                          </div>
+                          <input ref={replaceInputRef} type="file" style={{ display: 'none' }} onChange={e => setReplaceFile(e.target.files?.[0] || null)} />
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => { setEditTarget(null); setReplaceFile(null); setReplaceErr(''); }} className="pg-btn-cancel" style={{ fontSize: 12 }}>Cancel</button>
+                          <button onClick={handleReplace} disabled={!replaceFile || replacing}
+                            style={{ padding: '8px 16px', borderRadius: 8, background: replaceFile ? 'linear-gradient(135deg,#049edf,#0284c7)' : '#e8e8f4', color: replaceFile ? '#fff' : '#b0b0c8', border: 'none', cursor: replaceFile ? 'pointer' : 'not-allowed', fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6, boxShadow: replaceFile ? '0 2px 8px rgba(4,158,223,0.3)' : 'none' }}>
+                            {replacing ? <><Loader2 size={12} className="pg-spin" /> Saving…</> : <><Check size={12} /> Save</>}
+                          </button>
+                        </div>
+                      </div>
+                      {replaceErr && (
+                        <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, color: '#ef4444', fontSize: 12, fontFamily: 'Nunito, sans-serif', fontWeight: 700 }}>
+                          <AlertCircle size={13} />{replaceErr}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {previewUrl && ReactDOM.createPortal(
+        <div onClick={() => setPreviewUrl(null)} style={{ position: 'fixed', inset: 0, zIndex: 99999, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ position: 'relative', maxWidth: '90vw', maxHeight: '85vh' }}>
+            <img src={previewUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '80vh', borderRadius: 12, boxShadow: '0 8px 40px rgba(0,0,0,0.5)', display: 'block' }} />
+            <button onClick={() => setPreviewUrl(null)} style={{ position: 'absolute', top: -14, right: -14, width: 32, height: 32, borderRadius: '50%', background: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
+              <X size={15} color="#374151" />
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {deleteTarget && <AttachDeleteModal attach={deleteTarget} onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />}
+    </div>
+  );
+}
 
 /* ═══════════════════════════════════════════
    CONTRACT FORM
 ═══════════════════════════════════════════ */
-function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreqs, onBack, onSave }) {
+function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreqs, contracts, landContracts = [], hoardingMaps = [], onBack, onSave }) {
   const isAdd = mode === 'add';
+  const currentContractID = isAdd ? null : (contract?.customerContractID ?? null);
+const checkLandContractWarning = (hoardingID, endDate) => {
+  if (!hoardingID || !endDate) { setLandContractWarning(null); return; }
 
+  // Find all land contract maps for this hoarding
+  const maps = hoardingMaps.filter(m =>
+    Number(m.hoardingID ?? m.HoardingID) === Number(hoardingID)
+  );
+
+  if (!maps.length) { setLandContractWarning(null); return; }
+
+  for (const map of maps) {
+    const lcID = map.landContractID ?? map.LandContractID;
+    const lc = landContracts.find(c => Number(c.landContractID) === Number(lcID));
+    if (!lc || !lc.endDate) continue;
+
+    if (endDate > lc.endDate) {
+      setLandContractWarning({
+        landContractID: lc.landContractID,
+        landContractEnd: lc.endDate,
+        status: lc.status,
+      });
+      return;
+    }
+  }
+
+  setLandContractWarning(null);
+};
   const [form, setForm] = useState(() =>
     isAdd ? { ...EMPTY_FORM } : {
-      customerID:         contract?.customerID         ?? '',
-      hoardingID:         contract?.hoardingID         ?? '',
-      startDate:          contract?.startDate          ?? '',
-      endDate:            contract?.endDate            ?? '',
-      contractOrigValue:  contract?.contractOrigValue  ?? '',
-      paymentFreqID:      contract?.paymentFreqID      ?? '',
-      amountPerFreq:      contract?.amountPerFreq      ?? '',
-      advancePaid:        contract?.advancePaid        ?? '',
-      status:             contract?.status             ?? 'Active',
-      discountAmount:     contract?.discountAmount     ?? '',
-      adjustmentAmount:   contract?.adjustmentAmount   ?? '',
+      customerID: contract?.customerID ?? '',
+      hoardingID: contract?.hoardingID ?? '',
+      startDate: contract?.startDate ?? '',
+      endDate: contract?.endDate ?? '',
+      contractOrigValue: contract?.contractOrigValue ?? '',
+      paymentFreqID: contract?.paymentFreqID ?? '',
+      amountPerFreq: contract?.amountPerFreq ?? '',
+      advancePaid: contract?.advancePaid ?? '',
+      status: contract?.status ?? 'Active',
+      discountAmount: contract?.discountAmount ?? '',
+      adjustmentAmount: contract?.adjustmentAmount ?? '',
       contractFinalValue: contract?.contractFinalValue ?? '',
-      comments:           contract?.comments           ?? '',
+      comments: contract?.comments ?? '',
     }
+  );
+
+  const [savedContractID, setSavedContractID] = useState(
+    isAdd ? null : (contract?.customerContractID ?? null)
   );
 
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
   const [apiErr, setApiErr] = useState('');
+  const [liveConflict, setLiveConflict] = useState(null);        // ← must be here
+const [landContractWarning, setLandContractWarning] = useState(null);
+
+  // ── New states for attachment flow ──
+  const [contractSaved, setContractSaved] = useState(!isAdd); // true immediately in edit mode
+  const [attachmentList, setAttachmentList] = useState([]);
+  const [bannerErr, setBannerErr] = useState('');
+
+  // Stable callback — avoids infinite re-render in AttachmentSection
+  const handleAttachmentsChange = useCallback((list) => {
+    setAttachmentList(list);
+    // Auto-clear the banner error once a Banner Design is uploaded
+    setBannerErr(prev =>
+      prev && list.some(a => a.fileUploadType === 'Banner Design') ? '' : prev
+    );
+  }, []);
 
   const freqOptions = paymentFreqs.length ? paymentFreqs : PAYMENT_FREQ_FALLBACK;
 
-  const set = (key, val) => {
-    setForm(p => ({ ...p, [key]: val }));
-    if (errors[key]) setErrors(p => ({ ...p, [key]: '' }));
-  };
+const set = (key, val) => {
+  setForm(p => {
+    const next = { ...p, [key]: val };
+    if (key === 'hoardingID' || key === 'startDate' || key === 'endDate') {
+      setLiveConflict(detectHoardingConflict(next, contracts, currentContractID));
+      checkLandContractWarning(
+        key === 'hoardingID' ? val : next.hoardingID,
+        key === 'endDate' ? val : next.endDate
+      );
+    }
+    return next;
+  });
+  if (errors[key]) setErrors(p => ({ ...p, [key]: '' }));
+};
 
-  /* Auto-calculate contractFinalValue when orig/discount/adjustment change */
   useEffect(() => {
-    const orig   = Number(String(form.contractOrigValue).replace(/,/g, ''))  || 0;
-    const disc   = Number(String(form.discountAmount).replace(/,/g, ''))     || 0;
-    const adj    = Number(String(form.adjustmentAmount).replace(/,/g, ''))   || 0;
-    const final  = orig - disc + adj;
+    const orig = Number(String(form.contractOrigValue).replace(/,/g, '')) || 0;
+    const disc = Number(String(form.discountAmount).replace(/,/g, '')) || 0;
+    const adj = Number(String(form.adjustmentAmount).replace(/,/g, '')) || 0;
+    const final = orig - disc + adj;
     setForm(p => ({ ...p, contractFinalValue: final >= 0 ? final : 0 }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.contractOrigValue, form.discountAmount, form.adjustmentAmount]);
 
+  /* ── Save contract ── */
   const handleSave = async () => {
-    const errs = validateForm(form);
+    const errs = validateForm(form, contracts, currentContractID);
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true); setApiErr('');
     try {
       const payload = {
         customerContractID: isAdd ? 0 : contract.customerContractID,
-        customerID:         Number(form.customerID),
-        hoardingID:         Number(form.hoardingID),
-        startDate:          form.startDate,
-        endDate:            form.endDate,
-        contractOrigValue:  Number(String(form.contractOrigValue).replace(/,/g, ''))  || 0,
-        paymentFreqID:      Number(form.paymentFreqID),
-        amountPerFreq:      Number(String(form.amountPerFreq).replace(/,/g, ''))      || 0,
-        advancePaid:        Number(String(form.advancePaid).replace(/,/g, ''))        || 0,
-        status:             form.status,
-        discountAmount:     Number(String(form.discountAmount).replace(/,/g, ''))     || 0,
-        adjustmentAmount:   Number(String(form.adjustmentAmount).replace(/,/g, ''))   || 0,
+        customerID: Number(form.customerID),
+        hoardingID: Number(form.hoardingID),
+        startDate: form.startDate,
+        endDate: form.endDate,
+        contractOrigValue: Number(String(form.contractOrigValue).replace(/,/g, '')) || 0,
+        paymentFreqID: Number(form.paymentFreqID),
+        amountPerFreq: Number(String(form.amountPerFreq).replace(/,/g, '')) || 0,
+        advancePaid: Number(String(form.advancePaid).replace(/,/g, '')) || 0,
+        status: form.status,
+        discountAmount: Number(String(form.discountAmount).replace(/,/g, '')) || 0,
+        adjustmentAmount: Number(String(form.adjustmentAmount).replace(/,/g, '')) || 0,
         contractFinalValue: Number(String(form.contractFinalValue).replace(/,/g, '')) || 0,
-        comments:           form.comments || '',
+        comments: form.comments || '',
       };
 
       let saved;
@@ -671,15 +1130,39 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
         const res = await apiService.updateCustomerContract(payload);
         saved = normalizeContract(res?.data ?? res ?? { ...payload, customerContractID: contract.customerContractID });
       }
+
+      if (saved.customerContractID) setSavedContractID(saved.customerContractID);
+
       setSaveOk(true);
-      await new Promise(r => setTimeout(r, 700));
       onSave(saved, isAdd);
-      onBack();
+
+      if (isAdd) {
+        // Stay on the form — user must upload a Banner Design image next
+        setContractSaved(true);
+        setTimeout(() => setSaveOk(false), 2500);
+      } else {
+        // Edit mode: navigate back after short delay
+        setTimeout(() => onBack(), 900);
+      }
     } catch (err) {
       const msg = err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Save failed.';
       setApiErr(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally { setSaving(false); }
   };
+
+  /* ── Finish (add mode only) — validates banner image ── */
+  const handleFinish = () => {
+    const hasBanner = attachmentList.some(a => a.fileUploadType === 'Banner Design');
+    if (!hasBanner) {
+      setBannerErr('Banner Design image is required. Please upload one before finishing.');
+      // Scroll to attachment section
+      document.querySelector('.hd-attach-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    onBack();
+  };
+
+  const hasBanner = attachmentList.some(a => a.fileUploadType === 'Banner Design');
 
   return (
     <div className="hd-form-page">
@@ -705,6 +1188,78 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
               <AlertCircle size={14} /><span>{apiErr}</span>
             </div>
           )}
+
+          {/* ── Live double-booking warning ── */}
+          {liveConflict && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '12px 16px', marginBottom: 16,
+              background: '#fef2f2', border: '1.5px solid #fecaca',
+              borderRadius: 10, fontFamily: 'Nunito, sans-serif',
+            }}>
+              <AlertCircle size={16} color="#dc2626" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 13, color: '#dc2626', marginBottom: 3 }}>
+                  Hoarding Already Booked
+                </div>
+                <div style={{ fontWeight: 600, fontSize: 12.5, color: '#991b1b', lineHeight: 1.55 }}>
+                  This hoarding is booked under{' '}
+                  <strong>Contract #{liveConflict.customerContractID}</strong>{' '}
+                  from <strong>{fmtDate(liveConflict.startDate)}</strong> to{' '}
+                  <strong>{fmtDate(liveConflict.endDate)}</strong>
+                  {liveConflict.status && (
+                    <span style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 10, background: '#fee2e2', color: '#dc2626', fontSize: 11, fontWeight: 800, border: '1px solid #fca5a5' }}>
+                      {liveConflict.status}
+                    </span>
+                  )}.
+                  {' '}Please select different dates or a different hoarding.
+                </div>
+              </div>
+            </div>
+          )}
+{landContractWarning && (
+  <div style={{
+    display: 'flex', alignItems: 'flex-start', gap: 10,
+    padding: '12px 16px', marginBottom: 16,
+    background: '#fffbeb', border: '1.5px solid #fde68a',
+    borderRadius: 10, fontFamily: 'Nunito, sans-serif',
+  }}>
+    <AlertCircle size={16} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
+    <div>
+      <div style={{ fontWeight: 800, fontSize: 13, color: '#d97706', marginBottom: 3 }}>
+        Land Contract Ends Before Customer Contract
+      </div>
+      <div style={{ fontWeight: 600, fontSize: 12.5, color: '#92400e', lineHeight: 1.55 }}>
+        The land contract <strong>#{landContractWarning.landContractID}</strong> for this hoarding
+        ends on <strong>{fmtDate(landContractWarning.landContractEnd)}.</strong>
+      </div>
+    </div>
+  </div>
+)}
+          {/* ── Step indicator (add mode only) ── */}
+          {/* {isAdd && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 20, background: '#f8f8fd', border: '1px solid #e8e8f4', borderRadius: 12, overflow: 'hidden' }}>
+              <div style={{ flex: 1, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, background: contractSaved ? 'rgba(22,163,74,0.06)' : 'rgba(4,158,223,0.06)', borderRight: '1px solid #e8e8f4' }}>
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: contractSaved ? '#16a34a' : '#049edf', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {contractSaved ? <Check size={13} color="#fff" /> : <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#fff' }}>1</span>}
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: contractSaved ? '#16a34a' : '#049edf' }}>Contract Details</div>
+                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>{contractSaved ? 'Saved' : 'Fill & save'}</div>
+                </div>
+              </div>
+              <div style={{ flex: 1, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, background: hasBanner ? 'rgba(22,163,74,0.06)' : contractSaved ? 'rgba(4,158,223,0.06)' : 'transparent', opacity: contractSaved ? 1 : 0.45 }}>
+                <div style={{ width: 26, height: 26, borderRadius: '50%', background: hasBanner ? '#16a34a' : contractSaved ? '#049edf' : '#d0d0e8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  {hasBanner ? <Check size={13} color="#fff" /> : <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#fff' }}>2</span>}
+                </div>
+                <div>
+                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: hasBanner ? '#16a34a' : contractSaved ? '#049edf' : '#9090a8' }}>Banner Image</div>
+                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>{hasBanner ? 'Uploaded ✓' : 'Required'}</div>
+                </div>
+              </div>
+            </div>
+          )} */}
+
           <div className="row g-4">
 
             {/* ── Customer & Hoarding ── */}
@@ -721,25 +1276,12 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
                   <div className="row g-3">
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Customer" required />
-                      <CustomerSearchWidget
-                        customers={customers}
-                        value={form.customerID}
-                        onChange={val => set('customerID', val)}
-                        error={errors.customerID}
-                        disabled={!isAdd}
-                      />
+                      <CustomerSearchWidget customers={customers} value={form.customerID} onChange={val => set('customerID', val)} error={errors.customerID} disabled={!isAdd} />
                       <FieldError msg={errors.customerID} />
                     </div>
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Hoarding" required />
-                      <HoardingPickerField
-                        hoardings={hoardings}
-                        sites={sites}
-                        value={form.hoardingID}
-                        onChange={val => set('hoardingID', val)}
-                        error={errors.hoardingID}
-                        disabled={!isAdd}
-                      />
+                      <HoardingPickerField hoardings={hoardings} sites={sites} value={form.hoardingID} onChange={val => set('hoardingID', val)} error={errors.hoardingID} disabled={!isAdd} />
                       <FieldError msg={errors.hoardingID} />
                     </div>
                   </div>
@@ -775,11 +1317,7 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
                     </div>
                     <div className="col-12 col-md-4">
                       <FieldLabel label="Status" required />
-                      <ComboDropdown
-                        value={form.status} onChange={val => set('status', val)} onBlur={() => {}}
-                        hasError={!!errors.status} placeholder="Select status…" icon={ShieldCheck}
-                        options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))}
-                      />
+                      <ComboDropdown value={form.status} onChange={val => set('status', val)} onBlur={() => { }} hasError={!!errors.status} placeholder="Select status…" icon={ShieldCheck} options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))} />
                       <FieldError msg={errors.status} />
                     </div>
                   </div>
@@ -808,11 +1346,7 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
                     </div>
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Payment Frequency" required />
-                      <ComboDropdown
-                        value={form.paymentFreqID} onChange={val => set('paymentFreqID', val)} onBlur={() => {}}
-                        hasError={!!errors.paymentFreqID} placeholder="Select frequency…"
-                        icon={CreditCard} options={freqOptions}
-                      />
+                      <ComboDropdown value={form.paymentFreqID} onChange={val => set('paymentFreqID', val)} onBlur={() => { }} hasError={!!errors.paymentFreqID} placeholder="Select frequency…" icon={CreditCard} options={freqOptions} />
                       <FieldError msg={errors.paymentFreqID} />
                     </div>
                     <div className="col-12 col-md-6">
@@ -842,10 +1376,9 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
                     </div>
                     <div className="col-12 col-md-4">
                       <FieldLabel label="Final Contract Value (Rs.)" />
-                      {/* Auto-calculated: Orig - Discount + Adjustment */}
                       <div style={{ position: 'relative' }}>
                         <InputWrap icon={IndianRupee}>
-                          <CurrencyInput value={form.contractFinalValue} onChange={() => {}} placeholder="Auto-calculated" readOnly />
+                          <CurrencyInput value={form.contractFinalValue} onChange={() => { }} placeholder="Auto-calculated" readOnly />
                         </InputWrap>
                         <div style={{ marginTop: 4, fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>
                           = Original − Discount + Adjustment
@@ -878,19 +1411,94 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
               </div>
             </div>
 
+            {/* ── Attachments ── */}
+            <div className="col-12 hd-attach-section">
+
+              {/* Banner requirement notice / error bar */}
+              {contractSaved && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '11px 16px', marginBottom: 10,
+                  background: bannerErr ? '#fef2f2' : '#fffbeb',
+                  border: `1.5px solid ${bannerErr ? '#fecaca' : '#fde68a'}`,
+                  borderRadius: 10,
+                  fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700,
+                  color: bannerErr ? '#dc2626' : '#92400e',
+                  transition: 'all 0.2s',
+                }}>
+                  <AlertTriangle size={15} color={bannerErr ? '#dc2626' : '#d97706'} style={{ flexShrink: 0 }} />
+                  <span>
+                    {bannerErr
+                      ? bannerErr
+                      : 'Required: Upload at least one Banner Design image to complete this contract.'}
+                  </span>
+                  {hasBanner && (
+                    <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 4, color: '#16a34a', fontWeight: 800, fontSize: 12 }}>
+                      <Check size={13} /> Banner uploaded
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {(() => {
+                const selectedHoarding = hoardings.find(h => h.hoardingID === Number(form.hoardingID) || h.hoardingID === form.hoardingID);
+                const selectedSite = sites.find(s => s.siteID === selectedHoarding?.siteID);
+                const resolvedOwnerID = selectedSite?.ownerID ?? 0;
+                return (
+                  <AttachmentSection
+                    customerContractID={savedContractID}
+                    hoardingID={form.hoardingID}
+                    ownerID={resolvedOwnerID}
+                    onAttachmentsChange={handleAttachmentsChange}
+                  />
+                );
+              })()}
+            </div>
+
           </div>
         </div>
       </div>
 
+      {/* ── Footer ── */}
       <div className="hd-form-footer hd-form-footer--sticky">
-        <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
-        <button className="pg-btn-save" onClick={handleSave} disabled={saving}>
-          {saveOk
-            ? <><Check size={13} /> Saved!</>
-            : saving
-              ? <><Loader2 size={13} className="pg-spin" /> Saving...</>
-              : <><Check size={13} /> {isAdd ? 'Save Contract' : 'Update Contract'}</>}
+        <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>
+          {isAdd && contractSaved ? 'Back to Contracts' : 'Cancel'}
         </button>
+
+        {/* Save button — shown only when contract not yet saved (add) or always in edit */}
+        {(!isAdd || !contractSaved) && (
+          <button
+            className="pg-btn-save"
+            onClick={handleSave}
+            disabled={saving || !!liveConflict}
+            title={liveConflict ? 'Resolve the double-booking conflict before saving' : ''}
+            style={liveConflict ? { opacity: 0.55, cursor: 'not-allowed' } : {}}
+          >
+            {saveOk
+              ? <><Check size={13} /> Saved!</>
+              : saving
+                ? <><Loader2 size={13} className="pg-spin" /> Saving...</>
+                : liveConflict
+                  ? <><AlertCircle size={13} /> Booking Conflict</>
+                  : <><Check size={13} /> {isAdd ? 'Save Contract' : 'Update Contract'}</>}
+          </button>
+        )}
+
+        {/* Finish button — shown in add mode after contract is saved */}
+        {isAdd && contractSaved && (
+          <button
+            className="pg-btn-save"
+            onClick={handleFinish}
+            style={{
+              background: hasBanner
+                ? 'linear-gradient(135deg,#16a34a,#15803d)'
+                : 'linear-gradient(135deg,#049edf,#0284c7)',
+            }}
+          >
+            <Check size={13} />
+            {hasBanner ? 'Finish & Go Back' : 'Finish (Banner Required)'}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -900,28 +1508,29 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
    MAIN PAGE
 ═══════════════════════════════════════════ */
 export default function CustomerContractPage() {
-  const [customers,    setCustomers]    = useState([]);
-  const [hoardings,    setHoardings]    = useState([]);
-  const [sites,        setSites]        = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [hoardings, setHoardings] = useState([]);
+  const [sites, setSites] = useState([]);
   const [paymentFreqs, setPaymentFreqs] = useState([]);
-  const [contracts,    setContracts]    = useState([]);
-  const [loadingMeta,  setLoadingMeta]  = useState(true);
-  const [loadError,    setLoadError]    = useState('');
+  const [contracts, setContracts] = useState([]);
+  const [landContracts, setLandContracts] = useState([]);      // ← add
+const [hoardingMaps, setHoardingMaps] = useState([]);         // ← add
+  const [loadingMeta, setLoadingMeta] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
-  const [view,         setView]         = useState('grid');
-  const [formMode,     setFormMode]     = useState(null);
-  const [editTarget,   setEditTarget]   = useState(null);
-  const [viewTarget,   setViewTarget]   = useState(null);
+  const [view, setView] = useState('grid');
+  const [formMode, setFormMode] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
-  const [search,       setSearch]       = useState('');
+  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [sortKey,      setSortKey]      = useState('startDate');
-  const [sortDir,      setSortDir]      = useState('desc');
-  const [page,         setPage]         = useState(1);
-  const [pageSize,     setPageSize]     = useState(10);
+  const [sortKey, setSortKey] = useState('startDate');
+  const [sortDir, setSortDir] = useState('desc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
-  const tableRef    = useRef(null);
+  const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loadingMeta) setTableReady(true); }, [loadingMeta]);
   useResizableColumns(tableRef, tableReady, [60, 160, 160, 110, 110, 130, 100, 90]);
@@ -929,17 +1538,19 @@ export default function CustomerContractPage() {
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
     try {
-      const [rawCustomers, rawHoardings, rawSites, rawContracts, rawFreqs] = await Promise.all([
-        apiService.getAllCustomers(),
-        apiService.getAllHoardings(),
-        apiService.getAllSites(),
-        apiService.getAllCustomerContracts(),
-        apiService.getAllPaymentFreqs(),
-      ]);
+const [rawCustomers, rawHoardings, rawSites, rawContracts, rawFreqs, rawLandContracts, rawMaps] = await Promise.all([
+  apiService.getAllCustomers(),
+  apiService.getAllHoardings(),
+  apiService.getAllSites(),
+  apiService.getAllCustomerContracts(),
+  apiService.getAllPaymentFreqs(),
+  apiService.getAllLandContracts(),
+  apiService.getAllLandContractHoardingMaps(),
+]);
       setCustomers(Array.isArray(rawCustomers) ? rawCustomers : rawCustomers?.data ?? []);
       setHoardings(
-        Array.isArray(rawHoardings)         ? deduplicateHoardings(rawHoardings)
-        : Array.isArray(rawHoardings?.data) ? deduplicateHoardings(rawHoardings.data) : []
+        Array.isArray(rawHoardings) ? deduplicateHoardings(rawHoardings)
+          : Array.isArray(rawHoardings?.data) ? deduplicateHoardings(rawHoardings.data) : []
       );
       setSites(Array.isArray(rawSites) ? rawSites : rawSites?.data ?? []);
       const freqList = Array.isArray(rawFreqs) ? rawFreqs : rawFreqs?.data ?? [];
@@ -949,6 +1560,16 @@ export default function CustomerContractPage() {
       })));
       const list = Array.isArray(rawContracts) ? rawContracts : rawContracts?.data ?? [];
       setContracts(list.map(normalizeContract));
+      const lcList = Array.isArray(rawLandContracts) ? rawLandContracts : rawLandContracts?.data ?? [];
+setLandContracts(lcList.map(c => ({
+  landContractID: c.landContractID ?? c.LandContractID,
+  startDate: (c.startDate ?? c.StartDate ?? '').split('T')[0],
+  endDate: (c.endDate ?? c.EndDate ?? '').split('T')[0],
+  status: c.status ?? c.Status ?? '',
+})));
+
+const mapList = Array.isArray(rawMaps) ? rawMaps : rawMaps?.data ?? [];
+setHoardingMaps(mapList);
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally { setLoadingMeta(false); }
@@ -973,15 +1594,15 @@ export default function CustomerContractPage() {
 
   const tableRows = contracts.map(c => {
     const customer = customers.find(cu => cu.customerID === c.customerID);
-    const hoarding = hoardings.find(h  => h.hoardingID  === c.hoardingID);
+    const hoarding = hoardings.find(h => h.hoardingID === c.hoardingID);
     return {
       customerContractID: c.customerContractID,
-      customerName:       customer?.customerName || `Customer ID ${c.customerID}`,
-      hoardingLabel:      hoarding ? hoardingLabel(hoarding) : `Hoarding ID ${c.hoardingID}`,
-      startDate:          c.startDate || '',
-      endDate:            c.endDate   || '',
+      customerName: customer?.customerName || `Customer ID ${c.customerID}`,
+      hoardingLabel: hoarding ? hoardingLabel(hoarding) : `Hoarding ID ${c.hoardingID}`,
+      startDate: c.startDate || '',
+      endDate: c.endDate || '',
       contractFinalValue: c.contractFinalValue ?? c.contractOrigValue ?? 0,
-      status:             c.status || '',
+      status: c.status || '',
       _raw: c,
     };
   });
@@ -989,9 +1610,9 @@ export default function CustomerContractPage() {
   const filtered = tableRows.filter(r => {
     const q = search.toLowerCase();
     const match =
-      r.customerName.toLowerCase().includes(q)  ||
+      r.customerName.toLowerCase().includes(q) ||
       r.hoardingLabel.toLowerCase().includes(q) ||
-      r.status.toLowerCase().includes(q)         ||
+      r.status.toLowerCase().includes(q) ||
       String(r.customerContractID).includes(q);
     return match && (!statusFilter || r.status === statusFilter);
   });
@@ -1005,7 +1626,7 @@ export default function CustomerContractPage() {
   });
 
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
-  const paginated  = sortedRows.slice((page - 1) * pageSize, page * pageSize);
+  const paginated = sortedRows.slice((page - 1) * pageSize, page * pageSize);
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -1013,33 +1634,36 @@ export default function CustomerContractPage() {
     setPage(1);
   };
 
-  const totalValue  = contracts.reduce((s, c) => s + (Number(c.contractFinalValue) || 0), 0);
+  const totalValue = contracts.reduce((s, c) => s + (Number(c.contractFinalValue) || 0), 0);
   const activeCount = contracts.filter(c => c.status === 'Active').length;
-  const endedCount  = contracts.filter(c => c.status === 'Expired' || c.status === 'Terminated').length;
+  const endedCount = contracts.filter(c => c.status === 'Expired' || c.status === 'Terminated').length;
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
     .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
     .reduce((acc, p, i, arr) => { if (i > 0 && arr[i] - arr[i - 1] > 1) acc.push('...'); acc.push(p); return acc; }, []);
 
   const COLS = [
-    { key: 'customerContractID', label: '#ID'          },
-    { key: 'customerName',       label: 'Customer'      },
-    { key: 'hoardingLabel',      label: 'Hoarding',      tabletHide: true },
-    { key: 'startDate',          label: 'Start Date'    },
-    { key: 'endDate',            label: 'End Date',      tabletHide: true },
-    { key: 'contractFinalValue', label: 'Final Value'   },
-    { key: 'status',             label: 'Status'        },
-    { key: '_action',            label: 'Actions',       noSort: true },
+    { key: 'customerContractID', label: '#ID' },
+    { key: 'customerName', label: 'Customer' },
+    { key: 'hoardingLabel', label: 'Hoarding', tabletHide: true },
+    { key: 'startDate', label: 'Start Date' },
+    { key: 'endDate', label: 'End Date', tabletHide: true },
+    { key: 'contractFinalValue', label: 'Final Value' },
+    { key: 'status', label: 'Status' },
+    { key: '_action', label: 'Actions', noSort: true },
   ];
 
   if (view === 'form') {
     return (
-      <ContractForm
-        mode={formMode} contract={editTarget}
-        customers={customers} hoardings={hoardings} sites={sites} paymentFreqs={freqOptions}
-        onBack={() => { setView('grid'); setEditTarget(null); }}
-        onSave={handleSave}
-      />
+<ContractForm
+  mode={formMode} contract={editTarget}
+  customers={customers} hoardings={hoardings} sites={sites} paymentFreqs={freqOptions}
+  contracts={contracts}
+  landContracts={landContracts}
+  hoardingMaps={hoardingMaps}
+  onBack={() => { setView('grid'); setEditTarget(null); }}
+  onSave={handleSave}
+/>
     );
   }
 
@@ -1063,10 +1687,10 @@ export default function CustomerContractPage() {
       {!loadingMeta && contracts.length > 0 && (
         <div className="exp-stats-strip">
           {[
-            { icon: <FileText   size={16} color="#049edf" />, bg: 'rgba(4,158,223,0.1)',  label: 'Total Contracts', val: contracts.length },
-            { icon: <IndianRupee size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)', label: 'Total Value',     val: fmtCurrency(totalValue) },
-            { icon: <ShieldCheck size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)', label: 'Active',          val: activeCount },
-            { icon: <Clock       size={16} color="#dc2626" />, bg: 'rgba(220,38,38,0.08)',label: 'Expired/Ended',   val: endedCount },
+            { icon: <FileText size={16} color="#049edf" />, bg: 'rgba(4,158,223,0.1)', label: 'Total Contracts', val: contracts.length },
+            { icon: <IndianRupee size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)', label: 'Total Value', val: fmtCurrency(totalValue) },
+            { icon: <ShieldCheck size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)', label: 'Active', val: activeCount },
+            { icon: <Clock size={16} color="#dc2626" />, bg: 'rgba(220,38,38,0.08)', label: 'Expired/Ended', val: endedCount },
           ].map(s => (
             <div key={s.label} className="exp-stat-item">
               <div className="exp-stat-item__icon" style={{ background: s.bg }}>{s.icon}</div>
@@ -1123,7 +1747,6 @@ export default function CustomerContractPage() {
           </div>
         )}
 
-        {/* Desktop table */}
         {!loadingMeta && contracts.length > 0 && (
           <div className="pg-desktop-table">
             <table className="pg-table" ref={tableRef}>
@@ -1161,8 +1784,7 @@ export default function CustomerContractPage() {
                       </td>
                       <td className="pg-td">
                         <div className="pg-action-wrap">
-                          <button className="pg-btn-view" title="Edit"   onClick={() => { setFormMode('edit'); setEditTarget(r._raw); setView('form'); }}><Edit2 size={13} /></button>
-                          {/* <button className="exp-btn-delete" title="Delete" onClick={() => setDeleteTarget(r._raw)}><Trash2 size={13} /></button> */}
+                          <button className="pg-btn-view" title="Edit" onClick={() => { setFormMode('edit'); setEditTarget(r._raw); setView('form'); }}><Edit2 size={13} /></button>
                         </div>
                       </td>
                     </tr>
@@ -1173,7 +1795,6 @@ export default function CustomerContractPage() {
           </div>
         )}
 
-        {/* Mobile cards */}
         {!loadingMeta && contracts.length > 0 && (
           <div className="pg-mobile-cards">
             {paginated.length === 0 ? (
@@ -1190,7 +1811,6 @@ export default function CustomerContractPage() {
                       <div className="pg-card__subtitle">{r.hoardingLabel}</div>
                     </div>
                     <div className="pg-card__actions">
-                      <button className="pg-card__btn-edit" onClick={() => setViewTarget(r._raw)} title="View"><Eye size={13} /></button>
                       <button className="pg-card__btn-view" onClick={() => { setFormMode('edit'); setEditTarget(r._raw); setView('form'); }} title="Edit"><Edit2 size={13} /></button>
                       <button className="exp-btn-delete" onClick={() => setDeleteTarget(r._raw)} title="Delete"><Trash2 size={13} /></button>
                     </div>
@@ -1206,17 +1826,16 @@ export default function CustomerContractPage() {
           </div>
         )}
 
-        {/* Pagination */}
         {!loadingMeta && contracts.length > 0 && (
           <div className="pg-pagination">
             <div className="pg-pagination__left">
-              <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(1)}><ChevronsLeft  size={13} /></button>
-              <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(p => p - 1)}><ChevronLeft  size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}><ChevronsLeft size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={13} /></button>
               {pageNums.map((p, i) => p === '...'
                 ? <span key={`e${i}`} className="pg-pg-ellipsis">...</span>
                 : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>
               )}
-              <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight  size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight size={13} /></button>
               <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}><ChevronsRight size={13} /></button>
             </div>
             <div className="pg-pagination__right">
@@ -1229,8 +1848,6 @@ export default function CustomerContractPage() {
           </div>
         )}
       </div>
-
-
 
       {deleteTarget && (
         <DeleteConfirmModal contract={deleteTarget}

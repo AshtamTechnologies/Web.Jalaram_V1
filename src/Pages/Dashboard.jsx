@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   LayoutDashboard, Users, CalendarCheck, LogOut,
-  Menu, X, ChevronDown, RefreshCw, DollarSign,IndianRupee,
-  Bell, Search, TrendingUp, ArrowUpRight,
+  Menu, X, ChevronDown, RefreshCw, DollarSign, IndianRupee,
+  Bell, Search, TrendingUp, ArrowUpRight, BarChart3,
   MapPin, CreditCard, Layers, TrendingDown, UserCircle,
   ChevronRight, Receipt, FileText, PlusSquare, Banknote
 } from 'lucide-react';
@@ -12,6 +12,7 @@ import {
 } from 'recharts';
 import './Common1.css';
 
+import Chatbot from "../components/Chatbot";
 import OwnerPage from './Owner';
 import SitePage from './Site.jsx';
 import Hoarding from './Hoarding.jsx';
@@ -21,6 +22,14 @@ import LandPayment from './LandPayment.jsx';
 import CustomerPage from './Customer.jsx';
 import CustomerContract from './CustomerContract.jsx';
 import HoardingMerge from './Hoardingmerge.jsx';
+import Reports from './Reports.jsx'
+import Quotation from './Quotation.jsx'
+import Terms from './Terms.jsx'
+import Job from './Job.jsx'
+import Registration from './Registration.jsx';
+
+
+
 
 /* ─────────────────────────────────────
    MOCK DATA
@@ -59,32 +68,58 @@ const STATUS_STYLE = {
 ───────────────────────────────────── */
 const MENU = [
   {
-    id: 'hoardings', icon: Layers, label: 'Hoardings', badge: null,
+    id: 'hoardings',
+    icon: Layers,
+    label: 'Hoardings',
+    badge: null,
     children: [
       { id: 'new-hoarding', icon: PlusSquare, label: 'Maintain Hoarding' },
-      { id: 'hoarding-expense', icon: IndianRupee , label: 'Hoarding Expense' },
+      { id: 'hoarding-expense', icon: IndianRupee, label: 'Hoarding Expense' },
       { id: 'hoarding-merge', icon: Layers, label: 'Hoarding Merge' },
     ],
   },
-  // { id: 'bookings', icon: CalendarCheck, label: 'Bookings', badge: null },
+
+
   { id: 'sites', icon: MapPin, label: 'Sites', badge: null },
+
   {
-    id: 'land-contract', icon: FileText, label: 'Land Contracts', badge: null,
+    id: 'land-contract',
+    icon: FileText,
+    label: 'Land Contracts',
+    badge: null,
     children: [
-      { id: 'land-contracts', icon: FileText, label: 'Land Contracts' },  // ← existing page
-      { id: 'land-payment', icon: Banknote, label: 'Land Payment' },  // ← NEW page
+      { id: 'land-contracts', icon: FileText, label: 'Land Contracts' },
+      { id: 'land-payment', icon: Banknote, label: 'Land Payment' },
     ],
   },
+
   {
-    id: 'customer', icon: Users, label: 'Customer', badge: null,  // ← NEW
+    id: 'customer',
+    icon: Users,
+    label: 'Customer',
+    badge: null,
     children: [
       { id: 'customer-details', icon: UserCircle, label: 'Customer Details' },
       { id: 'customer-contract', icon: FileText, label: 'Customer Contract' },
+      { id: 'quotation', icon: BarChart3, label: 'Quotation' },
     ],
   },
-  // { id: 'clients', icon: Users,       label: 'Clients', badge: null },
+
   { id: 'owners', icon: UserCircle, label: 'Owners', badge: null },
-  // { id: 'payments',icon: CreditCard,  label: 'Payments',badge: null },
+  { id: 'reports', icon: BarChart3, label: 'Reports', badge: null },
+  { id: 'jobs', icon: BarChart3, label: 'Job Management', badge: null },
+  { id: 'registration', icon: BarChart3, label: 'Registration', badge: null },
+
+  
+  {
+    id: 'configuration',
+    icon: FileText,
+    label: 'Configuration',
+    badge: null,
+    children: [
+      { id: 'terms', icon: FileText, label: 'Terms' },
+    ],
+  },
 ];
 
 const CHILD_TO_PARENT = {};
@@ -491,6 +526,15 @@ export default function Dashboard({ onLogout }) {
       case 'customer-details': return <CustomerPage />;
       case 'customer-contract': return <CustomerContract />;
       case 'sites': return <SitePage />;
+      case 'reports': return <Reports />;
+      case 'quotation': return <Quotation />;
+      case 'terms': return <Terms />;
+      case 'jobs': return <Job />;
+      case 'registration': return <Registration />;
+
+
+
+
       default: return <DashboardPage />;
     }
   };
@@ -551,6 +595,7 @@ export default function Dashboard({ onLogout }) {
         <main className="page-content">
           {renderContent()}
         </main>
+        <Chatbot />
       </div>
     </div>
   );

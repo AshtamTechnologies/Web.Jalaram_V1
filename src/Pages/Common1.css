@@ -5438,3 +5438,778 @@ select.exp-cell-input {
   padding: 8px 0 4px;
   font-family: inherit;
 }
+/* ═══════════════════════════════════════════════════════════════
+   QUOTATION PAGE CSS — add these blocks to your Common1.css
+   (or common.css, wherever your pg-* classes live)
+═══════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════
+   QUOTATION PAGE — UPDATED CSS  (add to Common1.css)
+═══════════════════════════════════════════════════════ */
+
+/* ── Step bar ─────────────────────────────────────── */
+.qt-step-bar {
+  display: flex;
+  align-items: center;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #f0f0f8;
+  gap: 0;
+}
+.qt-step {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-shrink: 0;
+}
+.qt-step__circle {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #f0f0f8;
+  border: 2px solid #e0e0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+.qt-step--active .qt-step__circle { background: #049edf; border-color: #049edf; }
+.qt-step--done   .qt-step__circle { background: #16a34a; border-color: #16a34a; }
+.qt-step__label {
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: #b0b0c8;
+  white-space: nowrap;
+}
+.qt-step--active .qt-step__label { color: #049edf; }
+.qt-step--done   .qt-step__label { color: #16a34a; }
+.qt-step__connector {
+  flex: 1;
+  height: 2px;
+  background: #e8e8f4;
+  margin: 0 10px;
+  min-width: 20px;
+  transition: background 0.2s;
+}
+.qt-step__connector--done { background: #16a34a; }
+
+/* ── Form container ───────────────────────────────── */
+.qt-form-container {
+  /* subtle left accent */
+  border-top: 3px solid #049edf;
+}
+.qt-step-body {
+  padding: 24px 28px;
+}
+
+/* ── Form grid ────────────────────────────────────── */
+.qt-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 24px;
+  margin-bottom: 8px;
+}
+.qt-field-full { grid-column: 1 / -1; }
+
+/* ── Labels ───────────────────────────────────────── */
+.qt-label {
+  display: block;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  color: #5a5a78;
+  margin-bottom: 6px;
+  letter-spacing: 0.01em;
+}
+.qt-label--req { color: #dc2626; margin-left: 2px; }
+.qt-label--opt {
+  font-weight: 600;
+  color: #b0b0c8;
+  font-size: 11px;
+}
+
+/* ── Clean input (no heavy box) ───────────────────── */
+.qt-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: none;
+  border-bottom: 2px solid #e8e8f4;
+  padding: 8px 4px 8px 0;
+  background: transparent;
+  transition: border-color 0.18s;
+}
+.qt-input-wrap:focus-within {
+  border-bottom-color: #049edf;
+}
+.qt-input {
+  flex: 1;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a1a2e;
+  background: transparent;
+  border: none;
+  outline: none;
+  min-width: 0;
+}
+.qt-input::placeholder { color: #c0c0d8; font-weight: 600; }
+
+/* ── Customer info card ───────────────────────────── */
+.qt-customer-info {
+  margin-top: 10px;
+  padding: 10px 14px;
+  background: rgba(4,158,223,0.04);
+  border-left: 3px solid #049edf;
+  border-radius: 0 8px 8px 0;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #4a5568;
+  line-height: 1.6;
+}
+
+/* ── Type cards ───────────────────────────────────── */
+.qt-type-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 4px;
+}
+.qt-type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 2px solid #e8e8f4;
+  background: #fafafa;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.18s, background 0.18s;
+}
+.qt-type-card:hover { border-color: #c0d8f0; background: #f5f9ff; }
+.qt-type-card--active {
+  border-color: #049edf;
+  background: rgba(4,158,223,0.04);
+}
+.qt-type-card__check {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 2px solid #d0d0e0;
+  background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 10px;
+  transition: background 0.18s, border-color 0.18s;
+}
+.qt-type-card--active .qt-type-card__check { background: #049edf; border-color: #049edf; }
+.qt-type-card__label {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: 13px;
+  color: #1a1a2e;
+  margin-bottom: 3px;
+}
+.qt-type-card--active .qt-type-card__label { color: #049edf; }
+.qt-type-card__sub {
+  font-family: 'Nunito', sans-serif;
+  font-size: 11px;
+  color: #9090a8;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+/* ── Step 2 heading ───────────────────────────────── */
+.qt-step2-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.qt-step2-title {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: 15px;
+  color: #1a1a2e;
+}
+.qt-step2-sub {
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  color: #9090a8;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+/* ── Step 3 grid ──────────────────────────────────── */
+.qt-step3-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  margin-bottom: 8px;
+}
+.qt-section-head {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  color: #1a1a2e;
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #f0f0f8;
+}
+.qt-gst-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+.qt-terms-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.qt-summary-box {
+  background: #f8f8fc;
+  border-radius: 14px;
+  padding: 18px 20px;
+}
+.qt-summary-customer {
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1.5px solid #eeeefc;
+  margin-bottom: 10px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12.5px;
+  color: #9090a8;
+  font-weight: 600;
+}
+.qt-summary-customer span:last-child { color: #1a1a2e; font-weight: 800; }
+.qt-summary-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  color: #4a5568;
+  font-weight: 600;
+}
+.qt-summary-total {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 0 0;
+  font-family: 'Nunito', sans-serif;
+  font-size: 17px;
+  color: #1a1a2e;
+  font-weight: 900;
+  border-top: 2px solid #eeeefc;
+  margin-top: 8px;
+}
+.qt-summary-total span:last-child { color: #049edf; }
+.qt-summary-words {
+  margin-top: 6px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 11px;
+  color: #9090a8;
+  font-weight: 600;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+/* ── Step footer ──────────────────────────────────── */
+.qt-step-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f0f0f8;
+}
+
+/* ── Error banner ─────────────────────────────────── */
+.qt-error-banner {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 14px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  margin-top: 12px;
+  color: #dc2626;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'Nunito', sans-serif;
+}
+
+/* ── Add print row button ─────────────────────────── */
+.qt-add-print-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1.5px dashed #7c3aed50;
+  background: rgba(124,58,237,0.04);
+  color: #7c3aed;
+  cursor: pointer;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+/* ── Inline table inputs ──────────────────────────── */
+.qt-inline-input {
+  font-family: 'Nunito', sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1a1a2e;
+  background: transparent;
+  border: 1.5px solid transparent;
+  border-radius: 6px;
+  padding: 3px 6px;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+  width: 100%;
+  min-width: 0;
+}
+.qt-inline-input:hover  { border-color: #e0e0f0; background: #fafafa; }
+.qt-inline-input:focus  { border-color: #049edf; background: #f5fbff; }
+/* Date input — fixed width so it always shows the full dd/mm/yyyy value */
+.qt-date-input {
+  width: 140px;
+  min-width: 140px;
+  font-size: 11.5px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+/* ── Date range banner ────────────────────────────── */
+.qt-date-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  background: rgba(4,158,223,0.04);
+  border-left: 3px solid #049edf;
+  border-radius: 0 8px 8px 0;
+  flex-wrap: wrap;
+}
+.qt-date-banner__label {
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  color: #049edf;
+  white-space: nowrap;
+}
+.qt-date-banner__field {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.qt-date-banner__input {
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a1a2e;
+  border: none;
+  border-bottom: 2px solid #d0d0e8;
+  padding: 4px 2px;
+  outline: none;
+  background: transparent;
+  transition: border-color 0.15s;
+}
+.qt-date-banner__input:focus { border-bottom-color: #049edf; }
+.qt-date-banner__sep {
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: #9090a8;
+}
+.qt-date-banner__apply {
+  font-family: 'Nunito', sans-serif;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #fff;
+  background: #049edf;
+  border: none;
+  border-radius: 7px;
+  padding: 5px 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: background 0.15s;
+  white-space: nowrap;
+}
+.qt-date-banner__apply:hover { background: #0381bb; }
+
+/* ══════════════════════════════════════════════════
+   HISTORY TABLE — grouped rows
+══════════════════════════════════════════════════ */
+
+/* Main group row */
+.qt-group-row {
+  border-left: 3px solid transparent;
+  transition: border-color 0.15s;
+}
+.qt-group-row:hover { border-left-color: #049edf; }
+
+/* Expand button */
+.qt-expand-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1.5px solid #e8e8f4;
+  background: #f8f8fc;
+  color: #9090a8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+.qt-expand-btn:hover {
+  background: rgba(4,158,223,0.08);
+  border-color: #049edf;
+  color: #049edf;
+}
+
+/* Revision sub-rows */
+.qt-rev-row {
+  background: rgba(248,248,252,0.7);
+  border-left: 3px solid #f0f0f8;
+}
+.qt-rev-row td {
+  border-top: none !important;
+}
+.qt-rev-row:last-child { border-bottom: 2px solid #e8e8f4; }
+
+/* Tree line for revision indent */
+.qt-rev-tree-line {
+  width: 14px;
+  height: 2px;
+  background: #d0d0e8;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* ── Version badges ───────────────────────────────── */
+.qt-rev-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 10.5px;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: rgba(217,119,6,0.10);
+  color: #d97706;
+  border: 1px solid rgba(217,119,6,0.25);
+}
+.qt-orig-badge {
+  font-family: 'Nunito', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9090a8;
+}
+
+/* ── Saving overlay ───────────────────────────────── */
+.qt-saving-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: blur(3px);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+.qt-saving-overlay__text {
+  font-family: 'Nunito', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  color: #049edf;
+}
+
+/* ── Toast ────────────────────────────────────────── */
+.qt-toast {
+  position: fixed;
+  bottom: 28px;
+  right: 28px;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  z-index: 99999;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+  animation: qt-toast-in 0.25s ease;
+}
+.qt-toast--success { background: #f0fdf4; color: #16a34a; border: 1.5px solid rgba(22,163,74,0.25); }
+.qt-toast--error   { background: #fef2f2; color: #dc2626; border: 1.5px solid rgba(220,38,38,0.25); }
+@keyframes qt-toast-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Select-all row ───────────────────────────────── */
+.qt-select-all-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  border-bottom: 1px solid #f0f0f8;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #4a5568;
+  cursor: pointer;
+  background: #fafafe;
+}
+.qt-select-all-row:hover { background: #f4f4fb; }
+
+/* ── Modal checkbox ───────────────────────────────── */
+.qt-modal-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  border: 2px solid #d0d0e0;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s;
+}
+.qt-modal-check--on  { background: #049edf; border-color: #049edf; }
+.qt-modal-check--all { background: #1a1a2e; border-color: #1a1a2e; }
+
+/* ── Terms chip ───────────────────────────────────── */
+.qt-term-chip {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid #f4f4f8;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #4a5568;
+  width: 100%;
+}
+.qt-term-chip__num { font-weight: 900; color: #049edf; flex-shrink: 0; }
+/* ═══════════════════════════════════════════════════════
+   JOB MANAGEMENT PAGE  —  Job.css
+   Import after Common1.css in JobPage.jsx
+   All pg-*, qt-* base styles live in Common1.css
+═══════════════════════════════════════════════════════ */
+
+/* ── Form container: blue top accent ── */
+.jb-form-container {
+  border-top: 3px solid #049edf;
+}
+
+/* ── Disabled combo field ── */
+.jb-disabled {
+  opacity: 0.55;
+  cursor: not-allowed !important;
+  background: rgba(240, 240, 248, 0.6) !important;
+  pointer-events: none;
+}
+
+/* ── Read-only input row ── */
+.jb-readonly {
+  background: rgba(240, 240, 248, 0.45) !important;
+  border-bottom-color: #e4e4f0 !important;
+  cursor: not-allowed;
+}
+
+.jb-readonly-text {
+  flex: 1;
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #b0b0c8;
+  font-style: italic;
+}
+
+/* ── Textarea inside qt-input-wrap ── */
+.jb-textarea {
+  resize: vertical;
+  min-height: 72px;
+  max-height: 180px;
+  line-height: 1.55;
+  padding-top: 2px;
+}
+
+/* ── Customer info strip below combo ── */
+.jb-info-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 7px 12px;
+  background: rgba(4, 158, 223, 0.04);
+  border-left: 3px solid #049edf;
+  border-radius: 0 7px 7px 0;
+  font-family: 'Nunito', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a5568;
+}
+
+.jb-info-strip span::before {
+  content: '·';
+  margin-right: 10px;
+  color: #c0c0d8;
+}
+
+.jb-info-strip span:first-child::before {
+  display: none;
+}
+
+/* ══════════════════════════════════════
+   JOB SUMMARY BANNER  (Step 2 top strip)
+══════════════════════════════════════ */
+.jb-summary-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 18px;
+  background: linear-gradient(135deg, rgba(4, 158, 223, 0.05), rgba(108, 99, 255, 0.03));
+  border: 1.5px solid rgba(4, 158, 223, 0.14);
+  border-radius: 12px;
+  margin-bottom: 4px;
+}
+
+.jb-summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 80px;
+}
+
+.jb-summary-label {
+  font-family: 'Nunito', sans-serif;
+  font-size: 10px;
+  font-weight: 800;
+  color: #9090a8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.jb-summary-value {
+  font-family: 'Nunito', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  color: #1a1a2e;
+}
+
+.jb-summary-divider {
+  width: 1px;
+  height: 34px;
+  background: #e4e4f0;
+  flex-shrink: 0;
+  align-self: center;
+  margin: 0 4px;
+}
+
+/* ══════════════════════════════════════
+   JOB TYPE BADGE
+══════════════════════════════════════ */
+.jb-type-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 5px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.jb-type-badge--banner {
+  background: rgba(4, 158, 223, 0.09);
+  color: #049edf;
+  border: 1px solid rgba(4, 158, 223, 0.22);
+}
+
+.jb-type-badge--repair {
+  background: rgba(245, 158, 11, 0.09);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+.jb-type-badge--erection {
+  background: rgba(124, 58, 237, 0.09);
+  color: #7c3aed;
+  border: 1px solid rgba(124, 58, 237, 0.22);
+}
+
+/* ══════════════════════════════════════
+   TASK TABLE TWEAKS
+══════════════════════════════════════ */
+
+/* Submitted row highlight */
+.pg-tr.jb-task-submitted td {
+  background: rgba(22, 163, 74, 0.025);
+}
+
+/* Footer total row */
+.jb-tasks-total td {
+  background: #f5f5fd;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 12.5px;
+  color: #5a5a78;
+  padding: 10px 14px;
+  border-top: 2px solid #e8e8f4;
+}
+
+/* ══════════════════════════════════════
+   HISTORY TABLE  —  tasks progress chip
+══════════════════════════════════════ */
+.jb-tasks-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 5px;
+  background: #f0f0f8;
+  color: #7878a0;
+  border: 1px solid #e4e4f0;
+  white-space: nowrap;
+}
+
+.jb-tasks-chip--done {
+  background: rgba(22, 163, 74, 0.09);
+  color: #16a34a;
+  border-color: rgba(22, 163, 74, 0.22);
+}
+
+/* ══════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════ */
+@media (max-width: 900px) {
+  .jb-summary-banner { gap: 12px; }
+  .jb-summary-divider { display: none; }
+}
+
+@media (max-width: 640px) {
+  .jb-summary-banner { flex-direction: column; align-items: flex-start; }
+  .jb-summary-item { flex-direction: row; align-items: center; gap: 8px; }
+  .jb-summary-label::after { content: ':'; }
+}

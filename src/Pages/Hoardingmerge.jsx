@@ -495,15 +495,16 @@ function MergeForm({ mode, group, hoardings, sites, contracts, customers, onBack
       const h = hoardings.find(h2 => h2.versions?.some(v => v.hoardingID === id));
       return getLatest(h);
     }).filter(Boolean);
-    if (direction === 'W') {
-      const tw = blocks.reduce((s, b) => s + (Number(b?.width)  || 0), 0);
-      const h  = blocks[0]?.height;
-      return tw ? `${tw} × ${h || '?'} ft` : null;
-    } else {
-      const th = blocks.reduce((s, b) => s + (Number(b?.height) || 0), 0);
-      const w  = blocks[0]?.width;
-      return th ? `${w || '?'} × ${th} ft` : null;
-    }
+const gapCount = blocks.length - 1;          // ← number of connectors
+if (direction === 'W') {
+  const tw = blocks.reduce((s, b) => s + (Number(b?.width)  || 0), 0) + gapCount;
+  const h  = blocks[0]?.height;
+  return tw ? `${tw} × ${h || '?'} ft` : null;
+} else {
+  const th = blocks.reduce((s, b) => s + (Number(b?.height) || 0), 0) + gapCount;
+  const w  = blocks[0]?.width;
+  return th ? `${w || '?'} × ${th} ft` : null;
+}
   })();
 
   return (
@@ -826,13 +827,14 @@ export default function HoardingMergePage() {
       return getLatest(h);
     }).filter(Boolean);
     if (!blocks.length) return null;
-    if (isWidth) {
-      const tw = blocks.reduce((s, b) => s + (Number(b?.width) || 0), 0);
-      return tw ? `${tw}×${blocks[0]?.height || '?'}ft` : null;
-    } else {
-      const th = blocks.reduce((s, b) => s + (Number(b?.height) || 0), 0);
-      return th ? `${blocks[0]?.width || '?'}×${th}ft` : null;
-    }
+const gapCount = blocks.length - 1;          // ← number of connectors
+if (isWidth) {
+  const tw = blocks.reduce((s, b) => s + (Number(b?.width) || 0), 0) + gapCount;
+  return tw ? `${tw}×${blocks[0]?.height || '?'}ft` : null;
+} else {
+  const th = blocks.reduce((s, b) => s + (Number(b?.height) || 0), 0) + gapCount;
+  return th ? `${blocks[0]?.width || '?'}×${th}ft` : null;
+}
   };
 
   const widthCount  = groups.filter(g => g.mergeAlongFlag === 'W').length;

@@ -4,7 +4,7 @@ import {
   Plus, Search, X, AlertCircle, Check, Edit2,
   RefreshCw, Calendar, IndianRupee,
   Maximize2, Image as ImageIcon, Upload, Trash2,
-  ZoomIn, ArrowLeft, Hash, Clock, Info,ShieldCheck,
+  ZoomIn, ArrowLeft, Hash, Clock, Info, ShieldCheck,
   ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight,
   ChevronLeft, ChevronRight, MapPin, Layers,
   CheckCircle, Wrench, Eye, Replace, Loader2
@@ -15,10 +15,10 @@ import './Common1.css';
 /* ─────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────── */
-const MATERIAL_OPTIONS  = ['Flex', 'Vinyl', 'Metal', 'LED', 'Acrylic'];
-const STATUS_OPTIONS    = ['Active', 'Inactive', 'Under Maintenance'];
+const MATERIAL_OPTIONS = ['Flex', 'Vinyl', 'Metal', 'LED', 'Acrylic'];
+const STATUS_OPTIONS = ['Active', 'Inactive', 'Available', 'Occupied', 'Under Maintenance'];
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
-const HISTORY_PER_PAGE  = 3;
+const HISTORY_PER_PAGE = 3;
 
 const EMPTY_VERSION = {
   effdt: '', material: '', hoardingType: '', status: 'Active',
@@ -55,16 +55,16 @@ function groupHoardingsByCode(flatRecords) {
     const code = rec.hoardingCode;
     if (!map[code]) map[code] = { hoardingCode: code, versions: [] };
     map[code].versions.push({
-      hoardingID:   rec.hoardingID,
-      effdtRaw:     rec.effdt || '',
-      effdt:        rec.effdt ? rec.effdt.split('T')[0] : '',
-      material:     rec.material     || '',
+      hoardingID: rec.hoardingID,
+      effdtRaw: rec.effdt || '',
+      effdt: rec.effdt ? rec.effdt.split('T')[0] : '',
+      material: rec.material || '',
       hoardingType: rec.hoardingType || '',
-      status:       rec.status       || '',
-      monthlyRent:  rec.monthlyRent  ?? '',
-      width:        rec.width        ?? '',
-      height:       rec.height       ?? '',
-      siteID:       rec.siteID       || '',
+      status: rec.status || '',
+      monthlyRent: rec.monthlyRent ?? '',
+      width: rec.width ?? '',
+      height: rec.height ?? '',
+      siteID: rec.siteID || '',
     });
   });
   return Object.values(map);
@@ -91,9 +91,9 @@ function latestVersion(h) {
 function validateVersion(form, needEffdt) {
   const e = {};
   if (needEffdt && !form.effdt) e.effdt = 'Required';
-  if (!form.material)     e.material     = 'Required';
+  if (!form.material) e.material = 'Required';
   if (!form.hoardingType) e.hoardingType = 'Required';
-  if (!form.status)       e.status       = 'Required';
+  if (!form.status) e.status = 'Required';
   if (form.monthlyRent === '' || form.monthlyRent == null) e.monthlyRent = 'Required';
   if (form.width === '' || form.width == null) e.width = 'Required';
   else if (!Number.isInteger(Number(form.width)) || Number(form.width) <= 0)
@@ -107,9 +107,9 @@ function validateVersion(form, needEffdt) {
 ───────────────────────────────────────── */
 function StatusBadge({ status }) {
   const map = {
-    'Active':            { cls: 'hd-status-active',   Icon: CheckCircle },
-    'Inactive':          { cls: 'hd-status-inactive',  Icon: AlertCircle },
-    'Under Maintenance': { cls: 'hd-status-maint',     Icon: Wrench },
+    'Active': { cls: 'hd-status-active', Icon: CheckCircle },
+    'Inactive': { cls: 'hd-status-inactive', Icon: AlertCircle },
+    'Under Maintenance': { cls: 'hd-status-maint', Icon: Wrench },
   };
   const { cls, Icon } = map[status] || { cls: 'hd-status-inactive', Icon: AlertCircle };
   return (
@@ -126,7 +126,7 @@ function SortIcon({ col, sortKey, sortDir }) {
   const active = sortKey === col;
   return (
     <span className="pg-sort-icon">
-      <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"   />
+      <ChevronUp size={10} color={active && sortDir === 'asc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
       <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
     </span>
   );
@@ -176,26 +176,26 @@ function ComboDropdown({
   icon: Icon,
   options,
   searchable = false,
-  emptyText  = 'No options',
+  emptyText = 'No options',
 }) {
-  const [open,       setOpen]       = useState(false);
-  const [query,      setQuery]      = useState('');
-  const [wasOpened,  setWasOpened]  = useState(false);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [wasOpened, setWasOpened] = useState(false);
   const [panelStyle, setPanelStyle] = useState({ position: 'fixed', top: 0, left: 0, width: 0, zIndex: 99999 });
 
-  const wrapRef    = useRef(null);   // the whole combo wrapper
+  const wrapRef = useRef(null);   // the whole combo wrapper
   const triggerRef = useRef(null);   // the visible trigger pill
-  const panelRef   = useRef(null);   // the floating panel
-  const inputRef   = useRef(null);   // search <input> inside panel
-  const listRef    = useRef(null);   // option list
+  const panelRef = useRef(null);   // the floating panel
+  const inputRef = useRef(null);   // search <input> inside panel
+  const listRef = useRef(null);   // option list
 
   const selected = options.find(o => String(o.value) === String(value));
 
   const filtered = searchable
     ? options.filter(o =>
-        o.label.toLowerCase().includes(query.toLowerCase()) ||
-        (o.sub && o.sub.toLowerCase().includes(query.toLowerCase()))
-      )
+      o.label.toLowerCase().includes(query.toLowerCase()) ||
+      (o.sub && o.sub.toLowerCase().includes(query.toLowerCase()))
+    )
     : options;
 
   /* ── Position the portal panel under (or above) the trigger ── */
@@ -203,25 +203,25 @@ function ComboDropdown({
     if (!open || !triggerRef.current) return;
 
     const reposition = () => {
-      const r      = triggerRef.current?.getBoundingClientRect();
+      const r = triggerRef.current?.getBoundingClientRect();
       if (!r) return;
       const panelH = panelRef.current?.offsetHeight || 260;
       const flipUp = (window.innerHeight - r.bottom) < panelH + 8 && r.top > panelH + 8;
       setPanelStyle({
         position: 'fixed',
-        top:      flipUp ? r.top - panelH - 4 : r.bottom + 4,
-        left:     r.left,
-        width:    r.width,
-        zIndex:   99999,
+        top: flipUp ? r.top - panelH - 4 : r.bottom + 4,
+        left: r.left,
+        width: r.width,
+        zIndex: 99999,
       });
     };
 
     reposition();
-    window.addEventListener('scroll',  reposition, true);
-    window.addEventListener('resize',  reposition);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
     return () => {
-      window.removeEventListener('scroll',  reposition, true);
-      window.removeEventListener('resize',  reposition);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
     };
   }, [open]);
 
@@ -229,7 +229,7 @@ function ComboDropdown({
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
-      const inWrap  = wrapRef.current?.contains(e.target);
+      const inWrap = wrapRef.current?.contains(e.target);
       const inPanel = panelRef.current?.contains(e.target);
       if (!inWrap && !inPanel) {
         setOpen(false);
@@ -285,24 +285,24 @@ function ComboDropdown({
       return;
     }
     const items = navItems();
-    const idx   = Array.from(items).indexOf(document.activeElement);
-    if      (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
-    else if (e.key === 'ArrowUp')   { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
-    else if (e.key === 'Escape')    { closeDropdown(); }
+    const idx = Array.from(items).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') { closeDropdown(); }
   };
 
   const handleSearchKeyDown = (e) => {
-    if      (e.key === 'ArrowDown') { e.preventDefault(); navItems()[0]?.focus(); }
-    else if (e.key === 'Escape')    { closeDropdown(); }
+    if (e.key === 'ArrowDown') { e.preventDefault(); navItems()[0]?.focus(); }
+    else if (e.key === 'Escape') { closeDropdown(); }
   };
 
   const handleOptionKeyDown = (e, opt) => {
     const items = navItems();
-    const idx   = Array.from(items).indexOf(e.currentTarget);
-    if      (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+    const idx = Array.from(items).indexOf(e.currentTarget);
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
     else if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
-    else if (e.key === 'ArrowUp')   { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
-    else if (e.key === 'Escape')    { closeDropdown(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') { closeDropdown(); }
   };
 
   /* ── The floating panel rendered via portal ── */
@@ -389,7 +389,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
   const siteOptions = sites.map(s => ({
     value: s.siteID,
     label: s.addressLine1,
-    sub:   s.city || '',
+    sub: s.city || '',
   }));
 
   const materialOptions = MATERIAL_OPTIONS.map(m => ({ value: m, label: m }));
@@ -429,7 +429,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
         <ComboDropdown
           value={form.siteID || ''}
           onChange={v => onChange('siteID', Number(v))}
-          onBlur={() => {}}
+          onBlur={() => { }}
           hasError={!!errors.siteID}
           placeholder="Select site…"
           icon={MapPin}
@@ -446,7 +446,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
         <ComboDropdown
           value={form.material || ''}
           onChange={v => onChange('material', v)}
-          onBlur={() => {}}
+          onBlur={() => { }}
           hasError={!!errors.material}
           placeholder="Select material…"
           icon={Layers}
@@ -461,7 +461,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
         <ComboDropdown
           value={form.hoardingType || ''}
           onChange={v => onChange('hoardingType', Number(v))}
-          onBlur={() => {}}
+          onBlur={() => { }}
           hasError={!!errors.hoardingType}
           placeholder="Select type…"
           icon={Maximize2}
@@ -478,7 +478,7 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
         <ComboDropdown
           value={form.status || ''}
           onChange={v => onChange('status', v)}
-          onBlur={() => {}}
+          onBlur={() => { }}
           hasError={!!errors.status}
           placeholder="Select status…"
           icon={ShieldCheck}
@@ -550,11 +550,11 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
    PHOTO SECTION
 ───────────────────────────────────────── */
 function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readOnly = false }) {
-  const [lightbox,       setLightbox]       = useState(null);
-  const [uploading,      setUploading]      = useState(false);
-  const [photoError,     setPhotoError]     = useState('');
+  const [lightbox, setLightbox] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [photoError, setPhotoError] = useState('');
   const [replacingPhoto, setReplacingPhoto] = useState(null);
-  const addRef     = useRef(null);
+  const addRef = useRef(null);
   const replaceRef = useRef(null);
 
   const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -569,29 +569,29 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
     return true;
   };
 
-const buildFormData = ({ file, filename, hoardingIDOverride }) => {
-  const fd           = new FormData();
-  const userId       = getLoggedInUserId();
-  const resolvedName = filename || file.name;
-  const resolvedHID  = hoardingIDOverride || hoardingID;
+  const buildFormData = ({ file, filename, hoardingIDOverride }) => {
+    const fd = new FormData();
+    const userId = getLoggedInUserId();
+    const resolvedName = filename || file.name;
+    const resolvedHID = hoardingIDOverride || hoardingID;
 
-  const todayDate    = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
-  const effdtDateOnly = effdtRaw
-    ? effdtRaw.split('T')[0]
-    : todayDate;
+    const todayDate = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+    const effdtDateOnly = effdtRaw
+      ? effdtRaw.split('T')[0]
+      : todayDate;
 
-  fd.append('hoardingPhotoID', '0');
-  fd.append('hoardingID',      String(resolvedHID));
-  fd.append('effdt',           effdtDateOnly);  // ✅ DateOnly
-  fd.append('photo',           file, resolvedName);
-  fd.append('photoUrl',        resolvedName);
-  fd.append('photoPath',       resolvedName);
-  fd.append('filename',        resolvedName);
-  fd.append('uploadedOn',      todayDate);       // ✅ DateOnly
-  fd.append('lastUpdateDttm',  todayDate);       // ✅ DateOnly
-  fd.append('lastUpdatedBy',   String(userId));
-  return fd;
-};
+    fd.append('hoardingPhotoID', '0');
+    fd.append('hoardingID', String(resolvedHID));
+    fd.append('effdt', effdtDateOnly);  // ✅ DateOnly
+    fd.append('photo', file, resolvedName);
+    fd.append('photoUrl', resolvedName);
+    fd.append('photoPath', resolvedName);
+    fd.append('filename', resolvedName);
+    fd.append('uploadedOn', todayDate);       // ✅ DateOnly
+    fd.append('lastUpdateDttm', todayDate);       // ✅ DateOnly
+    fd.append('lastUpdatedBy', String(userId));
+    return fd;
+  };
 
   const handleAddFiles = async (e) => {
     const files = Array.from(e.target.files);
@@ -670,8 +670,8 @@ const buildFormData = ({ file, filename, hoardingIDOverride }) => {
         )}
         {!readOnly && (
           <>
-            <input ref={addRef}     type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style={{ display: 'none' }} onChange={handleAddFiles}   />
-            <input ref={replaceRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif"         style={{ display: 'none' }} onChange={handleReplaceFile} />
+            <input ref={addRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple style={{ display: 'none' }} onChange={handleAddFiles} />
+            <input ref={replaceRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{ display: 'none' }} onChange={handleReplaceFile} />
           </>
         )}
       </div>
@@ -703,9 +703,9 @@ const buildFormData = ({ file, filename, hoardingIDOverride }) => {
               <img src={resolvePhotoSrc(p)} alt={p.filename} />
               <div className="hd-photo-name">{p.filename}</div>
               <div className="hd-photo-overlay">
-                <button className="hd-photo-action"         onClick={() => setLightbox(p)}  title="View"    disabled={uploading}><ZoomIn  size={12} /></button>
+                <button className="hd-photo-action" onClick={() => setLightbox(p)} title="View" disabled={uploading}><ZoomIn size={12} /></button>
                 {!readOnly && <button className="hd-photo-action replace" onClick={() => triggerReplace(p)} title="Replace" disabled={uploading}><Replace size={12} /></button>}
-                {!readOnly && <button className="hd-photo-action danger"  onClick={() => handleDelete(p)}   title="Delete"  disabled={uploading}><Trash2  size={12} /></button>}
+                {!readOnly && <button className="hd-photo-action danger" onClick={() => handleDelete(p)} title="Delete" disabled={uploading}><Trash2 size={12} /></button>}
               </div>
             </div>
           ))}
@@ -747,10 +747,10 @@ const buildFormData = ({ file, filename, hoardingIDOverride }) => {
 ───────────────────────────────────────── */
 function EffdtHistory({ versions, sites, hoardingTypeMap, activePanel, onView, onEdit }) {
   const [page, setPage] = useState(1);
-  const sorted     = [...versions].sort((a, b) => new Date(b.effdt) - new Date(a.effdt));
+  const sorted = [...versions].sort((a, b) => new Date(b.effdt) - new Date(a.effdt));
   const totalPages = Math.max(1, Math.ceil(sorted.length / HISTORY_PER_PAGE));
-  const paged      = sorted.slice((page - 1) * HISTORY_PER_PAGE, page * HISTORY_PER_PAGE);
-  const globalIdx  = (localIdx) => (page - 1) * HISTORY_PER_PAGE + localIdx;
+  const paged = sorted.slice((page - 1) * HISTORY_PER_PAGE, page * HISTORY_PER_PAGE);
+  const globalIdx = (localIdx) => (page - 1) * HISTORY_PER_PAGE + localIdx;
 
   return (
     <>
@@ -766,10 +766,10 @@ function EffdtHistory({ versions, sites, hoardingTypeMap, activePanel, onView, o
       </div>
 
       {paged.map((v, i) => {
-        const gi         = globalIdx(i);
-        const isLatest   = gi === 0;
+        const gi = globalIdx(i);
+        const isLatest = gi === 0;
         const isSelected = activePanel !== null && activePanel.idx === gi;
-        const site       = sites.find(s => s.siteID === v.siteID);
+        const site = sites.find(s => s.siteID === v.siteID);
         return (
           <div key={v.hoardingID ?? v.effdt} className={`hd-effdt-row ${isSelected ? 'is-selected' : ''}`}>
             <div className="row align-items-center g-2">
@@ -794,8 +794,8 @@ function EffdtHistory({ versions, sites, hoardingTypeMap, activePanel, onView, o
               <div className="col-6 col-md-2"><span className="hd-effdt-val strong">{fmtCurrency(v.monthlyRent)}</span></div>
               <div className="col-12 col-md-1">
                 <div className="pg-action-wrap" style={{ justifyContent: 'flex-end' }}>
-                  <button className={`pg-btn-edit${isSelected && activePanel.mode === 'view' ? ' hd-btn-view-active' : ''}`} onClick={() => onView(gi, v)} title="View details"><Eye    size={13} /></button>
-                  <button className={`pg-btn-view${isSelected && activePanel.mode === 'edit' ? ' hd-btn-edit-active' : ''}`} onClick={() => onEdit(gi, v)} title="Edit this version"><Edit2  size={13} /></button>
+                  <button className={`pg-btn-edit${isSelected && activePanel.mode === 'view' ? ' hd-btn-view-active' : ''}`} onClick={() => onView(gi, v)} title="View details"><Eye size={13} /></button>
+                  <button className={`pg-btn-view${isSelected && activePanel.mode === 'edit' ? ' hd-btn-edit-active' : ''}`} onClick={() => onEdit(gi, v)} title="Edit this version"><Edit2 size={13} /></button>
                 </div>
               </div>
             </div>
@@ -809,7 +809,7 @@ function EffdtHistory({ versions, sites, hoardingTypeMap, activePanel, onView, o
             {(page - 1) * HISTORY_PER_PAGE + 1}–{Math.min(page * HISTORY_PER_PAGE, sorted.length)} of {sorted.length}
           </span>
           <div className="pg-pagination__left">
-            <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(p => p - 1)}><ChevronLeft  size={12} /></button>
+            <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={12} /></button>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
               <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>
             ))}
@@ -824,33 +824,46 @@ function EffdtHistory({ versions, sites, hoardingTypeMap, activePanel, onView, o
 /* ─────────────────────────────────────────
    FORM PAGE
 ───────────────────────────────────────── */
-function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMap, onBack, onRefresh }) {
-  const isAdd  = mode === 'add';
+function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMap, onBack, onRefresh, existingHoardings = [] }) {
+  const isAdd = mode === 'add';
   const isEdit = mode === 'edit';
 
   const sortedVersions = hoarding
     ? [...hoarding.versions].sort((a, b) => new Date(b.effdt) - new Date(a.effdt))
     : [];
 
-  const [hoardingCode,           setHoardingCode]           = useState(hoarding?.hoardingCode || '');
-  const [hcError,                setHcError]                = useState('');
-  const [addForm,                setAddForm]                = useState({ ...EMPTY_VERSION });
-  const [addErrors,              setAddErrors]              = useState({});
-  const [newlySavedHoardingID,   setNewlySavedHoardingID]   = useState(null);
-  const [newlySavedEffdtRaw,     setNewlySavedEffdtRaw]     = useState('');
-  const [activePanel,            setActivePanel]            = useState(null);
-  const [effdtForm,              setEffdtForm]              = useState({});
-  const [effdtErrors,            setEffdtErrors]            = useState({});
-  const [photosMap,              setPhotosMap]              = useState({});
-  const [photosLoading,          setPhotosLoading]          = useState(false);
-  const [saving,                 setSaving]                 = useState(false);
-  const [saveOk,                 setSaveOk]                 = useState(false);
-  const [apiErr,                 setApiErr]                 = useState('');
+  const [hoardingCode, setHoardingCode] = useState(hoarding?.hoardingCode || '');
+  const [hcError, setHcError] = useState('');
+  const [addForm, setAddForm] = useState({ ...EMPTY_VERSION });
+  const [addErrors, setAddErrors] = useState({});
+  const [newlySavedHoardingID, setNewlySavedHoardingID] = useState(null);
+  const [newlySavedEffdtRaw, setNewlySavedEffdtRaw] = useState('');
+  const [activePanel, setActivePanel] = useState(null);
+  const [effdtForm, setEffdtForm] = useState({});
+  const [effdtErrors, setEffdtErrors] = useState({});
+  const [photosMap, setPhotosMap] = useState({});
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveOk, setSaveOk] = useState(false);
+  const [apiErr, setApiErr] = useState('');
 
   const activeVersion = activePanel !== null && activePanel.idx >= 0
     ? sortedVersions[activePanel.idx]
     : null;
-
+  const handleHoardingCodeChange = (val) => {
+    setHoardingCode(val);
+    if (!val.trim()) {
+      setHcError('Hoarding code is required');
+      return;
+    }
+    const duplicate = existingHoardings.some(
+      h => h.hoardingCode.trim().toLowerCase() === val.trim().toLowerCase()
+    );
+    setHcError(duplicate
+      ? 'This hoarding code is already registered. Please choose a different name.'
+      : ''
+    );
+  };
   const loadPhotos = useCallback(async (hoardingID) => {
     if (!hoardingID) return;
     setPhotosLoading(true);
@@ -862,7 +875,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     } finally { setPhotosLoading(false); }
   }, []);
 
-  const photosFor    = (hID) => (hID ? (photosMap[hID] || []) : []);
+  const photosFor = (hID) => (hID ? (photosMap[hID] || []) : []);
   const scrollToPanel = () =>
     setTimeout(() => document.getElementById('hd-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
 
@@ -886,12 +899,12 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     setActivePanel({ idx: -1, mode: 'new' });
     setEffdtForm({
       ...EMPTY_VERSION,
-      siteID:       latest.siteID       || '',
-      material:     latest.material     || '',
+      siteID: latest.siteID || '',
+      material: latest.material || '',
       hoardingType: latest.hoardingType || '',
-      status:       'Active',
-      width:        latest.width        || '',
-      height:       latest.height       || '',
+      status: 'Active',
+      width: latest.width || '',
+      height: latest.height || '',
     });
     setEffdtErrors({});
     scrollToPanel();
@@ -920,14 +933,14 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     try {
       const response = await apiService.createHoarding({
         hoardingCode: hoardingCode.trim(),
-        effdt:        addForm.effdt,
-        material:     addForm.material,
+        effdt: addForm.effdt,
+        material: addForm.material,
         hoardingType: addForm.hoardingType,
-        status:       addForm.status,
-        monthlyRent:  addForm.monthlyRent,
-        width:        addForm.width,
-        height:       addForm.height,
-        siteID:       addForm.siteID,
+        status: addForm.status,
+        monthlyRent: addForm.monthlyRent,
+        width: addForm.width,
+        height: addForm.height,
+        siteID: addForm.siteID,
       });
 
       const savedID = response?.hoardingID || response?.id || null;
@@ -953,26 +966,26 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     try {
       if (isPanelNew) {
         await apiService.addHoardingEffdt(hoarding.hoardingCode, {
-          effdt:        effdtForm.effdt,
-          material:     effdtForm.material,
+          effdt: effdtForm.effdt,
+          material: effdtForm.material,
           hoardingType: effdtForm.hoardingType,
-          status:       effdtForm.status,
-          monthlyRent:  effdtForm.monthlyRent,
-          width:        effdtForm.width,
-          height:       effdtForm.height,
-          siteID:       effdtForm.siteID,
+          status: effdtForm.status,
+          monthlyRent: effdtForm.monthlyRent,
+          width: effdtForm.width,
+          height: effdtForm.height,
+          siteID: effdtForm.siteID,
         });
       } else {
         await apiService.updateHoarding(effdtForm.hoardingID, {
           hoardingCode: hoarding.hoardingCode,
-          effdt:        effdtForm.effdt,
-          material:     effdtForm.material,
+          effdt: effdtForm.effdt,
+          material: effdtForm.material,
           hoardingType: effdtForm.hoardingType,
-          status:       effdtForm.status,
-          monthlyRent:  effdtForm.monthlyRent,
-          width:        effdtForm.width,
-          height:       effdtForm.height,
-          siteID:       effdtForm.siteID,
+          status: effdtForm.status,
+          monthlyRent: effdtForm.monthlyRent,
+          width: effdtForm.width,
+          height: effdtForm.height,
+          siteID: effdtForm.siteID,
         });
       }
       setSaveOk(true);
@@ -1033,7 +1046,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                             className="pg-field-input"
                             placeholder="e.g. AMD-006"
                             value={hoardingCode}
-                            onChange={e => { setHoardingCode(e.target.value); setHcError(''); }}
+                            onChange={e => handleHoardingCodeChange(e.target.value)}
                           />
                         </InputWrap>
                         <FieldError msg={hcError} />
@@ -1134,19 +1147,19 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                             <div className="hd-section-sub">Read-only snapshot</div>
                           </div>
                           <button className="hd-btn-outline-sm" onClick={() => openEdit(activePanel.idx, activeVersion)}><Edit2 size={12} /> Edit</button>
-                          <button className="hd-btn-ghost-sm"   onClick={closePanel}><X size={12} /></button>
+                          <button className="hd-btn-ghost-sm" onClick={closePanel}><X size={12} /></button>
                         </div>
                         <div className="hd-section-body">
                           <div className="row g-3">
                             {[
                               { label: 'Effective Date', value: fmtDate(activeVersion.effdt) },
-                              { label: 'Site',           value: sites.find(s => s.siteID === activeVersion.siteID)?.addressLine1 || `Site ${activeVersion.siteID}` },
-                              { label: 'Material',       value: activeVersion.material },
-                              { label: 'Type',           value: hoardingTypeMap[activeVersion.hoardingType] || '—' },
-                              { label: 'Monthly Rent',   value: fmtCurrency(activeVersion.monthlyRent) },
-                              { label: 'Width',          value: activeVersion.width  ? `${activeVersion.width} ft`  : '—' },
-                              { label: 'Height',         value: activeVersion.height ? `${activeVersion.height} ft` : '—' },
-                              { label: 'Area',           value: activeVersion.width && activeVersion.height ? `${activeVersion.width * activeVersion.height} sq ft` : '—' },
+                              { label: 'Site', value: sites.find(s => s.siteID === activeVersion.siteID)?.addressLine1 || `Site ${activeVersion.siteID}` },
+                              { label: 'Material', value: activeVersion.material },
+                              { label: 'Type', value: hoardingTypeMap[activeVersion.hoardingType] || '—' },
+                              { label: 'Monthly Rent', value: fmtCurrency(activeVersion.monthlyRent) },
+                              { label: 'Width', value: activeVersion.width ? `${activeVersion.width} ft` : '—' },
+                              { label: 'Height', value: activeVersion.height ? `${activeVersion.height} ft` : '—' },
+                              { label: 'Area', value: activeVersion.width && activeVersion.height ? `${activeVersion.width * activeVersion.height} sq ft` : '—' },
                             ].map(f => (
                               <div key={f.label} className="col-6 col-md-4 col-lg-3">
                                 <div className="hd-view-field">
@@ -1165,12 +1178,12 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                           {photosLoading
                             ? <div style={{ textAlign: 'center', padding: '20px 0', color: '#9090a8' }}><Loader2 size={20} className="pg-spin" /></div>
                             : <PhotoSection
-                                hoardingID={activeVersion.hoardingID}
-                                effdtRaw={activeVersion.effdtRaw || activeVersion.effdt}
-                                photos={photosFor(activeVersion.hoardingID)}
-                                onPhotosChange={() => loadPhotos(activeVersion.hoardingID)}
-                                readOnly={true}
-                              />
+                              hoardingID={activeVersion.hoardingID}
+                              effdtRaw={activeVersion.effdtRaw || activeVersion.effdt}
+                              photos={photosFor(activeVersion.hoardingID)}
+                              onPhotosChange={() => loadPhotos(activeVersion.hoardingID)}
+                              readOnly={true}
+                            />
                           }
                         </div>
                       </>
@@ -1195,16 +1208,16 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                           {photosLoading
                             ? <div style={{ textAlign: 'center', padding: '20px 0', color: '#9090a8' }}><Loader2 size={20} className="pg-spin" /></div>
                             : <PhotoSection
-                                hoardingID={effdtForm.hoardingID}
-                                effdtRaw={effdtForm.effdtRaw || effdtForm.effdt}
-                                photos={photosFor(effdtForm.hoardingID)}
-                                onPhotosChange={() => loadPhotos(effdtForm.hoardingID)}
-                              />
+                              hoardingID={effdtForm.hoardingID}
+                              effdtRaw={effdtForm.effdtRaw || effdtForm.effdt}
+                              photos={photosFor(effdtForm.hoardingID)}
+                              onPhotosChange={() => loadPhotos(effdtForm.hoardingID)}
+                            />
                           }
                         </div>
                         <div className="hd-form-footer">
-                          <button className="pg-btn-cancel" onClick={closePanel}  disabled={saving}>Cancel</button>
-                          <button className="pg-btn-save"   onClick={saveEffdt}   disabled={saving}>
+                          <button className="pg-btn-cancel" onClick={closePanel} disabled={saving}>Cancel</button>
+                          <button className="pg-btn-save" onClick={saveEffdt} disabled={saving}>
                             {saveOk ? <><Check size={13} /> Saved!</> : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Save Changes</>}
                           </button>
                         </div>
@@ -1234,7 +1247,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                         </div>
                         <div className="hd-form-footer">
                           <button className="pg-btn-cancel" onClick={closePanel} disabled={saving}>Cancel</button>
-                          <button className="pg-btn-save"   onClick={saveEffdt}  disabled={saving}>
+                          <button className="pg-btn-save" onClick={saveEffdt} disabled={saving}>
                             {saveOk ? <><Check size={13} /> Saved!</> : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Save</>}
                           </button>
                         </div>
@@ -1250,8 +1263,8 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
 
       {isAdd && (
         <div className="hd-form-footer hd-form-footer--sticky">
-          <button className="pg-btn-cancel" onClick={onBack}          disabled={saving}>Cancel</button>
-          <button className="pg-btn-save"   onClick={saveNewHoarding} disabled={saving}>
+          <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
+          <button className="pg-btn-save" onClick={saveNewHoarding} disabled={saving}>
             {saveOk ? <><Check size={13} /> Saved!</> : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Save Hoarding</>}
           </button>
         </div>
@@ -1346,36 +1359,36 @@ function useResizableColumns(tableRef, tableReady) {
 }
 
 export default function HoardingPage() {
-  const [hoardings,     setHoardings]     = useState([]);
-  const [sites,         setSites]         = useState([]);
+  const [hoardings, setHoardings] = useState([]);
+  const [sites, setSites] = useState([]);
   const [hoardingTypes, setHoardingTypes] = useState([]);
-  const [loading,       setLoading]       = useState(true);
-  const [loadError,     setLoadError]     = useState('');
-const tableRef = useRef(null);
-const [tableReady, setTableReady] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const tableRef = useRef(null);
+  const [tableReady, setTableReady] = useState(false);
 
-useEffect(() => {
-  if (!loading) setTableReady(true);
-}, [loading]);
+  useEffect(() => {
+    if (!loading) setTableReady(true);
+  }, [loading]);
 
-useResizableColumns(tableRef, tableReady);
+  useResizableColumns(tableRef, tableReady);
 
-  const [view,       setView]       = useState(() => sessionStorage.getItem('hd_view')     || 'grid');
-  const [formMode,   setFormMode]   = useState(() => sessionStorage.getItem('hd_formMode') || null);
+  const [view, setView] = useState(() => sessionStorage.getItem('hd_view') || 'grid');
+  const [formMode, setFormMode] = useState(() => sessionStorage.getItem('hd_formMode') || null);
   const [editTarget, setEditTarget] = useState(() => {
     try { return JSON.parse(sessionStorage.getItem('hd_editTarget')) || null; }
     catch { return null; }
   });
 
-  const [search,       setSearch]       = useState('');
-  const [sortKey,      setSortKey]      = useState('hoardingCode');
-  const [sortDir,      setSortDir]      = useState('asc');
-  const [page,         setPage]         = useState(1);
-  const [pageSize,     setPageSize]     = useState(10);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('hoardingCode');
+  const [sortDir, setSortDir] = useState('asc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
   const [statusFilter, setStatusFilter] = useState('');
 
   useEffect(() => {
-    sessionStorage.setItem('hd_view',     view);
+    sessionStorage.setItem('hd_view', view);
     sessionStorage.setItem('hd_formMode', formMode || '');
     try { sessionStorage.setItem('hd_editTarget', editTarget ? JSON.stringify(editTarget) : ''); }
     catch { /* ignore */ }
@@ -1411,16 +1424,16 @@ useResizableColumns(tableRef, tableReady);
 
   const rows = hoardings.map(h => {
     const latest = latestVersion(h);
-    const site   = sites.find(s => s.siteID === latest?.siteID);
+    const site = sites.find(s => s.siteID === latest?.siteID);
     return {
       hoardingCode: h.hoardingCode,
-      siteLabel:    site ? `${site.addressLine1}${site.city ? ', ' + site.city : ''}` : latest?.siteID ? `Site ${latest.siteID}` : '—',
-      material:     latest?.material     || '',
-      typeLabel:    hoardingTypeMap[latest?.hoardingType] || '',
-      status:       latest?.status       || '',
-      monthlyRent:  latest?.monthlyRent  ?? 0,
-      width:        latest?.width        ?? 0,
-      height:       latest?.height       ?? 0,
+      siteLabel: site ? `${site.addressLine1}${site.city ? ', ' + site.city : ''}` : latest?.siteID ? `Site ${latest.siteID}` : '—',
+      material: latest?.material || '',
+      typeLabel: hoardingTypeMap[latest?.hoardingType] || '',
+      status: latest?.status || '',
+      monthlyRent: latest?.monthlyRent ?? 0,
+      width: latest?.width ?? 0,
+      height: latest?.height ?? 0,
       _raw: h,
     };
   });
@@ -1429,7 +1442,7 @@ useResizableColumns(tableRef, tableReady);
     const q = search.toLowerCase();
     return (
       (r.hoardingCode.toLowerCase().includes(q) || r.siteLabel.toLowerCase().includes(q) ||
-        r.material.toLowerCase().includes(q)    || r.typeLabel.toLowerCase().includes(q) ||
+        r.material.toLowerCase().includes(q) || r.typeLabel.toLowerCase().includes(q) ||
         r.status.toLowerCase().includes(q))
       && (statusFilter ? r.status === statusFilter : true)
     );
@@ -1442,7 +1455,7 @@ useResizableColumns(tableRef, tableReady);
   });
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
+  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -1450,9 +1463,9 @@ useResizableColumns(tableRef, tableReady);
     setPage(1);
   };
 
-  const openAdd  = ()    => { setFormMode('add');  setEditTarget(null);    setView('form'); };
+  const openAdd = () => { setFormMode('add'); setEditTarget(null); setView('form'); };
   const openEdit = (row) => { setFormMode('edit'); setEditTarget(row._raw); setView('form'); };
-  const goBack   = ()    => {
+  const goBack = () => {
     sessionStorage.removeItem('hd_view');
     sessionStorage.removeItem('hd_formMode');
     sessionStorage.removeItem('hd_editTarget');
@@ -1473,19 +1486,20 @@ useResizableColumns(tableRef, tableReady);
         mode={formMode} hoarding={editTarget}
         sites={sites} hoardingTypes={hoardingTypes} hoardingTypeMap={hoardingTypeMap}
         onBack={goBack} onRefresh={fetchAll}
+        existingHoardings={hoardings}
       />
     );
   }
 
   const COLS = [
     { key: 'hoardingCode', label: 'Hoarding Code' },
-    { key: 'siteLabel',    label: 'Site' },
-    { key: 'typeLabel',    label: 'Type' },
-    { key: 'material',     label: 'Material',     tabletHide: true },
-    { key: 'status',       label: 'Status' },
-    { key: 'monthlyRent',  label: 'Monthly Rent', tabletHide: true },
-    { key: 'size',         label: 'Size (W×H)',   tabletHide: true, noSort: true },
-    { key: '_action',      label: 'Action',        noSort: true },
+    { key: 'siteLabel', label: 'Site' },
+    { key: 'typeLabel', label: 'Type' },
+    { key: 'material', label: 'Material', tabletHide: true },
+    { key: 'status', label: 'Status' },
+    { key: 'monthlyRent', label: 'Monthly Rent', tabletHide: true },
+    { key: 'size', label: 'Size (W×H)', tabletHide: true, noSort: true },
+    { key: '_action', label: 'Action', noSort: true },
   ];
 
   return (
@@ -1597,9 +1611,9 @@ useResizableColumns(tableRef, tableReady);
                   </div>
                 </div>
                 <div className="pg-card__body">
-                  <div className="pg-card__row"><Layers     size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.material}</span></div>
-                  <div className="pg-card__row"><IndianRupee  size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{fmtCurrency(r.monthlyRent)} / month</span></div>
-                  <div className="pg-card__row"><Maximize2  size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.width && r.height ? `${r.width} × ${r.height} ft (${r.width * r.height} sq ft)` : '—'}</span></div>
+                  <div className="pg-card__row"><Layers size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.material}</span></div>
+                  <div className="pg-card__row"><IndianRupee size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{fmtCurrency(r.monthlyRent)} / month</span></div>
+                  <div className="pg-card__row"><Maximize2 size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.width && r.height ? `${r.width} × ${r.height} ft (${r.width * r.height} sq ft)` : '—'}</span></div>
                   <div className="pg-card__row"><StatusBadge status={r.status} /></div>
                 </div>
               </div>
@@ -1610,13 +1624,13 @@ useResizableColumns(tableRef, tableReady);
         {!loading && (
           <div className="pg-pagination">
             <div className="pg-pagination__left">
-              <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(1)}><ChevronsLeft  size={13} /></button>
-              <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(p => p - 1)}><ChevronLeft  size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}><ChevronsLeft size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={13} /></button>
               {pageNums.map((p, i) => p === '…'
                 ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
                 : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>
               )}
-              <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight  size={13} /></button>
+              <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight size={13} /></button>
               <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}><ChevronsRight size={13} /></button>
             </div>
             <div className="pg-pagination__right">
