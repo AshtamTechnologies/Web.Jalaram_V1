@@ -42,7 +42,6 @@ const STEPS = [
   { n: 3, label: 'GST & Generate',  Icon: FileCheck },
 ];
 
-/* ── Site pastel colour palette ─────────────────────────── */
 const SITE_PASTEL_PALETTE = [
   { bg: '#FFF0EE', border: '#FFBCB3', dot: '#FF6B55' },
   { bg: '#EEF4FF', border: '#B3CCFF', dot: '#3B7FFF' },
@@ -54,6 +53,13 @@ const SITE_PASTEL_PALETTE = [
   { bg: '#FFECFD', border: '#FFAAEE', dot: '#E020CC' },
   { bg: '#EEF9FF', border: '#AADEEF', dot: '#009DBF' },
   { bg: '#F2FFEE', border: '#C3FFAA', dot: '#46A800' },
+];
+
+const PAYMENT_FREQ_FALLBACK = [
+  { value: 1, label: 'Monthly'     },
+  { value: 2, label: 'Quarterly'   },
+  { value: 3, label: 'Half-Yearly' },
+  { value: 4, label: 'Yearly'      },
 ];
 
 /* ═══════════════════════════════════════════
@@ -119,10 +125,12 @@ function normalizeCustomer(raw) {
     customerName:   raw.customerName   ?? raw.CustomerName   ?? '',
     addressLine1:   raw.addressLine1   ?? raw.AddressLine1   ?? '',
     addressLine2:   raw.addressLine2   ?? raw.AddressLine2   ?? '',
+    addressLine3:   raw.addressLine3   ?? raw.AddressLine3   ?? '',
     city:           raw.city           ?? raw.City           ?? '',
     district:       raw.district       ?? raw.District       ?? '',
-    country:        raw.country        ?? raw.Country        ?? '',
+    country:        'India',
     phone1:         raw.phone1         ?? raw.Phone1         ?? '',
+    phone2:         raw.phone2         ?? raw.Phone2         ?? '',
     gstNumber:      raw.gstNumber      ?? raw.GstNumber      ?? raw.gSTNumber ?? '',
     authorizedName: raw.authorizedName ?? raw.AuthorizedName ?? '',
   };
@@ -161,17 +169,14 @@ const isAvailable = (h) => {
   return false;
 };
 
-/* ── Parse "W X H" size string ─────────────────────────── */
 function parseSize(sizeStr) {
   const parts = (sizeStr || '').split(/[Xx×\s]+/).map(p => parseFloat(p.trim())).filter(n => !isNaN(n) && n > 0);
   return { w: parts[0] || 0, h: parts[1] || 0 };
 }
 
-/* ── Build siteID → palette colour map ─────────────────── */
 function buildSiteColorMap(hoardings, sites = []) {
   const map = new Map();
   let idx = 0;
-  // Prefer dedicated sites list; fall back to siteIDs found in hoardings
   const allSiteIds = sites.length > 0
     ? sites.map(s => s.siteID ?? s.SiteID).filter(Boolean)
     : hoardings.map(h => h.siteID ?? h.site?.siteID).filter(Boolean);
@@ -184,7 +189,6 @@ function buildSiteColorMap(hoardings, sites = []) {
   return map;
 }
 
-/* ── Normalise a raw site object (handles PascalCase / camelCase) ── */
 function normalizeSite(raw) {
   if (!raw) return null;
   return {
@@ -201,10 +205,6 @@ function normalizeSite(raw) {
   };
 }
 
-/**
- * Build the full address string for a site object.
- * Used in the row's `location` field (goes into PDF).
- */
 function buildSiteAddress(site, fallback = '') {
   if (!site) return fallback;
   const addrParts = [site.addressLine1, site.addressLine2, site.addressLine3].filter(Boolean);
@@ -213,11 +213,6 @@ function buildSiteAddress(site, fallback = '') {
   return full || fallback;
 }
 
-/**
- * Returns { line1, line2 } for two-line display in modals / table cells.
- *  line1 → address lines
- *  line2 → landmark · city, district · siteType  (secondary, lighter text)
- */
 function getSiteDisplayLines(site, fallback = '') {
   if (!site) return { line1: fallback, line2: '' };
   const line1 = [site.addressLine1, site.addressLine2, site.addressLine3]
@@ -230,20 +225,18 @@ function getSiteDisplayLines(site, fallback = '') {
   return { line1, line2 };
 }
 
-/** Legacy helper kept for backward compat – prefers site, falls back to hoardingCode */
 function getSiteAddress(h) {
   return buildSiteAddress(h?.site, h?.hoardingCode || '');
 }
 
 const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = null) => {
-  // Prefer the nested site that came with the hoarding; fall back to siteMap lookup
   const site = h?.site ? normalizeSite(h.site) : (siteMap?.get(h?.siteID) ?? null);
   return {
     _id: uid(),
     rowType: 'hoarding',
     hoardingID:   h?.hoardingID || 0,
     siteID:       h?.siteID ?? site?.siteID ?? null,
-    siteObj:      site,                          // full site data for display
+    siteObj:      site,
     location:     buildSiteAddress(site, h?.hoardingCode || ''),
     hoardingCode: h?.hoardingCode || '',
     size:   h ? `${h.width} X ${h.height}` : '',
@@ -278,17 +271,16 @@ const newPrintingRow = () => ({
   saved: false,
 });
 
-/* ── Create a merged hoarding row ───────────────────────── */
 function newMergedRow(r1, r2, direction) {
   const s1 = parseSize(r1.size);
   const s2 = parseSize(r2.size);
   let mw, mh;
   if (direction === 'H') {
-    mw = s1.w + s2.w + 1;   // +1 for horizontal overlap/join
+    mw = s1.w + s2.w + 1;
     mh = Math.max(s1.h, s2.h);
   } else {
     mw = Math.max(s1.w, s2.w);
-    mh = s1.h + s2.h + 1;   // +1 for vertical overlap/join
+    mh = s1.h + s2.h + 1;
   }
   const sqFt = mw * mh;
   return {
@@ -705,7 +697,7 @@ ${renderFooter(isLast)}
 }
 
 /* ═══════════════════════════════════════════
-   HOARDING SELECT MODAL  (with site colours)
+   HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
 function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColorMap }) {
   const [search,   setSearch]   = useState('');
@@ -967,24 +959,21 @@ function TermsModal({ selected, onSelect, termsList, onClose }) {
 
 /* ═══════════════════════════════════════════
    MERGE HOARDING MODAL
-   Only hoardings from the SAME site can be merged.
 ═══════════════════════════════════════════ */
 function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
   const hoardingRows = rows.filter(r => r.rowType === 'hoarding');
   const [sel, setSel] = useState([]);
   const [dir, setDir] = useState('H');
 
-  // siteID of the first selected hoarding (null = anything goes only if both null)
   const firstSiteID = sel.length > 0
     ? (hoardingRows.find(r => r._id === sel[0])?.siteID ?? null)
-    : undefined; // undefined means nothing selected yet
+    : undefined;
 
   const toggle = (id) => {
     const row = hoardingRows.find(r => r._id === id);
     if (!row) return;
     setSel(prev => {
       if (prev.includes(id)) return prev.filter(i => i !== id);
-      // Already have 2 — replace oldest
       if (prev.length >= 2) return [prev[1], id];
       return [...prev, id];
     });
@@ -1003,13 +992,11 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
     return { size: `${mw} × ${mh} ft`, sqFt: (mw * mh).toFixed(1) };
   }, [sel, dir, rows]);
 
-  // Group hoardings by site for display
   const siteGroups = useMemo(() => {
-    const map = new Map(); // siteID → { label, rows[] }
+    const map = new Map();
     for (const r of hoardingRows) {
       const sid = r.siteID ?? '__none__';
       if (!map.has(sid)) {
-        // Build site label from siteObj if available
         const site = r.siteObj;
         const label = site
           ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ')
@@ -1061,7 +1048,6 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
           <button className="pg-modal__close" onClick={onClose}><X size={15}/></button>
         </div>
 
-        {/* Merge direction */}
         <div style={{ padding:'14px 24px', borderBottom:'1px solid #f0f0f8' }}>
           <div style={{ fontFamily:'Nunito,sans-serif', fontSize:12, fontWeight:700, color:'#5a5a78', marginBottom:10 }}>
             Merge Direction
@@ -1087,7 +1073,6 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
           </div>
         </div>
 
-        {/* Hoarding selection — grouped by site */}
         <div style={{ padding:'14px 24px 0', fontFamily:'Nunito,sans-serif', fontSize:12, fontWeight:700, color:'#5a5a78' }}>
           Select 2 Hoardings from the Same Site
           <span style={{ color:'#9090a8', fontWeight:600, marginLeft:6 }}>({sel.length}/2 selected)</span>
@@ -1095,11 +1080,9 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
         <div style={{ flex:1, overflowY:'auto', maxHeight:300, padding:'8px 24px 14px' }}>
           {siteGroups.map(group => {
             const groupColor = group.siteID != null ? siteColorMap.get(group.siteID) : null;
-            // Is this group locked? — locked if first selected and its siteID differs
             const groupLocked = firstSiteID !== undefined && group.siteID !== firstSiteID;
             return (
               <div key={String(group.siteID ?? '__none__')} style={{ marginBottom:14 }}>
-                {/* Site header */}
                 <div style={{
                   display:'flex', alignItems:'center', gap:8, marginBottom:6,
                   padding:'5px 10px', borderRadius:8,
@@ -1126,7 +1109,6 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
                   )}
                 </div>
 
-                {/* Hoarding rows in group */}
                 {group.rows.map(r => {
                   const checked  = sel.includes(r._id);
                   const disabled = groupLocked || (!checked && sel.length >= 2);
@@ -1170,7 +1152,6 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
           })}
         </div>
 
-        {/* Preview */}
         {preview && (
           <div style={{ margin:'0 24px 14px', padding:'12px 16px', borderRadius:12, background:'rgba(124,58,237,0.06)', border:'1.5px solid rgba(124,58,237,0.20)' }}>
             <div style={{ fontFamily:'Nunito,sans-serif', fontSize:12, fontWeight:700, color:'#7c3aed', marginBottom:6, display:'flex', alignItems:'center', gap:6 }}>
@@ -1227,6 +1208,613 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
 }
 
 /* ═══════════════════════════════════════════
+   CUSTOMER EDIT MODAL  ← NEW
+═══════════════════════════════════════════ */
+function CustomerEditModal({ customer, onSave, onClose }) {
+  const [form, setForm] = useState({
+    customerName:   customer?.customerName   ?? '',
+    authorizedName: customer?.authorizedName ?? '',
+    phone1:         customer?.phone1         ?? '',
+    phone2:         customer?.phone2         ?? '',
+    addressLine1:   customer?.addressLine1   ?? '',
+    addressLine2:   customer?.addressLine2   ?? '',
+    addressLine3:   customer?.addressLine3   ?? '',
+    city:           customer?.city           ?? '',
+    district:       customer?.district       ?? '',
+    gstNumber:      customer?.gstNumber      ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [apiErr, setApiErr] = useState('');
+
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const handleSave = async () => {
+    if (!form.customerName.trim()) { setApiErr('Customer name is required.'); return; }
+    setSaving(true); setApiErr('');
+    try {
+      await apiService.updateCustomer({ ...form, customerID: customer.customerID, country: 'India' });
+      onSave({ ...customer, ...form, country: 'India' });
+      onClose();
+    } catch (err) {
+      setApiErr(err?.response?.data?.message || err?.message || 'Save failed.');
+    } finally { setSaving(false); }
+  };
+
+  const FIELDS = [
+    { key: 'customerName',   label: 'Customer Name',            req: true,  full: true  },
+    { key: 'authorizedName', label: 'Authorized Person',        req: false, full: false },
+    { key: 'phone1',         label: 'Phone 1',                  req: true,  full: false },
+    { key: 'phone2',         label: 'Phone 2',                  req: false, full: false },
+    { key: 'addressLine1',   label: 'Address Line 1',           req: true,  full: true  },
+    { key: 'addressLine2',   label: 'Address Line 2',           req: false, full: false },
+    { key: 'addressLine3',   label: 'Address Line 3 / Landmark',req: false, full: false },
+    { key: 'city',           label: 'City',                     req: true,  full: false },
+    { key: 'district',       label: 'District',                 req: false, full: false },
+    { key: 'gstNumber',      label: 'GST Number (15 chars)',    req: false, full: false },
+  ];
+
+  return ReactDOM.createPortal(
+    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="pg-modal" style={{ maxWidth: 600 }}>
+        <div className="pg-modal__head">
+          <div className="pg-modal__head-left">
+            <div className="pg-modal__icon-wrap"><User size={20} color="#049edf" /></div>
+            <div>
+              <h5 className="pg-modal__title">Edit Customer</h5>
+              <p className="pg-modal__subtitle">#{customer.customerID} · {customer.customerName}</p>
+            </div>
+          </div>
+          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+        </div>
+
+        <div style={{ padding: '20px 24px', overflowY: 'auto', maxHeight: '62vh' }}>
+          {apiErr && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 12px', marginBottom: 14,
+              background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 9,
+              color: '#dc2626', fontSize: 12.5, fontFamily: 'Nunito,sans-serif', fontWeight: 700,
+            }}>
+              <AlertCircle size={13} /> {apiErr}
+            </div>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {FIELDS.map(f => (
+              <div key={f.key} style={f.full ? { gridColumn: '1 / -1' } : {}}>
+                <label style={{
+                  fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700,
+                  color: '#5a5a78', marginBottom: 4, display: 'block',
+                }}>
+                  {f.label}
+                  {f.req && <span style={{ color: '#ef4444', marginLeft: 3 }}>*</span>}
+                </label>
+                <div className="qt-input-wrap">
+                  <input
+                    className="qt-input"
+                    value={form[f.key]}
+                    placeholder={f.key === 'gstNumber' ? '24AAAAA0000A1Z5' : ''}
+                    onChange={e =>
+                      set(f.key, f.key === 'gstNumber' ? e.target.value.toUpperCase() : e.target.value)
+                    }
+                    maxLength={f.key === 'gstNumber' ? 15 : undefined}
+                    style={f.key === 'gstNumber' ? { letterSpacing: '0.05em', textTransform: 'uppercase' } : {}}
+                  />
+                </div>
+              </div>
+            ))}
+
+            {/* Country — read-only */}
+            <div>
+              <label style={{
+                fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700,
+                color: '#5a5a78', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                Country
+                <span style={{ fontSize: 10, color: '#049edf', fontWeight: 800, background: 'rgba(4,158,223,0.08)', padding: '1px 6px', borderRadius: 4 }}>
+                  🔒 Fixed
+                </span>
+              </label>
+              <div className="qt-input-wrap" style={{ background: 'rgba(4,158,223,0.03)', borderBottomColor: '#049edf', cursor: 'not-allowed' }}>
+                <input
+                  className="qt-input"
+                  value="India"
+                  readOnly
+                  style={{ color: '#049edf', fontWeight: 800, cursor: 'not-allowed', pointerEvents: 'none' }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="pg-modal__foot">
+          <button className="pg-btn-cancel" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="pg-btn-save" onClick={handleSave} disabled={saving}>
+            {saving
+              ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
+              : <><Check size={13} /> Save Changes</>}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ═══════════════════════════════════════════
+   CREATE CONTRACT FROM QUOTATION MODAL  ← NEW
+═══════════════════════════════════════════ */
+function CreateContractFromQuotModal({
+  quot, quotLines, hoardings, customers, siteMap, paymentFreqs, onClose, onCreated, showToast,
+}) {
+  const myLines = quotLines.filter(l =>
+    l.quotationID === quot.quotationID &&
+    l.quotationRevisionNumber === quot.quotationRevisionNumber
+  );
+
+  const initCustomer = customers.find(c => c.customerID === quot.customerID) || null;
+  const [localCustomer, setLocalCustomer] = useState(initCustomer);
+  const [showEditCust,  setShowEditCust]  = useState(false);
+
+  const freqOptions = paymentFreqs.length ? paymentFreqs : PAYMENT_FREQ_FALLBACK;
+  const [freqID,    setFreqID]    = useState(String(freqOptions[0]?.value ?? 1));
+  const [saving,    setSaving]    = useState(false);
+  const [rowErrors, setRowErrors] = useState({});
+
+  /* Build one editable row per quotation line */
+  const [contractRows, setContractRows] = useState(() =>
+    myLines.map(l => {
+      const h       = hoardings.find(hh => hh.hoardingID === l.hoardingID);
+      const siteID  = h?.siteID ?? h?.site?.siteID ?? null;
+      const siteObj = siteID != null ? siteMap.get(siteID) : null;
+      return {
+        _id:               uid(),
+        selected:          true,
+        hoardingID:        l.hoardingID,
+        hoardingCode:      h?.hoardingCode || `Hoarding ${l.hoardingID}`,
+        location:          buildSiteAddress(siteObj, h?.hoardingCode || ''),
+        size:              h ? `${h.width} X ${h.height}` : '',
+        startDate:         l.periodBeginDate || '',
+        endDate:           l.periodEndDate   || '',
+        contractOrigValue: l.rentAmount      || 0,
+        amountPerFreq:     l.rentAmount      || 0,
+        status:            'Active',
+      };
+    })
+  );
+
+  const selectedRows = contractRows.filter(r => r.selected);
+  const allSelected  = contractRows.length > 0 && contractRows.every(r => r.selected);
+  const someSelected = contractRows.some(r => r.selected);
+
+  const updateRow = (id, field, val) =>
+    setContractRows(p => p.map(r => r._id === id ? { ...r, [field]: val } : r));
+
+  const toggleRow = (id) =>
+    setContractRows(p => p.map(r => r._id === id ? { ...r, selected: !r.selected } : r));
+
+  const toggleAll = () => {
+    const next = !allSelected;
+    setContractRows(p => p.map(r => ({ ...r, selected: next })));
+  };
+
+  const handleCreate = async () => {
+    if (selectedRows.length === 0) { showToast('Select at least one hoarding.', 'error'); return; }
+
+    // Validate each selected row
+    const errs = {};
+    selectedRows.forEach(row => {
+      if (!row.startDate)                     errs[row._id] = 'Start date required';
+      else if (!row.endDate)                  errs[row._id] = 'End date required';
+      else if (row.endDate <= row.startDate)  errs[row._id] = 'End must be after start';
+    });
+    if (Object.keys(errs).length) { setRowErrors(errs); return; }
+    setRowErrors({});
+
+    setSaving(true);
+    let created = 0;
+    const failed = [];
+
+    for (const row of selectedRows) {
+      try {
+        await apiService.createCustomerContract({
+          customerID:         quot.customerID,
+          hoardingID:         row.hoardingID,
+          startDate:          row.startDate,
+          endDate:            row.endDate,
+          contractOrigValue:  Number(row.contractOrigValue) || 0,
+          paymentFreqID:      Number(freqID),
+          amountPerFreq:      Number(row.amountPerFreq)     || 0,
+          advancePaid:        0,
+          status:             row.status,
+          discountAmount:     0,
+          adjustmentAmount:   0,
+          contractFinalValue: Number(row.contractOrigValue) || 0,
+          comments:           `From Quotation ${quot.quotationNumber || quot.quotationID}`,
+        });
+        created++;
+      } catch {
+        failed.push(row.hoardingCode);
+      }
+    }
+
+    setSaving(false);
+    if (failed.length > 0) {
+      showToast(`${created} created · ${failed.length} failed: ${failed.join(', ')}`, 'error');
+    } else {
+      showToast(`${created} customer contract${created !== 1 ? 's' : ''} created successfully!`, 'success');
+      onCreated?.();
+      onClose();
+    }
+  };
+
+  const totalContractValue = selectedRows.reduce((s, r) => s + Number(r.contractOrigValue || 0), 0);
+  const totalAmtPerFreq    = selectedRows.reduce((s, r) => s + Number(r.amountPerFreq    || 0), 0);
+
+  return ReactDOM.createPortal(
+    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="pg-modal" style={{ maxWidth: 940 }}>
+
+        {/* ── Head ── */}
+        <div className="pg-modal__head">
+          <div className="pg-modal__head-left">
+            <div className="pg-modal__icon-wrap" style={{ background: 'rgba(124,58,237,0.10)' }}>
+              <FileCheck size={20} color="#7c3aed" />
+            </div>
+            <div>
+              <h5 className="pg-modal__title">Create Customer Contracts</h5>
+              <p className="pg-modal__subtitle">
+                From Quotation&nbsp;<strong>{quot.quotationNumber || `#${quot.quotationID}`}</strong>
+                &nbsp;·&nbsp;{myLines.length} hoarding{myLines.length !== 1 ? 's' : ''}
+                {Number(quot.quotationRevisionNumber) > 1 && (
+                  <span style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 8, background: 'rgba(217,119,6,0.10)', color: '#d97706', fontSize: 11, fontWeight: 800, border: '1px solid rgba(217,119,6,0.25)' }}>
+                    Rev. {quot.quotationRevisionNumber}
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+        </div>
+
+        {/* ── Customer bar ── */}
+        <div style={{
+          padding: '11px 24px', borderBottom: '1px solid #f0f0f8', background: '#fafafe',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+        }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 9,
+            background: 'rgba(4,158,223,0.10)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <User size={15} color="#049edf" />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 900, color: '#1a1a2e', lineHeight: 1.1 }}>
+              {localCustomer?.customerName || `Customer ID ${quot.customerID}`}
+            </div>
+            {localCustomer && (
+              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600, marginTop: 3 }}>
+                {[localCustomer.addressLine1, localCustomer.city, localCustomer.district].filter(Boolean).join(', ')}
+                {localCustomer.gstNumber && <span style={{ marginLeft: 8 }}>· GST: {localCustomer.gstNumber}</span>}
+                {localCustomer.phone1    && <span style={{ marginLeft: 8 }}>· {localCustomer.phone1}</span>}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => setShowEditCust(true)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5, padding: '6px 13px',
+              borderRadius: 8, border: '1.5px solid rgba(4,158,223,0.30)',
+              background: 'rgba(4,158,223,0.06)', cursor: 'pointer',
+              color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800,
+              flexShrink: 0,
+            }}
+          >
+            <Edit2 size={12} /> Edit Customer
+          </button>
+        </div>
+
+        {/* ── Config bar ── */}
+        <div style={{
+          padding: '10px 24px', borderBottom: '1px solid #f0f0f8', background: '#fff',
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#5a5a78', whiteSpace: 'nowrap' }}>
+            Payment Frequency:
+          </span>
+          <select
+            value={freqID}
+            onChange={e => setFreqID(e.target.value)}
+            style={{
+              padding: '7px 14px', border: '1.5px solid #e8e8f4', borderRadius: 9,
+              fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700,
+              color: '#1a1a2e', background: '#fff', cursor: 'pointer', outline: 'none',
+            }}
+          >
+            {freqOptions.map(f => <option key={f.value} value={f.value}>{f.label}</option>)}
+          </select>
+          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#b0b0c8', fontWeight: 600 }}>
+            Applied to all selected contracts
+          </span>
+          <div style={{ marginLeft: 'auto', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#9090a8' }}>
+            {selectedRows.length} / {contractRows.length} selected
+          </div>
+        </div>
+
+        {/* ── Table ── */}
+        <div style={{ overflowY: 'auto', maxHeight: 370 }}>
+          {myLines.length === 0 ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', fontFamily: 'Nunito,sans-serif', color: '#9090a8' }}>
+              <Building2 size={36} color="#d0d0e8" style={{ marginBottom: 10 }} />
+              <div>No hoarding lines in this quotation.</div>
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
+                <tr style={{ background: '#f8f8fd' }}>
+                  {/* Select-all */}
+                  <th style={{ padding: '10px 14px', width: 44, textAlign: 'center', borderBottom: '1.5px solid #e8e8f4' }}>
+                    <div
+                      onClick={toggleAll}
+                      title={allSelected ? 'Deselect all' : 'Select all'}
+                      style={{
+                        width: 20, height: 20, borderRadius: 6, cursor: 'pointer', margin: '0 auto',
+                        border: `2px solid ${allSelected ? '#049edf' : someSelected ? '#049edf' : '#d0d0e0'}`,
+                        background: allSelected ? '#049edf' : '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      {allSelected && <Check size={12} color="#fff" />}
+                      {!allSelected && someSelected && (
+                        <div style={{ width: 8, height: 2, background: '#049edf', borderRadius: 2 }} />
+                      )}
+                    </div>
+                  </th>
+                  {[
+                    { label: 'Hoarding / Location', align: 'left',   w: null },
+                    { label: 'Size',                 align: 'center', w: 80   },
+                    { label: 'Start Date',           align: 'center', w: 136  },
+                    { label: 'End Date',             align: 'center', w: 136  },
+                    { label: 'Contract Value (₹)',   align: 'center', w: 130  },
+                    { label: 'Amt / Freq (₹)',        align: 'center', w: 118  },
+                    { label: 'Status',               align: 'center', w: 110  },
+                  ].map(col => (
+                    <th key={col.label} style={{
+                      padding: '10px 12px', textAlign: col.align,
+                      fontSize: 10.5, fontFamily: 'Nunito,sans-serif', fontWeight: 800, color: '#7878a0',
+                      textTransform: 'uppercase', letterSpacing: '0.05em',
+                      borderBottom: '1.5px solid #e8e8f4', whiteSpace: 'nowrap',
+                      ...(col.w ? { width: col.w } : {}),
+                    }}>
+                      {col.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {contractRows.map((row, idx) => {
+                  const hasErr = rowErrors[row._id];
+                  return (
+                    <tr key={row._id} style={{
+                      background: !row.selected ? '#f9f9fb' : idx % 2 === 0 ? '#fff' : '#fafafe',
+                      opacity: row.selected ? 1 : 0.45,
+                      transition: 'opacity 0.15s',
+                    }}>
+
+                      {/* Checkbox */}
+                      <td style={{ padding: '10px 14px', textAlign: 'center', borderBottom: '1px solid #f0f0f8' }}>
+                        <div
+                          onClick={() => toggleRow(row._id)}
+                          style={{
+                            width: 20, height: 20, borderRadius: 6, cursor: 'pointer', margin: '0 auto',
+                            border: `2px solid ${row.selected ? '#049edf' : '#d0d0e0'}`,
+                            background: row.selected ? '#049edf' : '#fff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}
+                        >
+                          {row.selected && <Check size={12} color="#fff" />}
+                        </div>
+                      </td>
+
+                      {/* Hoarding info */}
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #f0f0f8' }}>
+                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf' }}>
+                          {row.hoardingCode}
+                        </div>
+                        {row.location && (
+                          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600, marginTop: 2, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <MapPin size={10} color="#c0c0d8" style={{ marginRight: 3, verticalAlign: 'middle' }} />
+                            {row.location}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* Size */}
+                      <td style={{ padding: '10px 12px', borderBottom: '1px solid #f0f0f8', textAlign: 'center' }}>
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#4a5568' }}>{row.size || '—'}</span>
+                      </td>
+
+                      {/* Start Date */}
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f0f0f8' }}>
+                        <input
+                          type="date"
+                          value={row.startDate}
+                          disabled={!row.selected}
+                          onChange={e => { updateRow(row._id, 'startDate', e.target.value); setRowErrors(p => ({ ...p, [row._id]: '' })); }}
+                          style={{
+                            width: '100%', padding: '6px 8px',
+                            border: `1.5px solid ${hasErr ? '#ef4444' : '#e8e8f4'}`,
+                            borderRadius: 8, fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
+                            color: '#1a1a2e', background: row.selected ? '#fff' : 'transparent', outline: 'none',
+                            cursor: row.selected ? 'pointer' : 'not-allowed',
+                          }}
+                        />
+                        {hasErr && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginTop: 3, color: '#ef4444', fontSize: 10.5, fontFamily: 'Nunito,sans-serif', fontWeight: 700 }}>
+                            <AlertCircle size={10} /> {hasErr}
+                          </div>
+                        )}
+                      </td>
+
+                      {/* End Date */}
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f0f0f8' }}>
+                        <input
+                          type="date"
+                          value={row.endDate}
+                          disabled={!row.selected}
+                          onChange={e => { updateRow(row._id, 'endDate', e.target.value); setRowErrors(p => ({ ...p, [row._id]: '' })); }}
+                          style={{
+                            width: '100%', padding: '6px 8px',
+                            border: `1.5px solid ${hasErr ? '#ef4444' : '#e8e8f4'}`,
+                            borderRadius: 8, fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
+                            color: '#1a1a2e', background: row.selected ? '#fff' : 'transparent', outline: 'none',
+                            cursor: row.selected ? 'pointer' : 'not-allowed',
+                          }}
+                        />
+                      </td>
+
+                      {/* Contract Value */}
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f0f0f8' }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          border: '1.5px solid #e8e8f4', borderRadius: 8, padding: '5px 8px',
+                          background: row.selected ? '#fff' : 'transparent',
+                        }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#b0b0c8', flexShrink: 0 }}>₹</span>
+                          <input
+                            type="number" min="0"
+                            value={row.contractOrigValue}
+                            disabled={!row.selected}
+                            onChange={e => updateRow(row._id, 'contractOrigValue', e.target.value)}
+                            style={{
+                              width: '100%', border: 'none', outline: 'none',
+                              fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800,
+                              color: '#049edf', background: 'transparent',
+                              cursor: row.selected ? 'text' : 'not-allowed',
+                            }}
+                          />
+                        </div>
+                      </td>
+
+                      {/* Amount per Freq */}
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f0f0f8' }}>
+                        <div style={{
+                          display: 'flex', alignItems: 'center', gap: 4,
+                          border: '1.5px solid #e8e8f4', borderRadius: 8, padding: '5px 8px',
+                          background: row.selected ? '#fff' : 'transparent',
+                        }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#b0b0c8', flexShrink: 0 }}>₹</span>
+                          <input
+                            type="number" min="0"
+                            value={row.amountPerFreq}
+                            disabled={!row.selected}
+                            onChange={e => updateRow(row._id, 'amountPerFreq', e.target.value)}
+                            style={{
+                              width: '100%', border: 'none', outline: 'none',
+                              fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800,
+                              color: '#16a34a', background: 'transparent',
+                              cursor: row.selected ? 'text' : 'not-allowed',
+                            }}
+                          />
+                        </div>
+                      </td>
+
+                      {/* Status */}
+                      <td style={{ padding: '7px 8px', borderBottom: '1px solid #f0f0f8' }}>
+                        <select
+                          value={row.status}
+                          disabled={!row.selected}
+                          onChange={e => updateRow(row._id, 'status', e.target.value)}
+                          style={{
+                            width: '100%', padding: '6px 8px',
+                            border: '1.5px solid #e8e8f4', borderRadius: 8,
+                            fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700,
+                            color: '#1a1a2e', background: row.selected ? '#fff' : 'transparent',
+                            outline: 'none', cursor: row.selected ? 'pointer' : 'not-allowed',
+                          }}
+                        >
+                          {['Active', 'Pending', 'Expired', 'Terminated'].map(s => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* ── Summary strip ── */}
+        {selectedRows.length > 0 && (
+          <div style={{
+            padding: '10px 24px', borderTop: '1px solid #f0f0f8',
+            background: 'rgba(124,58,237,0.04)',
+            display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap',
+          }}>
+            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#7c3aed' }}>
+              Total Contract Value:&nbsp;
+              <span style={{ fontSize: 14, fontWeight: 900 }}>
+                ₹ {totalContractValue.toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#16a34a' }}>
+              Total Amt / Freq:&nbsp;
+              <span style={{ fontSize: 14, fontWeight: 900 }}>
+                ₹ {totalAmtPerFreq.toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600, marginLeft: 'auto' }}>
+              Frequency: {freqOptions.find(f => String(f.value) === String(freqID))?.label || '—'}
+            </div>
+          </div>
+        )}
+
+        {/* ── Footer ── */}
+        <div className="pg-modal__foot">
+          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#9090a8', fontWeight: 600 }}>
+            {selectedRows.length} of {contractRows.length} hoardings selected
+          </span>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="pg-btn-cancel" onClick={onClose} disabled={saving}>Cancel</button>
+            <button
+              onClick={handleCreate}
+              disabled={saving || selectedRows.length === 0}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7,
+                padding: '9px 20px', borderRadius: 9, border: 'none',
+                background: selectedRows.length > 0
+                  ? 'linear-gradient(135deg,#7c3aed,#6d28d9)'
+                  : '#d0d0e0',
+                color: '#fff',
+                cursor: selectedRows.length > 0 && !saving ? 'pointer' : 'not-allowed',
+                fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
+                boxShadow: selectedRows.length > 0 ? '0 2px 10px rgba(124,58,237,0.30)' : 'none',
+              }}
+            >
+              {saving
+                ? <><Loader2 size={13} className="pg-spin" /> Creating…</>
+                : <><FileCheck size={14} /> Create {selectedRows.length} Contract{selectedRows.length !== 1 ? 's' : ''}</>}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Nested customer-edit modal */}
+      {showEditCust && localCustomer && (
+        <CustomerEditModal
+          customer={localCustomer}
+          onSave={updated => setLocalCustomer(updated)}
+          onClose={() => setShowEditCust(false)}
+        />
+      )}
+    </div>,
+    document.body
+  );
+}
+
+/* ═══════════════════════════════════════════
    MAIN PAGE
 ═══════════════════════════════════════════ */
 export default function QuotationPage() {
@@ -1234,8 +1822,9 @@ export default function QuotationPage() {
   /* ── API Data ── */
   const [customers,  setCustomers]  = useState([]);
   const [hoardings,  setHoardings]  = useState([]);
-  const [sites,      setSites]      = useState([]);   // full site records from /Site
+  const [sites,      setSites]      = useState([]);
   const [termsList,  setTermsList]  = useState([]);
+  const [paymentFreqs, setPaymentFreqs] = useState([]);   // ← NEW
   const [loading,    setLoading]    = useState(true);
   const [apiError,   setApiError]   = useState('');
   const [saving,     setSaving]     = useState(false);
@@ -1272,15 +1861,17 @@ export default function QuotationPage() {
   const [globalEnd,        setGlobalEnd]        = useState('');
 
   /* ── Modals ── */
-  const [showHoardModal,  setShowHoardModal]  = useState(false);
-  const [showManualModal, setShowManualModal] = useState(false);
-  const [showTermsModal,  setShowTermsModal]  = useState(false);
-  const [showMergeModal,  setShowMergeModal]  = useState(false);
+  const [showHoardModal,        setShowHoardModal]        = useState(false);
+  const [showManualModal,       setShowManualModal]       = useState(false);
+  const [showTermsModal,        setShowTermsModal]        = useState(false);
+  const [showMergeModal,        setShowMergeModal]        = useState(false);
+  const [showCustomerEditModal, setShowCustomerEditModal] = useState(false);  // ← NEW
+  const [showContractModal,     setShowContractModal]     = useState(false);  // ← NEW
+  const [contractQuot,          setContractQuot]          = useState(null);   // ← NEW
 
   /* ── Step 2 resizable table ── */
   const step2TableRef  = useRef(null);
   const [step2TableReady, setStep2TableReady] = useState(false);
-  // Column widths: #, Location, Size, SqFt, NOS, StartDate, EndDate, Rate, Amount, Actions
   useResizableColumns(step2TableRef, step2TableReady, [40, 200, 80, 70, 60, 148, 148, 90, 90, 50]);
 
   useEffect(() => {
@@ -1295,11 +1886,10 @@ export default function QuotationPage() {
 
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type }), []);
 
-  /* ── Site lookup map: siteID → normalised site object ── */
+  /* ── Site lookup map ── */
   const siteMap = useMemo(() => {
     const map = new Map();
     for (const s of sites) { if (s?.siteID) map.set(s.siteID, s); }
-    // Also index sites nested inside hoardings (in case /Site returns fewer)
     for (const h of hoardings) {
       const s = h.site ? normalizeSite(h.site) : null;
       if (s?.siteID && !map.has(s.siteID)) map.set(s.siteID, s);
@@ -1311,7 +1901,7 @@ export default function QuotationPage() {
   const siteColorMap = useMemo(() => buildSiteColorMap(hoardings, sites), [hoardings, sites]);
 
   const getRowSiteColor = (row) => {
-    if (row.rowType === 'merged')   return null; // merged gets its own styling
+    if (row.rowType === 'merged')   return null;
     if (row.rowType === 'printing') return null;
     if (row.siteID == null)         return null;
     return siteColorMap.get(row.siteID) || null;
@@ -1330,13 +1920,14 @@ export default function QuotationPage() {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw] = await Promise.all([
+        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw] = await Promise.all([
           apiService.getAllCustomers(),
           apiService.getAllHoardings(),
           apiService.getAllSites().catch(() => []),
           apiService.getAllCustomerTerms().catch(() => []),
           apiService.getAllQuotations().catch(() => []),
           apiService.getAllQuotationLines().catch(() => []),
+          apiService.getAllPaymentFreqs().catch(() => []),   // ← NEW
         ]);
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
         setHoardings(normalizeList(hRaw));
@@ -1344,6 +1935,12 @@ export default function QuotationPage() {
         setTermsList(normalizeList(tRaw));
         setQuotations(normalizeList(qRaw).map(normalizeQuotation));
         setQuotLines(normalizeList(qlRaw).map(normalizeQuotLine));
+        // ← NEW: normalise payment freqs
+        const freqList = normalizeList(pRaw);
+        setPaymentFreqs(freqList.map(f => ({
+          value: f.paymentFreqID ?? f.PaymentFreqID,
+          label: f.freqName ?? f.FreqName ?? f.name ?? String(f.paymentFreqID ?? ''),
+        })));
       } catch (err) {
         setApiError(err?.response?.data?.message || err?.message || 'Failed to load data.');
       } finally { setLoading(false); }
@@ -1364,6 +1961,16 @@ export default function QuotationPage() {
       showToast('Refresh failed: ' + (err?.message || 'Unknown error'), 'error');
     }
   }, [showToast]);
+
+  /* ── NEW: handle customer saved from CustomerEditModal ── */
+  const handleCustomerSaved = useCallback((updated) => {
+    setCustomers(prev => prev.map(c =>
+      c.customerID === updated.customerID ? { ...c, ...updated } : c
+    ));
+    if (selectedCustomer?.customerID === updated.customerID) {
+      setSelectedCustomer(prev => ({ ...prev, ...updated }));
+    }
+  }, [selectedCustomer]);
 
   /* ── Calculations ── */
   const subTotal   = useMemo(() => rows.reduce((s,r) => s + Number(r.amount||0), 0), [rows]);
@@ -1423,7 +2030,6 @@ export default function QuotationPage() {
     setShowManualModal(false);
   };
 
-  /* ── Merge hoardings ── */
   const handleMerge = useCallback((r1, r2, direction) => {
     const merged = newMergedRow(r1, r2, direction);
     setRows(prev => {
@@ -1580,7 +2186,6 @@ export default function QuotationPage() {
       const savedQuotID = savedHeader?.quotationID ?? savedHeader?.QuotationID ?? editingQuotID ?? 0;
       const savedRevNo  = Number(revisionNo);
 
-      // Save only hoarding rows (not merged or printing – no valid hoardingID)
       await Promise.all(
         rows.filter(r => r.rowType === 'hoarding').map((row, idx) => {
           const linePayload = {
@@ -1668,17 +2273,16 @@ export default function QuotationPage() {
     .reduce((acc,p,i,arr) => { if (i>0&&arr[i]-arr[i-1]>1) acc.push('…'); acc.push(p); return acc; }, []);
 
   const HIST_COLS = [
-    { key:'quotationNumber',  label:'Quotation No.', w:'16%' },
-    { key:'customerID',       label:'Customer',       w:'22%' },
-    { key:'quotationDate',    label:'Date',           w:'12%' },
-    { key:'_version',         label:'Latest Version', w:'12%', noSort:true },
-    { key:'totalAmount',      label:'Grand Total',    w:'14%' },
-    { key:'_action',          label:'Actions',        w:'16%', noSort:true },
+    { key:'quotationNumber',  label:'Quotation No.', w:'14%' },
+    { key:'customerID',       label:'Customer',       w:'20%' },
+    { key:'quotationDate',    label:'Date',           w:'11%' },
+    { key:'_version',         label:'Latest Version', w:'11%', noSort:true },
+    { key:'totalAmount',      label:'Grand Total',    w:'12%' },
+    { key:'_action',          label:'Actions',        w:'22%', noSort:true },
   ];
 
   const custName = (id) => customers.find(c => c.customerID===id)?.customerName || '—';
 
-  /* ── Merged rows count for step 2 badge ── */
   const mergedCount = rows.filter(r => r.rowType === 'merged').length;
 
   /* ════════════════ RENDER ════════════════ */
@@ -1728,9 +2332,7 @@ export default function QuotationPage() {
           </div>
         )}
 
-        {/* ══════════════════════════════
-            STEP-BASED CREATION FORM
-        ══════════════════════════════ */}
+        {/* ══════════════ STEP-BASED FORM ══════════════ */}
         {isCreating && (
           <div ref={formRef} className="pg-container qt-form-container" style={{ marginBottom:20 }}>
 
@@ -1769,7 +2371,6 @@ export default function QuotationPage() {
                       )}
                     </label>
                     {revisionNo > 1 ? (
-                      /* Read-only display when revising */
                       <div style={{
                         display:'flex', alignItems:'center', gap:8,
                         padding:'9px 12px', borderRadius:10,
@@ -1790,13 +2391,35 @@ export default function QuotationPage() {
                         customers={customers}
                       />
                     )}
+
+                    {/* ── Customer info strip with Edit button ── */}
                     {selectedCustomer && (
-                      <div className="qt-customer-info">
-                        <strong>{selectedCustomer.customerName}</strong>
-                        {selectedCustomer.addressLine1 && <span> · {selectedCustomer.addressLine1}</span>}
-                        {selectedCustomer.city && <span>, {[selectedCustomer.city,selectedCustomer.district].filter(Boolean).join(', ')}</span>}
-                        {selectedCustomer.phone1 && <span> · 📞 {selectedCustomer.phone1}</span>}
-                        {selectedCustomer.gstNumber && <span> · GST: {selectedCustomer.gstNumber}</span>}
+                      <div className="qt-customer-info" style={{ display:'flex', alignItems:'flex-start', gap:10 }}>
+                        <div style={{ flex:1 }}>
+                          <strong>{selectedCustomer.customerName}</strong>
+                          {selectedCustomer.addressLine1 && <span> · {selectedCustomer.addressLine1}</span>}
+                          {selectedCustomer.city && (
+                            <span>, {[selectedCustomer.city,selectedCustomer.district].filter(Boolean).join(', ')}</span>
+                          )}
+                          {selectedCustomer.phone1 && <span> · 📞 {selectedCustomer.phone1}</span>}
+                          {selectedCustomer.gstNumber && <span> · GST: {selectedCustomer.gstNumber}</span>}
+                        </div>
+                        {/* ← NEW: Edit customer button */}
+                        <button
+                          onClick={() => setShowCustomerEditModal(true)}
+                          title="Edit customer details"
+                          style={{
+                            display:'flex', alignItems:'center', gap:5,
+                            padding:'4px 11px', borderRadius:7,
+                            border:'1.5px solid rgba(4,158,223,0.30)',
+                            background:'rgba(4,158,223,0.06)',
+                            cursor:'pointer', color:'#049edf',
+                            fontFamily:'Nunito,sans-serif', fontSize:11.5, fontWeight:800,
+                            flexShrink:0, whiteSpace:'nowrap',
+                          }}
+                        >
+                          <Edit2 size={11}/> Edit
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1954,7 +2577,6 @@ export default function QuotationPage() {
                     </div>
                   </div>
                   <div style={{ display:'flex',gap:8 }}>
-                    {/* Merge button */}
                     <button
                       className="pg-btn-cancel"
                       onClick={() => setShowMergeModal(true)}
@@ -2039,7 +2661,6 @@ export default function QuotationPage() {
                                   </div>
                                 )}
                                 <input className="qt-inline-input" value={row.location} onChange={e => updateRow(row._id,'location',e.target.value)} style={{ width:'100%',fontStyle:isPrint?'italic':'normal' }}/>
-                                {/* Secondary address line: landmark · city, district */}
                                 {!isMerged && !isPrint && (() => {
                                   const { line2 } = getSiteDisplayLines(row.siteObj, '');
                                   return line2 ? (
@@ -2129,7 +2750,6 @@ export default function QuotationPage() {
               <div className="qt-step-body">
                 <div className="qt-step3-grid">
 
-                  {/* Left: GST + Terms */}
                   <div>
                     <div className="qt-section-head">GST Configuration</div>
                     <div className="qt-gst-row">
@@ -2169,7 +2789,6 @@ export default function QuotationPage() {
                         );
                       })}
 
-                    {/* Merged hoardings summary in step 3 */}
                     {mergedCount > 0 && (
                       <div style={{ marginTop:16, padding:'10px 14px', borderRadius:11, background:'rgba(124,58,237,0.05)', border:'1px solid rgba(124,58,237,0.18)' }}>
                         <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:6 }}>
@@ -2187,7 +2806,6 @@ export default function QuotationPage() {
                     )}
                   </div>
 
-                  {/* Right: Summary */}
                   <div>
                     <div className="qt-section-head">Summary</div>
                     <div className="qt-summary-box">
@@ -2232,9 +2850,7 @@ export default function QuotationPage() {
           </div>
         )}
 
-        {/* ══════════════════════════════
-            PREVIOUS REVISIONS PANEL
-        ══════════════════════════════ */}
+        {/* ══════════ PREVIOUS REVISIONS PANEL ══════════ */}
         {isCreating && quotNo && (() => {
           const prevRevisions = quotations
             .filter(q => (q.quotationNumber||'').trim() === (quotNo||'').trim())
@@ -2302,12 +2918,9 @@ export default function QuotationPage() {
           );
         })()}
 
-        {/* ══════════════════════════════
-            QUOTATION HISTORY
-        ══════════════════════════════ */}
+        {/* ══════════ QUOTATION HISTORY ══════════ */}
         {!isCreating && <div className="pg-container">
 
-          {/* Toolbar */}
           <div style={{ display:'flex',alignItems:'center',gap:12,padding:'16px 20px',borderBottom:'1px solid #f0f0f8',flexWrap:'wrap' }}>
             <div style={{ display:'flex',alignItems:'center',gap:7,flexShrink:0 }}>
               <div style={{ width:32,height:32,borderRadius:9,background:'rgba(4,158,223,0.10)',display:'flex',alignItems:'center',justifyContent:'center' }}>
@@ -2332,10 +2945,6 @@ export default function QuotationPage() {
               style={{ display:'flex',alignItems:'center',gap:6,padding:'8px 14px',borderRadius:9,border:'1.5px solid #e8e8f4',background:'#fff',color:'#5a5a78',cursor:'pointer',fontFamily:'Nunito,sans-serif',fontSize:12.5,fontWeight:700,flexShrink:0 }}>
               <RefreshCw size={13}/> Refresh
             </button>
-            {/* <button onClick={handleStartNew}
-              style={{ display:'flex',alignItems:'center',gap:7,padding:'9px 18px',borderRadius:9,border:'none',background:'#049edf',color:'#fff',cursor:'pointer',fontFamily:'Nunito,sans-serif',fontSize:13,fontWeight:800,flexShrink:0,boxShadow:'0 2px 8px rgba(4,158,223,0.25)' }}>
-              <Plus size={14}/> New Quotation
-            </button> */}
           </div>
 
           <table className="pg-table">
@@ -2406,14 +3015,25 @@ export default function QuotationPage() {
                       <td className="pg-td">
                         <span style={{ fontFamily:'Nunito,sans-serif',fontWeight:800,fontSize:13,color:'#049edf' }}>₹ {fmtCurrency(latest.totalAmount)}</span>
                       </td>
+                      {/* ── Actions: PDF · Contract · Revise ── */}
                       <td className="pg-td">
-                        <div style={{ display:'flex',gap:7,alignItems:'center' }}>
+                        <div style={{ display:'flex',gap:6,alignItems:'center',flexWrap:'wrap' }}>
+                          {/* PDF */}
                           <button onClick={() => handleViewPDF(latest)} title="View / Print PDF"
-                            style={{ display:'flex',alignItems:'center',gap:5,padding:'5px 12px',borderRadius:8,border:'1.5px solid #049edf',color:'#049edf',background:'rgba(4,158,223,0.06)',cursor:'pointer',fontFamily:'Nunito,sans-serif',fontSize:12,fontWeight:800,whiteSpace:'nowrap' }}>
+                            style={{ display:'flex',alignItems:'center',gap:5,padding:'5px 11px',borderRadius:8,border:'1.5px solid #049edf',color:'#049edf',background:'rgba(4,158,223,0.06)',cursor:'pointer',fontFamily:'Nunito,sans-serif',fontSize:12,fontWeight:800,whiteSpace:'nowrap' }}>
                             <Printer size={13}/> PDF
                           </button>
+                          {/* ← NEW: Create Contract button */}
+                          <button
+                            onClick={() => { setContractQuot(latest); setShowContractModal(true); }}
+                            title="Create customer contracts from this quotation"
+                            style={{ display:'flex',alignItems:'center',gap:5,padding:'5px 11px',borderRadius:8,border:'none',color:'#fff',background:'linear-gradient(135deg,#7c3aed,#6d28d9)',cursor:'pointer',fontFamily:'Nunito,sans-serif',fontSize:12,fontWeight:800,whiteSpace:'nowrap',boxShadow:'0 2px 6px rgba(124,58,237,0.25)' }}
+                          >
+                            <FileCheck size={13}/> Contract
+                          </button>
+                          {/* Revise */}
                           <button onClick={() => handleReopenHistory(latest)} title="Create Revision"
-                            style={{ display:'flex',alignItems:'center',gap:5,padding:'5px 12px',borderRadius:8,border:'none',color:'#fff',background:'#7c3aed',cursor:'pointer',fontFamily:'Nunito,sans-serif',fontSize:12,fontWeight:800,whiteSpace:'nowrap' }}>
+                            style={{ display:'flex',alignItems:'center',gap:5,padding:'5px 11px',borderRadius:8,border:'1.5px solid #e8e8f4',color:'#5a5a78',background:'#fff',cursor:'pointer',fontFamily:'Nunito,sans-serif',fontSize:12,fontWeight:800,whiteSpace:'nowrap' }}>
                             <Edit2 size={13}/> Revise
                           </button>
                         </div>
@@ -2446,9 +3066,9 @@ export default function QuotationPage() {
                           <span style={{ fontFamily:'Nunito,sans-serif',fontWeight:700,fontSize:12.5,color:'#9090a8' }}>₹ {fmtCurrency(rev.totalAmount)}</span>
                         </td>
                         <td className="pg-td">
-                          <div style={{ display:'flex',gap:7 }}>
+                          <div style={{ display:'flex',gap:6 }}>
                             <button onClick={() => handleViewPDF(rev)} title="View PDF"
-                              style={{ display:'flex',alignItems:'center',gap:5,padding:'4px 11px',borderRadius:8,border:'1.5px solid #049edf',color:'#049edf',background:'rgba(4,158,223,0.06)',cursor:'pointer',fontFamily:'Nunito,sans-serif',fontSize:11.5,fontWeight:800,whiteSpace:'nowrap' }}>
+                              style={{ display:'flex',alignItems:'center',gap:5,padding:'4px 10px',borderRadius:8,border:'1.5px solid #049edf',color:'#049edf',background:'rgba(4,158,223,0.06)',cursor:'pointer',fontFamily:'Nunito,sans-serif',fontSize:11.5,fontWeight:800,whiteSpace:'nowrap' }}>
                               <Printer size={12}/> PDF
                             </button>
                           </div>
@@ -2461,7 +3081,6 @@ export default function QuotationPage() {
             </tbody>
           </table>
 
-          {/* Pagination */}
           {sortedGroups.length > histPageSize && (
             <div className="pg-pagination">
               <div className="pg-pagination__left">
@@ -2487,7 +3106,7 @@ export default function QuotationPage() {
         </div>}
       </div>
 
-      {/* ── Modals ── */}
+      {/* ════════════ MODALS ════════════ */}
       {showHoardModal && (
         <HoardingSelectModal
           hoardings={hoardings}
@@ -2519,6 +3138,30 @@ export default function QuotationPage() {
           onMerge={handleMerge}
           onClose={() => setShowMergeModal(false)}
           siteColorMap={siteColorMap}
+        />
+      )}
+
+      {/* ← NEW: Customer Edit Modal (from Step 1) */}
+      {showCustomerEditModal && selectedCustomer && (
+        <CustomerEditModal
+          customer={selectedCustomer}
+          onSave={handleCustomerSaved}
+          onClose={() => setShowCustomerEditModal(false)}
+        />
+      )}
+
+      {/* ← NEW: Create Contract from Quotation Modal */}
+      {showContractModal && contractQuot && (
+        <CreateContractFromQuotModal
+          quot={contractQuot}
+          quotLines={quotLines}
+          hoardings={hoardings}
+          customers={customers}
+          siteMap={siteMap}
+          paymentFreqs={paymentFreqs}
+          onClose={() => { setShowContractModal(false); setContractQuot(null); }}
+          onCreated={() => { /* optionally navigate to contracts page */ }}
+          showToast={showToast}
         />
       )}
     </>
