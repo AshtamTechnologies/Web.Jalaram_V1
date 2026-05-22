@@ -1373,12 +1373,9 @@ export default function HoardingPage() {
 
   useResizableColumns(tableRef, tableReady);
 
-  const [view, setView] = useState(() => sessionStorage.getItem('hd_view') || 'grid');
-  const [formMode, setFormMode] = useState(() => sessionStorage.getItem('hd_formMode') || null);
-  const [editTarget, setEditTarget] = useState(() => {
-    try { return JSON.parse(sessionStorage.getItem('hd_editTarget')) || null; }
-    catch { return null; }
-  });
+const [view, setView] = useState('grid');
+const [formMode, setFormMode] = useState(null);
+const [editTarget, setEditTarget] = useState(null);
 
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('hoardingCode');
@@ -1387,12 +1384,13 @@ export default function HoardingPage() {
   const [pageSize, setPageSize] = useState(10);
   const [statusFilter, setStatusFilter] = useState('');
 
-  useEffect(() => {
-    sessionStorage.setItem('hd_view', view);
-    sessionStorage.setItem('hd_formMode', formMode || '');
-    try { sessionStorage.setItem('hd_editTarget', editTarget ? JSON.stringify(editTarget) : ''); }
-    catch { /* ignore */ }
-  }, [view, formMode, editTarget]);
+  // useEffect(() => {
+  //   sessionStorage.setItem('hd_view', view);
+  //   sessionStorage.setItem('hd_formMode', formMode || '');
+  //   try { sessionStorage.setItem('hd_editTarget', editTarget ? JSON.stringify(editTarget) : ''); }
+  //   catch { /* ignore */ }
+  // }, [view, formMode, editTarget]);
+  
 
   const fetchAll = useCallback(async () => {
     setLoading(true); setLoadError('');
