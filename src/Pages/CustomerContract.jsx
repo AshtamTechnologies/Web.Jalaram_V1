@@ -1003,49 +1003,54 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
 function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreqs, contracts, landContracts = [], hoardingMaps = [], onBack, onSave }) {
   const isAdd = mode === 'add';
   const currentContractID = isAdd ? null : (contract?.customerContractID ?? null);
-const checkLandContractWarning = (hoardingID, endDate) => {
-  if (!hoardingID || !endDate) { setLandContractWarning(null); return; }
+  const checkLandContractWarning = (hoardingID, endDate) => {
+    if (!hoardingID || !endDate) { setLandContractWarning(null); return; }
 
-  // Find all land contract maps for this hoarding
-  const maps = hoardingMaps.filter(m =>
-    Number(m.hoardingID ?? m.HoardingID) === Number(hoardingID)
-  );
+    // Find all land contract maps for this hoarding
+    const maps = hoardingMaps.filter(m =>
+      Number(m.hoardingID ?? m.HoardingID) === Number(hoardingID)
+    );
 
-  if (!maps.length) { setLandContractWarning(null); return; }
+    if (!maps.length) { setLandContractWarning(null); return; }
 
-  for (const map of maps) {
-    const lcID = map.landContractID ?? map.LandContractID;
-    const lc = landContracts.find(c => Number(c.landContractID) === Number(lcID));
-    if (!lc || !lc.endDate) continue;
+    for (const map of maps) {
+      const lcID = map.landContractID ?? map.LandContractID;
+      const lc = landContracts.find(c => Number(c.landContractID) === Number(lcID));
+      if (!lc || !lc.endDate) continue;
 
-    if (endDate > lc.endDate) {
-      setLandContractWarning({
-        landContractID: lc.landContractID,
-        landContractEnd: lc.endDate,
-        status: lc.status,
-      });
-      return;
+      if (endDate > lc.endDate) {
+        setLandContractWarning({
+          landContractID: lc.landContractID,
+          landContractEnd: lc.endDate,
+          status: lc.status,
+        });
+        return;
+      }
     }
-  }
 
-  setLandContractWarning(null);
-};
+    setLandContractWarning(null);
+  };
   const [form, setForm] = useState(() =>
-    isAdd ? { ...EMPTY_FORM } : {
-      customerID: contract?.customerID ?? '',
-      hoardingID: contract?.hoardingID ?? '',
-      startDate: contract?.startDate ?? '',
-      endDate: contract?.endDate ?? '',
-      contractOrigValue: contract?.contractOrigValue ?? '',
-      paymentFreqID: contract?.paymentFreqID ?? '',
-      amountPerFreq: contract?.amountPerFreq ?? '',
-      advancePaid: contract?.advancePaid ?? '',
-      status: contract?.status ?? 'Active',
-      discountAmount: contract?.discountAmount ?? '',
-      adjustmentAmount: contract?.adjustmentAmount ?? '',
-      contractFinalValue: contract?.contractFinalValue ?? '',
-      comments: contract?.comments ?? '',
-    }
+    isAdd
+      ? {
+        ...EMPTY_FORM,
+        customerID: contract?.customerID ?? '',
+      }
+      : {
+        customerID: contract?.customerID ?? '',
+        hoardingID: contract?.hoardingID ?? '',
+        startDate: contract?.startDate ?? '',
+        endDate: contract?.endDate ?? '',
+        contractOrigValue: contract?.contractOrigValue ?? '',
+        paymentFreqID: contract?.paymentFreqID ?? '',
+        amountPerFreq: contract?.amountPerFreq ?? '',
+        advancePaid: contract?.advancePaid ?? '',
+        status: contract?.status ?? 'Active',
+        discountAmount: contract?.discountAmount ?? '',
+        adjustmentAmount: contract?.adjustmentAmount ?? '',
+        contractFinalValue: contract?.contractFinalValue ?? '',
+        comments: contract?.comments ?? '',
+      }
   );
 
   const [savedContractID, setSavedContractID] = useState(
@@ -1057,7 +1062,7 @@ const checkLandContractWarning = (hoardingID, endDate) => {
   const [saveOk, setSaveOk] = useState(false);
   const [apiErr, setApiErr] = useState('');
   const [liveConflict, setLiveConflict] = useState(null);        // ← must be here
-const [landContractWarning, setLandContractWarning] = useState(null);
+  const [landContractWarning, setLandContractWarning] = useState(null);
 
   // ── New states for attachment flow ──
   const [contractSaved, setContractSaved] = useState(!isAdd); // true immediately in edit mode
@@ -1075,21 +1080,28 @@ const [landContractWarning, setLandContractWarning] = useState(null);
 
   const freqOptions = paymentFreqs.length ? paymentFreqs : PAYMENT_FREQ_FALLBACK;
 
-const set = (key, val) => {
-  setForm(p => {
-    const next = { ...p, [key]: val };
-    if (key === 'hoardingID' || key === 'startDate' || key === 'endDate') {
-      setLiveConflict(detectHoardingConflict(next, contracts, currentContractID));
-      checkLandContractWarning(
-        key === 'hoardingID' ? val : next.hoardingID,
-        key === 'endDate' ? val : next.endDate
-      );
-    }
-    return next;
-  });
-  if (errors[key]) setErrors(p => ({ ...p, [key]: '' }));
-};
+  const set = (key, val) => {
+    setForm(p => {
+      const next = { ...p, [key]: val };
+      if (key === 'hoardingID' || key === 'startDate' || key === 'endDate') {
+        setLiveConflict(detectHoardingConflict(next, contracts, currentContractID));
+        checkLandContractWarning(
+          key === 'hoardingID' ? val : next.hoardingID,
+          key === 'endDate' ? val : next.endDate
+        );
+      }
+      return next;
+    });
+    if (errors[key]) setErrors(p => ({ ...p, [key]: '' }));
+  };
+  sessionStorage.getItem('contractFromQuot')
+  // Inside ContractForm, add:
+  const [showEditCustomer, setShowEditCustomer] = useState(false);
+  const [editedCustomer, setEditedCustomer] = useState(null);
 
+  const selectedCustomerObj = editedCustomer
+    || customers.find(c => Number(c.customerID) === Number(form.customerID))
+    || null;
   useEffect(() => {
     const orig = Number(String(form.contractOrigValue).replace(/,/g, '')) || 0;
     const disc = Number(String(form.discountAmount).replace(/,/g, '')) || 0;
@@ -1163,7 +1175,109 @@ const set = (key, val) => {
   };
 
   const hasBanner = attachmentList.some(a => a.fileUploadType === 'Banner Design');
+function CustomerEditModal({ customer, onSave, onClose }) {
+  const [form, setForm] = useState({
+    customerName:   customer?.customerName   ?? '',
+    authorizedName: customer?.authorizedName ?? '',
+    phone1:         customer?.phone1         ?? '',
+    phone2:         customer?.phone2         ?? '',
+    addressLine1:   customer?.addressLine1   ?? '',
+    addressLine2:   customer?.addressLine2   ?? '',
+    addressLine3:   customer?.addressLine3   ?? '',
+    city:           customer?.city           ?? '',
+    district:       customer?.district       ?? '',
+    gstNumber:      customer?.gstNumber      ?? '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [apiErr, setApiErr] = useState('');
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
+  const handleSave = async () => {
+    if (!form.customerName.trim()) { setApiErr('Customer name is required.'); return; }
+    setSaving(true); setApiErr('');
+    try {
+      await apiService.updateCustomer({ ...form, customerID: customer.customerID, country: 'India' });
+      onSave({ ...customer, ...form, country: 'India' });
+      onClose();
+    } catch (err) {
+      setApiErr(err?.response?.data?.message || err?.message || 'Save failed.');
+    } finally { setSaving(false); }
+  };
+
+  const FIELDS = [
+    { key: 'customerName',   label: 'Customer Name',             req: true,  full: true  },
+    { key: 'authorizedName', label: 'Authorized Person',         req: false, full: false },
+    { key: 'phone1',         label: 'Phone 1',                   req: false, full: false },
+    { key: 'phone2',         label: 'Phone 2',                   req: false, full: false },
+    { key: 'addressLine1',   label: 'Address Line 1',            req: false, full: true  },
+    { key: 'addressLine2',   label: 'Address Line 2',            req: false, full: false },
+    { key: 'addressLine3',   label: 'Address Line 3 / Landmark', req: false, full: false },
+    { key: 'city',           label: 'City',                      req: false, full: false },
+    { key: 'district',       label: 'District',                  req: false, full: false },
+    { key: 'gstNumber',      label: 'GST Number',                req: false, full: false },
+  ];
+
+  return ReactDOM.createPortal(
+    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="pg-modal" style={{ maxWidth: 560 }}>
+        <div className="pg-modal__head">
+          <div className="pg-modal__head-left">
+            <div className="pg-modal__icon-wrap"><User size={20} color="#049edf" /></div>
+            <div>
+              <h5 className="pg-modal__title">Edit Customer</h5>
+              <p className="pg-modal__subtitle">#{customer.customerID} · {customer.customerName}</p>
+            </div>
+          </div>
+          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+        </div>
+
+        <div style={{ padding: '20px 24px', overflowY: 'auto', maxHeight: '60vh' }}>
+          {apiErr && (
+            <div style={{ display:'flex',alignItems:'center',gap:7,padding:'9px 12px',marginBottom:14,background:'#fef2f2',border:'1px solid #fecaca',borderRadius:9,color:'#dc2626',fontSize:12.5,fontFamily:'Nunito,sans-serif',fontWeight:700 }}>
+              <AlertCircle size={13} /> {apiErr}
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {FIELDS.map(f => (
+              <div key={f.key} style={f.full ? { gridColumn: '1 / -1' } : {}}>
+                <label style={{ fontFamily:'Nunito,sans-serif',fontSize:11.5,fontWeight:700,color:'#5a5a78',marginBottom:4,display:'block' }}>
+                  {f.label}{f.req && <span style={{ color:'#ef4444',marginLeft:3 }}>*</span>}
+                </label>
+                <div className="pg-field-wrap pg-field-wrap--normal">
+                  <input
+                    className="pg-field-input"
+                    value={form[f.key]}
+                    onChange={e => set(f.key, f.key === 'gstNumber' ? e.target.value.toUpperCase() : e.target.value)}
+                    maxLength={f.key === 'gstNumber' ? 15 : undefined}
+                    style={f.key === 'gstNumber' ? { letterSpacing:'0.05em', textTransform:'uppercase' } : {}}
+                  />
+                </div>
+              </div>
+            ))}
+            <div>
+              <label style={{ fontFamily:'Nunito,sans-serif',fontSize:11.5,fontWeight:700,color:'#5a5a78',marginBottom:4,display:'block' }}>
+                Country <span style={{ fontSize:10,color:'#049edf',fontWeight:800,background:'rgba(4,158,223,0.08)',padding:'1px 6px',borderRadius:4 }}>🔒 Fixed</span>
+              </label>
+              <div className="pg-field-wrap pg-field-wrap--normal" style={{ background:'rgba(4,158,223,0.03)',cursor:'not-allowed' }}>
+                <input className="pg-field-input" value="India" readOnly style={{ color:'#049edf',fontWeight:800,cursor:'not-allowed',pointerEvents:'none' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="pg-modal__foot">
+          <button className="pg-btn-cancel" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="pg-btn-save" onClick={handleSave} disabled={saving}>
+            {saving
+              ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
+              : <><Check size={13} /> Save Changes</>}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
   return (
     <div className="hd-form-page">
       <div className="hd-topbar">
@@ -1217,25 +1331,25 @@ const set = (key, val) => {
               </div>
             </div>
           )}
-{landContractWarning && (
-  <div style={{
-    display: 'flex', alignItems: 'flex-start', gap: 10,
-    padding: '12px 16px', marginBottom: 16,
-    background: '#fffbeb', border: '1.5px solid #fde68a',
-    borderRadius: 10, fontFamily: 'Nunito, sans-serif',
-  }}>
-    <AlertCircle size={16} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
-    <div>
-      <div style={{ fontWeight: 800, fontSize: 13, color: '#d97706', marginBottom: 3 }}>
-        Land Contract Ends Before Customer Contract
-      </div>
-      <div style={{ fontWeight: 600, fontSize: 12.5, color: '#92400e', lineHeight: 1.55 }}>
-        The land contract <strong>#{landContractWarning.landContractID}</strong> for this hoarding
-        ends on <strong>{fmtDate(landContractWarning.landContractEnd)}.</strong>
-      </div>
-    </div>
-  </div>
-)}
+          {landContractWarning && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '12px 16px', marginBottom: 16,
+              background: '#fffbeb', border: '1.5px solid #fde68a',
+              borderRadius: 10, fontFamily: 'Nunito, sans-serif',
+            }}>
+              <AlertCircle size={16} color="#d97706" style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 13, color: '#d97706', marginBottom: 3 }}>
+                  Land Contract Ends Before Customer Contract
+                </div>
+                <div style={{ fontWeight: 600, fontSize: 12.5, color: '#92400e', lineHeight: 1.55 }}>
+                  The land contract <strong>#{landContractWarning.landContractID}</strong> for this hoarding
+                  ends on <strong>{fmtDate(landContractWarning.landContractEnd)}.</strong>
+                </div>
+              </div>
+            </div>
+          )}
           {/* ── Step indicator (add mode only) ── */}
           {/* {isAdd && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 20, background: '#f8f8fd', border: '1px solid #e8e8f4', borderRadius: 12, overflow: 'hidden' }}>
@@ -1276,9 +1390,48 @@ const set = (key, val) => {
                   <div className="row g-3">
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Customer" required />
-                      <CustomerSearchWidget customers={customers} value={form.customerID} onChange={val => set('customerID', val)} error={errors.customerID} disabled={!isAdd} />
+                      <CustomerSearchWidget
+                        customers={customers}
+                        value={form.customerID}
+                        onChange={val => set('customerID', val)}
+                        error={errors.customerID}
+                        disabled={!isAdd}
+                      />
                       <FieldError msg={errors.customerID} />
+
+                      {/* ── Edit Customer button (shown when a customer is selected) ── */}
+                      {selectedCustomerObj && (
+                        <button
+                          type="button"
+                          onClick={() => setShowEditCustomer(true)}
+                          style={{
+                            marginTop: 8,
+                            display: 'flex', alignItems: 'center', gap: 5,
+                            padding: '5px 13px', borderRadius: 8,
+                            border: '1.5px solid rgba(4,158,223,0.30)',
+                            background: 'rgba(4,158,223,0.06)', cursor: 'pointer',
+                            color: '#049edf', fontFamily: 'Nunito, sans-serif',
+                            fontSize: 12, fontWeight: 800,
+                          }}
+                        >
+                          <Edit2 size={12} /> Edit Customer Info
+                        </button>
+                      )}
+
+                      {/* Customer Edit Modal */}
+                      {showEditCustomer && selectedCustomerObj && (
+                        <CustomerEditModal
+                          customer={selectedCustomerObj}
+                          onSave={(updated) => {
+                            setEditedCustomer(updated);
+                            // Also update the customers list so the form reflects the change
+                            // (if you have a setCustomers callback, call it here)
+                          }}
+                          onClose={() => setShowEditCustomer(false)}
+                        />
+                      )}
                     </div>
+
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Hoarding" required />
                       <HoardingPickerField hoardings={hoardings} sites={sites} value={form.hoardingID} onChange={val => set('hoardingID', val)} error={errors.hoardingID} disabled={!isAdd} />
@@ -1514,7 +1667,7 @@ export default function CustomerContractPage() {
   const [paymentFreqs, setPaymentFreqs] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [landContracts, setLandContracts] = useState([]);      // ← add
-const [hoardingMaps, setHoardingMaps] = useState([]);         // ← add
+  const [hoardingMaps, setHoardingMaps] = useState([]);         // ← add
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -1538,15 +1691,15 @@ const [hoardingMaps, setHoardingMaps] = useState([]);         // ← add
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
     try {
-const [rawCustomers, rawHoardings, rawSites, rawContracts, rawFreqs, rawLandContracts, rawMaps] = await Promise.all([
-  apiService.getAllCustomers(),
-  apiService.getAllHoardings(),
-  apiService.getAllSites(),
-  apiService.getAllCustomerContracts(),
-  apiService.getAllPaymentFreqs(),
-  apiService.getAllLandContracts(),
-  apiService.getAllLandContractHoardingMaps(),
-]);
+      const [rawCustomers, rawHoardings, rawSites, rawContracts, rawFreqs, rawLandContracts, rawMaps] = await Promise.all([
+        apiService.getAllCustomers(),
+        apiService.getAllHoardings(),
+        apiService.getAllSites(),
+        apiService.getAllCustomerContracts(),
+        apiService.getAllPaymentFreqs(),
+        apiService.getAllLandContracts(),
+        apiService.getAllLandContractHoardingMaps(),
+      ]);
       setCustomers(Array.isArray(rawCustomers) ? rawCustomers : rawCustomers?.data ?? []);
       setHoardings(
         Array.isArray(rawHoardings) ? deduplicateHoardings(rawHoardings)
@@ -1561,15 +1714,15 @@ const [rawCustomers, rawHoardings, rawSites, rawContracts, rawFreqs, rawLandCont
       const list = Array.isArray(rawContracts) ? rawContracts : rawContracts?.data ?? [];
       setContracts(list.map(normalizeContract));
       const lcList = Array.isArray(rawLandContracts) ? rawLandContracts : rawLandContracts?.data ?? [];
-setLandContracts(lcList.map(c => ({
-  landContractID: c.landContractID ?? c.LandContractID,
-  startDate: (c.startDate ?? c.StartDate ?? '').split('T')[0],
-  endDate: (c.endDate ?? c.EndDate ?? '').split('T')[0],
-  status: c.status ?? c.Status ?? '',
-})));
+      setLandContracts(lcList.map(c => ({
+        landContractID: c.landContractID ?? c.LandContractID,
+        startDate: (c.startDate ?? c.StartDate ?? '').split('T')[0],
+        endDate: (c.endDate ?? c.EndDate ?? '').split('T')[0],
+        status: c.status ?? c.Status ?? '',
+      })));
 
-const mapList = Array.isArray(rawMaps) ? rawMaps : rawMaps?.data ?? [];
-setHoardingMaps(mapList);
+      const mapList = Array.isArray(rawMaps) ? rawMaps : rawMaps?.data ?? [];
+      setHoardingMaps(mapList);
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally { setLoadingMeta(false); }
@@ -1655,15 +1808,15 @@ setHoardingMaps(mapList);
 
   if (view === 'form') {
     return (
-<ContractForm
-  mode={formMode} contract={editTarget}
-  customers={customers} hoardings={hoardings} sites={sites} paymentFreqs={freqOptions}
-  contracts={contracts}
-  landContracts={landContracts}
-  hoardingMaps={hoardingMaps}
-  onBack={() => { setView('grid'); setEditTarget(null); }}
-  onSave={handleSave}
-/>
+      <ContractForm
+        mode={formMode} contract={editTarget}
+        customers={customers} hoardings={hoardings} sites={sites} paymentFreqs={freqOptions}
+        contracts={contracts}
+        landContracts={landContracts}
+        hoardingMaps={hoardingMaps}
+        onBack={() => { setView('grid'); setEditTarget(null); }}
+        onSave={handleSave}
+      />
     );
   }
 

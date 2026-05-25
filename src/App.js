@@ -83,7 +83,7 @@ export default function App() {
       case 'customer-contract': return <CustomerContract />;
       case 'sites':             return <SitePage />;
       case 'reports':           return <Reports />;
-      case 'quotation':         return <Quotation />;
+      case 'quotation': return <Quotation onNavigateToContracts={() => changeTab('customer-contract')} />;
       case 'terms':             return <Terms />;
       default:                  return <Dashboard changeTab={changeTab} />;
     }
