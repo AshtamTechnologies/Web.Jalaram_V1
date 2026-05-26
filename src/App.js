@@ -13,6 +13,7 @@ import CustomerContract from './Pages/CustomerContract.jsx';
 import HoardingMerge from './Pages/Hoardingmerge.jsx';
 import Reports from './Pages/Reports.jsx';
 import Quotation from './Pages/Quotation.jsx';
+import Jobs from './Pages/Job.jsx'
 import Terms from './Pages/Terms.jsx';
 import { CalendarCheck, Users, CreditCard } from 'lucide-react';
 import './App.css';
@@ -85,6 +86,8 @@ export default function App() {
       case 'reports':           return <Reports />;
       case 'quotation': return <Quotation onNavigateToContracts={() => changeTab('customer-contract')} />;
       case 'terms':             return <Terms />;
+      case 'Jobs':             return <Jobs />;
+
       default:                  return <Dashboard changeTab={changeTab} />;
     }
   };

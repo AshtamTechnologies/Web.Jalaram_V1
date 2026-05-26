@@ -162,7 +162,11 @@ function normalizeQuotLine(raw) {
     rentAmount: raw.rentAmount ?? raw.RentAmount ?? 0,
   };
 }
-
+// Normalize siteID to number for consistent Map keys
+const toSID = (val) => {
+  const n = Number(val);
+  return (!isNaN(n) && n > 0) ? n : null;
+};
 const isAvailable = (h) => {
   if (typeof h.status === 'boolean') return h.status;
   if (typeof h.status === 'string') return ['available', 'active'].includes(h.status.toLowerCase());
@@ -174,21 +178,33 @@ function parseSize(sizeStr) {
   return { w: parts[0] || 0, h: parts[1] || 0 };
 }
 
+
+
+// AFTER — collect UNIQUE siteIDs from BOTH sources, deduplicated
 function buildSiteColorMap(hoardings, sites = []) {
   const map = new Map();
   let idx = 0;
-  const allSiteIds = sites.length > 0
-    ? sites.map(s => s.siteID ?? s.SiteID).filter(Boolean)
-    : hoardings.map(h => h.siteID ?? h.site?.siteID).filter(Boolean);
-  for (const sid of allSiteIds) {
-    if (!map.has(sid)) {
+
+  // Seed from hoardings FIRST — these siteIDs are confirmed correct
+  for (const h of hoardings) {
+    const sid = toSID(h.siteID);
+    if (sid != null && !map.has(sid)) {
       map.set(sid, SITE_PASTEL_PALETTE[idx % SITE_PASTEL_PALETTE.length]);
       idx++;
     }
   }
+
+  // Fill any remaining site IDs not already covered
+  for (const s of sites) {
+    const sid = toSID(s.siteID ?? s.SiteID);
+    if (sid != null && !map.has(sid)) {
+      map.set(sid, SITE_PASTEL_PALETTE[idx % SITE_PASTEL_PALETTE.length]);
+      idx++;
+    }
+  }
+
   return map;
 }
-
 function normalizeSite(raw) {
   if (!raw) return null;
   return {
@@ -215,14 +231,24 @@ function buildSiteAddress(site, fallback = '') {
 
 function getSiteDisplayLines(site, fallback = '') {
   if (!site) return { line1: fallback, line2: '' };
-  const line1 = [site.addressLine1, site.addressLine2, site.addressLine3]
-    .filter(Boolean).join(', ') || fallback;
-  const line2 = [
-    site.landmark ? `Nr. ${site.landmark}` : '',
-    [site.city, site.district].filter(Boolean).join(', '),
-    site.siteType || '',
-  ].filter(Boolean).join(' · ');
-  return { line1, line2 };
+
+  const addrParts = [site.addressLine1, site.addressLine2, site.addressLine3]
+    .filter(Boolean);
+  const cityDistrict = [site.city, site.district].filter(Boolean).join(', ');
+
+  // Primary address: use explicit address lines if present, else city/district
+  const line1 = addrParts.length > 0
+    ? addrParts.join(', ')
+    : cityDistrict || fallback;
+
+  // Secondary line: landmark · city/district (only when line1 didn't already use them)
+  const line2Parts = [];
+  if (site.landmark) line2Parts.push(`Nr. ${site.landmark}`);
+  // Include city/district in line2 only when we had actual address lines in line1
+  if (addrParts.length > 0 && cityDistrict) line2Parts.push(cityDistrict);
+  if (site.siteType) line2Parts.push(site.siteType);
+
+  return { line1, line2: line2Parts.join(' · ') };
 }
 
 function getSiteAddress(h) {
@@ -230,12 +256,19 @@ function getSiteAddress(h) {
 }
 
 const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = null) => {
-  const site = h?.site ? normalizeSite(h.site) : (siteMap?.get(h?.siteID) ?? null);
+  const rawSiteID = toSID(h?.siteID ?? h?.site?.siteID ?? h?.site?.SiteID);
+  const site = h?.site
+    ? normalizeSite(h.site)
+    : (rawSiteID != null ? (siteMap?.get(rawSiteID) ?? null) : null);
+  const siteID = toSID(site?.siteID) ?? rawSiteID ?? null;
+
+
+
   return {
     _id: uid(),
     rowType: 'hoarding',
     hoardingID: h?.hoardingID || 0,
-    siteID: h?.siteID ?? site?.siteID ?? null,
+    siteID,
     siteObj: site,
     location: buildSiteAddress(site, h?.hoardingCode || ''),
     hoardingCode: h?.hoardingCode || '',
@@ -271,43 +304,47 @@ const newPrintingRow = () => ({
   saved: false,
 });
 
-function newMergedRow(r1, r2, direction) {
-  const s1 = parseSize(r1.size);
-  const s2 = parseSize(r2.size);
+function newMergedRow(rowsArr, direction) {
+  const sizes = rowsArr.map(r => parseSize(r.size));
+  const gaps  = Math.max(rowsArr.length - 1, 1); // at least 1 gap
+ 
   let mw, mh;
   if (direction === 'H') {
-    mw = s1.w + s2.w + 1;
-    mh = Math.max(s1.h, s2.h);
+    mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;   // sum widths + gaps
+    mh = Math.max(...sizes.map(s => s.h));               // tallest height
   } else {
-    mw = Math.max(s1.w, s2.w);
-    mh = s1.h + s2.h + 1;
+    mw = Math.max(...sizes.map(s => s.w));               // widest width
+    mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;   // sum heights + gaps
   }
-  const sqFt = mw * mh;
-  const combinedRate = Number(r1.ratePerMonth || 0) + Number(r2.ratePerMonth || 0);
-  const combinedAmount = Number(r1.amount || 0) + Number(r2.amount || 0);
+ 
+  const sqFt         = mw * mh;
+  const combinedRate = rowsArr.reduce((s, r) => s + Number(r.ratePerMonth || 0), 0);
+  const combinedAmt  = rowsArr.reduce((s, r) => s + Number(r.amount       || 0), 0);
+ 
   return {
-    _id: uid(),
-    rowType: 'merged',
-    isMerged: true,
-    mergeDirection: direction,
-    mergedFromIds: [r1._id, r2._id],
-    mergedHoardingIDs: [Number(r1.hoardingID) || 0, Number(r2.hoardingID) || 0], // ← KEY
-    hoardingID: 0,
-    siteID: null,
-    location: `${r1.location} + ${r2.location}`,
-    hoardingCode: `${r1.hoardingCode || ''} + ${r2.hoardingCode || ''}`,
-    size: `${mw} X ${mh}`,
+    _id:               uid(),
+    rowType:           'merged',
+    isMerged:          true,
+    mergeDirection:    direction,
+    mergedFromIds:     rowsArr.map(r => r._id),
+    mergedHoardingIDs: rowsArr.map(r => Number(r.hoardingID) || 0).filter(id => id > 0),
+    hoardingID:        0,
+    siteID:            null,
+    location:          rowsArr.map(r => r.location).join(' + '),
+    hoardingCode:      rowsArr.map(r => r.hoardingCode || '').join(' + '),
+    size:              `${mw} X ${mh}`,
     sqFt,
-    nos: 1,
-    startDate: r1.startDate || r2.startDate || '',
-    endDate: r1.endDate || r2.endDate || '',
-    ratePerMonth: combinedRate,    // ← was 0
-    amount: combinedAmount,  // ← was 0
-    printingCost: 0,
+    nos:               1,
+    startDate:         rowsArr[0]?.startDate || '',
+    endDate:           rowsArr[0]?.endDate   || '',
+    ratePerMonth:      combinedRate,
+    amount:            combinedAmt,
+    printingCost:      0,
     quotationLineNumber: 0,
-    saved: false,
+    saved:             false,
   };
 }
+ 
 
 
 /* ═══════════════════════════════════════════
@@ -702,7 +739,7 @@ ${renderFooter(isLast)}
 /* ═══════════════════════════════════════════
    HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
-function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColorMap }) {
+function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColorMap, siteMap }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
 
@@ -764,9 +801,10 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
               const checked = selected.has(h.hoardingID);
               const alreadyIn = existingIds.has(h.hoardingID);
               const sid = h.siteID ?? h.site?.siteID;
-              const siteColor = sid != null ? siteColorMap.get(sid) : null;
+              const siteColor = toSID(sid) != null ? siteColorMap.get(toSID(sid)) : null;
               const site = h.site ? normalizeSite(h.site) : null;
-              const { line1, line2 } = getSiteDisplayLines(site, h.hoardingCode);
+              const resolvedSite = site ?? (toSID(sid) != null ? siteMap?.get(toSID(sid)) ?? null : null);
+              const { line1, line2 } = getSiteDisplayLines(resolvedSite, h.hoardingCode);
               return (
                 <div key={h.hoardingID}
                   onClick={() => !alreadyIn && toggle(h.hoardingID)}
@@ -819,10 +857,12 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
   );
 }
 
-/* ═══════════════════════════════════════════
-   MANUAL HOARDING MODAL
-═══════════════════════════════════════════ */
-function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap }) {
+/* ═══════════════════════════════════════════════════════════
+   COMPLETE ManualHoardingModal replacement
+   Replace the ENTIRE function with this.
+═══════════════════════════════════════════════════════════ */
+
+function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
 
@@ -834,7 +874,11 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap }) {
     ) : hoardings;
   }, [hoardings, search]);
 
-  const toggle = (id) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggle = (id) => setSelected(p => {
+    const n = new Set(p);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
 
   return ReactDOM.createPortal(
     <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -849,54 +893,129 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap }) {
           </div>
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
+
         <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0f0f8' }}>
           <div className="pg-search-box">
             <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
-            <input placeholder="Search all hoardings…" value={search} onChange={e => setSearch(e.target.value)} />
+            <input
+              placeholder="Search all hoardings…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
             {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
           </div>
         </div>
+
         <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
           {filtered.map(h => {
-            const p = selected.has(h.hoardingID);
+            const isSelected = selected.has(h.hoardingID);
             const av = isAvailable(h);
-            const statusLabel = typeof h.status === 'boolean' ? (h.status ? 'Available' : 'Unavailable') : (h.status || 'Unknown');
-            const sid = h.siteID ?? h.site?.siteID;
+            const statusLabel = typeof h.status === 'boolean'
+              ? (h.status ? 'Available' : 'Unavailable')
+              : (h.status || 'Unknown');
+
+            // ── Resolve site: first try h.site, then fall back to siteMap ──
+            const rawSid = h.siteID ?? h.site?.siteID ?? h.site?.SiteID;
+            const sid = toSID(rawSid);
             const siteColor = sid != null ? siteColorMap.get(sid) : null;
-            const site = h.site ? normalizeSite(h.site) : null;
-            const { line1, line2 } = getSiteDisplayLines(site, h.hoardingCode);
+            const embeddedSite = h.site ? normalizeSite(h.site) : null;
+            const resolvedSite = embeddedSite ?? (sid != null ? (siteMap?.get(sid) ?? null) : null);
+
+            // Build display lines from resolved site
+            const addrParts = resolvedSite
+              ? [resolvedSite.addressLine1, resolvedSite.addressLine2, resolvedSite.addressLine3].filter(Boolean)
+              : [];
+            const cityDistrict = resolvedSite
+              ? [resolvedSite.city, resolvedSite.district].filter(Boolean).join(', ')
+              : '';
+            const landmarkPart = resolvedSite?.landmark ? `Nr. ${resolvedSite.landmark}` : '';
+
+            // line1: address lines or city/district; fallback to hoarding code
+            const line1 = addrParts.length > 0
+              ? addrParts.join(', ')
+              : cityDistrict || h.hoardingCode;
+
+            // line2: landmark + city/district (when line1 had address lines)
+            const line2Parts = [landmarkPart, addrParts.length > 0 ? cityDistrict : ''].filter(Boolean);
+            const line2 = line2Parts.join(' · ');
+
             return (
-              <div key={h.hoardingID} onClick={() => toggle(h.hoardingID)}
+              <div
+                key={h.hoardingID}
+                onClick={() => toggle(h.hoardingID)}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 12,
                   padding: '10px 24px',
                   borderBottom: '1px solid #f8f8f8',
                   borderLeft: siteColor ? `4px solid ${siteColor.border}` : '4px solid transparent',
                   cursor: 'pointer',
-                  background: p ? 'rgba(4,158,223,0.05)' : siteColor ? siteColor.bg : '#fff',
+                  background: isSelected
+                    ? 'rgba(4,158,223,0.05)'
+                    : siteColor ? siteColor.bg : '#fff',
                 }}
               >
-                <div className={`qt-modal-check ${p ? 'qt-modal-check--on' : ''}`}>
-                  {p && <Check size={12} color="#fff" />}
+                {/* Checkbox */}
+                <div className={`qt-modal-check ${isSelected ? 'qt-modal-check--on' : ''}`}>
+                  {isSelected && <Check size={12} color="#fff" />}
                 </div>
-                {siteColor && <div style={{ width: 8, height: 8, borderRadius: '50%', background: siteColor.dot, flexShrink: 0 }} />}
+
+                {/* Site colour dot */}
+                {siteColor && (
+                  <div style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: siteColor.dot, flexShrink: 0,
+                  }} />
+                )}
+
+                {/* Address / info */}
                 <div style={{ flex: 1 }}>
-                  <div className="pg-td__primary">{line1 || h.hoardingCode}</div>
+                  <div className="pg-td__primary" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <MapPin size={11} color="#9090a8" style={{ flexShrink: 0 }} />
+                    <span>{line1}</span>
+                  </div>
                   {line2 && (
-                    <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#7a8499', marginTop: 1 }}>{line2}</div>
+                    <div style={{
+                      fontFamily: 'Nunito,sans-serif', fontSize: 11,
+                      color: '#7a8499', marginTop: 1,
+                    }}>
+                      {line2}
+                    </div>
                   )}
-                  <div className="pg-td__secondary">Code: {h.hoardingCode} · {h.width}×{h.height}</div>
+                  <div className="pg-td__secondary">
+                    Code: {h.hoardingCode} · {h.width}×{h.height} ft
+                    {h.monthlyRent ? ` · ₹${Number(h.monthlyRent).toLocaleString('en-IN')}/mo` : ''}
+                  </div>
                 </div>
-                <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 5, background: av ? 'rgba(22,163,74,0.10)' : 'rgba(220,38,38,0.10)', color: av ? '#16a34a' : '#dc2626', border: `1px solid ${av ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}`, flexShrink: 0 }}>{statusLabel}</span>
+
+                {/* Status badge */}
+                <span style={{
+                  fontSize: 10.5, fontWeight: 700, padding: '2px 8px',
+                  borderRadius: 5, flexShrink: 0,
+                  background: av ? 'rgba(22,163,74,0.10)' : 'rgba(220,38,38,0.10)',
+                  color: av ? '#16a34a' : '#dc2626',
+                  border: `1px solid ${av ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}`,
+                }}>
+                  {statusLabel}
+                </span>
               </div>
             );
           })}
         </div>
+
         <div className="pg-modal__foot">
-          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#9090a8', fontWeight: 600 }}>{selected.size} selected</span>
+          <span style={{
+            fontFamily: 'Nunito,sans-serif', fontSize: 12.5,
+            color: '#9090a8', fontWeight: 600,
+          }}>
+            {selected.size} selected
+          </span>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
-            <button className="pg-btn-save" onClick={() => onAdd(selected)} disabled={selected.size === 0}>
+            <button
+              className="pg-btn-save"
+              onClick={() => onAdd(selected)}
+              disabled={selected.size === 0}
+            >
               <Plus size={14} /> Add {selected.size > 0 ? `(${selected.size})` : ''}
             </button>
           </div>
@@ -967,34 +1086,31 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
   const hoardingRows = rows.filter(r => r.rowType === 'hoarding');
   const [sel, setSel] = useState([]);
   const [dir, setDir] = useState('H');
-
+ 
   const firstSiteID = sel.length > 0
     ? (hoardingRows.find(r => r._id === sel[0])?.siteID ?? null)
     : undefined;
-
+ 
+  // Toggle without any upper limit (min 2 to merge)
   const toggle = (id) => {
     const row = hoardingRows.find(r => r._id === id);
     if (!row) return;
-    setSel(prev => {
-      if (prev.includes(id)) return prev.filter(i => i !== id);
-      if (prev.length >= 2) return [prev[1], id];
-      return [...prev, id];
-    });
+    setSel(prev =>
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
   };
-
+ 
   const preview = useMemo(() => {
     if (sel.length < 2) return null;
-    const r1 = rows.find(r => r._id === sel[0]);
-    const r2 = rows.find(r => r._id === sel[1]);
-    if (!r1 || !r2) return null;
-    const s1 = parseSize(r1.size);
-    const s2 = parseSize(r2.size);
+    const selRows = sel.map(id => rows.find(r => r._id === id)).filter(Boolean);
+    const sizes   = selRows.map(r => parseSize(r.size));
+    const gaps    = selRows.length - 1;
     let mw, mh;
-    if (dir === 'H') { mw = s1.w + s2.w + 1; mh = Math.max(s1.h, s2.h); }
-    else { mw = Math.max(s1.w, s2.w); mh = s1.h + s2.h + 1; }
-    return { size: `${mw} × ${mh} ft`, sqFt: (mw * mh).toFixed(1) };
+    if (dir === 'H') { mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps; mh = Math.max(...sizes.map(s => s.h)); }
+    else             { mw = Math.max(...sizes.map(s => s.w)); mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps; }
+    return { size: `${mw} × ${mh} ft`, sqFt: (mw * mh).toFixed(1), count: selRows.length };
   }, [sel, dir, rows]);
-
+ 
   const siteGroups = useMemo(() => {
     const map = new Map();
     for (const r of hoardingRows) {
@@ -1002,7 +1118,8 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
       if (!map.has(sid)) {
         const site = r.siteObj;
         const label = site
-          ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ')
+          ? [site.addressLine1 || site.city, site.city, site.district]
+              .filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(', ')
           : (sid === '__none__' ? 'Unknown Site' : `Site ${sid}`);
         map.set(sid, { label, siteID: r.siteID, rows: [] });
       }
@@ -1010,7 +1127,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
     }
     return [...map.values()];
   }, [hoardingRows]);
-
+ 
   if (hoardingRows.length < 2) {
     return ReactDOM.createPortal(
       <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -1034,7 +1151,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
       document.body
     );
   }
-
+ 
   return ReactDOM.createPortal(
     <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="pg-modal" style={{ maxWidth: 580 }}>
@@ -1045,20 +1162,23 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
             </div>
             <div>
               <h5 className="pg-modal__title">Merge Hoardings</h5>
-              <p className="pg-modal__subtitle">Only hoardings from the <strong>same site</strong> can be merged</p>
+              <p className="pg-modal__subtitle">
+                Select <strong>2 or more</strong> hoardings from the <strong>same site</strong>
+              </p>
             </div>
           </div>
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
-
+ 
+        {/* Direction */}
         <div style={{ padding: '14px 24px', borderBottom: '1px solid #f0f0f8' }}>
           <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78', marginBottom: 10 }}>
             Merge Direction
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             {[
-              { val: 'H', label: 'Horizontal', sub: 'Side by side  ·  width + width + 1', icon: '↔' },
-              { val: 'V', label: 'Vertical', sub: 'Top to bottom  ·  height + height + 1', icon: '↕' },
+              { val: 'H', label: 'Horizontal', sub: 'Side by side · sum(widths) + gaps', icon: '↔' },
+              { val: 'V', label: 'Vertical',   sub: 'Top to bottom · sum(heights) + gaps', icon: '↕' },
             ].map(({ val, label, sub, icon }) => (
               <button key={val} onClick={() => setDir(val)}
                 style={{
@@ -1075,14 +1195,17 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
             ))}
           </div>
         </div>
-
+ 
         <div style={{ padding: '14px 24px 0', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>
-          Select 2 Hoardings from the Same Site
-          <span style={{ color: '#9090a8', fontWeight: 600, marginLeft: 6 }}>({sel.length}/2 selected)</span>
+          Select hoardings from the Same Site
+          <span style={{ color: '#9090a8', fontWeight: 600, marginLeft: 6 }}>
+            ({sel.length} selected — min. 2)
+          </span>
         </div>
+ 
         <div style={{ flex: 1, overflowY: 'auto', maxHeight: 300, padding: '8px 24px 14px' }}>
           {siteGroups.map(group => {
-            const groupColor = group.siteID != null ? siteColorMap.get(group.siteID) : null;
+            const groupColor  = group.siteID != null ? siteColorMap.get(group.siteID) : null;
             const groupLocked = firstSiteID !== undefined && group.siteID !== firstSiteID;
             return (
               <div key={String(group.siteID ?? '__none__')} style={{ marginBottom: 14 }}>
@@ -1105,17 +1228,13 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
                       ✕ Different site
                     </span>
                   )}
-                  {!groupLocked && group.rows.length < 2 && (
-                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#f59e0b', marginLeft: 'auto', fontWeight: 700 }}>
-                      Need 2+ hoardings to merge
-                    </span>
-                  )}
                 </div>
-
+ 
                 {group.rows.map(r => {
-                  const checked = sel.includes(r._id);
-                  const disabled = groupLocked || (!checked && sel.length >= 2);
+                  const checked  = sel.includes(r._id);
+                  const disabled = groupLocked;
                   const { line1, line2 } = getSiteDisplayLines(r.siteObj, r.hoardingCode);
+                  const selIdx = sel.indexOf(r._id);
                   return (
                     <div key={r._id}
                       onClick={() => !disabled && toggle(r._id)}
@@ -1125,10 +1244,15 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
                         cursor: disabled ? 'not-allowed' : 'pointer',
                         border: `1.5px solid ${checked ? '#7c3aed' : '#f0f0f0'}`,
                         background: checked ? 'rgba(124,58,237,0.06)' : groupLocked ? '#f8f8f8' : '#fafafa',
-                        opacity: disabled && !checked ? 0.4 : 1,
+                        opacity: disabled ? 0.4 : 1,
                       }}
                     >
-                      <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${checked ? '#7c3aed' : '#d0d0e0'}`, background: checked ? '#7c3aed' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <div style={{
+                        width: 20, height: 20, borderRadius: 6, flexShrink: 0,
+                        border: `2px solid ${checked ? '#7c3aed' : '#d0d0e0'}`,
+                        background: checked ? '#7c3aed' : '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
                         {checked && <Check size={12} color="#fff" />}
                       </div>
                       <div style={{ flex: 1 }}>
@@ -1143,8 +1267,13 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
                         </div>
                       </div>
                       {checked && (
-                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 5, background: 'rgba(124,58,237,0.12)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.25)', flexShrink: 0 }}>
-                          {sel.indexOf(r._id) === 0 ? '1st' : '2nd'}
+                        <div style={{
+                          fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800,
+                          padding: '2px 8px', borderRadius: 5, flexShrink: 0,
+                          background: 'rgba(124,58,237,0.12)', color: '#7c3aed',
+                          border: '1px solid rgba(124,58,237,0.25)',
+                        }}>
+                          #{selIdx + 1}
                         </div>
                       )}
                     </div>
@@ -1154,11 +1283,12 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
             );
           })}
         </div>
-
+ 
+        {/* Preview */}
         {preview && (
           <div style={{ margin: '0 24px 14px', padding: '12px 16px', borderRadius: 12, background: 'rgba(124,58,237,0.06)', border: '1.5px solid rgba(124,58,237,0.20)' }}>
             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#7c3aed', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Link2 size={13} /> Merge Preview
+              <Link2 size={13} /> Merge Preview ({preview.count} hoardings)
             </div>
             <div style={{ display: 'flex', gap: 24 }}>
               <div>
@@ -1178,29 +1308,28 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
             </div>
           </div>
         )}
-
+ 
         <div className="pg-modal__foot">
           <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
-            Original rows will be replaced by the merged row
+            {sel.length < 2 ? 'Select at least 2 hoardings' : `${sel.length} hoardings will be merged`}
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
             <button
-              disabled={sel.length !== 2}
+              disabled={sel.length < 2}
               onClick={() => {
-                const r1 = rows.find(r => r._id === sel[0]);
-                const r2 = rows.find(r => r._id === sel[1]);
-                onMerge(r1, r2, dir);
+                const selectedRowData = sel.map(id => rows.find(r => r._id === id)).filter(Boolean);
+                onMerge(selectedRowData, dir);
               }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '9px 20px', borderRadius: 9, border: 'none',
-                background: sel.length === 2 ? '#7c3aed' : '#d0d0e0',
-                color: '#fff', cursor: sel.length === 2 ? 'pointer' : 'not-allowed',
+                background: sel.length >= 2 ? '#7c3aed' : '#d0d0e0',
+                color: '#fff', cursor: sel.length >= 2 ? 'pointer' : 'not-allowed',
                 fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
               }}
             >
-              <Link2 size={14} /> Merge Hoardings
+              <Link2 size={14} /> Merge {sel.length >= 2 ? `(${sel.length})` : ''}
             </button>
           </div>
         </div>
@@ -1209,6 +1338,40 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
     document.body
   );
 }
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* ═══════════════════════════════════════════
    CUSTOMER EDIT MODAL  ← NEW
@@ -1469,7 +1632,7 @@ function CreateContractFromQuotModal({
                 From Quotation&nbsp;<strong>{quot.quotationNumber || `#${quot.quotationID}`}</strong>
                 &nbsp;·&nbsp;{myLines.length} hoarding{myLines.length !== 1 ? 's' : ''}
                 {Number(quot.quotationRevisionNumber) > 1 && (
-                  <span style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 8, background: 'rgba(217,119,6,0.10)', color: '#d97706', fontSize: 11, fontWeight: 800, border: '1px solid rgba(217,119,6,0.25)' }}>
+                  <span style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 8, background: 'rgba(217,119,6,0.10)', color: '#7c7c7c', fontSize: 11, fontWeight: 800, border: '1px solid rgba(217,119,6,0.25)' }}>
                     Rev. {quot.quotationRevisionNumber}
                   </span>
                 )}
@@ -1875,7 +2038,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
   /* ── Step 2 resizable table ── */
   const step2TableRef = useRef(null);
   const [step2TableReady, setStep2TableReady] = useState(false);
-  useResizableColumns(step2TableRef, step2TableReady, [40, 200, 80, 70, 60, 148, 148, 90, 90, 50]);
+  const histTableRef = useRef(null);
+  const [histTableReady, setHistTableReady] = useState(false);
+  const step2ColWidths = withPrinting
+    ? [40, 200, 80, 60, 90, 90, 90, 46]
+    : [40, 200, 80, 64, 56, 148, 148, 90, 90, 46];
+
+  useResizableColumns(step2TableRef, step2TableReady, step2ColWidths);
+  useResizableColumns(histTableRef, histTableReady, [44, 140, 200, 110, 110, 120, 220]);
 
   useEffect(() => {
     setStep2TableReady(false);
@@ -1884,6 +2054,13 @@ export default function QuotationPage({ onNavigateToContracts }) {
       return () => clearTimeout(t);
     }
   }, [step, withPrinting]);
+  useEffect(() => {
+    if (!loading && !isCreating) {
+      setHistTableReady(false);
+      const t = setTimeout(() => setHistTableReady(true), 150);
+      return () => clearTimeout(t);
+    }
+  }, [loading, isCreating]);
 
   const formRef = useRef(null);
 
@@ -1892,22 +2069,28 @@ export default function QuotationPage({ onNavigateToContracts }) {
   /* ── Site lookup map ── */
   const siteMap = useMemo(() => {
     const map = new Map();
-    for (const s of sites) { if (s?.siteID) map.set(s.siteID, s); }
+    for (const s of sites) {
+      const sid = toSID(s?.siteID ?? s?.SiteID);
+      if (sid) map.set(sid, s);
+    }
     for (const h of hoardings) {
+      const sid = toSID(h.siteID);
       const s = h.site ? normalizeSite(h.site) : null;
-      if (s?.siteID && !map.has(s.siteID)) map.set(s.siteID, s);
+      if (sid && s && !map.has(sid)) map.set(sid, s);
     }
     return map;
   }, [sites, hoardings]);
 
   /* ── Site colour map ── */
-  const siteColorMap = useMemo(() => buildSiteColorMap(hoardings, sites), [hoardings, sites]);
+  const siteColorMap = useMemo(() => {
+    const map = buildSiteColorMap(hoardings, sites);
+    return map;
+  }, [hoardings, sites]);
 
   const getRowSiteColor = (row) => {
-    if (row.rowType === 'merged') return null;
-    if (row.rowType === 'printing') return null;
-    if (row.siteID == null) return null;
-    return siteColorMap.get(row.siteID) || null;
+    const sid = toSID(row.siteID ?? row.siteObj?.siteID);
+    const color = sid == null ? null : siteColorMap.get(sid) || null;
+    return color;
   };
 
   const toggleGroup = useCallback((key) => {
@@ -1919,37 +2102,64 @@ export default function QuotationPage({ onNavigateToContracts }) {
   }, []);
 
   /* ── Load API data ── */
-useEffect(() => {
-  (async () => {
-    setLoading(true);
-    try {
-      const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw] = await Promise.all([
-        apiService.getAllCustomers(),
-        apiService.getAllHoardings(),
-        apiService.getAllSites().catch(() => []),
-        apiService.getAllCustomerTerms().catch(() => []),
-        apiService.getAllQuotations().catch(() => []),
-        apiService.getAllQuotationLines().catch(() => []),
-        apiService.getAllPaymentFreqs().catch(() => []),
-      ]);
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      try {
+        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw] = await Promise.all([
+          apiService.getAllCustomers(),
+          apiService.getAllHoardings(),
+          apiService.getAllSites().catch(() => []),
+          apiService.getAllCustomerTerms().catch(() => []),
+          apiService.getAllQuotations().catch(() => []),
+          apiService.getAllQuotationLines().catch(() => []),
+          apiService.getAllPaymentFreqs().catch(() => []),
+        ]);
 
-      setCustomers(normalizeList(cRaw).map(normalizeCustomer));
-      setHoardings(normalizeList(hRaw));
-      setSites(normalizeList(sRaw).map(normalizeSite).filter(Boolean));
-      setTermsList(normalizeList(tRaw));
-      setQuotations(normalizeList(qRaw).map(normalizeQuotation));
-      setQuotLines(normalizeList(qlRaw).map(normalizeQuotLine));
-      const freqList = normalizeList(pRaw);
-      setPaymentFreqs(freqList.map(f => ({
-        value: f.paymentFreqID ?? f.PaymentFreqID,
-        label: f.freqName ?? f.FreqName ?? f.name ?? String(f.paymentFreqID ?? ''),
-      })));
+        setCustomers(normalizeList(cRaw).map(normalizeCustomer));
+        setHoardings(normalizeList(hRaw));
+        setSites(normalizeList(sRaw).map(normalizeSite).filter(Boolean));
+        setTermsList(normalizeList(tRaw));
+        setQuotations(normalizeList(qRaw).map(normalizeQuotation));
+        setQuotLines(normalizeList(qlRaw).map(normalizeQuotLine));
+        const freqList = normalizeList(pRaw);
+        setPaymentFreqs(freqList.map(f => ({
+          value: f.paymentFreqID ?? f.PaymentFreqID,
+          label: f.freqName ?? f.FreqName ?? f.name ?? String(f.paymentFreqID ?? ''),
+        })));
 
-    } catch (err) {
-      setApiError(err?.response?.data?.message || err?.message || 'Failed to load data.');
-    } finally { setLoading(false); }
+      } catch (err) {
+        setApiError(err?.response?.data?.message || err?.message || 'Failed to load data.');
+      } finally { setLoading(false); }
 
-    // Load merges separately — isolated so it can never break main data loading
+      // Load merges separately — isolated so it can never break main data loading
+      try {
+        const mRaw = await apiService.getAllQuotationMerges();
+        setQuotMerges(normalizeList(mRaw).map(m => ({
+          quotationMergeID: m.quotationMergeID ?? m.QuotationMergeID ?? 0,
+          quotationLineNumber: m.quotationLineNumber ?? m.QuotationLineNumber ?? 0,
+          quotationID: m.quotationID ?? m.QuotationID ?? 0,
+          quotationRevisionNumber: m.quotationRevisionNumber ?? m.QuotationRevisionNumber ?? 0,
+          hoardingID: m.hoardingID ?? m.HoardingID ?? 0,
+          mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
+        })));
+      } catch {
+        setQuotMerges([]);
+      }
+    })();
+  }, []);
+
+  /* ── Refresh quotations ── */
+const refreshQuotations = useCallback(async () => {
+  try {
+    const [qRaw, qlRaw] = await Promise.all([
+      apiService.getAllQuotations(),
+      apiService.getAllQuotationLines(),
+    ]);
+    setQuotations(normalizeList(qRaw).map(normalizeQuotation));
+    setQuotLines(normalizeList(qlRaw).map(normalizeQuotLine));
+
+    // ← Also reload merges so handleViewPDF sees newly saved ones
     try {
       const mRaw = await apiService.getAllQuotationMerges();
       setQuotMerges(normalizeList(mRaw).map(m => ({
@@ -1960,26 +2170,13 @@ useEffect(() => {
         hoardingID:              m.hoardingID               ?? m.HoardingID              ?? 0,
         mergeAlongFlag:          m.mergeAlongFlag            ?? m.MergeAlongFlag          ?? 'H',
       })));
-    } catch {
-      setQuotMerges([]);
-    }
-  })();
-}, []);
+    } catch { /* silent — merged rows just won't show if this fails */ }
 
-  /* ── Refresh quotations ── */
-  const refreshQuotations = useCallback(async () => {
-    try {
-      const [qRaw, qlRaw] = await Promise.all([
-        apiService.getAllQuotations(),
-        apiService.getAllQuotationLines(),
-      ]);
-      setQuotations(normalizeList(qRaw).map(normalizeQuotation));
-      setQuotLines(normalizeList(qlRaw).map(normalizeQuotLine));
-      showToast('List refreshed', 'success');
-    } catch (err) {
-      showToast('Refresh failed: ' + (err?.message || 'Unknown error'), 'error');
-    }
-  }, [showToast]);
+    showToast('List refreshed', 'success');
+  } catch (err) {
+    showToast('Refresh failed: ' + (err?.message || 'Unknown error'), 'error');
+  }
+}, [showToast]);
 
   /* ── NEW: handle customer saved from CustomerEditModal ── */
   const handleCustomerSaved = useCallback((updated) => {
@@ -2049,15 +2246,47 @@ useEffect(() => {
     setShowManualModal(false);
   };
 
-  const handleMerge = useCallback((r1, r2, direction) => {
-    const merged = newMergedRow(r1, r2, direction);
-    setRows(prev => {
-      const withoutOriginals = prev.filter(r => r._id !== r1._id && r._id !== r2._id);
-      return [...withoutOriginals, merged];
-    });
-    setShowMergeModal(false);
-    showToast(`Hoardings merged (${direction === 'H' ? 'Horizontal' : 'Vertical'}) · Size: ${merged.size}`, 'success');
-  }, [showToast]);
+const handleMerge = useCallback((selectedRows, direction) => {
+  const merged = newMergedRow(selectedRows, direction);
+  setRows(prev => {
+    const ids = new Set(selectedRows.map(r => r._id));
+    return [...prev.filter(r => !ids.has(r._id)), merged];
+  });
+  setShowMergeModal(false);
+  showToast(
+    `${selectedRows.length} hoarding${selectedRows.length !== 1 ? 's' : ''} merged ` +
+    `(${direction === 'H' ? 'Horizontal' : 'Vertical'}) · Size: ${merged.size}`,
+    'success'
+  );
+}, [showToast]);
+const toggleMergeDirection = useCallback((rowId) => {
+  setRows(prev => prev.map(r => {
+    if (r._id !== rowId || r.rowType !== 'merged') return r;
+ 
+    const newDir = r.mergeDirection === 'H' ? 'V' : 'H';
+    const hIds   = r.mergedHoardingIDs || [];
+ 
+    // Look up original dimensions from the hoardings array
+    const sizes = hIds
+      .map(hid => hoardings.find(hh => hh.hoardingID === hid))
+      .filter(Boolean)
+      .map(h => ({ w: h.width || 0, h: h.height || 0 }));
+ 
+    if (sizes.length < 2) return { ...r, mergeDirection: newDir }; // no data, just flip label
+ 
+    const gaps = hIds.length - 1;
+    let mw, mh;
+    if (newDir === 'H') {
+      mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+      mh = Math.max(...sizes.map(s => s.h));
+    } else {
+      mw = Math.max(...sizes.map(s => s.w));
+      mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+    }
+ 
+    return { ...r, mergeDirection: newDir, size: `${mw} X ${mh}`, sqFt: mw * mh };
+  }));
+}, [hoardings]);
 
   const toggleTerm = (termID) => {
     setSelectedTerms(p => {
@@ -2481,7 +2710,7 @@ useEffect(() => {
                     <label className="qt-label">
                       Customer <span className="qt-label--req">*</span>
                       {revisionNo > 1 && (
-                        <span style={{ marginLeft: 6, fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#d97706' }}>
+                        <span style={{ marginLeft: 6, fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#7c7c7c' }}>
                           · locked for revision
                         </span>
                       )}
@@ -2490,15 +2719,15 @@ useEffect(() => {
                       <div style={{
                         display: 'flex', alignItems: 'center', gap: 8,
                         padding: '9px 12px', borderRadius: 10,
-                        background: 'rgba(217,119,6,0.04)',
-                        border: '1.5px solid rgba(217,119,6,0.25)',
+                        background: 'rgba(114, 114, 114, 0.04)',
+                        border: '1.5px solid rgba(88, 88, 88, 0.25)',
                         cursor: 'not-allowed',
                       }}>
-                        <User size={14} color="#d97706" style={{ flexShrink: 0 }} />
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#d97706', flex: 1 }}>
+                        <User size={14} color="#7c7c7c" style={{ flexShrink: 0 }} />
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#7c7c7c', flex: 1 }}>
                           {selectedCustomer?.customerName || '—'}
                         </span>
-                        <span style={{ fontSize: 11, color: '#d97706', flexShrink: 0 }}>🔒</span>
+                        <span style={{ fontSize: 11, color: '#7c7c7c', flexShrink: 0 }}>🔒</span>
                       </div>
                     ) : (
                       <CustomerCombo
@@ -2563,23 +2792,23 @@ useEffect(() => {
                     <label className="qt-label">
                       Quotation No.
                       {revisionNo > 1 && (
-                        <span style={{ marginLeft: 6, fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#d97706' }}>
+                        <span style={{ marginLeft: 6, fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#7c7c7c' }}>
                           · locked for revision
                         </span>
                       )}
                     </label>
-                    <div className="qt-input-wrap" style={revisionNo > 1 ? { background: 'rgba(217,119,6,0.04)', borderBottomColor: '#d97706', cursor: 'not-allowed' } : {}}>
-                      <Hash size={14} color={revisionNo > 1 ? '#d97706' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+                    <div className="qt-input-wrap" style={revisionNo > 1 ? { background: 'rgba(102, 102, 102, 0.04)', borderBottomColor: '#7c7c7c', cursor: 'not-allowed' } : {}}>
+                      <Hash size={14} color={revisionNo > 1 ? '#7c7c7c' : '#c0c0d8'} style={{ flexShrink: 0 }} />
                       <input
                         className="qt-input"
                         value={quotNo}
                         onChange={e => setQuotNo(e.target.value)}
                         placeholder="e.g. QT1/25-26"
                         readOnly={revisionNo > 1}
-                        style={revisionNo > 1 ? { color: '#d97706', fontWeight: 800, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
+                        style={revisionNo > 1 ? { color: '#7c7c7c', fontWeight: 800, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
                       />
                       {revisionNo > 1 && (
-                        <span title="Quotation number is fixed for revisions" style={{ fontSize: 11, color: '#d97706', flexShrink: 0 }}>🔒</span>
+                        <span title="Quotation number is fixed for revisions" style={{ fontSize: 11, color: '#7c7c7c', flexShrink: 0 }}>🔒</span>
                       )}
                     </div>
                   </div>
@@ -2596,11 +2825,11 @@ useEffect(() => {
                     <label className="qt-label">
                       Revision No. <span className="qt-label--opt">(1 = original)</span>
                     </label>
-                    <div className="qt-input-wrap" style={{ background: 'rgba(4,158,223,0.03)', borderBottomColor: revisionNo > 1 ? '#d97706' : '#049edf', cursor: 'default' }}>
-                      <Edit2 size={14} color={revisionNo > 1 ? '#d97706' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+                    <div className="qt-input-wrap" style={{ background: 'rgba(4,158,223,0.03)', borderBottomColor: revisionNo > 1 ? '#7c7c7c' : '#049edf', cursor: 'default' }}>
+                      <Edit2 size={14} color={revisionNo > 1 ? '#7c7c7c' : '#c0c0d8'} style={{ flexShrink: 0 }} />
                       <input className="qt-input" type="number" value={revisionNo} readOnly
-                        style={{ color: revisionNo > 1 ? '#d97706' : '#1a1a2e', fontWeight: 900, cursor: 'default', pointerEvents: 'none' }} />
-                      <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: revisionNo > 1 ? '#d97706' : '#16a34a', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                        style={{ color: revisionNo > 1 ? '#7c7c7c' : '#1a1a2e', fontWeight: 900, cursor: 'default', pointerEvents: 'none' }} />
+                      <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: revisionNo > 1 ? '#7c7c7c' : '#16a34a', flexShrink: 0, whiteSpace: 'nowrap' }}>
                         {revisionNo <= 1 ? 'Original' : `Revision ${revisionNo}`}
                       </span>
                     </div>
@@ -2665,7 +2894,7 @@ useEffect(() => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap', padding: '8px 12px', background: '#f8f8fd', borderRadius: 10, border: '1px solid #f0f0f8' }}>
                       <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700, color: '#5a5a78' }}>Sites:</span>
                       {siteIds.map(sid => {
-                        const color = siteColorMap.get(sid);
+                        const color = siteColorMap.get(toSID(sid));
                         const h = hoardings.find(hh => (hh.siteID ?? hh.site?.siteID) === sid);
                         const label = h?.site?.addressLine1 || h?.site?.city || `Site ${sid}`;
                         return color ? (
@@ -2763,20 +2992,48 @@ useEffect(() => {
                                 )}
                               </td>
                               <td className="pg-td" style={{ minWidth: 160 }}>
-                                {isMerged && (
-                                  <div style={{ marginBottom: 3 }}>
-                                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 800, padding: '2px 7px', borderRadius: 4, background: 'rgba(124,58,237,0.12)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.25)' }}>
-                                      {row.mergeDirection === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
-                                    </span>
-                                  </div>
-                                )}
+{isMerged && (
+  <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+    <span style={{
+      fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 800,
+      padding: '2px 7px', borderRadius: 4,
+      background: 'rgba(124,58,237,0.12)', color: '#7c3aed',
+      border: '1px solid rgba(124,58,237,0.25)',
+    }}>
+      {row.mergeDirection === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
+    </span>
+ 
+    {/* Direction toggle button */}
+    <button
+      onClick={e => { e.stopPropagation(); toggleMergeDirection(row._id); }}
+      title={`Switch to ${row.mergeDirection === 'H' ? 'Vertical' : 'Horizontal'}`}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 3,
+        padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(124,58,237,0.30)',
+        background: 'rgba(124,58,237,0.06)', color: '#7c3aed',
+        cursor: 'pointer', fontFamily: 'Nunito,sans-serif',
+        fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
+      }}
+    >
+      <RefreshCw size={9} />
+      {row.mergeDirection === 'H' ? '↕ Switch V' : '↔ Switch H'}
+    </button>
+  </div>
+)}
                                 {!isMerged && siteColor && (
                                   <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
                                     <div style={{ width: 7, height: 7, borderRadius: '50%', background: siteColor.dot, flexShrink: 0 }} />
                                     <MapPin size={10} color={siteColor.dot} />
                                   </div>
                                 )}
-                                <input className="qt-inline-input" value={row.location} onChange={e => updateRow(row._id, 'location', e.target.value)} style={{ width: '100%', fontStyle: isPrint ? 'italic' : 'normal' }} />
+                                <div style={{
+                                  fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600,
+                                  color: isMerged ? '#7c3aed' : '#1a1a2e',
+                                  fontStyle: isPrint ? 'italic' : 'normal',
+                                  lineHeight: 1.4, paddingTop: 1,
+                                }}>
+                                  {row.location}
+                                </div>
                                 {!isMerged && !isPrint && (() => {
                                   const { line2 } = getSiteDisplayLines(row.siteObj, '');
                                   return line2 ? (
@@ -2784,11 +3041,23 @@ useEffect(() => {
                                   ) : null;
                                 })()}
                               </td>
-                              <td className="pg-td">
-                                <input className="qt-inline-input" value={row.size} onChange={e => updateRow(row._id, 'size', e.target.value)} style={{ width: 72 }} />
+                              <td className="pg-td" style={{ textAlign: 'center' }}>
+                                <span style={{
+                                  fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700,
+                                  color: '#4a5568',
+                                }}>
+                                  {row.size || '—'}
+                                </span>
                               </td>
                               {!withPrinting && <>
-                                <td className="pg-td"><input className="qt-inline-input" type="number" value={row.sqFt} onChange={e => updateRow(row._id, 'sqFt', e.target.value)} style={{ width: 60 }} /></td>
+                                <td className="pg-td" style={{ textAlign: 'center' }}>
+                                  <span style={{
+                                    fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700,
+                                    color: '#4a5568',
+                                  }}>
+                                    {row.sqFt || '—'}
+                                  </span>
+                                </td>
                                 <td className="pg-td">
                                   <input className="qt-inline-input" type="number" min="1" value={row.nos} onChange={e => updateRow(row._id, 'nos', e.target.value)} style={{ width: 50 }} />
                                 </td>
@@ -2824,7 +3093,7 @@ useEffect(() => {
                               </td>
                               <td className="pg-td">
                                 <div className="pg-action-wrap">
-                                  <button className="pg-btn-view" onClick={() => deleteRow(row._id)} title="Remove" style={{ color: '#dc2626' }}>
+                                  <button className="pg-btn-view" onClick={() => deleteRow(row._id)} title="Remove">
                                     <Trash2 size={13} />
                                   </button>
                                 </div>
@@ -2977,14 +3246,14 @@ useEffect(() => {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 20px', borderBottom: '1px solid #f0f0f8' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(217,119,6,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <RefreshCw size={14} color="#d97706" />
-                    </div>
+                    {/* <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(217,119,6,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <RefreshCw size={14} color="#7c7c7c" />
+                    </div> */}
                     <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 900, color: '#1a1a2e' }}>
                       Previous Revisions — {quotNo}
                     </span>
                   </div>
-                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600, marginTop: 4, paddingLeft: 36 }}>
+                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600, marginTop: 4 }}>
                     {prevRevisions.length} revision{prevRevisions.length !== 1 ? 's' : ''} saved · You are creating Rev. {revisionNo}
                   </div>
                 </div>
@@ -3063,7 +3332,7 @@ useEffect(() => {
             </button>
           </div>
 
-          <table className="pg-table">
+          <table className="pg-table" ref={histTableRef}>
             <thead>
               <tr>
                 <th style={{ width: 44 }} className="pg-th"></th>
@@ -3151,7 +3420,7 @@ useEffect(() => {
                               onNavigateToContracts?.(); // parent App handles the actual navigation
                             }}
                             title="Go to Customer Contracts for this quotation"
-                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: 'none', color: '#fff', background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(124,58,237,0.25)' }}
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: 'none', color: '#fff', background: 'linear-gradient(135deg, #049edf, #6c63ff)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(124,58,237,0.25)' }}
                           >
                             <FileCheck size={13} /> Contract
                           </button>
@@ -3238,6 +3507,7 @@ useEffect(() => {
           onAdd={handleAddSelected}
           onClose={() => setShowHoardModal(false)}
           siteColorMap={siteColorMap}
+          siteMap={siteMap}
         />
       )}
       {showManualModal && (
@@ -3246,6 +3516,7 @@ useEffect(() => {
           onAdd={handleAddManual}
           onClose={() => setShowManualModal(false)}
           siteColorMap={siteColorMap}
+          siteMap={siteMap}
         />
       )}
       {showTermsModal && (

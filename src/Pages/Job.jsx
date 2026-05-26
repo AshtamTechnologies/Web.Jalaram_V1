@@ -567,40 +567,39 @@ export default function JobPage() {
   [tasks]);
 
   /* ── Load data ── */
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      try {
-        const [cRaw, conRaw, hRaw, uRaw, jRaw, jtRaw] = await Promise.all([
-          apiService.getAllCustomers(),
-          apiService.getAllCustomerContracts(),
-          apiService.getAllHoardings(),
-          apiService.getAllUsers().catch(() => []),
-          apiService.getAllJobRequests().catch(() => []),
-          apiService.getAllJobTasks().catch(() => []),
-        ]);
+useEffect(() => {
+  (async () => {
+    setLoading(true);
+    try {
+      const [cRaw, conRaw, hRaw, uRaw, jRaw, jtRaw] = await Promise.all([
+        apiService.getAllCustomers()          .catch(() => []),  // ← add catch
+        apiService.getAllCustomerContracts()  .catch(() => []),  // ← add catch
+        apiService.getAllHoardings()          .catch(() => []),  // ← add catch
+        apiService.getAllUsers()              .catch(() => []),
+        apiService.getAllJobRequests()        .catch(() => []),
+        apiService.getAllJobTasks()           .catch(() => []),
+      ]);
 
-        setCustomers(normalizeList(cRaw).map(normalizeCustomer));
-        setContracts(normalizeList(conRaw).map(normalizeContract));
-        setHoardings(normalizeList(hRaw));
+      setCustomers(normalizeList(cRaw).map(normalizeCustomer));
+      setContracts(normalizeList(conRaw).map(normalizeContract));
+      setHoardings(normalizeList(hRaw));
 
-        const allUsers = normalizeList(uRaw).map(normalizeUser);
-        // Filter users with supervisor role (role name contains 'supervisor' OR roleId = 3)
-        const sups = allUsers.filter(u =>
-          u.role?.toLowerCase().includes('supervisor') ||
-          u.roleId === 3
-        );
-        setSupervisors(sups);
+      const allUsers = normalizeList(uRaw).map(normalizeUser);
+      const sups = allUsers.filter(u =>
+        u.role?.toLowerCase().includes('supervisor') || u.roleId === 3
+      );
+      setSupervisors(sups);
 
-        setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
-        setAllJobTasks(normalizeList(jtRaw).map(normalizeJobTask));
-      } catch (err) {
-        setApiError(err?.response?.data?.message || err?.message || 'Failed to load data.');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+      setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
+      setAllJobTasks(normalizeList(jtRaw).map(normalizeJobTask));
+
+    } catch (err) {
+      setApiError(err?.response?.data?.message || err?.message || 'Failed to load data.');
+    } finally {
+      setLoading(false);
+    }
+  })();
+}, []);
 
   /* ── Refresh ── */
   const refreshJobs = useCallback(async () => {

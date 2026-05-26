@@ -62,10 +62,15 @@ export default function Dashboard({ changeTab }) {
   const width = useWindowWidth();
 
   /* Read admin name from localStorage (same source as Layout) */
-  useEffect(() => {
-    const s = JSON.parse(localStorage.getItem('userData') || '{}');
-    setAdminName(s?.name || s?.Name || s?.email || 'Admin');
-  }, []);
+useEffect(() => {
+  const s = JSON.parse(localStorage.getItem('userData') || '{}');
+  setAdminName(
+    `${s?.first_Name || ''} ${s?.last_Name || ''}`.trim() ||
+    s?.name ||
+    s?.Name ||
+    'Admin'
+  );
+}, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);

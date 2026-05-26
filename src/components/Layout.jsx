@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   LogOut, Menu, X, ChevronDown, ChevronRight,
   IndianRupee, Users, MapPin, Layers, UserCircle,
-  FileText, BarChart3, PlusSquare, Banknote,
+  FileText, BarChart3, PlusSquare, Banknote,bibriefcase,Briefcase,
 } from 'lucide-react';
 import Chatbot from './Chatbot';
 import './Layout.css';
@@ -46,6 +46,7 @@ const MENU = [
   },
   { id: 'owners',  icon: UserCircle, label: 'Owners',  badge: null },
   { id: 'reports', icon: BarChart3,  label: 'Reports', badge: null },
+   { id: 'Jobs',    icon: Briefcase,  label: 'Jobs',    badge: null },
   {
     id: 'configuration',
     icon: FileText,
@@ -99,10 +100,15 @@ export default function Layout({ tab, changeTab, onLogout, children }) {
   const isMobile = width < 1024;
 
   /* Read admin name from localStorage */
-  useEffect(() => {
-    const s = JSON.parse(localStorage.getItem('userData') || '{}');
-    setAdminName(s?.name || s?.Name || s?.email || 'Admin');
-  }, []);
+useEffect(() => {
+  const s = JSON.parse(localStorage.getItem('userData') || '{}');
+  setAdminName(
+    `${s?.first_Name || ''} ${s?.last_Name || ''}`.trim() ||
+    s?.name ||
+    s?.Name ||
+    'Admin'
+  );
+}, []);
 
   /* Close profile dropdown on outside click */
   useEffect(() => {

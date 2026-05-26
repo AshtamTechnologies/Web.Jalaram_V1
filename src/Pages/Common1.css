@@ -5448,9 +5448,9 @@ select.exp-cell-input {
   font-weight: 800;
   padding: 2px 8px;
   border-radius: 5px;
-  background: rgba(217,119,6,0.10);
-  color: #d97706;
-  border: 1px solid rgba(217,119,6,0.25);
+  background: rgb(151 ,151 ,151, 10%);
+  /* color: #7c7c7c; */
+  border: 1px solid rgba(115,115,115,039%);
 }
 .qt-orig-badge {
   font-family: 'Nunito', sans-serif;

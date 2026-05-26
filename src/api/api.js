@@ -759,7 +759,7 @@ export const apiService = {
   // JOB REQUESTS
   getAllJobRequests: () => api.get('/JobRequest/GetAll'),
   getJobRequestById: (id) => api.get(`/JobRequest/${id}`),
-  createJobRequest: (data) => api.post('/JobRequest/Create', {
+  createJobRequest: (data) => api.post('/JobRequest', {
     jobRequestID: 0,
     customerID: Number(data.customerID ?? 0),
     customerContractID: Number(data.customerContractID ?? 0),
