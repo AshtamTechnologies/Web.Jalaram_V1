@@ -93,9 +93,11 @@ export const apiService = {
     let userId = response.userId || response.user?.id || null;
     if (!userId) userId = decoded?.nameid || decoded?.sub || decoded?.userId || decoded?.id;
     if (userId) localStorage.setItem('userId', String(userId));
-    const roleId = response.roleId || response.user?.roleId || 2;
-    localStorage.setItem('roleId', String(roleId));
-    localStorage.setItem('userRole', roleId === 1 || roleId === '1' ? 'admin' : 'user');
+// ✅ NEW
+const roleId  = response.roleId  || response.user?.roleId || 2;
+const roleStr = (response.role   || response.user?.role   || '').toLowerCase().trim();
+localStorage.setItem('roleId',   String(roleId));
+localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId === '1' ? 'admin' : 'user'));
     localStorage.setItem('userData', JSON.stringify(response.user || response));
     localStorage.setItem('isLoggedIn', 'true');
     return response;

@@ -15,6 +15,8 @@ import Reports from './Pages/Reports.jsx';
 import Quotation from './Pages/Quotation.jsx';
 import Jobs from './Pages/Job.jsx'
 import Terms from './Pages/Terms.jsx';
+import SupervisorDashboard from './Pages/SupervisorDashboard.jsx';
+import WorkersPage from './Pages/Workers.jsx';
 import { CalendarCheck, Users, CreditCard } from 'lucide-react';
 import './App.css';
 
@@ -30,6 +32,9 @@ const Placeholder = ({ title, Icon }) => (
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(
     () => localStorage.getItem('isLoggedIn') === 'true'
+  );
+  const [userRole, setUserRole] = useState(
+    () => (localStorage.getItem('userRole') || '').toLowerCase()
   );
   const [tab, setTab] = useState(
     () => sessionStorage.getItem('dashTab') || 'dashboard'
@@ -48,8 +53,10 @@ export default function App() {
   }, []);
 
   /* ── Auth handlers ── */
-  const handleLogin = () => {
+  const handleLogin = (role = '') => {
     localStorage.setItem('isLoggedIn', 'true');
+    const resolvedRole = (role || localStorage.getItem('userRole') || '').toLowerCase();
+    setUserRole(resolvedRole);
     setLoggedIn(true);
   };
 
@@ -59,6 +66,7 @@ export default function App() {
     localStorage.clear();
     window.history.replaceState({}, document.title, '/');
     setLoggedIn(false);
+    setUserRole('');   // ← this line is what's new
   };
 
   /* ── Tab/route handler (passed down to Layout + pages) ── */
@@ -70,29 +78,44 @@ export default function App() {
   /* ── Page renderer ── */
   const renderPage = () => {
     switch (tab) {
-      case 'dashboard':         return <Dashboard changeTab={changeTab} />;
-      case 'new-hoarding':      return <Hoarding />;
-      case 'hoarding-expense':  return <Hoardingexpense />;
-      case 'hoarding-merge':    return <HoardingMerge />;
-      case 'land-contracts':    return <LandContract />;
-      case 'land-payment':      return <LandPayment />;
-      case 'bookings':          return <Placeholder title="Bookings"  Icon={CalendarCheck} />;
-      case 'clients':           return <Placeholder title="Clients"   Icon={Users} />;
-      case 'owners':            return <OwnerPage />;
-      case 'payments':          return <Placeholder title="Payments"  Icon={CreditCard} />;
-      case 'customer-details':  return <CustomerPage />;
+      case 'dashboard': return <Dashboard changeTab={changeTab} />;
+      case 'new-hoarding': return <Hoarding />;
+      case 'hoarding-expense': return <Hoardingexpense />;
+      case 'hoarding-merge': return <HoardingMerge />;
+      case 'land-contracts': return <LandContract />;
+      case 'land-payment': return <LandPayment />;
+      case 'bookings': return <Placeholder title="Bookings" Icon={CalendarCheck} />;
+      case 'clients': return <Placeholder title="Clients" Icon={Users} />;
+      case 'owners': return <OwnerPage />;
+      case 'payments': return <Placeholder title="Payments" Icon={CreditCard} />;
+      case 'customer-details': return <CustomerPage />;
       case 'customer-contract': return <CustomerContract />;
-      case 'sites':             return <SitePage />;
-      case 'reports':           return <Reports />;
+      case 'sites': return <SitePage />;
+      case 'reports': return <Reports />;
       case 'quotation': return <Quotation onNavigateToContracts={() => changeTab('customer-contract')} />;
-      case 'terms':             return <Terms />;
-      case 'Jobs':             return <Jobs />;
-
-      default:                  return <Dashboard changeTab={changeTab} />;
+      case 'terms': return <Terms />;
+      case 'Jobs': return <Jobs />;
+      case 'workers': return <WorkersPage />;
+      default: return <Dashboard changeTab={changeTab} />;
     }
   };
 
-  if (!loggedIn) return <Login onLogin={handleLogin} />;
+  // ✅ NEW — onNavigate passed correctly
+  if (!loggedIn) return (
+    <Login
+      onLogin={handleLogin}
+      onNavigate={(target) => {
+        if (target === 'admin') handleLogin('admin');
+        else if (target === 'supervisor') handleLogin('supervisor');
+        else handleLogin();
+      }}
+    />
+  );
+
+  // ✅ This block must exist — if missing, supervisor goes to admin layout
+  if (userRole === 'supervisor') {
+    return <SupervisorDashboard onLogout={handleLogout} />;
+  }
 
   return (
     <Layout tab={tab} changeTab={changeTab} onLogout={handleLogout}>
