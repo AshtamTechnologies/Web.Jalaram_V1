@@ -37,11 +37,7 @@ export default function SupervisorDashboard({ onLogout }) {
 const renderPage = () => {
   switch (tab) {
     case 'sup-dashboard': return <SupDashboardHome changeTab={changeTab} />;
-    case 'sup-hoardings': return <PlaceholderPage title="Hoardings"    Icon={Layers}      color="#10b981" />;
-    case 'sup-sites':     return <PlaceholderPage title="Sites"        Icon={MapPin}      color="#049edf" />;
-    case 'sup-job-list':  return <PlaceholderPage title="Job Requests" Icon={Briefcase}   color="#f59e0b" />;
-    case 'sup-job-tasks': return <PlaceholderPage title="Job Tasks"    Icon={CheckSquare} color="#8b5cf6" />;
-    case 'sup-reports':   return <PlaceholderPage title="Reports"      Icon={BarChart3}   color="#e84040" />;
+    case 'sup-hoardings': return <PlaceholderPage title="Sites"    Icon={Layers}      color="#10b981" />;
     case 'workers':       return <WorkersPage />;   // ← add this line
     default:              return <SupDashboardHome changeTab={changeTab} />;
   }

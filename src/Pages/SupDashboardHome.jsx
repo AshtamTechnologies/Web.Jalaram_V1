@@ -122,7 +122,7 @@ export default function SupDashboardHome({ changeTab }) {
       {/* PAGE HEADER */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">My Dashboard</h1>
+          <h1 className="page-title">Supervisor Dashboard</h1>
           <p className="page-subtitle">
             Welcome back, <strong style={{ color: '#049edf' }}>{supName}</strong>!
             &nbsp;·&nbsp;

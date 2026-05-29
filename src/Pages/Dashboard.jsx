@@ -77,7 +77,9 @@ useEffect(() => {
     await new Promise(r => setTimeout(r, 900));
     setRefreshing(false);
   };
-
+  const today = new Date().toLocaleDateString('en-IN', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
   const STATS = [
     { title: 'Total Hoardings',  value: '148',    sub: '+6 added this month',   icon: Layers,       color: '#049edf', bg: 'rgba(4,158,223,0.1)'   },
     { title: 'Active Bookings',  value: '62',     sub: '14 expiring this week', icon: CalendarCheck,color: '#1a9e6e', bg: 'rgba(26,158,110,0.1)'  },
@@ -93,8 +95,8 @@ useEffect(() => {
         <div>
           <h1 className="page-title">Dashboard Overview</h1>
           <p className="page-subtitle">
-            Welcome back, <strong>{adminName}</strong>! Here's what's happening today.
-          </p>
+            Welcome back, <strong>{adminName}</strong>!</p>
+          <span style={{ fontSize: 13, color: '#9090a8', fontWeight: 600 }}>Here's what's happening {today}.</span>
         </div>
         <button className="refresh-btn" onClick={handleRefresh} disabled={refreshing}>
           <RefreshCw size={14} className={refreshing ? 'spin' : ''} />

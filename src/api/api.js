@@ -93,11 +93,11 @@ export const apiService = {
     let userId = response.userId || response.user?.id || null;
     if (!userId) userId = decoded?.nameid || decoded?.sub || decoded?.userId || decoded?.id;
     if (userId) localStorage.setItem('userId', String(userId));
-// ✅ NEW
-const roleId  = response.roleId  || response.user?.roleId || 2;
-const roleStr = (response.role   || response.user?.role   || '').toLowerCase().trim();
-localStorage.setItem('roleId',   String(roleId));
-localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId === '1' ? 'admin' : 'user'));
+    // ✅ NEW
+    const roleId = response.roleId || response.user?.roleId || 2;
+    const roleStr = (response.role || response.user?.role || '').toLowerCase().trim();
+    localStorage.setItem('roleId', String(roleId));
+    localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId === '1' ? 'admin' : 'user'));
     localStorage.setItem('userData', JSON.stringify(response.user || response));
     localStorage.setItem('isLoggedIn', 'true');
     return response;
@@ -649,7 +649,7 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
     window.URL.revokeObjectURL(url);
   },
   exportReportExcel: function (reportType) { return this._exportReport(reportType, 'excel', 'xlsx'); },
-  exportReportPDF:   function (reportType) { return this._exportReport(reportType, 'pdf',   'pdf');  },
+  exportReportPDF: function (reportType) { return this._exportReport(reportType, 'pdf', 'pdf'); },
 
   // CUSTOMER TERMS
   getAllCustomerTerms: () => api.get('/CustomerTerms'),
@@ -671,9 +671,9 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
     quotationNumber: String(data.quotationNumber),
     quotationDate: data.quotationDate,
     cGSTPercent: Number(data.cGSTPercent ?? 0),
-    cGSTAmount:  Number(data.cGSTAmount  ?? 0),
+    cGSTAmount: Number(data.cGSTAmount ?? 0),
     sGSTPercent: Number(data.sGSTPercent ?? 0),
-    sGSTAmount:  Number(data.sGSTAmount  ?? 0),
+    sGSTAmount: Number(data.sGSTAmount ?? 0),
     totalAmount: Number(data.totalAmount ?? 0),
   }),
   updateQuotation: (data) => api.put('/Quotation', {
@@ -683,9 +683,9 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
     quotationNumber: String(data.quotationNumber),
     quotationDate: data.quotationDate,
     cGSTPercent: Number(data.cGSTPercent ?? 0),
-    cGSTAmount:  Number(data.cGSTAmount  ?? 0),
+    cGSTAmount: Number(data.cGSTAmount ?? 0),
     sGSTPercent: Number(data.sGSTPercent ?? 0),
-    sGSTAmount:  Number(data.sGSTAmount  ?? 0),
+    sGSTAmount: Number(data.sGSTAmount ?? 0),
     totalAmount: Number(data.totalAmount ?? 0),
   }),
 
@@ -694,22 +694,22 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
   getQuotationLineById: (lineID, quotationID, revisionID, hoardingID) =>
     api.get(`/QuotationLineDTL/${lineID}/${quotationID}/${revisionID}/${hoardingID}`),
   createQuotationLine: (data) => api.post('/QuotationLineDTL', {
-    quotationLineNumber:     Number(data.quotationLineNumber     ?? 0),
-    quotationID:             Number(data.quotationID),
+    quotationLineNumber: Number(data.quotationLineNumber ?? 0),
+    quotationID: Number(data.quotationID),
     quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-    hoardingID:              Number(data.hoardingID ?? 0),
-    periodBeginDate:         data.periodBeginDate,
-    periodEndDate:           data.periodEndDate,
-    rentAmount:              Number(data.rentAmount ?? 0),
+    hoardingID: Number(data.hoardingID ?? 0),
+    periodBeginDate: data.periodBeginDate,
+    periodEndDate: data.periodEndDate,
+    rentAmount: Number(data.rentAmount ?? 0),
   }),
   updateQuotationLine: (data) => api.put('/QuotationLineDTL', {
-    quotationLineNumber:     Number(data.quotationLineNumber     ?? 0),
-    quotationID:             Number(data.quotationID),
+    quotationLineNumber: Number(data.quotationLineNumber ?? 0),
+    quotationID: Number(data.quotationID),
     quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-    hoardingID:              Number(data.hoardingID ?? 0),
-    periodBeginDate:         data.periodBeginDate,
-    periodEndDate:           data.periodEndDate,
-    rentAmount:              Number(data.rentAmount ?? 0),
+    hoardingID: Number(data.hoardingID ?? 0),
+    periodBeginDate: data.periodBeginDate,
+    periodEndDate: data.periodEndDate,
+    rentAmount: Number(data.rentAmount ?? 0),
   }),
 
   // ─────────────────────────────────────────────────────────
@@ -736,30 +736,30 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
       return Promise.resolve(null);
     }
     return api.post('/QuotationMergeDTL', {
-      quotationMergeID:        0,
-      quotationLineNumber:     Number(data.quotationLineNumber     ?? 0),
-      quotationID:             Number(data.quotationID),
+      quotationMergeID: 0,
+      quotationLineNumber: Number(data.quotationLineNumber ?? 0),
+      quotationID: Number(data.quotationID),
       quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-      hoardingID:              Number(data.hoardingID),
-      mergeAlongFlag:          data.mergeAlongFlag === 'H' ? 'H' : 'V',
+      hoardingID: Number(data.hoardingID),
+      mergeAlongFlag: data.mergeAlongFlag === 'H' ? 'H' : 'V',
     });
   },
 
   updateQuotationMerge: (mergeId, hoardingId, data) =>
     api.put(`/QuotationMergeDTL/${mergeId}/${hoardingId}`, {
-      quotationMergeID:        Number(mergeId),
-      quotationLineNumber:     Number(data.quotationLineNumber     ?? 0),
-      quotationID:             Number(data.quotationID             ?? 0),
+      quotationMergeID: Number(mergeId),
+      quotationLineNumber: Number(data.quotationLineNumber ?? 0),
+      quotationID: Number(data.quotationID ?? 0),
       quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-      hoardingID:              Number(hoardingId),
-      mergeAlongFlag:          data.mergeAlongFlag === 'H' ? 'H' : 'V',
+      hoardingID: Number(hoardingId),
+      mergeAlongFlag: data.mergeAlongFlag === 'H' ? 'H' : 'V',
     }),
 
   deleteQuotationMerge: (mergeId, hoardingId) =>
     api.delete(`/QuotationMergeDTL/${mergeId}/${hoardingId}`),
 
   // JOB REQUESTS
-  getAllJobRequests: () => api.get('/JobRequest/GetAll'),
+getAllJobRequests: () => api.get('/JobRequest'),
   getJobRequestById: (id) => api.get(`/JobRequest/${id}`),
   createJobRequest: (data) => api.post('/JobRequest', {
     jobRequestID: 0,
@@ -767,89 +767,95 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
     customerContractID: Number(data.customerContractID ?? 0),
     jobType: String(data.jobType ?? ''),
     jobDescription: String(data.jobDescription ?? ''),
-    iD: Number(data.iD ?? 0),
+    iD: String(data.iD ?? ''),                          // ← STRING not number
+    jobCreateDTTM: new Date().toISOString(),             // ← NEW required field
+    supervisorAcceptDttm: new Date().toISOString(),      // ← NEW required field
+    noofHoardings: String(data.noofHoardings ?? '0'),    // ← NEW required field (string)
     rateperSQFT: Number(data.rateperSQFT ?? 0),
     totalAreaSQFT: Number(data.totalAreaSQFT ?? 0),
     targetCompletionDate: data.targetCompletionDate ?? '',
-    actualCompletionDate: data.actualCompletionDate || null,
+    actualCompletionDate: data.actualCompletionDate || data.targetCompletionDate || '',
     jobStatus: String(data.jobStatus ?? 'Open'),
   }),
-  updateJobRequest: (data) => api.put('/JobRequest/Update', {
+  updateJobRequest: (data) => api.put('/JobRequest', {
     jobRequestID: Number(data.jobRequestID ?? 0),
     customerID: Number(data.customerID ?? 0),
     customerContractID: Number(data.customerContractID ?? 0),
     jobType: String(data.jobType ?? ''),
     jobDescription: String(data.jobDescription ?? ''),
-    iD: Number(data.iD ?? 0),
+    iD: String(data.iD ?? ''),                          // ← STRING
+    jobCreateDTTM: new Date().toISOString(),
+    supervisorAcceptDttm: data.supervisorAcceptDttm || new Date().toISOString(),
+    noofHoardings: String(data.noofHoardings ?? '0'),
     rateperSQFT: Number(data.rateperSQFT ?? 0),
     totalAreaSQFT: Number(data.totalAreaSQFT ?? 0),
     targetCompletionDate: data.targetCompletionDate ?? '',
-    actualCompletionDate: data.actualCompletionDate || null,
+    actualCompletionDate: data.actualCompletionDate || data.targetCompletionDate || '',
     jobStatus: String(data.jobStatus ?? 'Open'),
   }),
   deleteJobRequest: (id) => api.delete(`/JobRequest/Delete/${id}`),
 
   // JOB TASKS
-  getAllJobTasks: () => api.get('/JobTaskDTL/GetAll'),
-  getJobTasksByJobRequestId: (jobRequestID) => api.get(`/JobTaskDTL/GetByJobRequest/${jobRequestID}`),
-  createJobTask: (data) => {
-    const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
-    return api.post('/JobTaskDTL/Create', {
-      jobTaskID: 0,
-      jobRequestID: Number(data.jobRequestID ?? 0),
-      hoardingID: Number(data.hoardingID ?? 0),
-      actualCompletionDate: data.actualCompletionDate ?? new Date().toISOString().split('T')[0],
-      status: String(data.status ?? 'Open'),
-      submitDTTM: data.submitDTTM ?? new Date().toISOString(),
-      lastUpdateDttm: new Date().toISOString(),
-      lastUpdatedBy: Number(data.lastUpdatedBy ?? userId),
-    });
-  },
-  updateJobTask: (data) => {
-    const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
-    return api.put('/JobTaskDTL/Update', {
-      jobTaskID: Number(data.jobTaskID ?? 0),
-      jobRequestID: Number(data.jobRequestID ?? 0),
-      hoardingID: Number(data.hoardingID ?? 0),
-      actualCompletionDate: data.actualCompletionDate ?? new Date().toISOString().split('T')[0],
-      status: String(data.status ?? 'Open'),
-      submitDTTM: data.submitDTTM ?? new Date().toISOString(),
-      lastUpdateDttm: new Date().toISOString(),
-      lastUpdatedBy: Number(data.lastUpdatedBy ?? userId),
-    });
-  },
-  deleteJobTask: (id) => api.delete(`/JobTaskDTL/Delete/${id}`),
+getAllJobTasks: () => api.get('/JobTask'),
+  getJobTasksByJobRequestId: (jobRequestID) => api.get(`/JobTask/GetByJobRequest/${jobRequestID}`),
+createJobTask: (data) => {
+  const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
+  return api.post('/JobTask', {
+    jobTaskID: 0,
+    jobRequestID: Number(data.jobRequestID ?? 0),
+    hoardingID: Number(data.hoardingID ?? 0),
+    actualCompletionDate: data.actualCompletionDate ?? new Date().toISOString().split('T')[0],
+    status: String(data.status ?? 'Open'),
+    submitDTTM: data.submitDTTM ?? new Date().toISOString(),
+    lastUpdateDttm: new Date().toISOString(),
+    lastUpdatedBy: Number(data.lastUpdatedBy ?? userId),
+  });
+},
+updateJobTask: (data) => {
+  const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
+  return api.put(`/JobTask/${Number(data.jobTaskID ?? 0)}`, {
+    jobTaskID: Number(data.jobTaskID ?? 0),
+    jobRequestID: Number(data.jobRequestID ?? 0),
+    hoardingID: Number(data.hoardingID ?? 0),
+    actualCompletionDate: data.actualCompletionDate ?? new Date().toISOString().split('T')[0],
+    status: String(data.status ?? 'Open'),
+    submitDTTM: data.submitDTTM ?? new Date().toISOString(),
+    lastUpdateDttm: new Date().toISOString(),
+    lastUpdatedBy: Number(data.lastUpdatedBy ?? userId),
+  });
+},
+deleteJobTask: (id) => api.delete(`/JobTask/${id}`),
 
   // USER REGISTRATION & MANAGEMENT
   getAllUsers: () => api.get('/Login/get-all'),
   registerUser: (data) => api.post('/Login/register', {
-    first_Name:     String(data.firstName    || '').trim(),
-    last_Name:      String(data.lastName     || '').trim(),
-    phone_1:        String(data.phone1       || '').trim(),
-    phone_2:        String(data.phone2       || '').trim(),
-    email:          String(data.email        || '').trim(),
+    first_Name: String(data.firstName || '').trim(),
+    last_Name: String(data.lastName || '').trim(),
+    phone_1: String(data.phone1 || '').trim(),
+    phone_2: String(data.phone2 || '').trim(),
+    email: String(data.email || '').trim(),
     address_Line_1: String(data.addressLine1 || '').trim(),
     address_Line_2: String(data.addressLine2 || '').trim(),
     address_Line_3: String(data.addressLine3 || '').trim(),
-    city:           String(data.city         || '').trim(),
-    district:       String(data.district     || '').trim(),
-    country:        String(data.country      || 'India').trim(),
-    role:           String(data.role         || '').trim(),
+    city: String(data.city || '').trim(),
+    district: String(data.district || '').trim(),
+    country: String(data.country || 'India').trim(),
+    role: String(data.role || '').trim(),
   }),
   updateUser: (userId, data) => api.put('/Login/update', {
-    id:             Number(userId),
-    first_Name:     String(data.firstName    || '').trim(),
-    last_Name:      String(data.lastName     || '').trim(),
-    phone_1:        String(data.phone1       || '').trim(),
-    phone_2:        String(data.phone2       || '').trim(),
-    email:          String(data.email        || '').trim(),
+    id: Number(userId),
+    first_Name: String(data.firstName || '').trim(),
+    last_Name: String(data.lastName || '').trim(),
+    phone_1: String(data.phone1 || '').trim(),
+    phone_2: String(data.phone2 || '').trim(),
+    email: String(data.email || '').trim(),
     address_Line_1: String(data.addressLine1 || '').trim(),
     address_Line_2: String(data.addressLine2 || '').trim(),
     address_Line_3: String(data.addressLine3 || '').trim(),
-    city:           String(data.city         || '').trim(),
-    district:       String(data.district     || '').trim(),
-    country:        String(data.country      || 'India').trim(),
-    role:           String(data.role         || '').trim(),
+    city: String(data.city || '').trim(),
+    district: String(data.district || '').trim(),
+    country: String(data.country || 'India').trim(),
+    role: String(data.role || '').trim(),
   }),
 
 };

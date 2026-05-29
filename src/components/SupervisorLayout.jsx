@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     LogOut, Menu, X, ChevronDown, ChevronRight,
-    Layers, MapPin, Briefcase, BarChart3, CheckSquare,HardHat
+    Layers, MapPin, Briefcase, BarChart3, CheckSquare, HardHat
 } from 'lucide-react';
 import './SupervisorLayout.css';
 
@@ -9,9 +9,9 @@ import './SupervisorLayout.css';
    SUPERVISOR MENU — add/remove as needed
 ───────────────────────────────────── */
 const SUP_MENU = [
-  { id: 'sup-dashboard', icon: BarChart3,  label: 'Dashboard' },
-  { id: 'sup-hoardings', icon: Layers,     label: 'Tasks'     },
-  { id: 'workers',       icon: HardHat,    label: 'Workers'   }, 
+    { id: 'sup-dashboard', icon: BarChart3, label: 'Dashboard' },
+    { id: 'sup-hoardings', icon: Layers, label: 'Jobs' },
+    { id: 'workers', icon: HardHat, label: 'Workers' },
 ];
 
 /* ── Lookup maps ── */
