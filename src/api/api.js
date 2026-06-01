@@ -785,7 +785,7 @@ getAllJobRequests: () => api.get('/JobRequest'),
     jobDescription: String(data.jobDescription ?? ''),
     iD: String(data.iD ?? ''),                          // ← STRING
     jobCreateDTTM: new Date().toISOString(),
-    supervisorAcceptDttm: data.supervisorAcceptDttm || new Date().toISOString(),
+supervisorAcceptDttm: data.supervisorAcceptDttm ?? new Date().toISOString(),
     noofHoardings: String(data.noofHoardings ?? '0'),
     rateperSQFT: Number(data.rateperSQFT ?? 0),
     totalAreaSQFT: Number(data.totalAreaSQFT ?? 0),
@@ -797,7 +797,14 @@ getAllJobRequests: () => api.get('/JobRequest'),
 
   // JOB TASKS
 getAllJobTasks: () => api.get('/JobTask'),
-  getJobTasksByJobRequestId: (jobRequestID) => api.get(`/JobTask/GetByJobRequest/${jobRequestID}`),
+  // In api.js — replace getJobTasksByJobRequestId
+getJobTasksByJobRequestId: async (jobRequestID) => {
+  const all = await api.get('/JobTask');
+  const list = Array.isArray(all) ? all : Array.isArray(all?.data) ? all.data : [];
+  return list.filter(t =>
+    Number(t.jobRequestID ?? t.JobRequestID) === Number(jobRequestID)
+  );
+},
 createJobTask: (data) => {
   const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
   return api.post('/JobTask', {
@@ -857,6 +864,15 @@ deleteJobTask: (id) => api.delete(`/JobTask/${id}`),
     country: String(data.country || 'India').trim(),
     role: String(data.role || '').trim(),
   }),
+
+// ─────────────────────────────────────────────────────────
+// ADD THIS INSIDE your apiService object in api.js
+// Place it right after getAllJobRequests / getJobRequestById
+// ─────────────────────────────────────────────────────────
+ 
+getJobRequestsByUserId: (userId) =>
+  api.get(`/JobRequest/GetByUserId/${userId}`),
+
 
 };
 

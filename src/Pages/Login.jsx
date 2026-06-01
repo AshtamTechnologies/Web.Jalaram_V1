@@ -150,18 +150,22 @@ export default function Login({ onLogin, onNavigate }) {
       }
 
       // Role-based navigation — localStorage is already set by apiService
-// ✅ Must look exactly like this
 const roleStr = (response.role || response.user?.role || '').toLowerCase().trim();
-const roleId  = response.roleId || response.user?.roleId;
+const roleId = response.roleId || response.user?.roleId;
 
-console.log('role from API:', roleStr); // ← add this temporarily to verify
+
 
 if (roleStr === 'admin' || roleId === 1 || roleId === '1') {
   onNavigate('admin');
-} else if (roleStr === 'supervisor') {
+}
+else if (roleStr === 'supervisor') {
   onNavigate('supervisor');
-} else {
-  onLogin && onLogin();
+}
+else if (roleStr === 'worker') {
+  onNavigate('workertask');
+}
+else {
+  alert(`Unknown role: ${roleStr}`);
 }
     } catch (error) {
       // Surface the error message from the API (e.g. "Invalid credentials")

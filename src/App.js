@@ -17,6 +17,9 @@ import Jobs from './Pages/Job.jsx'
 import Terms from './Pages/Terms.jsx';
 import SupervisorDashboard from './Pages/SupervisorDashboard.jsx';
 import WorkersPage from './Pages/Workers.jsx';
+import Supervisorjobs from './Pages/SupervisorJobs.jsx';
+import WorkerTask from './Pages/WorkerTask.jsx';
+
 import { CalendarCheck, Users, CreditCard } from 'lucide-react';
 import './App.css';
 
@@ -53,12 +56,19 @@ export default function App() {
   }, []);
 
   /* ── Auth handlers ── */
-  const handleLogin = (role = '') => {
-    localStorage.setItem('isLoggedIn', 'true');
-    const resolvedRole = (role || localStorage.getItem('userRole') || '').toLowerCase();
-    setUserRole(resolvedRole);
-    setLoggedIn(true);
-  };
+const handleLogin = (role = '') => {
+  console.log("handleLogin role =", role);
+
+  localStorage.setItem('isLoggedIn', 'true');
+
+  const resolvedRole =
+    (role || localStorage.getItem('userRole') || '').toLowerCase();
+
+  console.log("resolvedRole =", resolvedRole);
+
+  setUserRole(resolvedRole);
+  setLoggedIn(true);
+};
 
   const handleLogout = () => {
     localStorage.removeItem('isLoggedIn');
@@ -96,26 +106,45 @@ export default function App() {
       case 'terms': return <Terms />;
       case 'Jobs': return <Jobs />;
       case 'workers': return <WorkersPage />;
+      case 'jobs': return <Supervisorjobs />;
+      case 'WorkersPage': return <Supervisorjobs />;
+
+      
+
       default: return <Dashboard changeTab={changeTab} />;
     }
   };
 
   // ✅ NEW — onNavigate passed correctly
   if (!loggedIn) return (
-    <Login
-      onLogin={handleLogin}
-      onNavigate={(target) => {
-        if (target === 'admin') handleLogin('admin');
-        else if (target === 'supervisor') handleLogin('supervisor');
-        else handleLogin();
-      }}
-    />
+<Login
+  onLogin={handleLogin}
+  onNavigate={(target) => {
+    console.log("Navigation target =", target);
+
+    if (target === 'admin') {
+      handleLogin('admin');
+    }
+    else if (target === 'supervisor') {
+      handleLogin('supervisor');
+    }
+    else if (target === 'workertask') {
+      handleLogin('worker');
+    }
+    else {
+      handleLogin();
+    }
+  }}
+/>
   );
 
   // ✅ This block must exist — if missing, supervisor goes to admin layout
   if (userRole === 'supervisor') {
     return <SupervisorDashboard onLogout={handleLogout} />;
   }
+  if (userRole === 'worker') {
+  return <WorkerTask />;
+}
 
   return (
     <Layout tab={tab} changeTab={changeTab} onLogout={handleLogout}>

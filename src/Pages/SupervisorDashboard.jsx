@@ -2,6 +2,8 @@ import { useState } from 'react';
 import SupervisorLayout from '../components/SupervisorLayout.jsx';
 import SupDashboardHome from './SupDashboardHome.jsx';
 import WorkersPage from './Workers.jsx';
+import SupervisorJobsPage from './SupervisorJobs.jsx';
+
 import { BarChart3, Layers, MapPin, Briefcase, CheckSquare } from 'lucide-react';
 
 /* ── Placeholder for pages not yet built ── */
@@ -34,14 +36,14 @@ export default function SupervisorDashboard({ onLogout }) {
     sessionStorage.setItem('supTab', id);
   };
 
-const renderPage = () => {
-  switch (tab) {
-    case 'sup-dashboard': return <SupDashboardHome changeTab={changeTab} />;
-    case 'sup-hoardings': return <PlaceholderPage title="Sites"    Icon={Layers}      color="#10b981" />;
-    case 'workers':       return <WorkersPage />;   // ← add this line
-    default:              return <SupDashboardHome changeTab={changeTab} />;
-  }
-};
+  const renderPage = () => {
+    switch (tab) {
+      case 'sup-dashboard': return <SupDashboardHome changeTab={changeTab} />;
+      case 'sup-jobs':      return <SupervisorJobsPage />;
+      case 'workers':       return <WorkersPage />;
+      default:              return <SupDashboardHome changeTab={changeTab} />;
+    }
+  };
 
   return (
     <SupervisorLayout tab={tab} changeTab={changeTab} onLogout={onLogout}>

@@ -311,9 +311,9 @@ function TermModal({ initial, onSave, onClose, saving }) {
 
           </div>
 
-          <p className="pg-form__note">
+          {/* <p className="pg-form__note">
             <span className="pg-field-label__required">*</span> Required fields
-          </p>
+          </p> */}
         </div>
 
         {/* Footer */}
