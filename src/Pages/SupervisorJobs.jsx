@@ -579,36 +579,7 @@ const handleAccept = useCallback(async (job) => {
           </button>
         </div>
 
-        {/* STAT STRIP */}
-        <div className="stats-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', marginBottom: 20 }}>
-          {[
-            { label: 'Total Jobs',  val: jobs.length,    color: '#1a1a2e', bg: 'rgba(100,100,180,0.08)', filter: 'all'          },
-            { label: 'Open',        val: openCount,      color: '#049edf', bg: 'rgba(4,158,223,0.1)',    filter: 'Open'         },
-            { label: 'Accepted',    val: acceptedCount,  color: '#6c3fc7', bg: 'rgba(108,63,199,0.1)',   filter: 'Accepted'     },
-            { label: 'In Progress', val: inProgCount,    color: '#e08a00', bg: 'rgba(245,158,11,0.1)',   filter: 'In Progress'  },
-            { label: 'Completed',   val: doneCount,      color: '#16a34a', bg: 'rgba(22,163,74,0.1)',    filter: 'Completed'    },
-          ].map(s => (
-            <div
-              key={s.label}
-              className="stat-card"
-              style={{
-                cursor: 'pointer',
-                outline: statusFilter === s.filter ? `2px solid ${s.color}` : 'none',
-                outlineOffset: 2,
-              }}
-              onClick={() => { setStatusFilter(statusFilter === s.filter ? 'all' : s.filter); setPage(1); }}
-            >
-              <div className="stat-icon" style={{ background: s.bg }}>
-                <Briefcase size={20} color={s.color} />
-              </div>
-              <div style={{ minWidth: 0 }}>
-                <p className="stat-label">{s.label}</p>
-                <p className="stat-value">{s.val}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-
+      
         {/* TABLE CONTAINER */}
         <div className="pg-container">
 
