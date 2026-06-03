@@ -6,7 +6,7 @@ import {
     ChevronLeft, ChevronRight, Filter, Loader2, Eye,
     Calendar, CheckCircle, Clock, Circle, Hash,
     Briefcase, Layers, Edit3, Save, Camera,
-    ZoomIn, ZoomOut, Trash2, Check, AlertTriangle, Info,LogOut,
+    ZoomIn, ZoomOut, Trash2, Check, AlertTriangle, Info, LogOut,
     ImagePlus, SendHorizonal,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
@@ -43,6 +43,7 @@ function normalizeTask(raw) {
 function normalizeJob(raw) {
     return {
         jobRequestID: raw.jobRequestID ?? raw.JobRequestID ?? 0,
+        customerContractID: raw.customerContractID ?? raw.CustomerContractID ?? 0,
         jobType: raw.jobType ?? raw.JobType ?? '',
         jobDescription: raw.jobDescription ?? raw.JobDescription ?? '',
         jobStatus: raw.jobStatus ?? raw.JobStatus ?? 'Open',
@@ -198,7 +199,78 @@ function ImageUploadZone({ label, sublabel, IconComp, values = [], onChange, err
         </div>
     );
 }
+function BannerStrip({ contractID }) {
+    const [banners, setBanners] = useState([]);
+    const [loading, setLoading] = useState(false);
+    const [lightbox, setLightbox] = useState(null);
+    const API_BASE = 'https://api.jalaram-ad.ashtamtechnologies.com';
 
+    useEffect(() => {
+        if (!contractID) return;
+        setLoading(true);
+        apiService.getContractBannerImages(contractID)
+            .then(data => {
+                const list = Array.isArray(data) ? data : [];
+                setBanners(list);
+            })
+            .catch(() => setBanners([]))
+            .finally(() => setLoading(false));
+    }, [contractID]);
+
+    if (!contractID) return null;
+    if (loading) return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 14px', background: 'rgba(4,158,223,0.05)', borderRadius: 10, border: '1px solid rgba(4,158,223,0.15)' }}>
+            <Loader2 size={12} color="#049edf" className="pg-spin" />
+            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>Loading banner designs…</span>
+        </div>
+    );
+    if (banners.length === 0) return null;
+
+    return (
+        <>
+            {lightbox && ReactDOM.createPortal(
+                <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, zIndex: 999999, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <button onClick={() => setLightbox(null)} style={{ position: 'absolute', top: 18, right: 22, background: 'rgba(255,255,255,0.18)', border: 'none', borderRadius: 8, cursor: 'pointer', padding: '6px 14px', color: '#fff', fontSize: 20, fontWeight: 700 }}>✕</button>
+                    <img src={lightbox} alt="Banner" style={{ maxWidth: '92vw', maxHeight: '88vh', borderRadius: 14, objectFit: 'contain' }} onClick={e => e.stopPropagation()} />
+                </div>,
+                document.body
+            )}
+
+            <div style={{ background: 'rgba(4,158,223,0.04)', border: '1.5px solid rgba(4,158,223,0.15)', borderRadius: 11, padding: '10px 14px' }}>
+                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 900, color: '#049edf', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    🖼️ Banner Designs
+                    <span style={{ background: '#049edf', color: '#fff', borderRadius: 20, padding: '1px 7px', fontSize: 10, fontWeight: 900 }}>{banners.length}</span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+{banners.map((b, i) => {
+                        const imgUrl = b.imageUrl ?? b.ImageUrl ?? '';
+                        const filename = b.contractFilename ?? b.ContractFilename ?? `Banner ${i + 1}`;
+                        const fileType = b.fileUploadType ?? b.FileUploadType ?? '';
+                        return (
+                            <div key={b.custContractAttachID ?? i}
+                                onClick={() => setLightbox(imgUrl)}
+                                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px 4px 4px', background: '#fff', borderRadius: 8, border: '1.5px solid #e8e8f4', cursor: 'zoom-in', transition: 'border-color 0.15s, box-shadow 0.15s', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}
+                                onMouseEnter={e => { e.currentTarget.style.borderColor = '#049edf'; e.currentTarget.style.boxShadow = '0 3px 12px rgba(4,158,223,0.18)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.borderColor = '#e8e8f4'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)'; }}
+                            >
+                                <div style={{ width: 40, height: 40, borderRadius: 7, overflow: 'hidden', background: '#f0f0f8', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <img src={imgUrl} alt={filename} style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        onError={e => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.innerHTML = '<span style="font-size:20px">🖼️</span>'; }} />
+                                </div>
+                                <div>
+                                    {fileType && <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 9, fontWeight: 800, color: '#049edf', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{fileType}</div>}
+                                    <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#5a5a78', fontWeight: 700, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {filename.length > 16 ? filename.slice(0, 14) + '…' : filename}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        </>
+    );
+}
 /* ══════════════════════════════════════════
    TASK MODAL  (View + Update tabs)
 ══════════════════════════════════════════ */
@@ -210,21 +282,45 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
     const [saving, setSaving] = useState(false);
     const [saveErr, setSaveErr] = useState('');
     const [saved, setSaved] = useState(false);
+    const [existingClose, setExistingClose] = useState([]);
+    const [deleting, setDeleting] = useState(null); // attachID being deleted
+    const [existingFar, setExistingFar] = useState([]);
+    const [attLoading, setAttLoading] = useState(false);
+    const API_BASE = 'https://api.jalaram-ad.ashtamtechnologies.com';
 
     const job = task.job;
     const todayISO = new Date().toISOString().split('T')[0];
     const displayDate = fmtDate(task.actualCompletionDate || todayISO);
 
     /* Both images uploaded → status auto-becomes "Submitted" */
-    const willSubmit = closeImg.length > 0 && farImg.length > 0;
+    const willSubmit = (closeImg.length > 0 || existingClose.length > 0) &&
+        (farImg.length > 0 || existingFar.length > 0);
 
     const validate = () => {
         const errs = {};
-        if (closeImg.length === 0) errs.closeImg = 'At least one close-up photo required';
-        if (farImg.length === 0) errs.farImg = 'At least one far/wide photo required';
+        if (closeImg.length === 0 && existingClose.length === 0)
+            errs.closeImg = 'At least one near photo required';
+        if (farImg.length === 0 && existingFar.length === 0)
+            errs.farImg = 'At least one far photo required';
         return errs;
     };
-
+    const handleDeleteAttach = async (att) => {
+        const attachID = att.jobTaskAttachID ?? att.JobTaskAttachID ?? att.id ?? att.ID;
+        if (!attachID) return;
+        if (!window.confirm('Delete this photo?')) return;
+        setDeleting(attachID);
+        try {
+            await apiService.deleteJobTaskAttachment(attachID);
+            // Refresh existing attachments
+            const res = await apiService.getAllJobTaskAttachments();
+            const all = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+            const mine = all.filter(a => Number(a.jobTaskID ?? a.JobTaskID) === Number(task.jobTaskID));
+            setExistingClose(mine.filter(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('near')));
+            setExistingFar(mine.filter(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('far')));
+        } catch (e) {
+            alert(e?.message || 'Delete failed.');
+        } finally { setDeleting(null); }
+    };
     const handleSave = async () => {
         const errs = validate();
         setErrors(errs);
@@ -258,7 +354,19 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
             </div>
         </div>
     );
-
+    useEffect(() => {
+        if (!task.jobTaskID) return;
+        setAttLoading(true);
+        apiService.getAllJobTaskAttachments()
+            .then(res => {
+                const all = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+                const mine = all.filter(a => Number(a.jobTaskID ?? a.JobTaskID) === Number(task.jobTaskID));
+                setExistingClose(mine.filter(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('near')));
+                setExistingFar(mine.filter(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('far')));
+            })
+            .catch(() => { })
+            .finally(() => setAttLoading(false));
+    }, [task.jobTaskID]);
     return ReactDOM.createPortal(
         <div
             onClick={e => e.target === e.currentTarget && onClose()}
@@ -321,7 +429,17 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                         }}>{t.label}</button>
                     ))}
                 </div>
-
+{/* Banner images from contract */}
+                {(() => {
+                    const contractID = Number(
+                        task.contract?.customerContractID ??
+                        task.contract?.CustomerContractID ??
+                        task.job?.customerContractID ??
+                        task.job?.CustomerContractID ??
+                        0
+                    );
+                    return contractID > 0 ? <BannerStrip contractID={contractID} /> : null;
+                })()}
                 {/* ════════════════════
             DETAILS TAB
         ════════════════════ */}
@@ -411,11 +529,10 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                                     <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>Site Photos</div>
                                     <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 600, color: '#9090a8' }}>Both photos are mandatory</div>
                                 </div>
-                                {/* progress pills */}
                                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                                     {[
-                                        { label: 'Close', done: closeImg.length > 0, count: closeImg.length },
-                                        { label: 'Far', done: farImg.length > 0, count: farImg.length },
+                                        { label: 'Near', done: existingClose.length > 0 || closeImg.length > 0, count: existingClose.length + closeImg.length },
+                                        { label: 'Far', done: existingFar.length > 0 || farImg.length > 0, count: existingFar.length + farImg.length },
                                     ].map(p => (
                                         <span key={p.label} style={{
                                             display: 'inline-flex', alignItems: 'center', gap: 4,
@@ -430,28 +547,146 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                                 </div>
                             </div>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-                                <ImageUploadZone
-                                    label="Close-up" sublabel="(Near shot)"
-                                    IconComp={ZoomIn}
-                                    values={closeImg}
-                                    onChange={v => { setCloseImg(v); setErrors(e => ({ ...e, closeImg: '' })); }}
-                                    error={errors.closeImg}
-                                />
-                                <ImageUploadZone
-                                    label="Far view" sublabel="(Wide shot)"
-                                    IconComp={ZoomOut}
-                                    values={farImg}
-                                    onChange={v => { setFarImg(v); setErrors(e => ({ ...e, farImg: '' })); }}
-                                    error={errors.farImg}
-                                />
-                            </div>
+                            {attLoading ? (
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '20px', fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#9090a8' }}>
+                                    <Loader2 size={14} color="#049edf" className="pg-spin" /> Loading existing photos…
+                                </div>
+                            ) : (
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+
+                                    {/* ── Near Photo column ── */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                            Near Photo <span style={{ color: '#ef4444' }}>*</span>
+                                            {existingClose.length > 0 && (
+                                                <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#1a9e6e', background: '#e8faf3', padding: '1px 7px', borderRadius: 20, border: '1px solid #7dd5b0' }}>
+                                                    {existingClose.length} uploaded
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Existing uploaded near photos */}
+                                        {existingClose.length > 0 && (
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 6 }}>
+                                                {existingClose.map((att, i) => {
+                                                    const rawPath = att.photoFilePath ?? att.PhotoFilePath ?? '';
+                                                    const imgUrl = rawPath.startsWith('http') ? rawPath : `${API_BASE}${rawPath}`;
+                                                    const attachID = att.jobTaskAttachID ?? att.JobTaskAttachID ?? att.id ?? att.ID;
+                                                    const isDeleting = deleting === attachID;
+                                                    return (
+                                                        <div key={i} style={{ position: 'relative', aspectRatio: '4/3', borderRadius: 8, overflow: 'hidden', border: '2px solid #7dd5b0' }}>
+                                                            <img src={imgUrl} alt={`Near ${i + 1}`}
+                                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'zoom-in' }}
+                                                                onClick={() => window.open(imgUrl, '_blank')}
+                                                                onError={e => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f0f0f8">🖼️</div>'; }}
+                                                            />
+                                                            {/* Delete button */}
+                                                            <button
+                                                                onClick={e => { e.stopPropagation(); handleDeleteAttach(att); }}
+                                                                disabled={isDeleting}
+                                                                title="Delete photo"
+                                                                style={{
+                                                                    position: 'absolute', top: 4, right: 4,
+                                                                    width: 22, height: 22, borderRadius: '50%',
+                                                                    background: isDeleting ? 'rgba(156,163,175,0.9)' : 'rgba(220,38,38,0.88)',
+                                                                    border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    cursor: isDeleting ? 'wait' : 'pointer', color: '#fff', padding: 0,
+                                                                    boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+                                                                }}
+                                                            >
+                                                                {isDeleting
+                                                                    ? <Loader2 size={11} className="pg-spin" />
+                                                                    : <Trash2 size={11} />}
+                                                            </button>
+                                                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(26,158,110,0.75)', color: '#fff', fontFamily: 'Nunito,sans-serif', fontSize: 9, fontWeight: 700, padding: '2px 5px', textAlign: 'center' }}>
+                                                                Uploaded ✓
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {/* New near photo upload zone */}
+                                        <ImageUploadZone
+                                            label="Near Photo" sublabel="(Close-up)"
+                                            IconComp={ZoomIn}
+                                            values={closeImg}
+                                            onChange={v => { setCloseImg(v); setErrors(e => ({ ...e, closeImg: '' })); }}
+                                            error={errors.closeImg}
+                                        />
+                                    </div>
+
+                                    {/* ── Far Photo column ── */}
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                                            Far Photo <span style={{ color: '#ef4444' }}>*</span>
+                                            {existingFar.length > 0 && (
+                                                <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#1a9e6e', background: '#e8faf3', padding: '1px 7px', borderRadius: 20, border: '1px solid #7dd5b0' }}>
+                                                    {existingFar.length} uploaded
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Existing uploaded far photos */}
+                                        {existingFar.length > 0 && (
+                                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 6 }}>
+                                                {existingFar.map((att, i) => {
+                                                    const rawPath = att.photoFilePath ?? att.PhotoFilePath ?? '';
+                                                    const imgUrl = rawPath.startsWith('http') ? rawPath : `${API_BASE}${rawPath}`;
+                                                    const attachID = att.jobTaskAttachID ?? att.JobTaskAttachID ?? att.id ?? att.ID;
+                                                    const isDeleting = deleting === attachID;
+                                                    return (
+                                                        <div key={i} style={{ position: 'relative', aspectRatio: '4/3', borderRadius: 8, overflow: 'hidden', border: '2px solid #7dd5b0' }}>
+                                                            <img src={imgUrl} alt={`Far ${i + 1}`}
+                                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'zoom-in' }}
+                                                                onClick={() => window.open(imgUrl, '_blank')}
+                                                                onError={e => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f0f0f8">🖼️</div>'; }}
+                                                            />
+                                                            {/* Delete button */}
+                                                            <button
+                                                                onClick={e => { e.stopPropagation(); handleDeleteAttach(att); }}
+                                                                disabled={isDeleting}
+                                                                title="Delete photo"
+                                                                style={{
+                                                                    position: 'absolute', top: 4, right: 4,
+                                                                    width: 22, height: 22, borderRadius: '50%',
+                                                                    background: isDeleting ? 'rgba(156,163,175,0.9)' : 'rgba(220,38,38,0.88)',
+                                                                    border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                    cursor: isDeleting ? 'wait' : 'pointer', color: '#fff', padding: 0,
+                                                                    boxShadow: '0 1px 4px rgba(0,0,0,0.25)',
+                                                                }}
+                                                            >
+                                                                {isDeleting
+                                                                    ? <Loader2 size={11} className="pg-spin" />
+                                                                    : <Trash2 size={11} />}
+                                                            </button>
+                                                            <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(26,158,110,0.75)', color: '#fff', fontFamily: 'Nunito,sans-serif', fontSize: 9, fontWeight: 700, padding: '2px 5px', textAlign: 'center' }}>
+                                                                Uploaded ✓
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                        {/* New far photo upload zone */}
+                                        <ImageUploadZone
+                                            label="Far Photo" sublabel="(Wide shot)"
+                                            IconComp={ZoomOut}
+                                            values={farImg}
+                                            onChange={v => { setFarImg(v); setErrors(e => ({ ...e, farImg: '' })); }}
+                                            error={errors.farImg}
+                                        />
+                                    </div>
+
+                                </div>
+                            )}
 
                             {/* instruction banner */}
                             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10 }}>
                                 <AlertTriangle size={13} color="#d97706" style={{ marginTop: 1, flexShrink: 0 }} />
                                 <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 600, color: '#92400e', lineHeight: 1.5 }}>
-                                    Take a <strong>close-up photo</strong> standing near the hoarding, and a <strong>wide/far photo</strong> from a distance showing the full installation. Both are required before saving.
+                                    Take a <strong>near/close-up photo</strong> standing close to the hoarding, and a <strong>far/wide photo</strong> from a distance showing the full installation. Both are required before saving.
                                 </span>
                             </div>
                         </div>
@@ -557,17 +792,52 @@ export default function WorkerTasksPage() {
         setLoading(true); setFetchError('');
         try {
             const userId = parseInt(localStorage.getItem('userId') || '0', 10);
+
+            // Get only tasks assigned to this worker
+            const assignRes = await apiService.getJobTaskAssignsByUserId(userId);
+            const assigns = Array.isArray(assignRes) ? assignRes
+                : Array.isArray(assignRes?.data) ? assignRes.data : [];
+
+            if (assigns.length === 0) {
+                setTasks([]);
+                setLoading(false);
+                return;
+            }
+
+            // Get the assigned jobTaskIDs
+            const assignedTaskIds = new Set(
+                assigns.map(a => Number(a.jobTaskID ?? a.JobTaskID))
+            );
+
+            // Fetch all tasks and filter to assigned ones
             const tRes = await apiService.getAllJobTasks();
-            const allTasks = Array.isArray(tRes) ? tRes : Array.isArray(tRes?.data) ? tRes.data : [];
-            const myTasks = allTasks.filter(t => Number(t.lastUpdatedBy ?? t.LastUpdatedBy) === userId);
-            // const normed = (myTasks.length > 0 ? myTasks : allTasks).map(normalizeTask);
-            const normed = allTasks.map(normalizeTask);
+            const allTasks = Array.isArray(tRes) ? tRes
+                : Array.isArray(tRes?.data) ? tRes.data : [];
+            const myTasks = allTasks
+                .filter(t => assignedTaskIds.has(Number(t.jobTaskID ?? t.JobTaskID)))
+                .map(normalizeTask);
+
+            // Fetch jobs for enrichment
             const jRes = await apiService.getAllJobRequests();
-            const allJobs = Array.isArray(jRes) ? jRes : Array.isArray(jRes?.data) ? jRes.data : [];
+            const allJobs = Array.isArray(jRes) ? jRes
+                : Array.isArray(jRes?.data) ? jRes.data : [];
             const jobMap = {};
             allJobs.forEach(j => { const n = normalizeJob(j); jobMap[n.jobRequestID] = n; });
 
-            setTasks(normed.map(t => ({ ...t, job: jobMap[t.jobRequestID] ?? null })));
+            // Fetch customer contracts for banner lookup
+            const contractRes = await apiService.getAllCustomerContracts();
+            const allContracts = Array.isArray(contractRes) ? contractRes
+                : Array.isArray(contractRes?.data) ? contractRes.data : [];
+            const contractMap = {};
+            allContracts.forEach(c => {
+                contractMap[Number(c.customerContractID ?? c.CustomerContractID)] = c;
+            });
+
+            setTasks(myTasks.map(t => ({
+                ...t,
+                job: jobMap[t.jobRequestID] ?? null,
+                contract: contractMap[jobMap[t.jobRequestID]?.customerContractID] ?? null,
+            })));
         } catch (err) {
             setFetchError(err?.response?.data?.message || err?.message || 'Failed to load tasks.');
         } finally { setLoading(false); }
@@ -577,31 +847,53 @@ export default function WorkerTasksPage() {
     useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
     /* ── save handler ── */
     const handleSave = async (data) => {
+        const userId = parseInt(localStorage.getItem('userId') || '0', 10);
+        const nowISO = new Date().toISOString();
+
+        // Update task status to Submitted
         await apiService.updateJobTask({
             jobTaskID: data.jobTaskID,
             jobRequestID: data.jobRequestID,
             hoardingID: data.hoardingID,
-            status: data.status,
+            status: 'Submitted',
             actualCompletionDate: data.actualCompletionDate,
-            submitDTTM: data.submitDTTM,
-            lastUpdatedBy: data.lastUpdatedBy,
+            submitDTTM: nowISO,
+            lastUpdateDttm: nowISO,
+            lastUpdatedBy: userId,
         });
-for (const file of data.closeImgs ?? []) {
-    const fd = new FormData();
-    fd.append('HoardingPhotoID', 0);
-    fd.append('HoardingID', data.hoardingID);
-    fd.append('PhotoType', 'Close');
-    fd.append('File', file);
-    await apiService.uploadHoardingPhoto(fd);
-}
-for (const file of data.farImgs ?? []) {
-    const fd = new FormData();
-    fd.append('HoardingPhotoID', 0);
-    fd.append('HoardingID', data.hoardingID);
-    fd.append('PhotoType', 'Far');
-    fd.append('File', file);
-    await apiService.uploadHoardingPhoto(fd);
-}
+
+        // Upload Near Photos
+        for (const file of data.closeImgs ?? []) {
+            const fd = new FormData();
+            fd.append('JobTaskAttachID', '0');
+            fd.append('JobTaskID', String(data.jobTaskID));
+            fd.append('JobRequestID', String(data.jobRequestID));
+            fd.append('HoardingID', String(data.hoardingID));
+            fd.append('PhotoFileType', 'Near Photo');
+            fd.append('Files', file);
+            fd.append('PhotoFilePath', '');
+            fd.append('PhotoFilename', file.name);
+            fd.append('LastUpdateDttm', nowISO);
+            fd.append('LastUpdatedBy', String(userId));
+            await apiService.uploadJobTaskAttachment(fd);
+        }
+
+        // Upload Far Photos
+        for (const file of data.farImgs ?? []) {
+            const fd = new FormData();
+            fd.append('JobTaskAttachID', '0');
+            fd.append('JobTaskID', String(data.jobTaskID));
+            fd.append('JobRequestID', String(data.jobRequestID));
+            fd.append('HoardingID', String(data.hoardingID));
+            fd.append('PhotoFileType', 'Far Photo');
+            fd.append('Files', file);
+            fd.append('PhotoFilePath', '');
+            fd.append('PhotoFilename', file.name);
+            fd.append('LastUpdateDttm', nowISO);
+            fd.append('LastUpdatedBy', String(userId));
+            await apiService.uploadJobTaskAttachment(fd);
+        }
+
         await fetchData();
     };
 
@@ -678,35 +970,35 @@ for (const file of data.farImgs ?? []) {
             <div className="pg-page" style={{ padding: '40px' }}>
 
                 {/* ── Header ── */}
-<div className="pg-header">
-    <div>
-        <h1 className="pg-header__title">My Tasks</h1>
-        <p className="pg-header__subtitle">All job tasks <strong>assigned to you</strong>.</p>
-    </div>
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <button className="pg-pg-btn" onClick={fetchData} title="Refresh" style={{ width: 38, height: 38 }}>
-            <RefreshCw size={14} />
-        </button>
-        <button
-            onClick={() => {
-                localStorage.clear();
-                window.location.href = '/login';
-            }}
-            style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                padding: '9px 16px', borderRadius: 11, border: 'none',
-                background: '#fef2f2', color: '#dc2626',
-                fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13,
-                cursor: 'pointer', border: '1.5px solid #fecaca',
-                transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
-            onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
-        >
-            <LogOut size={14} /> Logout
-        </button>
-    </div>
-</div>
+                <div className="pg-header">
+                    <div>
+                        <h1 className="pg-header__title">My Tasks</h1>
+                        <p className="pg-header__subtitle">All job tasks <strong>assigned to you</strong>.</p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button className="pg-pg-btn" onClick={fetchData} title="Refresh" style={{ width: 38, height: 38 }}>
+                            <RefreshCw size={14} />
+                        </button>
+                        <button
+                            onClick={() => {
+                                localStorage.clear();
+                                window.location.href = '/login';
+                            }}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 7,
+                                padding: '9px 16px', borderRadius: 11, border: 'none',
+                                background: '#fef2f2', color: '#dc2626',
+                                fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13,
+                                cursor: 'pointer', border: '1.5px solid #fecaca',
+                                transition: 'all 0.15s',
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = '#fee2e2'}
+                            onMouseLeave={e => e.currentTarget.style.background = '#fef2f2'}
+                        >
+                            <LogOut size={14} /> Logout
+                        </button>
+                    </div>
+                </div>
 
                 {/* ── Stat strip ── */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 20 }}>

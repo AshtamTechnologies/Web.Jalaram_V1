@@ -412,11 +412,16 @@ export const apiService = {
   deleteCustomer: (id) => api.delete(`/CustomerDTL/Delete/${id}`),
 
   // CUSTOMER CONTRACTS
-  getAllCustomerContracts: () => api.get('/CustomerContract/GetAll'),
+  getAllCustomerContracts: async () => {
+    const res = await api.get('/CustomerContract/GetAll');
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.data)) return res.data;
+    if (Array.isArray(res?.$values)) return res.$values;
+    return [];
+  },
   createCustomerContract: (data) => api.post('/CustomerContract/Create', {
     customerContractID: 0,
     customerID: Number(data.customerID),
-    hoardingID: Number(data.hoardingID),
     startDate: data.startDate,
     endDate: data.endDate,
     contractOrigValue: Number(data.contractOrigValue) || 0,
@@ -434,7 +439,6 @@ export const apiService = {
   updateCustomerContract: (data) => api.put('/CustomerContract/Update', {
     customerContractID: Number(data.customerContractID),
     customerID: Number(data.customerID),
-    hoardingID: Number(data.hoardingID),
     startDate: data.startDate,
     endDate: data.endDate,
     contractOrigValue: Number(data.contractOrigValue) || 0,
@@ -492,7 +496,25 @@ export const apiService = {
   },
 
   // HOARDING MERGE (contract-level)
-  getAllHoardingMerges: () => api.get('/HoardingMerge/GetAll'),
+  getAllHoardingMerges: async () => {
+    try {
+      const res = await api.get('/HoardingMerge/GetAll');
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.value) ? res.value : [];
+      console.log('[MERGE GetAll count]', list.length, 'sample:', JSON.stringify(list[0]));
+      return list;
+    } catch (err) {
+      console.warn('[MERGE GetAll failed, trying /HoardingMerge]', err?.response?.status);
+      try {
+        const res2 = await api.get('/HoardingMerge');
+        const list2 = Array.isArray(res2) ? res2 : Array.isArray(res2?.data) ? res2.data : Array.isArray(res2?.value) ? res2.value : [];
+        console.log('[MERGE /HoardingMerge count]', list2.length, 'sample:', JSON.stringify(list2[0]));
+        return list2;
+      } catch (err2) {
+        console.error('[MERGE both endpoints failed]', err2?.response?.status);
+        return [];
+      }
+    }
+  },
   getHoardingMergeById: (id) => api.get(`/HoardingMerge/${id}`),
   createHoardingMerge: (data) => api.post('/HoardingMerge/Create', {
     hoardingMergeID: 0,
@@ -500,7 +522,7 @@ export const apiService = {
     customerContractID: Number(data.customerContractID),
     mergeAlongFlag: data.mergeAlongFlag,
   }),
-  updateHoardingMerge: (id, data) => api.put(`/HoardingMerge/Update/${id}`, {
+  updateHoardingMerge: (id, data) => api.put(`/HoardingMerge/Update`, {
     hoardingMergeID: Number(id),
     hoardingID: Number(data.hoardingID),
     customerContractID: Number(data.customerContractID),
@@ -759,7 +781,7 @@ export const apiService = {
     api.delete(`/QuotationMergeDTL/${mergeId}/${hoardingId}`),
 
   // JOB REQUESTS
-getAllJobRequests: () => api.get('/JobRequest'),
+  getAllJobRequests: () => api.get('/JobRequest'),
   getJobRequestById: (id) => api.get(`/JobRequest/${id}`),
   createJobRequest: (data) => api.post('/JobRequest', {
     jobRequestID: 0,
@@ -785,7 +807,7 @@ getAllJobRequests: () => api.get('/JobRequest'),
     jobDescription: String(data.jobDescription ?? ''),
     iD: String(data.iD ?? ''),                          // ← STRING
     jobCreateDTTM: new Date().toISOString(),
-supervisorAcceptDttm: data.supervisorAcceptDttm ?? new Date().toISOString(),
+    supervisorAcceptDttm: data.supervisorAcceptDttm ?? new Date().toISOString(),
     noofHoardings: String(data.noofHoardings ?? '0'),
     rateperSQFT: Number(data.rateperSQFT ?? 0),
     totalAreaSQFT: Number(data.totalAreaSQFT ?? 0),
@@ -796,42 +818,42 @@ supervisorAcceptDttm: data.supervisorAcceptDttm ?? new Date().toISOString(),
   deleteJobRequest: (id) => api.delete(`/JobRequest/Delete/${id}`),
 
   // JOB TASKS
-getAllJobTasks: () => api.get('/JobTask'),
+  getAllJobTasks: () => api.get('/JobTask'),
   // In api.js — replace getJobTasksByJobRequestId
-getJobTasksByJobRequestId: async (jobRequestID) => {
-  const all = await api.get('/JobTask');
-  const list = Array.isArray(all) ? all : Array.isArray(all?.data) ? all.data : [];
-  return list.filter(t =>
-    Number(t.jobRequestID ?? t.JobRequestID) === Number(jobRequestID)
-  );
-},
-createJobTask: (data) => {
-  const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
-  return api.post('/JobTask', {
-    jobTaskID: 0,
-    jobRequestID: Number(data.jobRequestID ?? 0),
-    hoardingID: Number(data.hoardingID ?? 0),
-    actualCompletionDate: data.actualCompletionDate ?? new Date().toISOString().split('T')[0],
-    status: String(data.status ?? 'Open'),
-    submitDTTM: data.submitDTTM ?? new Date().toISOString(),
-    lastUpdateDttm: new Date().toISOString(),
-    lastUpdatedBy: Number(data.lastUpdatedBy ?? userId),
-  });
-},
-updateJobTask: (data) => {
-  const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
-  return api.put(`/JobTask/${Number(data.jobTaskID ?? 0)}`, {
-    jobTaskID: Number(data.jobTaskID ?? 0),
-    jobRequestID: Number(data.jobRequestID ?? 0),
-    hoardingID: Number(data.hoardingID ?? 0),
-    actualCompletionDate: data.actualCompletionDate ?? new Date().toISOString().split('T')[0],
-    status: String(data.status ?? 'Open'),
-    submitDTTM: data.submitDTTM ?? new Date().toISOString(),
-    lastUpdateDttm: new Date().toISOString(),
-    lastUpdatedBy: Number(data.lastUpdatedBy ?? userId),
-  });
-},
-deleteJobTask: (id) => api.delete(`/JobTask/${id}`),
+  getJobTasksByJobRequestId: async (jobRequestID) => {
+    const all = await api.get('/JobTask');
+    const list = Array.isArray(all) ? all : Array.isArray(all?.data) ? all.data : [];
+    return list.filter(t =>
+      Number(t.jobRequestID ?? t.JobRequestID) === Number(jobRequestID)
+    );
+  },
+  createJobTask: (data) => {
+    const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
+    return api.post('/JobTask', {
+      jobTaskID: 0,
+      jobRequestID: Number(data.jobRequestID ?? 0),
+      hoardingID: Number(data.hoardingID ?? 0),
+      actualCompletionDate: data.actualCompletionDate ?? new Date().toISOString().split('T')[0],
+      status: String(data.status ?? 'Open'),
+      submitDTTM: data.submitDTTM ?? new Date().toISOString(),
+      lastUpdateDttm: new Date().toISOString(),
+      lastUpdatedBy: Number(data.lastUpdatedBy ?? userId),
+    });
+  },
+  updateJobTask: (data) => {
+    const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
+    return api.put(`/JobTask/${Number(data.jobTaskID ?? 0)}`, {
+      jobTaskID: Number(data.jobTaskID ?? 0),
+      jobRequestID: Number(data.jobRequestID ?? 0),
+      hoardingID: Number(data.hoardingID ?? 0),
+      actualCompletionDate: data.actualCompletionDate ?? new Date().toISOString().split('T')[0],
+      status: String(data.status ?? 'Open'),
+      submitDTTM: data.submitDTTM ?? new Date().toISOString(),
+      lastUpdateDttm: new Date().toISOString(),
+      lastUpdatedBy: Number(data.lastUpdatedBy ?? userId),
+    });
+  },
+  deleteJobTask: (id) => api.delete(`/JobTask/${id}`),
 
   // USER REGISTRATION & MANAGEMENT
   getAllUsers: () => api.get('/Login/get-all'),
@@ -865,15 +887,142 @@ deleteJobTask: (id) => api.delete(`/JobTask/${id}`),
     role: String(data.role || '').trim(),
   }),
 
-// ─────────────────────────────────────────────────────────
-// ADD THIS INSIDE your apiService object in api.js
-// Place it right after getAllJobRequests / getJobRequestById
-// ─────────────────────────────────────────────────────────
- 
-getJobRequestsByUserId: (userId) =>
-  api.get(`/JobRequest/GetByUserId/${userId}`),
+  // ─────────────────────────────────────────────────────────
+  // ADD THIS INSIDE your apiService object in api.js
+  // Place it right after getAllJobRequests / getJobRequestById
+  // ─────────────────────────────────────────────────────────
+
+  getJobRequestsByUserId: (userId) =>
+    api.get(`/JobRequest/GetByUserId/${userId}`),
+
+  // QUOTATION CUSTOMER
+  getAllQuotationCustomers: () => api.get('/QuotationCustomer'),
+  getQuotationCustomerById: (id) => api.get(`/QuotationCustomer/${id}`),
+  createQuotationCustomer: (data) => api.post('/QuotationCustomer', {
+    quotationCustomer_ID: 0,
+    quotation_ID: Number(data.quotationID),
+    quotation_Revision_Number: Number(data.quotationRevisionNumber ?? 0),
+    customer_ID: Number(data.customerID),
+  }),
+  updateQuotationCustomer: (id, data) => api.put(`/QuotationCustomer/${id}`, {
+    quotationCustomer_ID: Number(id),
+    quotation_ID: Number(data.quotationID),
+    quotation_Revision_Number: Number(data.quotationRevisionNumber ?? 0),
+    customer_ID: Number(data.customerID),
+  }),
 
 
+  // Customer Contract Hoarding Map
+  getCustomerContractHoardingMaps: async (customerContractID) => {
+    try {
+      const all = await api.get('/CustomerContractHoarding');
+      const list = Array.isArray(all) ? all : Array.isArray(all?.data) ? all.data : [];
+      return list.filter(m =>
+        Number(m.customerContractID ?? m.CustomerContractID) === Number(customerContractID)
+      );
+    } catch (err) {
+      if (err?.response?.status === 404) return [];
+      throw err;
+    }
+  },
+  createCustomerContractHoardingMap: (payload) =>
+    api.post('/CustomerContractHoarding', {
+      customerContractLineID: 0,
+      customerContractID: Number(payload.customerContractID),
+      customerID: Number(payload.customerID),
+      hoardingID: Number(payload.hoardingID),
+    }),
+  updateCustomerContractHoardingMap: (customerContractLineID, payload) =>
+    api.put(`/CustomerContractHoarding/${customerContractLineID}`, {
+      customerContractLineID: Number(customerContractLineID),
+      customerContractID: Number(payload.customerContractID),
+      customerID: Number(payload.customerID),
+      hoardingID: Number(payload.hoardingID),
+    }),
+  deleteCustomerContractHoardingMap: (customerContractLineID) =>
+    api.delete(`/CustomerContractHoarding/${customerContractLineID}`),
+
+
+
+  // ── Job Task Attachments ──
+
+  getAllJobTaskAttachments: () => api.get('/JobTaskAttach'),
+  getJobTaskAttachmentById: (id) => api.get(`/JobTaskAttach/${id}`),
+  uploadJobTaskAttachment: (formData) =>
+    api.post('/JobTaskAttach/Upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  updateJobTaskAttachment: (id, data) => api.put(`/JobTaskAttach/${id}`, data),
+  // Inside apiService object, after uploadJobTaskAttachment:
+  deleteJobTaskAttachment: (id) => api.delete(`/JobTaskAttach/${id}`),
+
+  getJobTaskAssignsByUserId: (userId) =>
+    api.get(`/JobTaskAssign/GetByUserId/${userId}`),
+
+
+
+  // Workers
+  getWorkers: async () => {
+    try {
+      const res = await api.get('/Login/get-all');
+      const list = Array.isArray(res) ? res
+        : Array.isArray(res?.data) ? res.data
+          : Array.isArray(res?.$values) ? res.$values : [];
+      return list
+        .filter(u => (u.role ?? u.Role ?? '').toLowerCase() === 'worker')
+        .map(u => ({
+          id: u.id ?? u.Id ?? u.userID ?? u.UserID ?? 0,
+          name: [u.first_Name ?? u.firstName ?? '', u.last_Name ?? u.lastName ?? ''].filter(Boolean).join(' ').trim()
+            || u.email || `User #${u.id}`,
+          role: u.role ?? u.Role ?? '',
+          email: u.email ?? u.Email ?? '',
+        }));
+    } catch (err) {
+      console.error('getWorkers failed:', err?.response?.status);
+      return [];
+    }
+  },
+
+  // Job Task Assignments
+  getJobTaskAssignsByTaskId: async (jobTaskID) => {
+    try {
+      const res = await api.get('/JobTaskAssign');
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      return list.filter(a => Number(a.jobTaskID ?? a.JobTaskID) === Number(jobTaskID));
+    } catch {
+      return [];
+    }
+  },
+
+  createJobTaskAssign: async (payload) => {
+    const response = await axios.post(`${API_BASE_URL}/JobTaskAssign`, payload);
+    return response.data;
+  },
+
+  updateJobTaskAssign: async (payload) => {
+    const response = await axios.put(`${API_BASE_URL}/JobTaskAssign/${payload.jobTaskAssignID}`, payload);
+    return response.data;
+  },
+
+  deleteJobTaskAssign: async (jobTaskAssignID) => {
+    const response = await axios.delete(`${API_BASE_URL}/JobTaskAssign/${jobTaskAssignID}`);
+    return response.data;
+  },
+
+  // Add inside apiService:
+  getContractBannerImages: async (customerContractID) => {
+    try {
+      const res = await api.get(`/CustContractAttach/ViewImage/${customerContractID}`);
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      return list
+        .filter(item => item.fileUploadType === 'Banner Design' || item.imageUrl)
+        .map(item => ({
+          custContractAttachID: item.custContractAttachID,
+          contractFilename: item.contractFilename,
+          imageUrl: `https://api.jalaram-ad.ashtamtechnologies.com${item.imageUrl}`,
+        }));
+    } catch { return []; }
+  },
 };
 
 export default api;

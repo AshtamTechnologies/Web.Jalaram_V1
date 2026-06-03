@@ -14,7 +14,7 @@ import {
 import { apiService } from '../api/api';
 import { useResizableColumns } from '../hooks/useResizableColumns';
 import "./Common1.css";
-
+const API_BASE = 'https://api.jalaram-ad.ashtamtechnologies.com';
 /* ═══════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════ */
@@ -48,6 +48,15 @@ const fmtDateTime = (d) => {
     return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   } catch { return d; }
 };
+
+
+
+function buildImageUrl(att) {
+  const path = att.photoFilePath ?? att.PhotoFilePath ?? '';
+  if (!path) return null;
+  if (path.startsWith('http')) return path;   // already full URL
+  return `${API_BASE}${path}`;               // e.g. /JobTaskAttach/2026/2/20002_1.jpg
+}
 
 function normalizeList(res) {
   if (Array.isArray(res)) return res;
@@ -93,20 +102,18 @@ function normalizeSite(raw) {
 }
 
 function normalizeUser(raw) {
-  // Build full name from first_Name + last_Name (API registration fields)
   const firstName = raw.first_Name ?? raw.First_Name ?? raw.firstName ?? raw.FirstName ?? '';
-  const lastName  = raw.last_Name  ?? raw.Last_Name  ?? raw.lastName  ?? raw.LastName  ?? '';
-  const fullName  = [firstName, lastName].filter(Boolean).join(' ').trim();
-
+  const lastName = raw.last_Name ?? raw.Last_Name ?? raw.lastName ?? raw.LastName ?? '';
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
   return {
-    userID:   raw.userID   ?? raw.UserID   ?? raw.id     ?? 0,
+    userID: raw.userID ?? raw.UserID ?? raw.id ?? 0,
     userName: raw.userName ?? raw.UserName ?? raw.fullName ?? raw.FullName ??
-              raw.name     ?? raw.Name     ??
-              (fullName || null) ??          // ← built from first_Name + last_Name
-              raw.email    ?? raw.Email    ?? '',
-    email:    raw.email    ?? raw.Email    ?? '',
-    role:     raw.role     ?? raw.Role     ?? raw.roleName ?? raw.RoleName ?? '',
-    roleId:   Number(raw.roleId ?? raw.RoleId ?? raw.roleID ?? 0),
+      raw.name ?? raw.Name ??
+      (fullName || null) ??
+      raw.email ?? raw.Email ?? '',
+    email: raw.email ?? raw.Email ?? '',
+    role: raw.role ?? raw.Role ?? raw.roleName ?? raw.RoleName ?? '',
+    roleId: Number(raw.roleId ?? raw.RoleId ?? raw.roleID ?? 0),
   };
 }
 
@@ -377,7 +384,6 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
 
-        {/* Warning when unfiltered */}
         {!isFiltered && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: 'rgba(245,158,11,0.07)', borderBottom: '1px solid rgba(245,158,11,0.18)', fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#b45309', fontWeight: 600 }}>
             <AlertCircle size={13} />
@@ -393,7 +399,6 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
           </div>
         </div>
 
-        {/* Select all */}
         {selectable.length > 0 && (
           <div className="qt-select-all-row" onClick={toggleAll}>
             <div className={`qt-modal-check ${allSelected ? 'qt-modal-check--all' : someSel ? 'qt-modal-check--on' : ''}`}>
@@ -480,6 +485,322 @@ function SortIcon({ col, sortKey, sortDir }) {
 }
 
 /* ═══════════════════════════════════════════
+   TASK PHOTO MODAL
+═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   TASK PHOTO MODAL  (replace entire function)
+═══════════════════════════════════════════ */
+function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, onUploaded }) {
+  const [files, setFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(null); // attachID being deleted
+  const [lightbox, setLightbox] = useState(null);
+  const [imgErrors, setImgErrors] = useState({}); // track broken images by index
+  const inputRef = useRef(null);
+
+  const myAttachments = attachments.filter(
+    a => Number(a.jobTaskID ?? a.JobTaskID) === Number(task.jobTaskID)
+  );
+
+  const handleUpload = async () => {
+    if (files.length === 0) return;
+    setUploading(true);
+    try {
+      const userId = parseInt(localStorage.getItem('userId') || '0', 10);
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('JobTaskAttachID', '0');
+        fd.append('JobTaskID', String(task.jobTaskID || 0));
+        fd.append('JobRequestID', String(jobRequestID || 0));
+        fd.append('HoardingID', String(task.hoardingID || 0));
+        fd.append('PhotoFileType', file.type || 'image/jpeg');
+        fd.append('Files', file);
+        fd.append('PhotoFilePath', '');
+        fd.append('PhotoFilename', file.name);
+        fd.append('LastUpdateDttm', new Date().toISOString());
+        fd.append('LastUpdatedBy', String(userId));
+        await apiService.uploadJobTaskAttachment(fd);
+      }
+      showToast(`${files.length} photo${files.length !== 1 ? 's' : ''} uploaded!`, 'success');
+      setFiles([]);
+      onUploaded?.();
+    } catch (err) {
+      showToast(err?.message || 'Upload failed.', 'error');
+    } finally { setUploading(false); }
+  };
+
+  const handleDelete = async (att, i) => {
+    const attachID = att.jobTaskAttachID ?? att.JobTaskAttachID ?? att.id ?? att.ID;
+    if (!attachID) { showToast('Cannot delete: no attachment ID found.', 'error'); return; }
+    if (!window.confirm('Delete this photo?')) return;
+    setDeleting(attachID);
+    // Replace the try block in handleDelete with:
+    try {
+      await apiService.deleteJobTaskAttachment(attachID);
+      showToast('Photo deleted.', 'success');
+      onUploaded?.();
+    } catch (err) {
+      showToast(err?.message || 'Delete failed.', 'error');
+    } finally { setDeleting(null); }
+  };
+
+  return ReactDOM.createPortal(
+    <>
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 999999,
+            background: 'rgba(0,0,0,0.90)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <button
+            onClick={() => setLightbox(null)}
+            style={{
+              position: 'absolute', top: 18, right: 22,
+              background: 'rgba(255,255,255,0.18)', border: 'none',
+              borderRadius: 8, cursor: 'pointer', padding: '6px 14px',
+              color: '#fff', fontSize: 20, lineHeight: 1, fontWeight: 700,
+            }}
+          >✕</button>
+          <img
+            src={lightbox}
+            alt="Full size preview"
+            style={{
+              maxWidth: '92vw', maxHeight: '88vh',
+              borderRadius: 14, boxShadow: '0 12px 60px rgba(0,0,0,0.7)',
+              objectFit: 'contain',
+            }}
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="pg-modal" style={{ maxWidth: 680 }}>
+
+          {/* Head */}
+          <div className="pg-modal__head">
+            <div className="pg-modal__head-left">
+              <div className="pg-modal__icon-wrap" style={{
+                background: 'rgba(4,158,223,0.10)', fontSize: 20,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>📷</div>
+              <div>
+                <h5 className="pg-modal__title">Task Photos</h5>
+                <p className="pg-modal__subtitle">
+                  <strong>{task.hoardingCode || `Hoarding ${task.hoardingID}`}</strong>
+                  {task.siteAddress ? ` · ${task.siteAddress}` : ''}
+                  <span style={{
+                    marginLeft: 8, padding: '1px 8px', borderRadius: 10,
+                    background: 'rgba(4,158,223,0.10)', color: '#049edf',
+                    fontSize: 11, fontWeight: 800,
+                  }}>
+                    {myAttachments.length} photo{myAttachments.length !== 1 ? 's' : ''}
+                  </span>
+                </p>
+              </div>
+            </div>
+            <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          </div>
+
+          {/* Upload zone */}
+          <div style={{ padding: '16px 24px', borderBottom: '1px solid #f0f0f8' }}>
+            <div
+              onClick={() => inputRef.current?.click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => {
+                e.preventDefault();
+                const dropped = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                setFiles(p => [...p, ...dropped]);
+              }}
+              style={{
+                border: `2px dashed ${files.length > 0 ? '#049edf' : '#d0d0e8'}`,
+                borderRadius: 12, padding: '20px',
+                textAlign: 'center', cursor: 'pointer',
+                background: files.length > 0 ? 'rgba(4,158,223,0.04)' : '#fafafe',
+                transition: 'border-color 0.2s, background 0.2s',
+              }}
+            >
+              <div style={{ fontSize: 28, marginBottom: 6 }}>📁</div>
+              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#5a5a78' }}>
+                Click to select or drag &amp; drop photos
+              </div>
+              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', marginTop: 3 }}>
+                JPG, PNG, WEBP · Multiple files supported
+              </div>
+              <input
+                ref={inputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+                onChange={e => setFiles(p => [...p, ...Array.from(e.target.files)])}
+              />
+            </div>
+
+            {files.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                {files.map((f, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 5,
+                    padding: '3px 10px', borderRadius: 20,
+                    background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.20)',
+                    fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700, color: '#049edf',
+                  }}>
+                    📄 {f.name.length > 22 ? f.name.slice(0, 20) + '…' : f.name}
+                    <X size={11} style={{ cursor: 'pointer', flexShrink: 0 }}
+                      onClick={() => setFiles(p => p.filter((_, j) => j !== i))} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Photo grid */}
+          <div style={{ padding: '16px 24px', overflowY: 'auto', maxHeight: 340, minHeight: 80 }}>
+            {myAttachments.length === 0 ? (
+              <div style={{
+                textAlign: 'center', padding: '32px 0',
+                fontFamily: 'Nunito,sans-serif', fontSize: 13.5,
+                color: '#b0b0c8', fontStyle: 'italic',
+              }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>🖼️</div>
+                No photos uploaded yet for this task
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))',
+                gap: 12,
+              }}>
+                {myAttachments.map((att, i) => {
+                  const url = buildImageUrl(att);
+                  const name = att.photoFilename ?? att.PhotoFilename ?? `Photo ${i + 1}`;
+                  const attachID = att.jobTaskAttachID ?? att.JobTaskAttachID ?? att.id ?? att.ID;
+                  const isDeleting = deleting === attachID;
+                  const hasError = imgErrors[i];
+
+                  return (
+                    <div
+                      key={i}
+                      style={{
+                        borderRadius: 11, overflow: 'hidden',
+                        border: '1.5px solid #e8e8f4', background: '#f8f8fd',
+                        position: 'relative',
+                        boxShadow: '0 1px 5px rgba(0,0,0,0.07)',
+                        transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.transform = 'scale(1.04)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(4,158,223,0.20)';
+                        e.currentTarget.style.borderColor = '#049edf';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = '0 1px 5px rgba(0,0,0,0.07)';
+                        e.currentTarget.style.borderColor = '#e8e8f4';
+                      }}
+                    >
+                      {/* Image area — click to open lightbox */}
+                      <div
+                        onClick={() => url && !hasError && setLightbox(url)}
+                        style={{
+                          position: 'relative', height: 118,
+                          background: '#f0f0f8', overflow: 'hidden',
+                          cursor: url && !hasError ? 'zoom-in' : 'default',
+                        }}
+                      >
+                        {url && !hasError ? (
+                          <img
+                            src={url}
+                            alt={name}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                            onError={() => setImgErrors(p => ({ ...p, [i]: true }))}
+                          />
+                        ) : (
+                          /* Fallback — shown when no URL or image fails to load */
+                          <div style={{
+                            width: '100%', height: '100%',
+                            display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: 36, color: '#c0c0d8',
+                          }}>
+                            🖼️
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Filename row + delete button */}
+                      <div style={{
+                        display: 'flex', alignItems: 'center',
+                        padding: '5px 8px',
+                        borderTop: '1px solid #f0f0f8',
+                        gap: 6,
+                      }}>
+                        <span style={{
+                          flex: 1,
+                          fontFamily: 'Nunito,sans-serif', fontSize: 10.5,
+                          color: '#7a8499', fontWeight: 600,
+                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {name.length > 20 ? name.slice(0, 18) + '…' : name}
+                        </span>
+
+                        {/* ── Delete button ── */}
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDelete(att, i); }}
+                          disabled={isDeleting}
+                          title="Delete photo"
+                          style={{
+                            flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            width: 22, height: 22, borderRadius: 6,
+                            border: '1px solid rgba(220,38,38,0.25)',
+                            background: 'rgba(220,38,38,0.07)',
+                            color: '#dc2626', cursor: isDeleting ? 'wait' : 'pointer',
+                            padding: 0, opacity: isDeleting ? 0.5 : 1,
+                          }}
+                        >
+                          {isDeleting
+                            ? <Loader2 size={11} className="pg-spin" />
+                            : <Trash2 size={11} />}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="pg-modal__foot">
+            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
+              {files.length > 0
+                ? `${files.length} file${files.length !== 1 ? 's' : ''} ready to upload`
+                : myAttachments.length > 0
+                  ? 'Click any photo to enlarge · Trash icon to delete'
+                  : 'No photos yet'}
+            </span>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button className="pg-btn-cancel" onClick={onClose}>Close</button>
+              <button
+                className="pg-btn-save"
+                onClick={handleUpload}
+                disabled={files.length === 0 || uploading}
+              >
+                {uploading
+                  ? <><Loader2 size={13} className="pg-spin" /> Uploading…</>
+                  : <>📤 Upload {files.length > 0 ? `(${files.length})` : ''}</>}
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+}
+
+/* ═══════════════════════════════════════════
    MAIN JOB PAGE
 ═══════════════════════════════════════════ */
 export default function JobPage() {
@@ -491,6 +812,7 @@ export default function JobPage() {
   const [supervisors, setSupervisors] = useState([]);
   const [jobRequests, setJobRequests] = useState([]);
   const [allJobTasks, setAllJobTasks] = useState([]);
+  const [allAttachments, setAllAttachments] = useState([]);
 
   /* ── UI ── */
   const [loading, setLoading] = useState(true);
@@ -503,6 +825,7 @@ export default function JobPage() {
   const [step2Error, setStep2Error] = useState('');
   const [editingJobID, setEditingJobID] = useState(null);
   const [showHoardModal, setShowHoardModal] = useState(false);
+
 
   /* ── Form ── */
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -517,7 +840,8 @@ export default function JobPage() {
 
   /* ── Inline tasks ── */
   const [tasks, setTasks] = useState([]);
-
+  const [contractBanners, setContractBanners] = useState([]);
+  const [bannersLoading, setBannersLoading] = useState(false);
   /* ── History table ── */
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('jobRequestID');
@@ -526,18 +850,17 @@ export default function JobPage() {
   const [pageSize, setPageSize] = useState(10);
 
   const formRef = useRef(null);
-   const tableRef = useRef(null);
+  const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
   useResizableColumns(tableRef, tableReady, [80, 160, 90, 130, 100, 90, 80, 100, 100]);
+
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type }), []);
 
   /* ── Computed ── */
   const totalAreaSQFT = useMemo(() =>
-    tasks.reduce((s, t) => s + Number(t.sqFt || 0), 0),
-    [tasks]);
+    tasks.reduce((s, t) => s + Number(t.sqFt || 0), 0), [tasks]);
 
-  // Derive job request status from task states + supervisor acceptance
   const derivedJobStatus = useMemo(() => {
     if (tasks.length > 0 && tasks.every(t => t.status === 'Submitted')) return 'Submitted';
     if (supervisorAcceptDttm) return 'In Progress';
@@ -545,20 +868,17 @@ export default function JobPage() {
     return 'Open';
   }, [tasks, supervisorAcceptDttm, editingJobID, selectedSupervisor]);
 
-  // Contracts belonging to selected customer
   const customerContracts = useMemo(() => {
     if (!selectedCustomer) return [];
     return contracts.filter(c => c.customerID === selectedCustomer.customerID);
   }, [contracts, selectedCustomer]);
 
-  // Hoarding IDs accessible from selected contract/customer
   const filteredHoardingIds = useMemo(() => {
     if (selectedContract) {
       const ids = new Set(
         contracts
           .filter(c => c.customerContractID === selectedContract.customerContractID)
-          .map(c => c.hoardingID)
-          .filter(Boolean)
+          .map(c => c.hoardingID).filter(Boolean)
       );
       return ids.size > 0 ? ids : null;
     }
@@ -566,44 +886,64 @@ export default function JobPage() {
       const ids = new Set(
         contracts
           .filter(c => c.customerID === selectedCustomer.customerID)
-          .map(c => c.hoardingID)
-          .filter(Boolean)
+          .map(c => c.hoardingID).filter(Boolean)
       );
       return ids.size > 0 ? ids : null;
     }
-    return null; // show all hoardings
+    return null;
   }, [selectedContract, selectedCustomer, contracts]);
 
   const existingTaskHoardingIds = useMemo(() =>
-    new Set(tasks.map(t => t.hoardingID).filter(Boolean)),
-    [tasks]);
-
+    new Set(tasks.map(t => t.hoardingID).filter(Boolean)), [tasks]);
+  useEffect(() => {
+    if (!selectedContract) {
+      setContractBanners([]);
+      return;
+    }
+    setBannersLoading(true);
+    apiService.getCustContractAttachments(selectedContract.customerContractID)
+      .then(data => setContractBanners(normalizeList(data)))
+      .catch(() => setContractBanners([]))
+      .finally(() => setBannersLoading(false));
+  }, [selectedContract]);
   /* ── Load data ── */
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, conRaw, hRaw, uRaw, jRaw, jtRaw] = await Promise.all([
-          apiService.getAllCustomers().catch(() => []),  // ← add catch
-          apiService.getAllCustomerContracts().catch(() => []),  // ← add catch
-          apiService.getAllHoardings().catch(() => []),  // ← add catch
+        // ✅ All 7 items properly destructured
+        const [cRaw, conRaw, hRaw, uRaw, jRaw, jtRaw, attRaw] = await Promise.all([
+          apiService.getAllCustomers().catch(() => []),
+          apiService.getAllCustomerContracts().catch(() => []),
+          apiService.getAllHoardings().catch(() => []),
           apiService.getAllUsers().catch(() => []),
           apiService.getAllJobRequests().catch(() => []),
           apiService.getAllJobTasks().catch(() => []),
+          apiService.getAllJobTaskAttachments().catch(() => []),  // ✅ now destructured
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
         setContracts(normalizeList(conRaw).map(normalizeContract));
         setHoardings(normalizeList(hRaw));
-
+        const rawHoardings = normalizeList(hRaw);
+        const latestByCode = new Map();
+        rawHoardings.forEach(h => {
+          const code = h.hoardingCode ?? h.HoardingCode ?? '';
+          const existing = latestByCode.get(code);
+          const thisDate = new Date(h.effdt ?? h.Effdt ?? 0).getTime();
+          const existDate = existing ? new Date(existing.effdt ?? existing.Effdt ?? 0).getTime() : -1;
+          if (!existing || thisDate > existDate) latestByCode.set(code, h);
+        });
+        setHoardings(Array.from(latestByCode.values()));
         const allUsers = normalizeList(uRaw).map(normalizeUser);
-        const sups = allUsers.filter(u =>
+        setSupervisors(allUsers.filter(u =>
           u.role?.toLowerCase().includes('supervisor') || u.roleId === 3
-        );
-        setSupervisors(sups);
+        ));
 
         setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
         setAllJobTasks(normalizeList(jtRaw).map(normalizeJobTask));
+        setAllAttachments(normalizeList(attRaw));  // ✅ loaded on startup
+        console.log('[ATTACH] sample:', normalizeList(attRaw)?.[0]);
 
       } catch (err) {
         setApiError(err?.response?.data?.message || err?.message || 'Failed to load data.');
@@ -616,12 +956,14 @@ export default function JobPage() {
   /* ── Refresh ── */
   const refreshJobs = useCallback(async () => {
     try {
-      const [jRaw, jtRaw] = await Promise.all([
+      const [jRaw, jtRaw, attRaw] = await Promise.all([
         apiService.getAllJobRequests(),
         apiService.getAllJobTasks(),
+        apiService.getAllJobTaskAttachments().catch(() => []),
       ]);
       setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
       setAllJobTasks(normalizeList(jtRaw).map(normalizeJobTask));
+      setAllAttachments(normalizeList(attRaw));
       showToast('Refreshed', 'success');
     } catch { showToast('Refresh failed', 'error'); }
   }, [showToast]);
@@ -662,7 +1004,7 @@ export default function JobPage() {
     setEditingJobID(job.jobRequestID);
 
     const myTasks = allJobTasks.filter(t => t.jobRequestID === job.jobRequestID);
-    const builtTasks = myTasks.map(jt => {
+    setTasks(myTasks.map(jt => {
       const h = hoardings.find(hh => hh.hoardingID === jt.hoardingID);
       return {
         _id: uid(),
@@ -677,8 +1019,7 @@ export default function JobPage() {
         submitDttm: jt.submitDTTM || '',
         saved: true,
       };
-    });
-    setTasks(builtTasks);
+    }));
 
     setStep(1); setIsCreating(true);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
@@ -701,8 +1042,9 @@ export default function JobPage() {
 
   /* ── Task operations ── */
   const handleAddHoardings = (selectedIds) => {
+    const existingHoardingIDs = new Set(tasks.map(t => t.hoardingID));
     const toAdd = hoardings
-      .filter(h => selectedIds.has(h.hoardingID) && !tasks.find(t => t.hoardingID === h.hoardingID))
+      .filter(h => selectedIds.has(h.hoardingID) && !existingHoardingIDs.has(h.hoardingID))
       .map(h => newTaskRow(h));
     setTasks(p => [...p, ...toAdd]);
     setShowHoardModal(false);
@@ -712,7 +1054,6 @@ export default function JobPage() {
     setTasks(prev => prev.map(t => {
       if (t._id !== id) return t;
       const u = { ...t, [field]: val };
-      // Auto-set submit date when marking Submitted
       if (field === 'status' && val === 'Submitted' && !u.submitDttm) {
         u.submitDttm = nowISO();
       }
@@ -735,8 +1076,8 @@ export default function JobPage() {
         customerContractID: selectedContract?.customerContractID || 0,
         jobType,
         jobDescription: jobDescription || '',
-        iD: String(selectedSupervisor?.userID ?? ''),   // ← String()
-        noofHoardings: String(tasks.length),                       // ← count of tasks
+        iD: String(selectedSupervisor?.userID ?? ''),
+        noofHoardings: String(tasks.length),
         supervisorAcceptDttm: supervisorAcceptDttm || new Date().toISOString(),
         rateperSQFT: Number(ratePerSQFT || 0),
         totalAreaSQFT,
@@ -751,9 +1092,11 @@ export default function JobPage() {
       } else {
         const saved = await apiService.createJobRequest(jobPayload);
         savedJobID = saved?.jobRequestID ?? saved?.JobRequestID ?? 0;
+        setEditingJobID(savedJobID); // ← mark as saved so photo buttons activate
       }
 
-      await Promise.all(tasks.map(task => {
+      // Save tasks and capture their returned IDs
+      const updatedTasks = await Promise.all(tasks.map(async task => {
         const payload = {
           jobRequestID: savedJobID,
           hoardingID: task.hoardingID,
@@ -763,15 +1106,24 @@ export default function JobPage() {
           lastUpdateDttm: nowISO(),
           lastUpdatedBy: userId,
         };
+
         if (task.saved && task.jobTaskID > 0) {
-          return apiService.updateJobTask({ ...payload, jobTaskID: task.jobTaskID });
+          await apiService.updateJobTask({ ...payload, jobTaskID: task.jobTaskID });
+          return task; // already has jobTaskID
+        } else {
+          const created = await apiService.createJobTask(payload);
+          // ← capture the new jobTaskID so photo button activates immediately
+          const newJobTaskID = created?.jobTaskID ?? created?.JobTaskID ?? 0;
+          return { ...task, jobTaskID: newJobTaskID, saved: true };
         }
-        return apiService.createJobTask(payload);
       }));
+
+      setTasks(updatedTasks); // ← update tasks with real server IDs
 
       showToast(editingJobID ? 'Job updated successfully!' : 'Job created successfully!', 'success');
       await refreshJobs();
-      setIsCreating(false);
+      // ← removed: setIsCreating(false)  so form stays open for photos
+
     } catch (err) {
       showToast(err?.response?.data?.message || err?.message || 'Failed to save job.', 'error');
     } finally { setSaving(false); }
@@ -810,11 +1162,9 @@ export default function JobPage() {
     .reduce((acc, p, i, arr) => { if (i > 0 && arr[i] - arr[i - 1] > 1) acc.push('…'); acc.push(p); return acc; }, []);
 
   const custName = (id) => customers.find(c => c.customerID === id)?.customerName || '—';
-const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.userName || '—';
-
+  const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.userName || '—';
   const getMyTasks = (jobID) => allJobTasks.filter(t => t.jobRequestID === jobID);
 
-  /* ── Job type badge styles ── */
   const jobTypeBadgeStyle = (type) => {
     const styles = {
       'Banner': { bg: 'rgba(4,158,223,0.09)', color: '#049edf', border: 'rgba(4,158,223,0.25)' },
@@ -871,9 +1221,7 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
           </div>
         )}
 
-        {/* ══════════════════════════════
-            CREATION / EDIT FORM
-        ══════════════════════════════ */}
+        {/* ══════════ FORM ══════════ */}
         {isCreating && (
           <div ref={formRef} className="pg-container jb-form-container" style={{ marginBottom: 20 }}>
 
@@ -895,17 +1243,116 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                 );
               })}
             </div>
+            {/* ── Contract Banner Preview ── */}
+            {selectedContract && (
+              <div className="qt-field-full" style={{ margin: 30 }}>
+                {bannersLoading ? (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600,
+                  }}>
+                    <Loader2 size={12} color="#049edf" className="pg-spin" /> Loading banner designs…
+                  </div>
+                ) : contractBanners.length === 0 ? null : (
+                  <div style={{
+                    background: 'rgba(4,158,223,0.04)',
+                    border: '1.5px solid rgba(4,158,223,0.15)',
+                    borderRadius: 10, padding: '10px 14px',
+                    display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+                  }}>
+                    {/* Label */}
+                    <div style={{
+                      fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800,
+                      color: '#049edf', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5,
+                    }}>
+                      🖼️ Banner Designs
+                      <span style={{
+                        background: '#049edf', color: '#fff', borderRadius: 20,
+                        padding: '1px 7px', fontSize: 10, fontWeight: 900,
+                      }}>{contractBanners.length}</span>
+                    </div>
 
-            {/* ─── STEP 1: JOB DETAILS ─── */}
+                    <div style={{ width: 1, height: 28, background: 'rgba(4,158,223,0.2)', flexShrink: 0 }} />
+
+                    {/* Thumbnails */}
+                    {contractBanners.map((banner, i) => {
+                      const rawPath = banner.imageUrl ?? banner.ImageUrl ?? banner.contractFilePath ?? banner.ContractFilePath ?? '';
+                      const imgUrl = rawPath.startsWith('http') ? rawPath : `${API_BASE}${rawPath}`;
+                      const filename = banner.contractFilename ?? banner.ContractFilename ?? `Banner ${i + 1}`;
+                      const fileType = banner.fileUploadType ?? banner.FileUploadType ?? '';
+
+                      return (
+                        <div
+                          key={banner.custContractAttachID ?? i}
+                          onClick={() => window.open(imgUrl, '_blank')}
+                          title={`${fileType ? fileType + ' · ' : ''}${filename} — click to view`}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            padding: '4px 10px 4px 4px',
+                            background: '#fff', borderRadius: 8,
+                            border: '1.5px solid #e8e8f4',
+                            cursor: 'pointer',
+                            transition: 'border-color 0.15s, box-shadow 0.15s',
+                            boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+                          }}
+                          onMouseEnter={e => {
+                            e.currentTarget.style.borderColor = '#049edf';
+                            e.currentTarget.style.boxShadow = '0 3px 12px rgba(4,158,223,0.18)';
+                          }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.borderColor = '#e8e8f4';
+                            e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.06)';
+                          }}
+                        >
+                          {/* Small thumbnail */}
+                          <div style={{
+                            width: 36, height: 36, borderRadius: 6, overflow: 'hidden',
+                            background: '#f0f0f8', flexShrink: 0,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            <img
+                              src={imgUrl}
+                              alt={filename}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                              onError={e => {
+                                e.currentTarget.style.display = 'none';
+                                e.currentTarget.parentElement.innerHTML = '<span style="font-size:18px">🖼️</span>';
+                              }}
+                            />
+                          </div>
+
+                          {/* Name + type */}
+                          <div>
+                            {fileType && (
+                              <div style={{
+                                fontFamily: 'Nunito,sans-serif', fontSize: 9.5, fontWeight: 800,
+                                color: '#049edf', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1,
+                              }}>
+                                {fileType}
+                              </div>
+                            )}
+                            <div style={{
+                              fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#5a5a78', fontWeight: 700,
+                              maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              marginTop: fileType ? 2 : 0,
+                            }}>
+                              {filename.length > 18 ? filename.slice(0, 16) + '…' : filename}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+            {/* ─── STEP 1 ─── */}
             {step === 1 && (
               <div className="qt-step-body">
                 <div className="qt-form-grid">
 
-                  {/* Customer */}
                   <div>
-                    <label className="qt-label">
-                      Customer <span className="qt-label--opt">(optional)</span>
-                    </label>
+                    <label className="qt-label">Customer <span className="qt-label--opt">(optional)</span></label>
                     <ComboField
                       value={selectedCustomer?.customerID}
                       onChange={c => { setSelectedCustomer(c); setSelectedContract(null); setStep1Error(''); }}
@@ -926,18 +1373,13 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                     )}
                   </div>
 
-                  {/* Customer Contract */}
                   <div>
-                    <label className="qt-label">
-                      Customer Contract <span className="qt-label--opt">(optional — filters hoardings)</span>
-                    </label>
+                    <label className="qt-label">Customer Contract <span className="qt-label--opt">(optional — filters hoardings)</span></label>
                     <ComboField
                       value={selectedContract?.customerContractID}
                       onChange={c => setSelectedContract(c)}
                       options={customerContracts}
-                      placeholder={selectedCustomer
-                        ? (customerContracts.length === 0 ? 'No contracts for this customer' : 'Select contract…')
-                        : 'Select customer first'}
+                      placeholder={selectedCustomer ? (customerContracts.length === 0 ? 'No contracts for this customer' : 'Select contract…') : 'Select customer first'}
                       icon={FileText}
                       disabled={!selectedCustomer || customerContracts.length === 0}
                       getLabel={c => `Contract #${c.customerContractID}`}
@@ -947,7 +1389,6 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                     />
                   </div>
 
-                  {/* Job Type */}
                   <div>
                     <label className="qt-label">Job Type <span className="qt-label--req">*</span></label>
                     <ComboField
@@ -962,18 +1403,13 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                     />
                   </div>
 
-                  {/* Select Supervisor */}
                   <div>
                     <label className="qt-label">Select Supervisor</label>
                     <ComboField
                       value={selectedSupervisor?.userID}
                       onChange={u => setSelectedSupervisor(u)}
                       options={supervisors}
-                      placeholder={
-                        supervisors.length === 0
-                          ? 'No supervisors found in system'
-                          : 'Select supervisor…'
-                      }
+                      placeholder={supervisors.length === 0 ? 'No supervisors found in system' : 'Select supervisor…'}
                       icon={UserCheck}
                       disabled={supervisors.length === 0}
                       getLabel={u => u.userName}
@@ -988,7 +1424,6 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                     )}
                   </div>
 
-                  {/* Job Description */}
                   <div className="qt-field-full">
                     <label className="qt-label">Job Description <span className="qt-label--opt">(optional)</span></label>
                     <div className="qt-input-wrap" style={{ alignItems: 'flex-start', paddingTop: 10 }}>
@@ -1003,7 +1438,6 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                     </div>
                   </div>
 
-                  {/* Rate per SQFT */}
                   <div>
                     <label className="qt-label">Rate per SQFT <span className="qt-label--req">*</span></label>
                     <div className="qt-input-wrap">
@@ -1015,7 +1449,6 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                     </div>
                   </div>
 
-                  {/* Target Completion Date */}
                   <div>
                     <label className="qt-label">Target Completion Date <span className="qt-label--req">*</span></label>
                     <div className="qt-input-wrap">
@@ -1025,11 +1458,8 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                     </div>
                   </div>
 
-                  {/* Supervisor Accept Date — read only */}
                   <div>
-                    <label className="qt-label">
-                      Supervisor Accept Date <span className="qt-label--opt">(read-only)</span>
-                    </label>
+                    <label className="qt-label">Supervisor Accept Date <span className="qt-label--opt">(read-only)</span></label>
                     <div className="qt-input-wrap jb-readonly">
                       <Clock size={14} color="#d0d0e0" style={{ flexShrink: 0 }} />
                       <span className="jb-readonly-text">
@@ -1039,11 +1469,8 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                     </div>
                   </div>
 
-                  {/* Actual Completion Date — read only */}
                   <div>
-                    <label className="qt-label">
-                      Actual Completion Date <span className="qt-label--opt">(read-only)</span>
-                    </label>
+                    <label className="qt-label">Actual Completion Date <span className="qt-label--opt">(read-only)</span></label>
                     <div className="qt-input-wrap jb-readonly">
                       <Calendar size={14} color="#d0d0e0" style={{ flexShrink: 0 }} />
                       <span className="jb-readonly-text">
@@ -1053,7 +1480,6 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                     </div>
                   </div>
 
-                  {/* Job Status (derived) */}
                   <div>
                     <label className="qt-label">Job Status <span className="qt-label--opt">(auto-derived)</span></label>
                     <div style={{ marginTop: 6 }}>
@@ -1079,11 +1505,11 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
               </div>
             )}
 
-            {/* ─── STEP 2: HOARDINGS & TASKS ─── */}
+            {/* ─── STEP 2 ─── */}
             {step === 2 && (
               <div className="qt-step-body">
 
-                {/* Job summary banner */}
+                {/* Summary banner */}
                 <div className="jb-summary-banner">
                   <div className="jb-summary-item">
                     <span className="jb-summary-label">Customer</span>
@@ -1159,43 +1585,49 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                           <th className="pg-th" style={{ minWidth: 148 }}>Actual Completion</th>
                           <th className="pg-th" style={{ minWidth: 140 }}>Task Status</th>
                           <th className="pg-th" style={{ minWidth: 170 }}>Submit Date / Time</th>
-                          <th className="pg-th" style={{ width: 46 }}></th>
+                          {/* ✅ Single actions column */}
+                          <th className="pg-th" style={{ width: 60, textAlign: 'center' }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {tasks.map((task, i) => (
                           <tr key={task._id} className="pg-tr"
                             style={{ background: task.status === 'Submitted' ? 'rgba(22,163,74,0.03)' : undefined }}>
+
                             <td className="pg-td" style={{ textAlign: 'center' }}>
                               <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#9090a8' }}>{i + 1}</span>
                             </td>
+
                             <td className="pg-td">
                               <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1a1a2e' }}>
                                 {task.siteAddress || task.hoardingCode || '—'}
                               </div>
                             </td>
+
                             <td className="pg-td">
                               <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#049edf', fontWeight: 700 }}>
                                 {task.hoardingCode || '—'}
                               </span>
                             </td>
+
                             <td className="pg-td" style={{ textAlign: 'center' }}>
                               <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#4a5568' }}>{task.size || '—'}</span>
                             </td>
+
                             <td className="pg-td" style={{ textAlign: 'center' }}>
                               <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#1a1a2e' }}>{task.sqFt}</span>
                             </td>
+
                             <td className="pg-td">
                               <input className="qt-inline-input qt-date-input" type="date"
                                 value={task.actualCompletionDate}
                                 onChange={e => updateTask(task._id, 'actualCompletionDate', e.target.value)} />
                             </td>
+
                             <td className="pg-td">
-                              <TaskStatusSelect
-                                value={task.status}
-                                onChange={val => updateTask(task._id, 'status', val)}
-                              />
+                              <TaskStatusSelect value={task.status} onChange={val => updateTask(task._id, 'status', val)} />
                             </td>
+
                             <td className="pg-td">
                               {task.status === 'Submitted' ? (
                                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>
@@ -1208,15 +1640,18 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                                 </span>
                               )}
                             </td>
-                            <td className="pg-td">
-                              <div className="pg-action-wrap">
-                                <button className="pg-btn-view"
-                                  onClick={() => deleteTask(task._id)} title="Remove task"
-                                  style={{ background: 'rgba(220,38,38,0.08)', boxShadow: 'none', color: '#dc2626' }}>
-                                  <Trash2 size={13} />
-                                </button>
-                              </div>
-                            </td>
+
+<td className="pg-td" style={{ textAlign: 'center' }}>
+  <button
+    className="pg-btn-view"
+    onClick={() => deleteTask(task._id)}
+    title="Remove task"
+    style={{ background: 'rgba(220,38,38,0.08)', color: '#dc2626', boxShadow: 'none' }}
+  >
+    <Trash2 size={13} />
+  </button>
+</td>
+
                           </tr>
                         ))}
                       </tbody>
@@ -1242,18 +1677,48 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
 
                 <div className="qt-step-foot">
                   <div style={{ display: 'flex', gap: 10 }}>
-                    <button className="pg-btn-cancel" onClick={handleBackToList} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button className="pg-btn-cancel" onClick={handleBackToList}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <LayoutGrid size={13} /> Back to List
                     </button>
-                    <button className="pg-btn-cancel" onClick={goBack} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <button className="pg-btn-cancel" onClick={goBack}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <ArrowLeft size={13} /> Back
                     </button>
                   </div>
-                  <button className="pg-btn-save" onClick={handleSave}
-                    disabled={tasks.length === 0 || saving}
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', fontSize: 14 }}>
-                    <Check size={15} /> {editingJobID ? 'Update Job' : 'Create Job'}
-                  </button>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    {/* Show hint when tasks are unsaved */}
+                    {tasks.some(t => !t.saved || t.jobTaskID === 0) && (
+                      <span style={{
+                        fontFamily: 'Nunito,sans-serif', fontSize: 12,
+                        color: '#f59e0b', fontWeight: 600,
+                        display: 'flex', alignItems: 'center', gap: 5
+                      }}>
+                        <AlertCircle size={12} /> Save first to enable photo uploads
+                      </span>
+                    )}
+                    <button
+                      className="pg-btn-save"
+                      onClick={handleSave}
+                      disabled={tasks.length === 0 || saving}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 24px', fontSize: 14 }}
+                    >
+                      {saving
+                        ? <><Loader2 size={14} className="pg-spin" /> Saving…</>
+                        : <><Check size={15} /> {editingJobID ? 'Update Job' : 'Create Job'}</>
+                      }
+                    </button>
+                    {/* Close button only appears after save */}
+                    {editingJobID && (
+                      <button
+                        className="pg-btn-cancel"
+                        onClick={() => setIsCreating(false)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <LayoutGrid size={13} /> Done
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -1261,13 +1726,10 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
           </div>
         )}
 
-        {/* ══════════════════════════════
-            JOB REQUEST LIST
-        ══════════════════════════════ */}
+        {/* ══════════ JOB LIST ══════════ */}
         {!isCreating && (
           <div className="pg-container">
 
-            {/* Toolbar */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '16px 20px', borderBottom: '1px solid #f0f0f8', flexWrap: 'wrap' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0 }}>
                 <div style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(4,158,223,0.10)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1295,14 +1757,13 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                 <RefreshCw size={13} /> Refresh
               </button>
 
-              <button onClick={handleStartNew}
+              {/* <button onClick={handleStartNew}
                 style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 9, border: 'none', background: '#049edf', color: '#fff', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, flexShrink: 0, boxShadow: '0 2px 8px rgba(4,158,223,0.25)' }}>
                 <Plus size={14} /> New Job
-              </button>
+              </button> */}
             </div>
 
-            {/* Table */}
-            <table className="pg-table"  ref={tableRef}>
+            <table className="pg-table" ref={tableRef}>
               <thead>
                 <tr>
                   {[
@@ -1363,9 +1824,7 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                         ) : <span style={{ color: '#c0c0d8' }}>—</span>}
                       </td>
                       <td className="pg-td pg-td--overflow">
-                        <span className="pg-td__ellipsis" style={{ color: '#4a5568' }}>
-                          {supName(job.supervisorID)}
-                        </span>
+                        <span className="pg-td__ellipsis" style={{ color: '#4a5568' }}>{supName(job.supervisorID)}</span>
                       </td>
                       <td className="pg-td">
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#4a5568' }}>
@@ -1380,9 +1839,7 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                       <td className="pg-td" style={{ textAlign: 'center' }}>
                         {myTasks.length > 0 ? (
                           <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700 }}>
-                            <span style={{ color: submittedCnt === myTasks.length ? '#16a34a' : '#4a5568' }}>
-                              {submittedCnt}
-                            </span>
+                            <span style={{ color: submittedCnt === myTasks.length ? '#16a34a' : '#4a5568' }}>{submittedCnt}</span>
                             <span style={{ color: '#b0b0c8' }}>/{myTasks.length}</span>
                             <div style={{ fontSize: 10, color: '#9090a8', marginTop: 1 }}>submitted</div>
                           </div>
@@ -1390,15 +1847,13 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
                           <span style={{ color: '#c0c0d8', fontSize: 12 }}>—</span>
                         )}
                       </td>
+                      <td className="pg-td"><JobStatusBadge status={job.jobStatus} /></td>
                       <td className="pg-td">
-                        <JobStatusBadge status={job.jobStatus} />
-                      </td>
-                      <td className="pg-td">
-<div className="pg-action-wrap">
-  <button className="pg-btn-view" onClick={() => handleEdit(job)} title="Edit">
-    <Edit2 size={13} />
-  </button>
-</div>
+                        <div className="pg-action-wrap">
+                          <button className="pg-btn-view" onClick={() => handleEdit(job)} title="Edit">
+                            <Edit2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1406,35 +1861,34 @@ const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.
               </tbody>
             </table>
 
-            {/* Pagination */}
             {sorted.length > pageSize && (
-<div className="pg-pagination">
-  <div className="pg-pagination__left">
-    <button className="pg-pg-btn" disabled={page===1} onClick={()=>setPage(1)}><ChevronsLeft size={13}/></button>
-    <button className="pg-pg-btn" disabled={page===1} onClick={()=>setPage(p=>p-1)}><ChevronLeft size={13}/></button>
-    {pageNums.map((p,i) => p==='…'
-      ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
-      : <button key={p} className={`pg-pg-btn${page===p?' pg-pg-btn--active':''}`} onClick={()=>setPage(p)}>{p}</button>
-    )}
-    <button className="pg-pg-btn" disabled={page===totalPages} onClick={()=>setPage(p=>p+1)}><ChevronRight size={13}/></button>
-    <button className="pg-pg-btn" disabled={page===totalPages} onClick={()=>setPage(totalPages)}><ChevronsRight size={13}/></button>
-  </div>
-  <div className="pg-pagination__right">
-    <select className="pg-pagesize-select" value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}>
-      {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
-    </select>
-    <span className="pg-pagination__text">Items per page</span>
-    <span className="pg-pagination__text">{page} of {totalPages} pages ({sorted.length} items)</span>
-  </div>
-</div>
+              <div className="pg-pagination">
+                <div className="pg-pagination__left">
+                  <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}><ChevronsLeft size={13} /></button>
+                  <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={13} /></button>
+                  {pageNums.map((p, i) => p === '…'
+                    ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
+                    : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>
+                  )}
+                  <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}><ChevronRight size={13} /></button>
+                  <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}><ChevronsRight size={13} /></button>
+                </div>
+                <div className="pg-pagination__right">
+                  <select className="pg-pagesize-select" value={pageSize} onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}>
+                    {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                  <span className="pg-pagination__text">Items per page</span>
+                  <span className="pg-pagination__text">{page} of {totalPages} pages ({sorted.length} items)</span>
+                </div>
+              </div>
             )}
 
           </div>
         )}
-
       </div>
 
-      {/* Hoarding selector modal */}
+
+      {/* ── Hoarding selector modal ── */}
       {showHoardModal && (
         <HoardingSelectModal
           hoardings={hoardings}

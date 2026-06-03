@@ -1,22 +1,5 @@
 import { useEffect } from 'react';
 
-/**
- * useResizableColumns
- *
- * Attaches drag-to-resize handles to every <th> in the given table ref.
- *
- * @param {React.RefObject} tableRef   - ref attached to the <table> element
- * @param {boolean}         tableReady - set to true once the table is rendered
- * @param {number[]}        initialWidths - optional array of starting column widths (px)
- *
- * Usage:
- *   const tableRef = useRef(null);
- *   const [tableReady, setTableReady] = useState(false);
- *   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
- *   useResizableColumns(tableRef, tableReady, [140, 200, 110, 100, 70]);
- *
- *   <table ref={tableRef}>…</table>
- */
 export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
   useEffect(() => {
     if (!tableReady) return;
@@ -26,39 +9,47 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
     const ths = Array.from(table.querySelectorAll('thead th'));
     const DEFAULT_WIDTH = 120;
 
+    // Set table to fixed layout so width changes take effect
+    table.style.tableLayout = 'fixed';
+
     ths.forEach((th, i) => {
       th.style.width    = (initialWidths[i] ?? DEFAULT_WIDTH) + 'px';
+      th.style.minWidth = (initialWidths[i] ?? DEFAULT_WIDTH) + 'px';
       th.style.position = 'relative';
       th.style.overflow = 'visible';
+      th.style.userSelect = 'none';
     });
 
-    let startX, startW, activeTh;
+    let startX, startW, activeTh, activeLine;
 
     const onMouseMove = (e) => {
       if (!activeTh) return;
       const newW = Math.max(60, startW + (e.clientX - startX));
-      activeTh.style.width = newW + 'px';
+      activeTh.style.width    = newW + 'px';
+      activeTh.style.minWidth = newW + 'px';
     };
 
     const onMouseUp = () => {
-      if (activeTh) {
-        activeTh.querySelector('.col-resizer')?.classList.remove('resizing');
-        activeTh = null;
+      if (activeLine) {
+        activeLine.style.background = 'rgba(4,158,223,0.35)';
       }
+      activeTh   = null;
+      activeLine = null;
+      document.body.style.cursor    = '';
+      document.body.style.userSelect = '';
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup',   onMouseUp);
     };
 
     ths.forEach((header) => {
-      // Remove any stale resizer from a previous render
       header.querySelector('.col-resizer')?.remove();
 
       const resizer = document.createElement('div');
       resizer.className = 'col-resizer';
       resizer.style.cssText = `
-        position: absolute; right: 0; top: 0;
-        height: 100%; width: 8px;
-        cursor: col-resize; user-select: none; z-index: 10;
+        position: absolute; right: -1px; top: 0;
+        height: 100%; width: 10px;
+        cursor: col-resize; user-select: none; z-index: 20;
         display: flex; align-items: center; justify-content: center;
       `;
 
@@ -80,10 +71,13 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
       resizer.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        activeTh = header;
-        startX   = e.clientX;
-        startW   = header.offsetWidth;
-        line.style.background = '#049edf';
+        activeTh   = header;
+        activeLine = line;
+        startX     = e.clientX;
+        startW     = header.offsetWidth;
+        line.style.background         = '#049edf';
+        document.body.style.cursor    = 'col-resize';
+        document.body.style.userSelect = 'none';
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup',   onMouseUp);
       });
@@ -95,6 +89,8 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
       ths.forEach(header => header.querySelector('.col-resizer')?.remove());
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup',   onMouseUp);
+      document.body.style.cursor    = '';
+      document.body.style.userSelect = '';
     };
-  }, [tableReady]); // re-runs only when the table becomes ready
+  }, [tableReady]);
 }
