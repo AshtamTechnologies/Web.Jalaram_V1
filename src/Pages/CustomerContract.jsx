@@ -18,7 +18,55 @@ import { useResizableColumns } from '../hooks/useResizableColumns';
 ───────────────────────────────────────── */
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
 const STATUS_OPTIONS = ['Active', 'Expired', 'Terminated', 'Pending'];
-
+function parseOccupancyError(err) {
+  if (err?.response?.status !== 400) return null;
+  const raw =
+    err?.response?.data?.message ||
+    err?.response?.data           ||
+    err?.message                  ||
+    '';
+  const str = typeof raw === 'string' ? raw : JSON.stringify(raw);
+  if (str.toLowerCase().includes('occupied')) return str.trim();
+  return null;
+}
+ 
+// ── component ── (needs AlertTriangle, X from lucide — already imported)
+function OccupancyWarningBanner({ messages, onDismiss }) {
+  if (!messages || messages.length === 0) return null;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 12,
+      padding: '13px 16px', borderRadius: 12, marginBottom: 14,
+      background: '#fffbeb', border: '1.5px solid #fbbf24',
+      boxShadow: '0 2px 10px rgba(251,191,36,0.15)',
+    }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+        background: 'rgba(251,191,36,0.15)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <AlertTriangle size={18} color="#d97706" />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#92400e', marginBottom: messages.length > 1 ? 6 : 2 }}>
+          {messages.length === 1 ? 'Hoarding Already Occupied' : `${messages.length} Hoardings Already Occupied`}
+        </div>
+        {messages.map((msg, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#b45309', lineHeight: 1.5, marginTop: i > 0 ? 4 : 0 }}>
+            {messages.length > 1 && <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#d97706', marginTop: 7, flexShrink: 0 }} />}
+            {msg}
+          </div>
+        ))}
+        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 600, color: '#a16207', marginTop: 6 }}>
+          Please choose a different date range or remove these hoardings.
+        </div>
+      </div>
+      <button onClick={onDismiss} style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0, background: 'rgba(251,191,36,0.18)', border: '1px solid rgba(251,191,36,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#d97706' }}>
+        <X size={13} />
+      </button>
+    </div>
+  );
+}
 const FILE_UPLOAD_TYPE_OPTIONS = [
   { value: 'Contract', label: 'Contract Document' },
   { value: 'Banner Design', label: 'Banner Design' },
@@ -1271,6 +1319,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
   const [apiError, setApiError] = useState('');
   const [pickOpen, setPickOpen] = useState(false);
   const [mergePickOpen, setMergePickOpen] = useState(false);
+  const [occupancyWarnings, setOccupancyWarnings] = useState([]);
 
   const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
   const mappedHoardingIds = new Set(maps.map(m => Number(m.hoardingID)));
@@ -1362,7 +1411,40 @@ setMerges(
       setApiError(err?.response?.data?.message || err?.message || 'Failed to add hoardings.');
     } finally { setSaving(false); }
   };
+const handleAdd = async (pickedHoardings) => {
+  if (!pickedHoardings.length) return;
+  setSaving(true);
+  setApiError('');
+  setOccupancyWarnings([]);
 
+  const occupiedMsgs = [];
+  let   successCount  = 0;
+
+  for (const h of pickedHoardings) {
+    try {
+      await apiService.createCustomerContractHoardingMap({
+        customerContractLineID: 0,
+        customerContractID,
+        customerID: Number(customerID),
+        hoardingID: Number(h.hoardingID),
+      });
+      successCount++;
+    } catch (err) {
+      const occ = parseOccupancyError(err);
+      if (occ) {
+        const code = h.hoardingCode ? ` (${h.hoardingCode})` : '';
+        occupiedMsgs.push(occ.replace(/Hoarding\s+\d+/, `Hoarding #${h.hoardingID}${code}`));
+      } else {
+        setApiError(err?.response?.data?.message || err?.message || 'Failed to add one or more hoardings.');
+      }
+    }
+  }
+
+  if (occupiedMsgs.length > 0) setOccupancyWarnings(occupiedMsgs);
+  if (successCount > 0)        await loadAll();
+  setSaving(false);
+};
+ 
   /* ── Remove hoarding ── */
   const handleDeleteMap = async (mapId) => {
     setDeletingMapId(mapId); setApiError('');
@@ -1596,11 +1678,17 @@ setMerges(
       </div>
 
       <div className="hd-section-body">
+        <OccupancyWarningBanner
+          messages={occupancyWarnings}
+          onDismiss={() => setOccupancyWarnings([])}
+        />
+ 
         {apiError && (
           <div className="pg-field-error" style={{ marginBottom: 12 }}>
             <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>{apiError}</span>
-            <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }} onClick={() => setApiError('')}>✕</button>
+            <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }}
+              onClick={() => setApiError('')}>✕</button>
           </div>
         )}
 

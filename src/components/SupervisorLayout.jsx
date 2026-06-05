@@ -9,7 +9,7 @@ import './SupervisorLayout.css';
    SUPERVISOR MENU
 ───────────────────────────────────── */
 const SUP_MENU = [
-    { id: 'sup-dashboard', icon: BarChart3,  label: 'Dashboard' },
+    // { id: 'sup-dashboard', icon: BarChart3,  label: 'Dashboard' },
     { id: 'sup-jobs',      icon: Briefcase,  label: 'Jobs'      },  // ← fixed: was 'sup-hoardings'
     { id: 'workers',       icon: HardHat,    label: 'Workers'   },
 ];

@@ -477,13 +477,6 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                 {tab === 'update' && (
                     <div style={{ padding: '20px 22px', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-                        {/* ── Info strip ── */}
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '10px 14px', background: 'rgba(4,158,223,0.06)', border: '1px solid rgba(4,158,223,0.18)', borderRadius: 11 }}>
-                            <Info size={14} color="#049edf" style={{ marginTop: 1, flexShrink: 0 }} />
-                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 600, color: '#1e40af', lineHeight: 1.5 }}>
-                                Upload both site photos to submit this task. Status will automatically change to <strong>Submitted</strong> and today's date will be recorded.
-                            </span>
-                        </div>
 
                         {/* ── Status preview (read-only) ── */}
                         <div>
@@ -509,14 +502,14 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                         </div>
 
                         {/* ── Completion date (read-only) ── */}
-                        <div>
+                        {/* <div>
                             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Actual Completion Date</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', borderRadius: 11, background: 'rgba(4,158,223,0.04)', border: '1.5px solid rgba(4,158,223,0.22)' }}>
                                 <Calendar size={14} color="#049edf" />
                                 <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#049edf' }}>{displayDate}</span>
                                 <span style={{ marginLeft: 'auto', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 700, color: '#9090a8', background: '#f0f0f8', padding: '2px 8px', borderRadius: 6 }}>Auto-filled</span>
                             </div>
-                        </div>
+                        </div> */}
 
                         {/* ── Photo uploads ── */}
                         <div>
@@ -683,12 +676,12 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                             )}
 
                             {/* instruction banner */}
-                            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10 }}>
+                            {/* <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10 }}>
                                 <AlertTriangle size={13} color="#d97706" style={{ marginTop: 1, flexShrink: 0 }} />
                                 <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 600, color: '#92400e', lineHeight: 1.5 }}>
                                     Take a <strong>near/close-up photo</strong> standing close to the hoarding, and a <strong>far/wide photo</strong> from a distance showing the full installation. Both are required before saving.
                                 </span>
-                            </div>
+                            </div> */}
                         </div>
 
                         {/* ── Error banner ── */}

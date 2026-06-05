@@ -36,14 +36,18 @@ export default function SupervisorDashboard({ onLogout }) {
     sessionStorage.setItem('supTab', id);
   };
 
-  const renderPage = () => {
-    switch (tab) {
-      case 'sup-dashboard': return <SupDashboardHome changeTab={changeTab} />;
-      case 'sup-jobs':      return <SupervisorJobsPage />;
-      case 'workers':       return <WorkersPage />;
-      default:              return <SupDashboardHome changeTab={changeTab} />;
-    }
-  };
+const renderPage = () => {
+  switch (tab) {
+    case 'sup-jobs':
+      return <SupervisorJobsPage />;
+
+    case 'workers':
+      return <WorkersPage />;
+
+    default:
+      return <SupervisorJobsPage />;
+  }
+};
 
   return (
     <SupervisorLayout tab={tab} changeTab={changeTab} onLogout={onLogout}>

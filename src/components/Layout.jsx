@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   LogOut, Menu, X, ChevronDown, ChevronRight,
   IndianRupee, Users, MapPin, Layers, UserCircle,
-  FileText, BarChart3, PlusSquare, Banknote,bibriefcase,Briefcase,
+  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase,CreditCard,
 } from 'lucide-react';
 import Chatbot from './Chatbot';
 import './Layout.css';
@@ -12,17 +12,41 @@ import './Layout.css';
 ───────────────────────────────────── */
 const MENU = [
   {
+  id: 'job',
+  icon: Briefcase,
+  label: 'Job',
+  badge: null,
+  children: [
+    { id: 'Jobs', icon: Briefcase, label: 'Jobs', badge: null },
+    { id: 'JobPayment', icon: CreditCard, label: 'Job Payment', badge: null },
+  ]
+},
+ {
+    id: 'customer',
+    icon: Users,
+    label: 'Customer',
+    badge: null,
+    children: [
+      { id: 'customer-details', icon: UserCircle, label: 'Customer Details' },
+      { id: 'customer-contract', icon: FileText, label: 'Customer Contract' },
+      { id: 'quotation', icon: BarChart3, label: 'Quotation' },
+    ],
+  },
+  { id: 'owners', icon: UserCircle, label: 'Land Lord', badge: null },
+  { id: 'sites', icon: MapPin, label: 'Sites', badge: null },
+  {
     id: 'hoardings',
     icon: Layers,
     label: 'Hoardings',
     badge: null,
     children: [
-      { id: 'new-hoarding',     icon: PlusSquare,  label: 'Maintain Hoarding' },
-      { id: 'hoarding-expense', icon: IndianRupee, label: 'Hoarding Expense'  },
-      { id: 'hoarding-merge',   icon: Layers,      label: 'Hoarding Merge'    },
+      { id: 'new-hoarding', icon: PlusSquare, label: 'Maintain Hoarding' },
+      { id: 'hoarding-expense', icon: IndianRupee, label: 'Hoarding Expense' },
+      // { id: 'hoarding-merge', icon: Layers, label: 'Hoarding Merge' },
     ],
   },
-  { id: 'sites', icon: MapPin, label: 'Sites', badge: null },
+  { id: 'reports', icon: BarChart3, label: 'Reports', badge: null },
+  
   {
     id: 'land-contract',
     icon: FileText,
@@ -30,23 +54,10 @@ const MENU = [
     badge: null,
     children: [
       { id: 'land-contracts', icon: FileText, label: 'Land Contracts' },
-      { id: 'land-payment',   icon: Banknote, label: 'Land Payment'  },
+      { id: 'land-payment', icon: Banknote, label: 'Land Payment' },
     ],
   },
-  {
-    id: 'customer',
-    icon: Users,
-    label: 'Customer',
-    badge: null,
-    children: [
-      { id: 'customer-details',  icon: UserCircle, label: 'Customer Details'  },
-      { id: 'customer-contract', icon: FileText,   label: 'Customer Contract' },
-      { id: 'quotation',         icon: BarChart3,  label: 'Quotation'         },
-    ],
-  },
-  { id: 'owners',  icon: UserCircle, label: 'Owners',  badge: null },
-  { id: 'reports', icon: BarChart3,  label: 'Reports', badge: null },
-   { id: 'Jobs',    icon: Briefcase,  label: 'Jobs',    badge: null },
+  //  { id: 'Jobs', icon: Briefcase, label: 'Jobs', badge: null },
   {
     id: 'configuration',
     icon: FileText,
@@ -82,8 +93,8 @@ function useWindowWidth() {
 ═══════════════════════════════════════════ */
 export default function Layout({ tab, changeTab, onLogout, children }) {
   const [mobileMenu, setMobileMenu] = useState(false);
-  const [dropOpen,   setDropOpen]   = useState(false);
-  const [adminName,  setAdminName]  = useState('Admin');
+  const [dropOpen, setDropOpen] = useState(false);
+  const [adminName, setAdminName] = useState('Admin');
 
   /* Expand the parent that owns the active child on first render */
   const [expandedMenus, setExpandedMenus] = useState(() => {
@@ -96,19 +107,19 @@ export default function Layout({ tab, changeTab, onLogout, children }) {
   });
 
   const dropRef = useRef(null);
-  const width   = useWindowWidth();
+  const width = useWindowWidth();
   const isMobile = width < 1024;
 
   /* Read admin name from localStorage */
-useEffect(() => {
-  const s = JSON.parse(localStorage.getItem('userData') || '{}');
-  setAdminName(
-    `${s?.first_Name || ''} ${s?.last_Name || ''}`.trim() ||
-    s?.name ||
-    s?.Name ||
-    'Admin'
-  );
-}, []);
+  useEffect(() => {
+    const s = JSON.parse(localStorage.getItem('userData') || '{}');
+    setAdminName(
+      `${s?.first_Name || ''} ${s?.last_Name || ''}`.trim() ||
+      s?.name ||
+      s?.Name ||
+      'Admin'
+    );
+  }, []);
 
   /* Close profile dropdown on outside click */
   useEffect(() => {
@@ -187,24 +198,24 @@ useEffect(() => {
       <nav className="sidebar-nav">
         {MENU.map((item) => {
           const { id, icon: Icon, label, badge, children } = item;
-          const hasChildren  = children?.length > 0;
+          const hasChildren = children?.length > 0;
           const parentActive = isParentActive(item);
           const isSelfActive = tab === id;
-          const isExpanded   = !!expandedMenus[id];
-          const isActive     = parentActive || isSelfActive;
+          const isExpanded = !!expandedMenus[id];
+          const isActive = parentActive || isSelfActive;
 
           const parentBtnStyle = isActive
             ? {
-                background: 'rgba(4,158,223,0.13)',
-                color: '#049edf',
-                borderLeft: '3px solid #049edf',
-                paddingLeft: 'calc(1rem - 3px)',
-                fontWeight: 700,
-              }
+              background: 'rgba(4,158,223,0.13)',
+              color: '#049edf',
+              borderLeft: '3px solid #049edf',
+              paddingLeft: 'calc(1rem - 3px)',
+              fontWeight: 700,
+            }
             : {
-                borderLeft: '3px solid transparent',
-                paddingLeft: 'calc(1rem - 3px)',
-              };
+              borderLeft: '3px solid transparent',
+              paddingLeft: 'calc(1rem - 3px)',
+            };
 
           return (
             <div key={id}>

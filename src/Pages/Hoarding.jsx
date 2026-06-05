@@ -15,7 +15,7 @@ import './Common1.css';
 /* ─────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────── */
-const MATERIAL_OPTIONS = ['Flex', 'Vinyl', 'Metal', 'LED', 'Acrylic'];
+const MATERIAL_OPTIONS = ['Terrace Structure','Pillar Structure', 'Channel Set', 'Wooden Set'];
 const STATUS_OPTIONS = ['Active', 'Inactive', 'Available', 'Occupied', 'Under Maintenance'];
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
 const HISTORY_PER_PAGE = 3;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import {
   Briefcase, Search, RefreshCw, X, AlertCircle, Check,
@@ -10,7 +10,8 @@ import {
   ArrowLeft, User, Users, Building2, LayoutGrid,
 } from 'lucide-react';
 import './Common1.css';
-import { apiService } from '../api/api';
+import { apiService, API_ROOT_URL } from '../api/api';
+
 
 /* ─────────────────────────────────────────
    CONSTANTS
@@ -149,6 +150,7 @@ function BannerStrip({ customerContractID }) {
   const [loading, setLoading] = useState(true);
   const [lightbox, setLightbox] = useState(null);
 
+
   useEffect(() => {
     if (!customerContractID) { setLoading(false); return; }
     apiService.getContractBannerImages(customerContractID)
@@ -201,7 +203,8 @@ function TaskPhotosSection({ jobTaskID }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [lightbox, setLightbox] = useState(null); // { url, index }
-  const API_BASE = 'https://api.jalaram-ad.ashtamtechnologies.com';
+  // const API_BASE = 'https://api.jalaram-ad.ashtamtechnologies.com';
+
 
   useEffect(() => {
     if (!jobTaskID) { setLoading(false); return; }
@@ -243,6 +246,7 @@ function TaskPhotosSection({ jobTaskID }) {
     // Log to confirm field names — remove after fix confirmed
     console.log('[BUILD URL att]', JSON.stringify(att));
 
+
     const path =
       att.photoFilePath ??
       att.PhotoFilePath ??
@@ -259,7 +263,7 @@ function TaskPhotosSection({ jobTaskID }) {
 
     if (!path || path === '') return null;
     if (path.startsWith('http')) return path;
-    return `${API_BASE}${path.startsWith('/') ? '' : '/'}${path}`;
+    return `${API_ROOT_URL}${path.startsWith('/') ? '' : '/'}${path}`;
   };
   const PhotoGrid = ({ items, label, color }) => (
     items.length === 0 ? null : (
@@ -380,11 +384,32 @@ function TaskPhotosSection({ jobTaskID }) {
     </>
   );
 }
+function getSiteAddress(h) {
+  if (!h) return '';
+  const s = h.site || null;
+  if (s) {
+    const addr = [s.addressLine1, s.addressLine2].filter(Boolean).join(', ');
+    const city = [s.city, s.district].filter(Boolean).join(', ');
+    const full = [addr, city].filter(Boolean).join(' — ');
+    if (full) return full;
+  }
+  const flatAddr = [h.addressLine1 ?? h.AddressLine1 ?? '', h.addressLine2 ?? h.AddressLine2 ?? ''].filter(Boolean).join(', ');
+  const flatCity = [h.city ?? h.City ?? h.siteCity ?? h.SiteCity ?? '', h.district ?? h.District ?? ''].filter(Boolean).join(', ');
+  const flatFull = [flatAddr, flatCity].filter(Boolean).join(' — ');
+  if (flatFull) return flatFull;
+  const landmark = h.landmark ?? h.Landmark ?? '';
+  if (landmark) return landmark;
+  return h.hoardingCode ?? h.HoardingCode ?? '';
+}
 /* ═══════════════════════════════════════════
    TASK WORKER CARD  (full inline section, no dropdown)
 ═══════════════════════════════════════════ */
-function TaskWorkerCard({ task, workers, jobRequestID, showToast }) {
-  const [assignments, setAssignments] = useState([]);
+/* ═══════════════════════════════════════════
+   MERGED TASK WORKER CARD
+   One shared worker picker for all merged tasks
+═══════════════════════════════════════════ */
+function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, showToast, flag, allAttachments = [] }) {
+  const [assignmentsByTask, setAssignmentsByTask] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(null);
@@ -393,233 +418,403 @@ function TaskWorkerCard({ task, workers, jobRequestID, showToast }) {
   const [selectedIds, setSelectedIds] = useState([]);
   const [primaryId, setPrimaryId] = useState(null);
 
-  const fetchAssignments = useCallback(async () => {
+  const fetchAllAssignments = useCallback(async () => {
     setLoading(true);
     try {
-      const raw = await apiService.getJobTaskAssignsByTaskId(task.jobTaskID);
-      setAssignments(extractArray(raw).map(normalizeAssignment));
-    } catch { setAssignments([]); } finally { setLoading(false); }
-  }, [task.jobTaskID]);
-  useEffect(() => { fetchAssignments(); }, [fetchAssignments]);
+      const results = await Promise.all(
+        groupTasks.map(async task => {
+          const raw = await apiService.getJobTaskAssignsByTaskId(task.jobTaskID);
+          return { taskID: task.jobTaskID, assignments: extractArray(raw).map(normalizeAssignment) };
+        })
+      );
+      const map = {};
+      results.forEach(r => { map[r.taskID] = r.assignments; });
+      setAssignmentsByTask(map);
+    } catch { setAssignmentsByTask({}); }
+    finally { setLoading(false); }
+  }, [groupTasks]);
 
-  const assignedIds = new Set(assignments.map(a => a.id));
+  useEffect(() => { fetchAllAssignments(); }, [fetchAllAssignments]);
+
+  const allAssignments = useMemo(() => {
+    const seen = new Map();
+    Object.values(assignmentsByTask).forEach(list => {
+      list.forEach(a => {
+        if (!seen.has(a.id)) seen.set(a.id, a);
+      });
+    });
+    return [...seen.values()];
+  }, [assignmentsByTask]);
+
+  const assignedIds = new Set(allAssignments.map(a => a.id));
+
   const filteredWorkers = workers.filter(w => {
     if (assignedIds.has(w.id)) return false;
     if (!query.trim()) return true;
-    return w.name.toLowerCase().includes(query.toLowerCase()) || (w.role || '').toLowerCase().includes(query.toLowerCase());
+    return w.name.toLowerCase().includes(query.toLowerCase()) ||
+      (w.role || '').toLowerCase().includes(query.toLowerCase());
   });
-  const toggle = (id) => setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
+
+  const toggle = (id) => setSelectedIds(p =>
+    p.includes(id) ? p.filter(x => x !== id) : [...p, id]
+  );
 
   const handleAssign = async () => {
     if (!selectedIds.length) return;
     setSaving(true);
     try {
-      for (const wid of selectedIds)
-        await apiService.createJobTaskAssign({ jobTaskAssignID: 0, jobTaskID: task.jobTaskID, jobRequestID, hoardingID: task.hoardingID, id: wid, isPrimary: primaryId === wid });
+      for (const task of groupTasks) {
+        for (const wid of selectedIds) {
+          await apiService.createJobTaskAssign({
+            jobTaskAssignID: 0,
+            jobTaskID: task.jobTaskID,
+            jobRequestID,
+            hoardingID: task.hoardingID,
+            id: wid,
+            isPrimary: primaryId === wid,
+          });
+        }
+      }
       setSelectedIds([]); setPrimaryId(null); setPickerOpen(false); setQuery('');
-      await fetchAssignments();
-      showToast('Worker(s) assigned!', 'success');
-    } catch (err) { showToast(err?.message || 'Failed to assign.', 'error'); } finally { setSaving(false); }
-  };
-  const handleTogglePrimary = async (asgn) => {
-    try { await apiService.updateJobTaskAssign({ ...asgn, isPrimary: !asgn.isPrimary }); await fetchAssignments(); } catch { }
-  };
-  const handleDelete = async (assignID) => {
-    if (!window.confirm('Remove this worker from the task?')) return;
-    setDeleting(assignID);
-    try { await apiService.deleteJobTaskAssign(assignID); setAssignments(p => p.filter(a => a.jobTaskAssignID !== assignID)); showToast('Worker removed.', 'success'); }
-    catch (err) { showToast(err?.message || 'Failed.', 'error'); } finally { setDeleting(null); }
+      await fetchAllAssignments();
+      showToast('Worker(s) assigned to all merged tasks!', 'success');
+    } catch (err) {
+      showToast(err?.message || 'Failed to assign.', 'error');
+    } finally { setSaving(false); }
   };
 
-  const ts = TASK_STATUS_COLORS[task.status] || TASK_STATUS_COLORS['Open'];
+  const handleTogglePrimary = async (asgn) => {
+    try {
+      const allForWorker = Object.values(assignmentsByTask)
+        .flat()
+        .filter(a => a.id === asgn.id);
+      await Promise.all(
+        allForWorker.map(a => apiService.updateJobTaskAssign({ ...a, isPrimary: !asgn.isPrimary }))
+      );
+      await fetchAllAssignments();
+    } catch { }
+  };
+
+  const handleDelete = async (workerID) => {
+    if (!window.confirm('Remove this worker from all merged tasks?')) return;
+    setDeleting(workerID);
+    try {
+      const allForWorker = Object.values(assignmentsByTask)
+        .flat()
+        .filter(a => a.id === workerID);
+      await Promise.all(
+        allForWorker.map(a => apiService.deleteJobTaskAssign(a.jobTaskAssignID))
+      );
+      await fetchAllAssignments();
+      showToast('Worker removed from all merged tasks.', 'success');
+    } catch (err) {
+      showToast(err?.message || 'Failed.', 'error');
+    } finally { setDeleting(null); }
+  };
+
+  /* ── Photo helpers ── */
+const buildUrl = (att) => {
+    const path = att.photoFilePath ?? att.PhotoFilePath ?? att.photoFileUrl ?? att.PhotoFileUrl ?? att.filePath ?? att.FilePath ?? att.imageUrl ?? att.ImageUrl ?? att.url ?? att.Url ?? '';
+    if (!path) return null;
+    if (path.startsWith('http')) return path;
+    return `${API_ROOT_URL}${path.startsWith('/') ? '' : '/'}${path}`;
+  };
+
+  const PhotoStrip = ({ items, label, color }) => {
+    if (!items.length) return null;
+    return (
+      <div>
+        <div style={{
+          fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800,
+          color, textTransform: 'uppercase', letterSpacing: '0.06em',
+          marginBottom: 5, display: 'flex', alignItems: 'center', gap: 5,
+        }}>
+          {label}
+          <span style={{ background: color, color: '#fff', borderRadius: 20, padding: '0 6px', fontSize: 9, fontWeight: 900 }}>
+            {items.length}
+          </span>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
+          {items.map((att, i) => {
+            const url = buildUrl(att);
+            if (!url) return null;
+            return (
+              <div key={i}
+                style={{
+                  width: 68, height: 52, borderRadius: 8, overflow: 'hidden',
+                  border: `2px solid ${color}35`, cursor: 'zoom-in', flexShrink: 0,
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.10)',
+                  transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.transform = 'scale(1.08)';
+                  e.currentTarget.style.borderColor = color;
+                  e.currentTarget.style.boxShadow = `0 4px 14px ${color}40`;
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.transform = 'scale(1)';
+                  e.currentTarget.style.borderColor = `${color}35`;
+                  e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,0.10)';
+                }}
+                onClick={() => window.open(url, '_blank')}
+              >
+                <img src={url} alt={`${label} ${i + 1}`}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                  onError={e => {
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.parentElement.innerHTML =
+                      '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:18px;background:#f0f0f8">🖼️</div>';
+                  }}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div style={{ background: '#fff', borderRadius: 14, border: `1.5px solid ${ts.border}`, overflow: 'hidden', marginBottom: 12 }}>
-      {/* Task header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 18px', background: ts.bg, borderBottom: `1px solid ${ts.border}` }}>
-        <div style={{ width: 10, height: 10, borderRadius: '50%', background: ts.color, flexShrink: 0 }} />
-        <div style={{ flex: 1 }}>
-          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 900, color: '#1a1a2e' }}>Task #{task.jobTaskID}</span>
-          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 600, color: '#7878a0', marginLeft: 8 }}>· Hoarding #{task.hoardingID}</span>
-          {task.actualCompletionDate && (
-            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', marginLeft: 10, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-              <Calendar size={10} /> {fmtDate(task.actualCompletionDate)}
-            </span>
-          )}
-        </div>
-        <TaskStatusBadge status={task.status} />
+    <div style={{ padding: '14px 18px' }}>
+
+      {/* ── Assigned Workers label ── */}
+      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: '#7878a0', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
+        <Users size={12} color="#049edf" /> Assigned Workers
+        {allAssignments.length > 0 && (
+          <span style={{ background: 'rgba(4,158,223,0.12)', color: '#049edf', borderRadius: 20, padding: '0 7px', fontSize: 10, fontWeight: 900 }}>
+            {allAssignments.length}
+          </span>
+        )}
+        <span style={{ marginLeft: 4, fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 700, color: '#9090a8', fontStyle: 'italic' }}>
+          (shared across all {groupTasks.length} hoardings)
+        </span>
       </div>
 
-      {/* Workers section */}
-      <div style={{ padding: '14px 18px' }}>
-        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: '#7878a0', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 5 }}>
-          <Users size={12} color="#049edf" /> Assigned Workers
-          {assignments.length > 0 && (
-            <span style={{ background: 'rgba(4,158,223,0.12)', color: '#049edf', borderRadius: 20, padding: '0 7px', fontSize: 10, fontWeight: 900 }}>{assignments.length}</span>
-          )}
+      {loading ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#b0b0c8', fontFamily: 'Nunito,sans-serif', fontSize: 12 }}>
+          <Loader2 size={14} className="pg-spin" /> Loading assignments…
         </div>
+      ) : (
+        <>
+          {/* ── Assigned worker chips ── */}
+          {allAssignments.length > 0 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+              {allAssignments.map(asgn => {
+                const w = workers.find(x => x.id === asgn.id);
+                const name = w?.name || `Worker #${asgn.id}`;
+                const [bgC, txtC] = avatarColor(name);
+                const isDel = deleting === asgn.id;
+                return (
+                  <div key={asgn.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px 6px 6px', borderRadius: 30, background: bgC, border: `1.5px solid ${txtC}25`, opacity: isDel ? 0.5 : 1, transition: 'opacity 0.15s' }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: txtC, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 900, flexShrink: 0 }}>
+                      {name[0].toUpperCase()}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: txtC, whiteSpace: 'nowrap' }}>{name}</div>
+                      {w?.role && <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, color: `${txtC}90`, fontWeight: 600 }}>{w.role}</div>}
+                    </div>
+                    {asgn.isPrimary && (
+                      <span style={{ background: `${txtC}18`, color: txtC, borderRadius: 20, padding: '1px 7px', fontSize: 9.5, fontWeight: 900, fontFamily: 'Nunito,sans-serif', whiteSpace: 'nowrap' }}>PRIMARY</span>
+                    )}
+                    <button onClick={() => handleTogglePrimary(asgn)} title={asgn.isPrimary ? 'Remove primary' : 'Set as primary'}
+                      style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
+                      <Star size={13} color={asgn.isPrimary ? '#f59e0b' : `${txtC}50`} fill={asgn.isPrimary ? '#f59e0b' : 'none'} />
+                    </button>
+                    <button onClick={() => handleDelete(asgn.id)} disabled={isDel}
+                      style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(220,38,38,0.09)', border: '1px solid rgba(220,38,38,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isDel ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
+                      {isDel ? <Loader2 size={10} className="pg-spin" color="#dc2626" /> : <X size={11} color="#dc2626" />}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-        {loading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#b0b0c8', fontFamily: 'Nunito,sans-serif', fontSize: 12 }}>
-            <Loader2 size={14} className="pg-spin" /> Loading assignments…
-          </div>
-        ) : (
-          <>
-            {/* Assigned worker chips */}
-            {assignments.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                {assignments.map(asgn => {
-                  const w = workers.find(x => x.id === asgn.id);
-                  const name = w?.name || `Worker #${asgn.id}`;
-                  const [bgC, txtC] = avatarColor(name);
-                  const isDel = deleting === asgn.jobTaskAssignID;
+          {/* ── Empty state ── */}
+          {allAssignments.length === 0 && !pickerOpen && (
+            <div style={{ padding: '12px 0', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#b0b0c8', fontWeight: 600, fontStyle: 'italic' }}>
+              No workers assigned to these tasks yet
+            </div>
+          )}
+
+          {/* ── Add worker button ── */}
+          {!pickerOpen && (
+            <button
+              onClick={() => { setPickerOpen(true); setQuery(''); setSelectedIds([]); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 10, border: '1.5px dashed rgba(4,158,223,0.4)', background: 'rgba(4,158,223,0.04)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf', transition: 'all 0.15s' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(4,158,223,0.09)'; e.currentTarget.style.borderColor = '#049edf'; }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(4,158,223,0.04)'; e.currentTarget.style.borderColor = 'rgba(4,158,223,0.4)'; }}
+            >
+              <UserPlus size={14} /> {allAssignments.length > 0 ? 'Add More Workers' : 'Assign Workers'}
+            </button>
+          )}
+
+          {/* ── Worker Picker ── */}
+          {pickerOpen && (
+            <div style={{ marginTop: 4, border: '1.5px solid #e0e8f8', borderRadius: 12, overflow: 'hidden', background: '#fafcff' }}>
+
+              {/* Picker header */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'linear-gradient(135deg,#eff6ff,#f5f0ff)', borderBottom: '1px solid #e0e8f8' }}>
+                <UserPlus size={15} color="#049edf" />
+                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e', flex: 1 }}>
+                  Assign Workers to All {groupTasks.length} Merged Hoardings
+                </span>
+                {selectedIds.length > 0 && (
+                  <span style={{ background: '#049edf', color: '#fff', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 900, fontFamily: 'Nunito,sans-serif' }}>
+                    {selectedIds.length} selected
+                  </span>
+                )}
+                <button
+                  onClick={() => { setPickerOpen(false); setSelectedIds([]); setQuery(''); }}
+                  style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #e0e8f8', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#7878a0' }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div style={{ padding: '10px 14px', borderBottom: '1px solid #eeeefc' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #e0e8f8', borderRadius: 9, padding: '8px 12px' }}>
+                  <Search size={13} color="#c0c8e0" style={{ flexShrink: 0 }} />
+                  <input
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder="Search workers by name or role…"
+                    style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}
+                    autoFocus
+                  />
+                  {query && <X size={12} style={{ cursor: 'pointer', color: '#c0c0d8' }} onClick={() => setQuery('')} />}
+                </div>
+              </div>
+
+              {/* Worker list */}
+              <div style={{ maxHeight: 240, overflowY: 'auto' }}>
+                {filteredWorkers.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '24px 0', fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#b0b0c8', fontWeight: 600 }}>
+                    {query ? `No workers match "${query}"` : 'All available workers are already assigned'}
+                  </div>
+                ) : filteredWorkers.map(w => {
+                  const isSel = selectedIds.includes(w.id);
+                  const isPrim = primaryId === w.id;
+                  const [bgC, txtC] = avatarColor(w.name);
                   return (
-                    <div key={asgn.jobTaskAssignID} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 10px 6px 6px', borderRadius: 30, background: bgC, border: `1.5px solid ${txtC}25`, opacity: isDel ? 0.5 : 1, transition: 'opacity 0.15s' }}>
-                      {/* Avatar */}
-                      <div style={{ width: 28, height: 28, borderRadius: '50%', background: txtC, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 900, flexShrink: 0 }}>
-                        {name[0].toUpperCase()}
+                    <div
+                      key={w.id}
+                      onClick={() => toggle(w.id)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', cursor: 'pointer', background: isSel ? 'rgba(4,158,223,0.05)' : '#fff', borderBottom: '1px solid #f4f6fb', transition: 'background 0.12s' }}
+                      onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = '#f4f8ff'; }}
+                      onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = '#fff'; }}
+                    >
+                      <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: `2.5px solid ${isSel ? '#049edf' : '#d0d8e8'}`, background: isSel ? '#049edf' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.12s' }}>
+                        {isSel && <Check size={10} color="#fff" strokeWidth={3} />}
                       </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: txtC, whiteSpace: 'nowrap' }}>{name}</div>
-                        {w?.role && <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, color: `${txtC}90`, fontWeight: 600 }}>{w.role}</div>}
+                      <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, background: bgC, border: `1.5px solid ${txtC}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: txtC }}>
+                        {w.name[0].toUpperCase()}
                       </div>
-                      {asgn.isPrimary && (
-                        <span style={{ background: `${txtC}18`, color: txtC, borderRadius: 20, padding: '1px 7px', fontSize: 9.5, fontWeight: 900, fontFamily: 'Nunito,sans-serif', whiteSpace: 'nowrap' }}>PRIMARY</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>{w.name}</div>
+                        {w.role && <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600, marginTop: 1 }}>{w.role}</div>}
+                      </div>
+                      {isSel && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setPrimaryId(isPrim ? null : w.id); }}
+                          title={isPrim ? 'Remove primary' : 'Set as primary'}
+                          style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, border: `1.5px solid ${isPrim ? 'rgba(245,158,11,0.5)' : '#e0e8f0'}`, background: isPrim ? 'rgba(245,158,11,0.09)' : '#f8f8fd', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: isPrim ? '#d97706' : '#9090a8', flexShrink: 0 }}
+                        >
+                          <Star size={11} color={isPrim ? '#f59e0b' : '#c0c0d8'} fill={isPrim ? '#f59e0b' : 'none'} />
+                          {isPrim ? 'Primary' : 'Set Primary'}
+                        </button>
                       )}
-                      {/* Star */}
-                      <button onClick={() => handleTogglePrimary(asgn)} title={asgn.isPrimary ? 'Remove primary' : 'Set as primary'}
-                        style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
-                        <Star size={13} color={asgn.isPrimary ? '#f59e0b' : `${txtC}50`} fill={asgn.isPrimary ? '#f59e0b' : 'none'} />
-                      </button>
-                      {/* Remove */}
-                      <button onClick={() => handleDelete(asgn.jobTaskAssignID)} disabled={isDel}
-                        style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(220,38,38,0.09)', border: '1px solid rgba(220,38,38,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isDel ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
-                        {isDel ? <Loader2 size={10} className="pg-spin" color="#dc2626" /> : <X size={11} color="#dc2626" />}
-                      </button>
                     </div>
                   );
                 })}
               </div>
-            )}
 
-            {assignments.length === 0 && !pickerOpen && (
-              <div style={{ padding: '12px 0', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#b0b0c8', fontWeight: 600, fontStyle: 'italic' }}>
-                No workers assigned to this task yet
-              </div>
-            )}
-
-            {/* Add worker button */}
-            {!pickerOpen && (
-              <button onClick={() => { setPickerOpen(true); setQuery(''); setSelectedIds([]); }}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 10, border: '1.5px dashed rgba(4,158,223,0.4)', background: 'rgba(4,158,223,0.04)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf', transition: 'all 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(4,158,223,0.09)'; e.currentTarget.style.borderColor = '#049edf'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(4,158,223,0.04)'; e.currentTarget.style.borderColor = 'rgba(4,158,223,0.4)'; }}>
-                <UserPlus size={14} /> {assignments.length > 0 ? 'Add More Workers' : 'Assign Workers'}
-              </button>
-            )}
-
-            {/* ── Worker Picker (inline, no dropdown) ── */}
-            {pickerOpen && (
-              <div style={{ marginTop: 4, border: '1.5px solid #e0e8f8', borderRadius: 12, overflow: 'hidden', background: '#fafcff' }}>
-                {/* Picker header */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'linear-gradient(135deg,#eff6ff,#f5f0ff)', borderBottom: '1px solid #e0e8f8' }}>
-                  <UserPlus size={15} color="#049edf" />
-                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e', flex: 1 }}>Select Workers to Assign</span>
-                  {selectedIds.length > 0 && (
-                    <span style={{ background: '#049edf', color: '#fff', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 900, fontFamily: 'Nunito,sans-serif' }}>
-                      {selectedIds.length} selected
-                    </span>
-                  )}
-                  <button onClick={() => { setPickerOpen(false); setSelectedIds([]); setQuery(''); }}
-                    style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #e0e8f8', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#7878a0' }}>
-                    <X size={14} />
+              {/* Picker footer */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid #e8edf8', background: '#f4f8ff' }}>
+                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#7878a0', fontWeight: 600 }}>
+                  {selectedIds.length === 0
+                    ? `Will assign to all ${groupTasks.length} hoardings`
+                    : `${selectedIds.length} worker${selectedIds.length !== 1 ? 's' : ''} → ${groupTasks.length} hoardings`}
+                </span>
+                <div style={{ display: 'flex', gap: 9 }}>
+                  <button className="pg-btn-cancel" onClick={() => { setPickerOpen(false); setSelectedIds([]); setQuery(''); }}>
+                    Cancel
+                  </button>
+                  <button
+                    className="pg-btn-save"
+                    onClick={handleAssign}
+                    disabled={selectedIds.length === 0 || saving}
+                  >
+                    {saving
+                      ? <><Loader2 size={13} className="pg-spin" /> Assigning…</>
+                      : <><UserPlus size={13} /> Assign {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}</>}
                   </button>
                 </div>
-
-                {/* Search */}
-                <div style={{ padding: '10px 14px', borderBottom: '1px solid #eeeefc' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1.5px solid #e0e8f8', borderRadius: 9, padding: '8px 12px' }}>
-                    <Search size={13} color="#c0c8e0" style={{ flexShrink: 0 }} />
-                    <input
-                      value={query} onChange={e => setQuery(e.target.value)}
-                      placeholder="Search workers by name or role…"
-                      style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}
-                      autoFocus
-                    />
-                    {query && <X size={12} style={{ cursor: 'pointer', color: '#c0c0d8' }} onClick={() => setQuery('')} />}
-                  </div>
-                </div>
-
-                {/* Worker list */}
-                <div style={{ maxHeight: 240, overflowY: 'auto' }}>
-                  {filteredWorkers.length === 0
-                    ? <div style={{ textAlign: 'center', padding: '24px 0', fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#b0b0c8', fontWeight: 600 }}>
-                      {query ? `No workers match "${query}"` : 'All available workers are already assigned'}
-                    </div>
-                    : filteredWorkers.map(w => {
-                      const isSel = selectedIds.includes(w.id);
-                      const isPrim = primaryId === w.id;
-                      const [bgC, txtC] = avatarColor(w.name);
-                      return (
-                        <div key={w.id}
-                          onClick={() => toggle(w.id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '11px 16px', cursor: 'pointer', background: isSel ? 'rgba(4,158,223,0.05)' : '#fff', borderBottom: '1px solid #f4f6fb', transition: 'background 0.12s' }}
-                          onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = '#f4f8ff'; }}
-                          onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = '#fff'; }}>
-                          {/* Checkbox */}
-                          <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, border: `2.5px solid ${isSel ? '#049edf' : '#d0d8e8'}`, background: isSel ? '#049edf' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.12s' }}>
-                            {isSel && <Check size={10} color="#fff" strokeWidth={3} />}
-                          </div>
-                          {/* Avatar */}
-                          <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, background: bgC, border: `1.5px solid ${txtC}25`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: txtC }}>
-                            {w.name[0].toUpperCase()}
-                          </div>
-                          {/* Info */}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>{w.name}</div>
-                            {w.role && <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600, marginTop: 1 }}>{w.role}</div>}
-                          </div>
-                          {/* Primary toggle (only when selected) */}
-                          {isSel && (
-                            <button onClick={e => { e.stopPropagation(); setPrimaryId(isPrim ? null : w.id); }}
-                              title={isPrim ? 'Remove primary' : 'Set as primary'}
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, border: `1.5px solid ${isPrim ? 'rgba(245,158,11,0.5)' : '#e0e8f0'}`, background: isPrim ? 'rgba(245,158,11,0.09)' : '#f8f8fd', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: isPrim ? '#d97706' : '#9090a8', flexShrink: 0 }}>
-                              <Star size={11} color={isPrim ? '#f59e0b' : '#c0c0d8'} fill={isPrim ? '#f59e0b' : 'none'} />
-                              {isPrim ? 'Primary' : 'Set Primary'}
-                            </button>
-                          )}
-                        </div>
-                      );
-                    })
-                  }
-                </div>
-
-                {/* Picker footer */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid #e8edf8', background: '#f4f8ff' }}>
-                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#7878a0', fontWeight: 600 }}>
-                    {selectedIds.length === 0 ? 'Select workers above' : `${selectedIds.length} worker${selectedIds.length !== 1 ? 's' : ''} selected`}
-                  </span>
-                  <div style={{ display: 'flex', gap: 9 }}>
-                    <button className="pg-btn-cancel" onClick={() => { setPickerOpen(false); setSelectedIds([]); setQuery(''); }}>
-                      Cancel
-                    </button>
-                    <button
-                      className="pg-btn-save"
-                      onClick={handleAssign}
-                      disabled={selectedIds.length === 0 || saving}
-                    >
-                      {saving
-                        ? <><Loader2 size={13} className="pg-spin" /> Assigning…</>
-                        : <><UserPlus size={13} /> Assign {selectedIds.length > 0 ? `(${selectedIds.length})` : ''}</>}
-                    </button>
-                  </div>
-                </div>
               </div>
-            )}
-          </>
-        )}
-          <TaskPhotosSection jobTaskID={task.jobTaskID} />
-      </div>
+
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Task Photos (Near / Far / Other) ── */}
+      {groupTasks.map(task => {
+        if (!task.jobTaskID) return null;
+
+        const taskPhotos = allAttachments.filter(
+          a => Number(a.jobTaskID ?? a.JobTaskID ?? 0) === Number(task.jobTaskID)
+        );
+        if (taskPhotos.length === 0) return null;
+
+        const nearPhotos  = taskPhotos.filter(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('near'));
+        const farPhotos   = taskPhotos.filter(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('far'));
+        const otherPhotos = taskPhotos.filter(a => {
+          const t = (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase();
+          return !t.includes('near') && !t.includes('far');
+        });
+
+        return (
+          <div key={task.jobTaskID} style={{
+            marginTop: 14,
+            padding: '10px 14px',
+            background: 'rgba(4,158,223,0.03)',
+            border: '1.5px solid rgba(4,158,223,0.12)',
+            borderRadius: 10,
+          }}>
+            {/* Header */}
+            <div style={{
+              fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 900,
+              color: '#049edf', textTransform: 'uppercase', letterSpacing: '0.06em',
+              display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10,
+            }}>
+              📷 Worker Photos
+              {task.hoardingCode && (
+                <span style={{
+                  fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 700,
+                  color: '#7878a0', textTransform: 'none', letterSpacing: 0,
+                }}>
+                  · {task.hoardingCode}
+                </span>
+              )}
+              <span style={{
+                background: '#049edf', color: '#fff', borderRadius: 20,
+                padding: '0 7px', fontSize: 9, fontWeight: 900,
+              }}>
+                {taskPhotos.length}
+              </span>
+            </div>
+
+            {/* Photo strips */}
+            <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
+              <PhotoStrip items={nearPhotos}  label="Near"  color="#049edf" />
+              <PhotoStrip items={farPhotos}   label="Far"   color="#7c3aed" />
+              <PhotoStrip items={otherPhotos} label="Other" color="#16a34a" />
+            </div>
+          </div>
+        );
+      })}
+
     </div>
   );
 }
@@ -627,10 +822,26 @@ function TaskWorkerCard({ task, workers, jobRequestID, showToast }) {
 /* ═══════════════════════════════════════════
    JOB DETAIL PAGE  (full page, no popup)
 ═══════════════════════════════════════════ */
-function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast }) {
+function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, allAttachments = [] }) {
   const done = job.tasks.filter(t => t.status === 'Completed' || t.status === 'Submitted').length;
   const pct = job.tasks.length > 0 ? Math.round((done / job.tasks.length) * 100) : 0;
   const canAccept = job.jobStatus !== 'Accepted' && job.jobStatus !== 'Completed';
+
+  // ── Group merged tasks together, keep singles separate ──
+  const { mergedGroups, singleTasks } = useMemo(() => {
+    const mergedMap = new Map(); // mergeAlongFlag → [tasks]
+    const singles = [];
+    job.tasks.forEach(task => {
+      if (task.isMerged) {
+        const key = task.mergeAlongFlag || 'H';
+        if (!mergedMap.has(key)) mergedMap.set(key, []);
+        mergedMap.get(key).push(task);
+      } else {
+        singles.push(task);
+      }
+    });
+    return { mergedGroups: [...mergedMap.entries()], singleTasks: singles };
+  }, [job.tasks]);
 
   return (
     <div className="hd-form-page">
@@ -661,10 +872,8 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast })
         <div className="container-fluid px-0">
           <div className="row g-4">
 
-            {/* ── Left col: Banner + Job info ── */}
+            {/* ── Left col ── */}
             <div className="col-12 col-lg-4">
-
-              {/* Banner card */}
               {job.customerContractID > 0 && (
                 <div className="hd-section-card" style={{ marginBottom: 16 }}>
                   <div className="hd-section-head">
@@ -679,8 +888,6 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast })
                   </div>
                 </div>
               )}
-
-              {/* Job info card */}
               <div className="hd-section-card">
                 <div className="hd-section-head">
                   <div className="hd-section-icon-wrap"><Briefcase size={14} color="#049edf" /></div>
@@ -708,8 +915,6 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast })
                       </div>
                     </div>
                   ))}
-
-                  {/* Progress */}
                   <div style={{ marginTop: 14 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                       <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#5a5a78' }}>Task Progress</span>
@@ -730,28 +935,85 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast })
                   <div className="hd-section-icon-wrap"><ClipboardList size={14} color="#049edf" /></div>
                   <div>
                     <div className="hd-section-title">Tasks &amp; Worker Assignment</div>
-                    <div className="hd-section-sub">{job.tasks.length} task{job.tasks.length !== 1 ? 's' : ''} · Click "Assign Workers" on each task to manage</div>
+                    <div className="hd-section-sub">{job.tasks.length} task{job.tasks.length !== 1 ? 's' : ''} · Assign workers to each task below</div>
                   </div>
                   <span style={{ marginLeft: 'auto', background: 'rgba(4,158,223,0.1)', color: '#049edf', border: '1px solid rgba(4,158,223,0.25)', borderRadius: 20, padding: '2px 10px', fontSize: 11.5, fontWeight: 800, fontFamily: 'Nunito,sans-serif' }}>
                     {job.tasks.length} task{job.tasks.length !== 1 ? 's' : ''}
                   </span>
                 </div>
                 <div className="hd-section-body">
-                  {job.tasks.length === 0
-                    ? <div style={{ textAlign: 'center', padding: '32px 0', color: '#b0b0c8' }}>
+                  {job.tasks.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '32px 0', color: '#b0b0c8' }}>
                       <ClipboardList size={32} color="#e0e0f0" style={{ marginBottom: 10 }} />
                       <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 700, color: '#c0c0c8' }}>No tasks assigned to this job</div>
                     </div>
-                    : job.tasks.map(task => (
-                      <TaskWorkerCard
-                        key={task.jobTaskID}
-                        task={task}
-                        workers={workers}
-                        jobRequestID={job.jobRequestID}
-                        showToast={showToast}
-                      />
-                    ))
-                  }
+                  ) : (
+                    <>
+                      {/* ── Merged group cards ── */}
+                      {mergedGroups.map(([flag, groupTasks]) => (
+                        <div key={flag} style={{ marginBottom: 16, border: '1.5px solid rgba(124,58,237,0.3)', borderRadius: 14, overflow: 'hidden' }}>
+
+                          {/* Group header */}
+                          <div style={{ padding: '12px 18px', background: 'linear-gradient(135deg, rgba(124,58,237,0.07), rgba(124,58,237,0.03))', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                            <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{flag === 'H' ? '↔' : '↕'}</div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#7c3aed' }}>
+                                  {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                                </span>
+                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#9090a8' }}>
+                                  · {groupTasks.length} hoardings combined
+                                </span>
+                                {groupTasks.map(t => t.hoardingCode).filter(Boolean).map(code => (
+                                  <span key={code} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)' }}>
+                                    {code}
+                                  </span>
+                                ))}
+                              </div>
+                              {[...new Set(groupTasks.map(t => t.siteAddress).filter(Boolean))].map((addr, i) => (
+                                <div key={i} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: i > 0 ? 3 : 0 }}>
+                                  <MapPin size={11} color="#9090a8" style={{ flexShrink: 0, marginTop: 2 }} />
+                                  <span>{addr}</span>
+                                </div>
+                              ))}
+                              {/* Task IDs row */}
+                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                                {groupTasks.map(t => (
+                                  <span key={t.jobTaskID} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.07)', color: '#049edf', border: '1px solid rgba(4,158,223,0.18)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    Task #{t.jobTaskID} <TaskStatusBadge status={t.status} />
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ── ONE shared worker assignment for all merged tasks ── */}
+                          <MergedTaskWorkerCard
+                            groupTasks={groupTasks}
+                            workers={workers}
+                            jobRequestID={job.jobRequestID}
+                            showToast={showToast}
+                            flag={flag}
+                            allAttachments={allAttachments}
+                          />
+
+                        </div>
+                      ))}
+
+                      {/* ── Single (unmerged) task cards ── */}
+                      {singleTasks.map(task => (
+                        <MergedTaskWorkerCard
+                          key={task.jobTaskID}
+                          groupTasks={[task]}
+                          workers={workers}
+                          jobRequestID={job.jobRequestID}
+                          showToast={showToast}
+                          flag=""
+                          allAttachments={allAttachments}
+                        />
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -782,6 +1044,11 @@ export default function SupervisorJobsPage() {
   const [sortDir, setSortDir] = useState('desc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [hoardings, setHoardings] = useState([]);
+  const [hoardingMerges, setHoardingMerges] = useState([]);
+  const [allAttachments, setAllAttachments] = useState([]);
+
+
 
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type }), []);
 
@@ -794,24 +1061,92 @@ export default function SupervisorJobsPage() {
 
   /* ── Load jobs ── */
   const fetchJobs = useCallback(async () => {
-    setLoading(true); setFetchError('');
+    setLoading(true);
+    setFetchError('');
     try {
       const userId = parseInt(localStorage.getItem('userId') || '0', 10);
-      const res = await apiService.getJobRequestsByUserId(userId);
+
+      const [res, hRaw, mergeRaw, sRaw, attRaw] = await Promise.all([
+        apiService.getJobRequestsByUserId(userId),
+        apiService.getAllHoardings(),
+        apiService.getAllHoardingMerges(),
+        apiService.getAllSites().catch(() => []),
+        apiService.getAllJobTaskAttachments().catch(() => []),
+      ]);
+
+      // Build site lookup map
+      const siteList = Array.isArray(sRaw) ? sRaw
+        : Array.isArray(sRaw?.$values) ? sRaw.$values
+          : Array.isArray(sRaw?.data) ? sRaw.data : [];
+
+      const siteMap = new Map(
+        siteList.map(s => [
+          Number(s.siteID ?? s.SiteID ?? 0),
+          {
+            addressLine1: s.addressLine1 ?? s.AddressLine1 ?? '',
+            addressLine2: s.addressLine2 ?? s.AddressLine2 ?? '',
+            city: s.city ?? s.City ?? '',
+            district: s.district ?? s.District ?? '',
+            landmark: s.landmark ?? s.Landmark ?? '',
+          }
+        ])
+      );
+
+      // Enrich hoardings with site data
+      const rawHoardingList = extractArray(hRaw);
+      const enrichedHoardings = rawHoardingList.map(h => {
+        const siteID = Number(h.siteID ?? h.SiteID ?? h.siteId ?? 0);
+        const foundSite = siteMap.get(siteID) || null;
+        return {
+          ...h,
+          site: foundSite || (h.site ? h.site : null),
+        };
+      });
+
+      setHoardings(enrichedHoardings);
+      setHoardingMerges(extractArray(mergeRaw));
+      setAllAttachments(extractArray(attRaw));
+
       const list = extractArray(res).map(normalizeJob);
+
       const withTasks = await Promise.all(
-        list.map(async job => {
+        list.map(async (job) => {
           try {
             const tRes = await apiService.getJobTasksByJobRequestId(job.jobRequestID);
-            return { ...job, tasks: extractArray(tRes).map(normalizeTask) };
-          } catch { return job; }
+            const taskList = extractArray(tRes).map(t => {
+              const task = normalizeTask(t);
+
+              const h = enrichedHoardings.find(        // ← use enrichedHoardings
+                x => Number(x.hoardingID) === Number(task.hoardingID)
+              );
+
+              const merge = extractArray(mergeRaw).find(
+                x => Number(x.hoardingID) === Number(task.hoardingID)
+              );
+
+              return {
+                ...task,
+                hoardingCode: h?.hoardingCode || h?.HoardingCode || '',
+                siteAddress: getSiteAddress(h),         // ← now uses enriched h
+                mergeAlongFlag: merge?.mergeAlongFlag || null,
+                isMerged: !!merge,
+              };
+            });
+            return { ...job, tasks: taskList };
+          } catch {
+            return { ...job, tasks: [] };
+          }
         })
       );
+
       setJobs(withTasks);
     } catch (err) {
-      setFetchError(err?.response?.data?.message || err?.message || 'Failed to load jobs.');
-    } finally { setLoading(false); }
+      setFetchError(err?.message || 'Failed to load jobs');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
   useEffect(() => { fetchJobs(); }, [fetchJobs]);
 
   /* ── Accept ── */
@@ -883,6 +1218,7 @@ export default function SupervisorJobsPage() {
           onAccept={handleAccept}
           accepting={acceptingId === selectedJob.jobRequestID && accepting}
           showToast={showToast}
+          allAttachments={allAttachments}
         />
       </>
     );

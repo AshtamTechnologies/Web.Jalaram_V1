@@ -3,26 +3,26 @@ import './Common.css';
 import { apiService } from '../api/api';
 
 export default function Login({ onLogin, onNavigate }) {
-  const [formData, setFormData]         = useState({ email: '', password: '' });
-  const [errors, setErrors]             = useState({});
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember]         = useState(true);
-  const [loading, setLoading]           = useState(false);
-  const [visible, setVisible]           = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
 
   // ── Forgot password ──────────────────────────────────────
   const [forgotLoading, setForgotLoading] = useState(false);
-  const [forgotError,   setForgotError]   = useState('');
+  const [forgotError, setForgotError] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState('');
 
   // ── Forced password change ───────────────────────────────
-  const [forceChange,     setForceChange]     = useState(false);
-  const [changeStep,      setChangeStep]      = useState(1);
-  const [changeData,      setChangeData]      = useState({
+  const [forceChange, setForceChange] = useState(false);
+  const [changeStep, setChangeStep] = useState(1);
+  const [changeData, setChangeData] = useState({
     email: '', userId: null, resetToken: '', newPassword: '', confirmPassword: '',
   });
-  const [showNewPw,       setShowNewPw]       = useState(false);
-  const [showConfirmPw,   setShowConfirmPw]   = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 60);
@@ -102,7 +102,7 @@ export default function Login({ onLogin, onNavigate }) {
     setErrors({});
     try {
       await apiService.resetPassword({
-        email:       changeData.email,
+        email: changeData.email,
         newPassword: changeData.newPassword,
       });
       alert('Password changed successfully! Please log in with your new password.');
@@ -137,10 +137,10 @@ export default function Login({ onLogin, onNavigate }) {
       // forced password change — apiService returns early without storing tokens
       if (response.forcePasswordChange === true) {
         setChangeData({
-          email:           formData.email,
-          userId:          response.userId,
-          resetToken:      '',
-          newPassword:     '',
+          email: formData.email,
+          userId: response.userId,
+          resetToken: '',
+          newPassword: '',
           confirmPassword: '',
         });
         setChangeStep(2);
@@ -150,30 +150,30 @@ export default function Login({ onLogin, onNavigate }) {
       }
 
       // Role-based navigation — localStorage is already set by apiService
-const roleStr = (response.role || response.user?.role || '').toLowerCase().trim();
-const roleId = response.roleId || response.user?.roleId;
+      const roleStr = (response.role || response.user?.role || '').toLowerCase().trim();
+      const roleId = response.roleId || response.user?.roleId;
 
 
 
-if (roleStr === 'admin' || roleId === 1 || roleId === '1') {
-  onNavigate('admin');
-}
-else if (roleStr === 'supervisor') {
-  onNavigate('supervisor');
-}
-else if (roleStr === 'worker') {
-  onNavigate('workertask');
-}
-else {
-  alert(`Unknown role: ${roleStr}`);
-}
+      if (roleStr === 'admin' || roleId === 1 || roleId === '1') {
+        onNavigate('admin');
+      }
+      else if (roleStr === 'supervisor') {
+        onNavigate('supervisor');
+      }
+      else if (roleStr === 'worker') {
+        onNavigate('workertask');
+      }
+      else {
+        alert(`Unknown role: ${roleStr}`);
+      }
     } catch (error) {
       // Surface the error message from the API (e.g. "Invalid credentials")
       // or fall back to generic messages based on what went wrong.
       if (error.response) {
         const msg =
           error.response.data?.message ||
-          error.response.data?.error   ||
+          error.response.data?.error ||
           (error.response.status === 401 ? 'Invalid email or password.' : null) ||
           (error.response.status === 400 ? 'Invalid request. Check your details.' : null) ||
           'Login failed. Please try again.';
@@ -494,8 +494,8 @@ function EyeOffIcon() {
 function PasswordStrengthBar({ password }) {
   if (!password) return null;
   const len = password.length;
-  const hasUpper  = /[A-Z]/.test(password);
-  const hasNum    = /[0-9]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasNum = /[0-9]/.test(password);
   const hasSymbol = /[^A-Za-z0-9]/.test(password);
   const score = (len >= 8 ? 1 : 0) + (hasUpper ? 1 : 0) + (hasNum ? 1 : 0) + (hasSymbol ? 1 : 0);
   const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];

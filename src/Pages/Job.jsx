@@ -149,11 +149,36 @@ function normalizeJobTask(raw) {
 
 function getSiteAddress(h) {
   if (!h) return '';
+
+  // 1. Try nested site object (if populated)
   const s = h.site ? normalizeSite(h.site) : null;
-  if (!s) return h.hoardingCode || '';
-  const addr = [s.addressLine1, s.addressLine2].filter(Boolean).join(', ');
-  const city = [s.city, s.district].filter(Boolean).join(', ');
-  return [addr, city].filter(Boolean).join(' — ') || h.hoardingCode || '';
+  if (s) {
+    const addr = [s.addressLine1, s.addressLine2].filter(Boolean).join(', ');
+    const city = [s.city, s.district].filter(Boolean).join(', ');
+    const full = [addr, city].filter(Boolean).join(' — ');
+    if (full) return full;
+  }
+
+  // 2. Try flat fields directly on the hoarding (common in .NET APIs)
+  const flatAddr = [
+    h.addressLine1 ?? h.AddressLine1 ?? '',
+    h.addressLine2 ?? h.AddressLine2 ?? '',
+  ].filter(Boolean).join(', ');
+
+  const flatCity = [
+    h.city ?? h.City ?? h.siteCity ?? h.SiteCity ?? '',
+    h.district ?? h.District ?? h.siteDistrict ?? h.SiteDistrict ?? '',
+  ].filter(Boolean).join(', ');
+
+  const flatFull = [flatAddr, flatCity].filter(Boolean).join(' — ');
+  if (flatFull) return flatFull;
+
+  // 3. Try landmark
+  const landmark = h.landmark ?? h.Landmark ?? h.siteLandmark ?? h.SiteLandmark ?? '';
+  if (landmark) return landmark;
+
+  // 4. Last resort
+  return h.hoardingCode ?? h.HoardingCode ?? '';
 }
 
 const newTaskRow = (h = null) => ({
@@ -250,6 +275,7 @@ function useOutsideClick(wrapRef, panelRef, open, onClose) {
     };
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
+
   }, [open, wrapRef, panelRef, onClose]);
 }
 
@@ -336,15 +362,36 @@ function ComboField({ value, onChange, options, placeholder, icon: Icon, disable
 /* ═══════════════════════════════════════════
    HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
-function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAdd, onClose }) {
+function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAdd, onClose, anyIdToLatestId, hoardingMerges }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
-
   const isFiltered = filteredHoardingIds !== null;
 
-  const base = useMemo(() =>
-    isFiltered ? hoardings.filter(h => filteredHoardingIds.has(h.hoardingID)) : hoardings,
-    [hoardings, filteredHoardingIds, isFiltered]);
+  // Build a map: hoardingID → mergeAlongFlag ('H' or 'V'), for merged hoardings only
+  const mergedFlagMap = useMemo(() => {
+    const map = new Map();
+    (hoardingMerges || []).forEach(m => {
+      const id = Number(m.hoardingID ?? m.HoardingID ?? 0);
+      if (id) map.set(id, m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H');
+    });
+    return map;
+  }, [hoardingMerges]);
+
+  const base = useMemo(() => {
+    if (!isFiltered) return hoardings;
+    const canonicalIds = new Set();
+    filteredHoardingIds.forEach(rawId => {
+      canonicalIds.add(rawId);
+      const mapped = anyIdToLatestId?.get(rawId);
+      if (mapped) canonicalIds.add(mapped);
+    });
+    anyIdToLatestId?.forEach((latestId, anyId) => {
+      if (filteredHoardingIds.has(anyId) || filteredHoardingIds.has(latestId)) {
+        canonicalIds.add(latestId);
+      }
+    });
+    return hoardings.filter(h => canonicalIds.has(Number(h.hoardingID)));
+  }, [hoardings, filteredHoardingIds, isFiltered, anyIdToLatestId]);
 
   const display = useMemo(() => {
     const q = search.toLowerCase();
@@ -364,6 +411,61 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
   const toggleAll = () => {
     if (allSelected) setSelected(p => { const n = new Set(p); selectable.forEach(h => n.delete(h.hoardingID)); return n; });
     else setSelected(p => { const n = new Set(p); selectable.forEach(h => n.add(h.hoardingID)); return n; });
+  };
+
+  // Group display: merged hoardings shown together, unmerged shown individually
+  const { mergeGroups, unmerged } = useMemo(() => {
+    const groups = new Map(); // flag → [hoardings]
+    const ungrouped = [];
+
+    display.forEach(h => {
+      const flag = mergedFlagMap.get(Number(h.hoardingID));
+      if (flag) {
+        const key = flag; // 'H' or 'V' — groups all same-direction merges together
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(h);
+      } else {
+        ungrouped.push(h);
+      }
+    });
+
+    return { mergeGroups: [...groups.entries()], unmerged: ungrouped };
+  }, [display, mergedFlagMap]);
+
+  const renderRow = (h, isMerged = false, mergeFlag = null) => {
+    const checked = selected.has(h.hoardingID);
+    const alreadyIn = existingIds.has(h.hoardingID);
+    const addr = getSiteAddress(h);
+    const siteCity = [h.site?.city, h.site?.district].filter(Boolean).join(', ');
+
+    return (
+      <div key={h.hoardingID}
+        onClick={() => !alreadyIn && toggle(h.hoardingID)}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          padding: isMerged ? '9px 24px 9px 36px' : '10px 24px',
+          borderBottom: '1px solid #f8f8f8',
+          cursor: alreadyIn ? 'not-allowed' : 'pointer',
+          background: checked ? 'rgba(4,158,223,0.05)' : isMerged ? '#fafafe' : '#fff',
+          opacity: alreadyIn ? 0.5 : 1,
+        }}
+      >
+        <div className={`qt-modal-check ${checked ? 'qt-modal-check--on' : ''}`}>
+          {checked && <Check size={12} color="#fff" />}
+        </div>
+        <MapPin size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#1a1a2e', display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+            {addr || h.hoardingCode}
+            {alreadyIn && <span style={{ color: '#9090a8', fontWeight: 600, fontSize: 11 }}> · Already added</span>}
+          </div>
+          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', marginTop: 2 }}>
+            Code: {h.hoardingCode} · {h.width}×{h.height} ft · {h.width * h.height} sq.ft
+            {siteCity ? ` · ${siteCity}` : ''}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return ReactDOM.createPortal(
@@ -408,39 +510,57 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
           </div>
         )}
 
-        <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
+        <div style={{ flex: 1, overflowY: 'auto', maxHeight: 400 }}>
           {display.length === 0 ? (
             <div className="pg-empty__inner" style={{ padding: '32px 20px' }}>
               <Building2 size={32} color="#d0d0e8" />
               <span className="pg-empty__label">{isFiltered ? 'No hoardings in this contract' : 'No hoardings found'}</span>
             </div>
-          ) : display.map(h => {
-            const checked = selected.has(h.hoardingID);
-            const alreadyIn = existingIds.has(h.hoardingID);
-            const addr = getSiteAddress(h);
-            const siteCity = [h.site?.city, h.site?.district].filter(Boolean).join(', ');
-            return (
-              <div key={h.hoardingID}
-                onClick={() => !alreadyIn && toggle(h.hoardingID)}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 24px', borderBottom: '1px solid #f8f8f8', cursor: alreadyIn ? 'not-allowed' : 'pointer', background: checked ? 'rgba(4,158,223,0.05)' : '#fff', opacity: alreadyIn ? 0.5 : 1 }}
-              >
-                <div className={`qt-modal-check ${checked ? 'qt-modal-check--on' : ''}`}>
-                  {checked && <Check size={12} color="#fff" />}
-                </div>
-                <MapPin size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>
-                    {addr || h.hoardingCode}
-                    {alreadyIn && <span style={{ color: '#9090a8', fontWeight: 600, fontSize: 11 }}> · Already added</span>}
+          ) : (
+            <>
+              {/* ── Merged groups ── */}
+              {mergeGroups.map(([flag, groupHoardings]) => {
+                // Compute combined size
+                const sizes = groupHoardings.map(h => ({ w: Number(h.width) || 0, h: Number(h.height) || 0 }));
+                const gaps = Math.max(groupHoardings.length - 1, 1);
+                const mw = flag === 'H' ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps : Math.max(...sizes.map(s => s.w));
+                const mh = flag === 'H' ? Math.max(...sizes.map(s => s.h)) : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+                const mergedSqFt = mw * mh;
+
+                return (
+                  <div key={flag} style={{ margin: '8px 12px', border: '1.5px solid rgba(124,58,237,0.25)', borderRadius: 10, overflow: 'hidden' }}>
+                    {/* Merge group header */}
+                    <div style={{
+                      padding: '8px 14px', background: 'rgba(124,58,237,0.06)',
+                      borderBottom: '1px solid rgba(124,58,237,0.15)',
+                      display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                    }}>
+                      <span style={{ fontSize: 13 }}>{flag === 'H' ? '↔' : '↕'}</span>
+                      <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>
+                        {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge · {groupHoardings.length} hoardings
+                      </span>
+                      <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#5a5a78' }}>
+                        {mw} × {mh} ft
+                      </span>
+                      <span style={{
+                        padding: '1px 8px', borderRadius: 10,
+                        background: 'rgba(124,58,237,0.10)', color: '#7c3aed',
+                        border: '1px solid rgba(124,58,237,0.20)',
+                        fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800,
+                      }}>
+                        {mergedSqFt.toLocaleString('en-IN')} sq.ft
+                      </span>
+                    </div>
+                    {/* Individual merged hoardings */}
+                    {groupHoardings.map(h => renderRow(h, true, flag))}
                   </div>
-                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', marginTop: 2 }}>
-                    Code: {h.hoardingCode} · {h.width}×{h.height} ft · {h.width * h.height} sq.ft
-                    {siteCity ? ` · ${siteCity}` : ''}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+
+              {/* ── Unmerged hoardings ── */}
+              {unmerged.map(h => renderRow(h, false))}
+            </>
+          )}
         </div>
 
         <div className="pg-modal__foot">
@@ -813,6 +933,7 @@ export default function JobPage() {
   const [jobRequests, setJobRequests] = useState([]);
   const [allJobTasks, setAllJobTasks] = useState([]);
   const [allAttachments, setAllAttachments] = useState([]);
+  const [photoModalTask, setPhotoModalTask] = useState(null); // task row for photo modal
 
   /* ── UI ── */
   const [loading, setLoading] = useState(true);
@@ -837,6 +958,8 @@ export default function JobPage() {
   const [targetDate, setTargetDate] = useState('');
   const [supervisorAcceptDttm, setSupervisorAcceptDttm] = useState('');
   const [actualCompletionDate, setActualCompletionDate] = useState('');
+  const [contractHoardingMaps, setContractHoardingMaps] = useState([]);
+  const [hoardingMerges, setHoardingMerges] = useState([]);
 
   /* ── Inline tasks ── */
   const [tasks, setTasks] = useState([]);
@@ -848,18 +971,81 @@ export default function JobPage() {
   const [sortDir, setSortDir] = useState('desc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-
+  const [anyIdToLatestId, setAnyIdToLatestId] = useState(new Map());
   const formRef = useRef(null);
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
+
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
-  useResizableColumns(tableRef, tableReady, [80, 160, 90, 130, 100, 90, 80, 100, 100]);
+  useResizableColumns(tableRef, tableReady, [40, 200, 120, 100, 70, 148, 140, 170, 60]); useResizableColumns(tableRef, tableReady, [40, 200, 120, 100, 70, 148, 140, 170, 60]);
+  // Group tasks: merged ones collapse into a single display row
+  const displayTaskRows = useMemo(() => {
+    const mergedIds = new Set(
+      hoardingMerges.map(m => Number(m.hoardingID ?? m.HoardingID ?? 0)).filter(Boolean)
+    );
 
+    const mergedGroup = [];
+    const unmergedRows = [];
+
+    tasks.forEach(task => {
+      if (mergedIds.has(Number(task.hoardingID))) {
+        mergedGroup.push(task);
+      } else {
+        unmergedRows.push(task);
+      }
+    });
+
+    const result = [];
+
+    // One grouped row for all merged hoardings
+    if (mergedGroup.length > 0) {
+      const flag = hoardingMerges.find(
+        m => Number(m.hoardingID ?? m.HoardingID) === Number(mergedGroup[0].hoardingID)
+      )?.mergeAlongFlag ?? 'H';
+
+      const sizes = mergedGroup.map(t => {
+        const h = hoardings.find(hh => hh.hoardingID === t.hoardingID);
+        return { w: Number(h?.width) || 0, h: Number(h?.height) || 0 };
+      });
+      const gaps = Math.max(mergedGroup.length - 1, 1);
+      const mw = flag === 'H' ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps : Math.max(...sizes.map(s => s.w));
+      const mh = flag === 'H' ? Math.max(...sizes.map(s => s.h)) : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+
+      result.push({
+        _type: 'merged',
+        _id: '__merged__',
+        tasks: mergedGroup,
+        mergeFlag: flag,
+        mergedWidth: mw,
+        mergedHeight: mh,
+        mergedSqFt: mw * mh,
+        // Use first task's fields for status/date editing (or aggregate)
+        status: mergedGroup[0].status,
+        actualCompletionDate: mergedGroup[0].actualCompletionDate,
+        submitDttm: mergedGroup[0].submitDttm,
+        saved: mergedGroup.every(t => t.saved),
+        jobTaskID: mergedGroup[0].jobTaskID,
+      });
+    }
+
+    // Individual rows for unmerged
+    unmergedRows.forEach(task => result.push({ _type: 'single', ...task }));
+
+    return result;
+  }, [tasks, hoardingMerges, hoardings]);
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type }), []);
-
+  const mergedTaskHoardingIds = useMemo(() => {
+    return new Set(hoardingMerges.map(m => Number(m.hoardingID ?? m.HoardingID ?? 0)).filter(Boolean));
+  }, [hoardingMerges]);
   /* ── Computed ── */
-  const totalAreaSQFT = useMemo(() =>
-    tasks.reduce((s, t) => s + Number(t.sqFt || 0), 0), [tasks]);
+  const totalAreaSQFT = useMemo(() => {
+    let total = 0;
+    displayTaskRows.forEach(row => {
+      if (row._type === 'merged') total += row.mergedSqFt;
+      else total += Number(row.sqFt || 0);
+    });
+    return total;
+  }, [displayTaskRows]);
 
   const derivedJobStatus = useMemo(() => {
     if (tasks.length > 0 && tasks.every(t => t.status === 'Submitted')) return 'Submitted';
@@ -874,24 +1060,53 @@ export default function JobPage() {
   }, [contracts, selectedCustomer]);
 
   const filteredHoardingIds = useMemo(() => {
+    if (!selectedContract && !selectedCustomer) return null;
+
+    // Collect contract IDs in scope
+    const scopeContractIDs = new Set();
     if (selectedContract) {
-      const ids = new Set(
-        contracts
-          .filter(c => c.customerContractID === selectedContract.customerContractID)
-          .map(c => c.hoardingID).filter(Boolean)
-      );
-      return ids.size > 0 ? ids : null;
+      scopeContractIDs.add(Number(selectedContract.customerContractID));
+    } else {
+      contracts
+        .filter(c => c.customerID === selectedCustomer.customerID)
+        .forEach(c => scopeContractIDs.add(Number(c.customerContractID)));
     }
-    if (selectedCustomer) {
-      const ids = new Set(
-        contracts
-          .filter(c => c.customerID === selectedCustomer.customerID)
-          .map(c => c.hoardingID).filter(Boolean)
+
+    // Helper: translate any raw hoardingID → latest deduplicated ID
+    const toLatest = (rawId) => {
+      const n = Number(rawId);
+      return anyIdToLatestId.get(n) ?? n; // fallback to itself if not found
+    };
+
+    // Direct hoardings from CustomerContractHoarding map
+    const result = new Set();
+    contractHoardingMaps.forEach(m => {
+      const contractID = Number(m.customerContractID ?? m.CustomerContractID ?? 0);
+      if (scopeContractIDs.has(contractID)) {
+        const latestId = toLatest(m.hoardingID ?? m.HoardingID);
+        if (latestId) result.add(latestId);
+      }
+    });
+
+    // Merged hoardings from HoardingMerge
+    // Each merge row: hoardingID = a merged hoarding, customerContractID = the contract it belongs to
+    hoardingMerges.forEach(m => {
+      const contractID = Number(
+        m.customerContractID ?? m.CustomerContractID ??
+        m.contractID ?? m.ContractID ?? 0
       );
-      return ids.size > 0 ? ids : null;
-    }
-    return null;
-  }, [selectedContract, selectedCustomer, contracts]);
+      if (scopeContractIDs.has(contractID)) {
+        const latestId = toLatest(m.hoardingID ?? m.HoardingID);
+        if (latestId) result.add(latestId);
+      }
+    });
+
+    console.log('[FILTER] scopeContracts:', [...scopeContractIDs]);
+    console.log('[FILTER] result ids:', [...result]);
+
+    return result.size > 0 ? result : null;
+
+  }, [selectedContract, selectedCustomer, contracts, contractHoardingMaps, hoardingMerges, anyIdToLatestId]);
 
   const existingTaskHoardingIds = useMemo(() =>
     new Set(tasks.map(t => t.hoardingID).filter(Boolean)), [tasks]);
@@ -911,21 +1126,32 @@ export default function JobPage() {
     (async () => {
       setLoading(true);
       try {
-        // ✅ All 7 items properly destructured
-        const [cRaw, conRaw, hRaw, uRaw, jRaw, jtRaw, attRaw] = await Promise.all([
+        const [cRaw, conRaw, hRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw] = await Promise.all([
           apiService.getAllCustomers().catch(() => []),
           apiService.getAllCustomerContracts().catch(() => []),
           apiService.getAllHoardings().catch(() => []),
           apiService.getAllUsers().catch(() => []),
           apiService.getAllJobRequests().catch(() => []),
           apiService.getAllJobTasks().catch(() => []),
-          apiService.getAllJobTaskAttachments().catch(() => []),  // ✅ now destructured
+          apiService.getAllJobTaskAttachments().catch(() => []),
+          apiService.getAllSites().catch(() => []),
+          apiService.getAllCustomerContractHoardingMaps().catch(() => []),
+          apiService.getAllHoardingMerges().catch(() => []),   // ← ADD
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
         setContracts(normalizeList(conRaw).map(normalizeContract));
-        setHoardings(normalizeList(hRaw));
+        // Build site lookup map
+        const siteList = normalizeList(sRaw);
+        const siteMap = new Map(
+          siteList.map(s => [
+            Number(s.siteID ?? s.SiteID ?? 0),
+            normalizeSite(s)
+          ])
+        );
         const rawHoardings = normalizeList(hRaw);
+
+        // ── 1. Build code → latest hoarding
         const latestByCode = new Map();
         rawHoardings.forEach(h => {
           const code = h.hoardingCode ?? h.HoardingCode ?? '';
@@ -934,7 +1160,56 @@ export default function JobPage() {
           const existDate = existing ? new Date(existing.effdt ?? existing.Effdt ?? 0).getTime() : -1;
           if (!existing || thisDate > existDate) latestByCode.set(code, h);
         });
-        setHoardings(Array.from(latestByCode.values()));
+
+        // ── 2. Build anyHoardingID → latestHoardingID for that code
+        //    This lets us translate old effdt IDs (stored in merge/contract tables)
+        //    to the deduplicated latest ID we actually render
+        // Build: any raw hoardingID → the latest hoardingID for that code
+        const anyIdToLatestId = new Map();
+        rawHoardings.forEach(h => {
+          const code = h.hoardingCode ?? h.HoardingCode ?? '';
+          const latest = latestByCode.get(code);
+          if (latest) {
+            anyIdToLatestId.set(
+              Number(h.hoardingID ?? h.HoardingID ?? 0),
+              Number(latest.hoardingID ?? latest.HoardingID ?? 0)
+            );
+          }
+        });
+        setAnyIdToLatestId(anyIdToLatestId);
+
+
+        // ── 3. Enrich with site data
+        const enrichedHoardings = Array.from(latestByCode.values()).map(h => {
+          const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
+          const foundSite = siteMap.get(siteID) || null;
+          const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+          return {
+            ...h,
+            site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+          };
+        });
+
+        // Debug — now safe to reference enrichedHoardings
+        console.log('[LATEST IDs]', enrichedHoardings.map(h => h.hoardingID));
+        console.log('[anyIdToLatestId 20029]', anyIdToLatestId.get(20029));
+        console.log('[anyIdToLatestId 20038]', anyIdToLatestId.get(20038));
+
+        setHoardings(enrichedHoardings);
+        setAnyIdToLatestId(anyIdToLatestId); // ← new state, see below
+
+        setContractHoardingMaps(normalizeList(chmRaw));
+        setHoardingMerges(normalizeList(mergeRaw));
+        console.log('[MERGE RAW SAMPLE]', normalizeList(mergeRaw)[0]);
+        console.log('[CHM RAW SAMPLE]', normalizeList(chmRaw)[0]);
+        rawHoardings.forEach(h => {
+          const code = h.hoardingCode ?? h.HoardingCode ?? '';
+          const existing = latestByCode.get(code);
+          const thisDate = new Date(h.effdt ?? h.Effdt ?? 0).getTime();
+          const existDate = existing ? new Date(existing.effdt ?? existing.Effdt ?? 0).getTime() : -1;
+          if (!existing || thisDate > existDate) latestByCode.set(code, h);
+        });
+        // setHoardings(Array.from(latestByCode.values()));
         const allUsers = normalizeList(uRaw).map(normalizeUser);
         setSupervisors(allUsers.filter(u =>
           u.role?.toLowerCase().includes('supervisor') || u.roleId === 3
@@ -952,7 +1227,12 @@ export default function JobPage() {
       }
     })();
   }, []);
-
+  const refreshAttachments = useCallback(async () => {
+    try {
+      const attRaw = await apiService.getAllJobTaskAttachments().catch(() => []);
+      setAllAttachments(normalizeList(attRaw));
+    } catch { }
+  }, []);
   /* ── Refresh ── */
   const refreshJobs = useCallback(async () => {
     try {
@@ -1585,77 +1865,253 @@ export default function JobPage() {
                           <th className="pg-th" style={{ minWidth: 148 }}>Actual Completion</th>
                           <th className="pg-th" style={{ minWidth: 140 }}>Task Status</th>
                           <th className="pg-th" style={{ minWidth: 170 }}>Submit Date / Time</th>
-                          {/* ✅ Single actions column */}
+                          <th className="pg-th" style={{ minWidth: 80, textAlign: 'center' }}>Photos</th>
                           <th className="pg-th" style={{ width: 60, textAlign: 'center' }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {tasks.map((task, i) => (
-                          <tr key={task._id} className="pg-tr"
-                            style={{ background: task.status === 'Submitted' ? 'rgba(22,163,74,0.03)' : undefined }}>
+                        {displayTaskRows.map((row, i) => {
+                          if (row._type === 'merged') {
+                            // ── Merged group row ──
+                            const codes = row.tasks.map(t => t.hoardingCode).filter(Boolean).join(' + ');
+                            const addrs = [...new Set(row.tasks.map(t => t.siteAddress || t.hoardingCode).filter(Boolean))].join(', ');
+                            const allSubmitted = row.tasks.every(t => t.status === 'Submitted');
+                            const anySubmitted = row.tasks.some(t => t.status === 'Submitted');
 
-                            <td className="pg-td" style={{ textAlign: 'center' }}>
-                              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#9090a8' }}>{i + 1}</span>
-                            </td>
+                            return (
+                              <tr key="__merged__" className="pg-tr" style={{
+                                background: allSubmitted ? 'rgba(22,163,74,0.04)' : 'rgba(124,58,237,0.03)',
+                                borderLeft: '3px solid rgba(124,58,237,0.35)',
+                              }}>
+                                <td className="pg-td" style={{ textAlign: 'center' }}>
+                                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#9090a8' }}>{i + 1}</span>
+                                </td>
 
-                            <td className="pg-td">
-                              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1a1a2e' }}>
-                                {task.siteAddress || task.hoardingCode || '—'}
-                              </div>
-                            </td>
+                                <td className="pg-td">
+                                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1a1a2e' }}>
+                                    {addrs}
+                                  </div>
+                                  <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                    <span style={{
+                                      display: 'inline-flex', alignItems: 'center', gap: 4,
+                                      padding: '2px 8px', borderRadius: 10,
+                                      background: 'rgba(124,58,237,0.08)',
+                                      border: '1px solid rgba(124,58,237,0.22)',
+                                      color: '#7c3aed',
+                                      fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 800,
+                                    }}>
+                                      {row.mergeFlag === 'H' ? '↔' : '↕'} {row.mergeFlag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                                    </span>
+                                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>
+                                      {row.tasks.length} hoardings merged
+                                    </span>
+                                  </div>
+                                </td>
 
-                            <td className="pg-td">
-                              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#049edf', fontWeight: 700 }}>
-                                {task.hoardingCode || '—'}
-                              </span>
-                            </td>
+                                <td className="pg-td">
+                                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#7c3aed', fontWeight: 700 }}>
+                                    {codes}
+                                  </span>
+                                </td>
 
-                            <td className="pg-td" style={{ textAlign: 'center' }}>
-                              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#4a5568' }}>{task.size || '—'}</span>
-                            </td>
+                                <td className="pg-td" style={{ textAlign: 'center' }}>
+                                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#4a5568', fontWeight: 700 }}>
+                                    {row.mergedWidth} × {row.mergedHeight} ft
+                                  </span>
+                                </td>
 
-                            <td className="pg-td" style={{ textAlign: 'center' }}>
-                              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#1a1a2e' }}>{task.sqFt}</span>
-                            </td>
+                                <td className="pg-td" style={{ textAlign: 'center' }}>
+                                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#7c3aed' }}>
+                                    {row.mergedSqFt}
+                                  </span>
+                                </td>
 
-                            <td className="pg-td">
-                              <input className="qt-inline-input qt-date-input" type="date"
-                                value={task.actualCompletionDate}
-                                onChange={e => updateTask(task._id, 'actualCompletionDate', e.target.value)} />
-                            </td>
+                                <td className="pg-td">
+                                  <input className="qt-inline-input qt-date-input" type="date"
+                                    value={row.actualCompletionDate}
+                                    onChange={e => {
+                                      const val = e.target.value;
+                                      row.tasks.forEach(t => updateTask(t._id, 'actualCompletionDate', val));
+                                    }} />
+                                </td>
 
-                            <td className="pg-td">
-                              <TaskStatusSelect value={task.status} onChange={val => updateTask(task._id, 'status', val)} />
-                            </td>
+                                <td className="pg-td">
+                                  <TaskStatusSelect value={row.status} onChange={val => {
+                                    row.tasks.forEach(t => updateTask(t._id, 'status', val));
+                                  }} />
+                                </td>
 
-                            <td className="pg-td">
-                              {task.status === 'Submitted' ? (
-                                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>
-                                  {task.submitDttm ? fmtDateTime(task.submitDttm) : fmtDateTime(nowISO())}
-                                  <span style={{ fontSize: 10, color: '#d0d0e0', marginLeft: 4 }}>🔒</span>
+                                <td className="pg-td">
+                                  {allSubmitted ? (
+                                    <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>
+                                      {row.submitDttm ? fmtDateTime(row.submitDttm) : fmtDateTime(nowISO())}
+                                      <span style={{ fontSize: 10, color: '#d0d0e0', marginLeft: 4 }}>🔒</span>
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#d0d0e0', fontStyle: 'italic' }}>
+                                      Set status to Submitted
+                                    </span>
+                                  )}
+                                </td>
+
+                                <td className="pg-td" style={{ textAlign: 'center' }}>
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
+                                    {row.tasks.map(t => {
+                                      const cnt = allAttachments.filter(
+                                        a => Number(a.jobTaskID ?? a.JobTaskID ?? 0) === Number(t.jobTaskID)
+                                      ).length;
+                                      return t.jobTaskID > 0 ? (
+                                        <button
+                                          key={t.jobTaskID}
+                                          className="pg-btn-view"
+                                          onClick={() => setPhotoModalTask(t)}
+                                          title={`Photos for Task #${t.jobTaskID} (${t.hoardingCode})`}
+                                          style={{ background: 'rgba(4,158,223,0.08)', color: '#049edf', boxShadow: 'none', position: 'relative', fontSize: 11 }}
+                                        >
+                                          📷
+                                          {cnt > 0 && (
+                                            <span style={{
+                                              position: 'absolute', top: -6, right: -6,
+                                              background: '#049edf', color: '#fff',
+                                              borderRadius: '50%', width: 16, height: 16,
+                                              fontSize: 9, fontWeight: 900, fontFamily: 'Nunito,sans-serif',
+                                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                              border: '1.5px solid #fff',
+                                            }}>{cnt}</span>
+                                          )}
+                                        </button>
+                                      ) : (
+                                        <span key={t._id} title="Save job first"
+                                          style={{
+                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                            width: 30, height: 30, borderRadius: 8,
+                                            background: '#f4f4fb', border: '1px solid #e8e8f4',
+                                            fontSize: 14, opacity: 0.4, cursor: 'not-allowed',
+                                          }}>📷</span>
+                                      );
+                                    })}
+                                  </div>
+                                </td>
+                                <td className="pg-td" style={{ textAlign: 'center' }}>
+                                  <button
+                                    className="pg-btn-view"
+                                    onClick={() => row.tasks.forEach(t => deleteTask(t._id))}
+                                    title="Remove all merged tasks"
+                                    style={{ background: 'rgba(220,38,38,0.08)', color: '#dc2626', boxShadow: 'none' }}
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          }
+
+                          // ── Single row ──
+                          return (
+                            <tr key={row._id} className="pg-tr"
+                              style={{ background: row.status === 'Submitted' ? 'rgba(22,163,74,0.03)' : undefined }}>
+
+                              <td className="pg-td" style={{ textAlign: 'center' }}>
+                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#9090a8' }}>{i + 1}</span>
+                              </td>
+                              <td className="pg-td">
+                                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1a1a2e' }}>
+                                  {row.siteAddress || row.hoardingCode || '—'}
                                 </div>
-                              ) : (
-                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#d0d0e0', fontStyle: 'italic' }}>
-                                  Set status to Submitted
+                              </td>
+                              <td className="pg-td">
+                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#049edf', fontWeight: 700 }}>
+                                  {row.hoardingCode || '—'}
                                 </span>
-                              )}
-                            </td>
-
-<td className="pg-td" style={{ textAlign: 'center' }}>
-  <button
-    className="pg-btn-view"
-    onClick={() => deleteTask(task._id)}
-    title="Remove task"
-    style={{ background: 'rgba(220,38,38,0.08)', color: '#dc2626', boxShadow: 'none' }}
-  >
-    <Trash2 size={13} />
-  </button>
-</td>
-
-                          </tr>
-                        ))}
+                              </td>
+                              <td className="pg-td" style={{ textAlign: 'center' }}>
+                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#4a5568' }}>{row.size || '—'}</span>
+                              </td>
+                              <td className="pg-td" style={{ textAlign: 'center' }}>
+                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#1a1a2e' }}>{row.sqFt}</span>
+                              </td>
+                              <td className="pg-td">
+                                <input className="qt-inline-input qt-date-input" type="date"
+                                  value={row.actualCompletionDate}
+                                  onChange={e => updateTask(row._id, 'actualCompletionDate', e.target.value)} />
+                              </td>
+                              <td className="pg-td">
+                                <TaskStatusSelect value={row.status} onChange={val => updateTask(row._id, 'status', val)} />
+                              </td>
+                              <td className="pg-td">
+                                {row.status === 'Submitted' ? (
+                                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>
+                                    {row.submitDttm ? fmtDateTime(row.submitDttm) : fmtDateTime(nowISO())}
+                                    <span style={{ fontSize: 10, color: '#d0d0e0', marginLeft: 4 }}>🔒</span>
+                                  </div>
+                                ) : (
+                                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#d0d0e0', fontStyle: 'italic' }}>
+                                    Set status to Submitted
+                                  </span>
+                                )}
+                              </td>
+                              <td className="pg-td" style={{ textAlign: 'center' }}>
+                                {row.jobTaskID > 0 ? (
+                                  <button
+                                    className="pg-btn-view"
+                                    onClick={() => setPhotoModalTask(row)}
+                                    title="View / Upload Photos"
+                                    style={{ background: 'rgba(4,158,223,0.08)', color: '#049edf', boxShadow: 'none', position: 'relative' }}
+                                  >
+                                    📷
+                                    {/* Photo count badge */}
+                                    {(() => {
+                                      const cnt = allAttachments.filter(
+                                        a => Number(a.jobTaskID ?? a.JobTaskID ?? 0) === Number(row.jobTaskID)
+                                      ).length;
+                                      return cnt > 0 ? (
+                                        <span style={{
+                                          position: 'absolute', top: -6, right: -6,
+                                          background: '#049edf', color: '#fff',
+                                          borderRadius: '50%', width: 16, height: 16,
+                                          fontSize: 9, fontWeight: 900, fontFamily: 'Nunito,sans-serif',
+                                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                          border: '1.5px solid #fff',
+                                        }}>{cnt}</span>
+                                      ) : null;
+                                    })()}
+                                  </button>
+                                ) : (
+                                  <span title="Save job first to upload photos" style={{
+                                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                    width: 30, height: 30, borderRadius: 8,
+                                    background: '#f4f4fb', border: '1px solid #e8e8f4',
+                                    fontSize: 14, opacity: 0.4, cursor: 'not-allowed',
+                                  }}>📷</span>
+                                )}
+                              </td>
+                              <td className="pg-td" style={{ textAlign: 'center' }}>
+                                <button
+                                  className="pg-btn-view"
+                                  onClick={() => deleteTask(row._id)}
+                                  title="Remove task"
+                                  style={{ background: 'rgba(220,38,38,0.08)', color: '#dc2626', boxShadow: 'none' }}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
-                      {tasks.length > 0 && (
+                      <tfoot>
+                        <tr style={{ background: '#f5f5fd' }}>
+                          <td colSpan={4} className="pg-td"
+                            style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 12.5, color: '#5a5a78', textAlign: 'right' }}>
+                            Total Area SQFT →
+                          </td>
+                          <td className="pg-td" style={{ textAlign: 'center', fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 14, color: '#049edf' }}>
+                            {totalAreaSQFT.toFixed(1)}
+                          </td>
+                          <td colSpan={4}></td>
+                        </tr>
+                      </tfoot>
+                      {/* {tasks.length > 0 && (
                         <tfoot>
                           <tr style={{ background: '#f5f5fd' }}>
                             <td colSpan={4} className="pg-td"
@@ -1668,7 +2124,7 @@ export default function JobPage() {
                             <td colSpan={4}></td>
                           </tr>
                         </tfoot>
-                      )}
+                      )} */}
                     </table>
                   )}
                 </div>
@@ -1896,6 +2352,19 @@ export default function JobPage() {
           existingIds={existingTaskHoardingIds}
           onAdd={handleAddHoardings}
           onClose={() => setShowHoardModal(false)}
+          anyIdToLatestId={anyIdToLatestId}
+          hoardingMerges={hoardingMerges}
+        />
+      )}
+      {/* ── Task Photo Modal ── */}
+      {photoModalTask && (
+        <TaskPhotoModal
+          task={photoModalTask}
+          jobRequestID={editingJobID}
+          attachments={allAttachments}
+          onClose={() => setPhotoModalTask(null)}
+          showToast={showToast}
+          onUploaded={refreshAttachments}
         />
       )}
     </>

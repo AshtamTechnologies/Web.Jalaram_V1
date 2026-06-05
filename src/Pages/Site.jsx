@@ -15,14 +15,20 @@ import { useResizableColumns } from '../hooks/useResizableColumns';
 /* ─────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────── */
-const SITE_TYPE_OPTIONS = ['Residential', 'Govt', 'Industrial', 'Terrace'];
+const SITE_TYPE_OPTIONS = ['Residential', 'Commercial', 'Panchayat', 'Nagar Palika', 'Maha Nagar Palika','PWD', 'Immigation', 'Farm', 'Dandi Marg', 'No Record'];
 const STATUS_OPTIONS    = ['Active', 'Inactive'];
 
 const TYPE_COLORS = {
-  Residential: { color: 'rgb(74, 85, 104)' },
-  Govt:        { color: 'rgb(74, 85, 104)' },
-  Industrial:  { color: 'rgb(74, 85, 104)' },
-  Terrace:     { color: 'rgb(74, 85, 104)' },
+  Residential: { color: '#4a5568' },
+  Commercial: { color: '#4a5568' },
+  Panchayat: { color: '#4a5568' },
+  'Nagar Palika': { color: '#4a5568' },
+  'Maha Nagar Palika': { color: '#4a5568' },
+  PWD: { color: '#4a5568' },
+  Immigation: { color: '#4a5568' },
+  Farm: { color: '#4a5568' },
+  'Dandi Marg': { color: '#4a5568' },
+  'No Record': { color: '#4a5568' },
 };
 const STATUS_COLORS = {
   Active:   { color: 'rgb(74, 85, 104)' },

@@ -3,10 +3,11 @@ import React, {
   useRef, useLayoutEffect,
 } from 'react';
 import ReactDOM from 'react-dom';
+// AFTER  — added AlertTriangle
 import {
   Plus, Trash2, FileText, X, Search, Loader2,
   Printer, Building2, ChevronDown, Check,
-  AlertCircle, RefreshCw, ChevronsLeft, ChevronsRight,
+  AlertCircle, AlertTriangle, RefreshCw, ChevronsLeft, ChevronsRight,
   ChevronLeft, ChevronRight, ChevronUp, Edit2,
   Filter, List, User, ArrowRight, ArrowLeft,
   FileCheck, Settings, Users, Hash, Calendar,
@@ -35,7 +36,69 @@ const COMPANY = {
 
 const ROWS_PER_PRINT_PAGE = 13;
 const PAGE_SIZE_OPTIONS = [5, 10, 15, 20];
+function parseOccupancyError(err) {
+  const status = err?.response?.status;
+  // Accept any 4xx error (400, 409 Conflict, 422 Unprocessable, etc.)
+  if (!status || status < 400 || status >= 500) return null;
 
+  const raw =
+    err?.response?.data?.message ||
+    err?.response?.data?.title ||
+    err?.response?.data?.errors ||
+    err?.response?.data ||
+    err?.message ||
+    '';
+  const str = typeof raw === 'string' ? raw : JSON.stringify(raw);
+  const lower = str.toLowerCase();
+
+  if (
+    lower.includes('occupied') ||
+    lower.includes('already book') ||
+    lower.includes('conflict') ||
+    lower.includes('overlaps')
+  ) {
+    return str.trim();
+  }
+  return null;
+}
+
+// ── component ── (needs AlertTriangle, X from lucide — already imported)
+function OccupancyWarningBanner({ messages, onDismiss }) {
+  if (!messages || messages.length === 0) return null;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'flex-start', gap: 12,
+      padding: '13px 16px', borderRadius: 12, marginBottom: 14,
+      background: '#fffbeb', border: '1.5px solid #fbbf24',
+      boxShadow: '0 2px 10px rgba(251,191,36,0.15)',
+    }}>
+      <div style={{
+        width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+        background: 'rgba(251,191,36,0.15)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        <AlertTriangle size={18} color="#d97706" />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#92400e', marginBottom: messages.length > 1 ? 6 : 2 }}>
+          {messages.length === 1 ? 'Hoarding Already Occupied' : `${messages.length} Hoardings Already Occupied`}
+        </div>
+        {messages.map((msg, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 6, fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#b45309', lineHeight: 1.5, marginTop: i > 0 ? 4 : 0 }}>
+            {messages.length > 1 && <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#d97706', marginTop: 7, flexShrink: 0 }} />}
+            {msg}
+          </div>
+        ))}
+        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 600, color: '#a16207', marginTop: 6 }}>
+          Please choose a different date range or remove these hoardings.
+        </div>
+      </div>
+      <button onClick={onDismiss} style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0, background: 'rgba(251,191,36,0.18)', border: '1px solid rgba(251,191,36,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#d97706' }}>
+        <X size={13} />
+      </button>
+    </div>
+  );
+}
 const STEPS = [
   { n: 1, label: 'Customer & Type', Icon: Users },
   { n: 2, label: 'Add Hoardings', Icon: Building2 },
@@ -94,7 +157,61 @@ const addMonths = (dateStr, months) => {
   d.setMonth(d.getMonth() + 1, 0);
   return d.toISOString().split('T')[0];
 };
+function checkHoardingDateConflicts(rows, allContracts, allContractMaps, customers) {
+  const conflicts = [];
+  const seen = new Set();
 
+  for (const row of rows) {
+    if (row.rowType === 'merged' || row.rowType === 'printing') continue;
+    if (!row.hoardingID || !row.startDate || !row.endDate) continue;
+
+    const rowStart = new Date(row.startDate);
+    const rowEnd = new Date(row.endDate);
+
+    const mappings = allContractMaps.filter(m =>
+      Number(m.hoardingID ?? m.HoardingID) === Number(row.hoardingID)
+    );
+
+    for (const mapping of mappings) {
+      const contractID = Number(
+        mapping.customerContractID ?? mapping.CustomerContractID ?? 0
+      );
+      if (!contractID) continue;
+
+      const contract = allContracts.find(c =>
+        Number(c.customerContractID) === contractID
+      );
+      if (!contract) continue;
+      if (contract.status === 'Expired' || contract.status === 'Terminated') continue;
+
+      const cStart = new Date(contract.startDate);
+      const cEnd = new Date(contract.endDate);
+
+      // Overlap: rowStart ≤ cEnd  AND  rowEnd ≥ cStart
+      if (rowStart <= cEnd && rowEnd >= cStart) {
+        const key = `${row.hoardingID}-${contractID}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const customer = customers.find(c =>
+          Number(c.customerID) === Number(contract.customerID)
+        );
+        conflicts.push({
+          hoardingID: row.hoardingID,
+          hoardingCode: row.hoardingCode || `#${row.hoardingID}`,
+          rowStart: row.startDate,
+          rowEnd: row.endDate,
+          contractID,
+          contractStart: contract.startDate,
+          contractEnd: contract.endDate,
+          customerName: customer?.customerName || `Customer #${contract.customerID}`,
+          status: contract.status,
+        });
+      }
+    }
+  }
+  return conflicts;
+}
 function numberToWords(n) {
   n = Math.round(Math.abs(n));
   if (!n) return 'Zero Only';
@@ -1078,7 +1195,205 @@ function TermsModal({ selected, onSelect, termsList, onClose }) {
     document.body
   );
 }
+function HoardingConflictModal({ conflicts, onClose }) {
+  return ReactDOM.createPortal(
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 99998,
+        background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 22, width: '100%', maxWidth: 640,
+          maxHeight: '88vh', display: 'flex', flexDirection: 'column',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden',
+        }}
+      >
+        {/* ── Header — white with amber accent ── */}
+        <div style={{
+          padding: '22px 24px 18px',
+          borderBottom: '1.5px solid #f0f0f8',
+          display: 'flex', alignItems: 'flex-start', gap: 16,
+          flexShrink: 0,
+        }}>
+          {/* Icon */}
+          <div style={{
+            width: 48, height: 48, borderRadius: 14, flexShrink: 0,
+            background: '#fffbeb', border: '2px solid #fde68a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <AlertTriangle size={22} color="#d97706" />
+          </div>
 
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18,
+              color: '#1a1a2e', lineHeight: 1.1,
+            }}>
+              Booking Conflicts Detected
+            </div>
+            <div style={{
+              fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600,
+              color: '#7878a0', marginTop: 5, lineHeight: 1.5,
+            }}>
+              {conflicts.length} hoarding{conflicts.length !== 1 ? 's are' : ' is'} already
+              booked under active contracts during your selected dates.
+              Please update the hoarding dates in Step 2 before proceeding.
+            </div>
+          </div>
+
+          <button
+            onClick={onClose}
+            style={{
+              width: 32, height: 32, borderRadius: 9, flexShrink: 0, marginTop: 2,
+              border: '1.5px solid #e8e8f4', background: '#f8f8fd',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: 'pointer', color: '#7878a0',
+            }}
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* ── Conflict list ── */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px 20px' }}>
+          {conflicts.map((c, i) => (
+            <div
+              key={i}
+              style={{
+                borderRadius: 14, overflow: 'hidden', marginBottom: 12,
+                border: '1.5px solid #e8e8f4',
+              }}
+            >
+              {/* Card header — hoarding name + status */}
+              <div style={{
+                padding: '11px 16px',
+                background: 'linear-gradient(135deg,#f8f8fd,#fafafe)',
+                borderBottom: '1px solid #f0f0f8',
+                display: 'flex', alignItems: 'center', gap: 10,
+              }}>
+                <div style={{
+                  width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+                  background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.18)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Building2 size={15} color="#049edf" />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 14, color: '#1a1a2e' }}>
+                    {c.hoardingCode}
+                  </div>
+                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600, marginTop: 1 }}>
+                    ID #{c.hoardingID} · Contract #{c.contractID}
+                  </div>
+                </div>
+                <span style={{
+                  padding: '3px 11px', borderRadius: 20, flexShrink: 0,
+                  background: '#fffbeb', border: '1px solid #fde68a',
+                  fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: '#d97706',
+                }}>
+                  ⚠ Conflict
+                </span>
+              </div>
+
+              {/* Card body */}
+              <div style={{ padding: '13px 16px', background: '#fff' }}>
+                <div style={{ display: 'flex', gap: 0, flexDirection: 'column' }}>
+
+                  {/* Row 1 — date comparison */}
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'stretch', marginBottom: 10, flexWrap: 'wrap' }}>
+                    {/* Your dates */}
+                    <div style={{
+                      flex: 1, minWidth: 170,
+                      padding: '10px 12px', borderRadius: 10,
+                      background: '#fffbeb', border: '1.5px solid #fde68a',
+                    }}>
+                      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, color: '#92400e', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+                        📋 Your Quotation Dates
+                      </div>
+                      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#d97706' }}>
+                        {fmtDateDisplay(c.rowStart)}
+                        <span style={{ fontWeight: 600, color: '#b0b0c8', margin: '0 6px' }}>→</span>
+                        {fmtDateDisplay(c.rowEnd)}
+                      </div>
+                    </div>
+
+                    {/* VS divider */}
+                    <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, padding: '0 4px' }}>
+                      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 900, color: '#c0c0d8', letterSpacing: '0.05em' }}>VS</div>
+                    </div>
+
+                    {/* Contract dates */}
+                    <div style={{
+                      flex: 1, minWidth: 170,
+                      padding: '10px 12px', borderRadius: 10,
+                      background: '#f8f8fd', border: '1.5px solid #e8e8f4',
+                    }}>
+                      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, color: '#7878a0', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+                        📄 Existing Contract #{c.contractID}
+                      </div>
+                      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                        {fmtDateDisplay(c.contractStart)}
+                        <span style={{ fontWeight: 600, color: '#b0b0c8', margin: '0 6px' }}>→</span>
+                        {fmtDateDisplay(c.contractEnd)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Row 2 — customer */}
+                  <div style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 7,
+                    padding: '6px 11px', borderRadius: 8,
+                    background: 'rgba(4,158,223,0.05)', border: '1px solid rgba(4,158,223,0.15)',
+                    alignSelf: 'flex-start',
+                  }}>
+                    <User size={12} color="#049edf" style={{ flexShrink: 0 }} />
+                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#049edf' }}>
+                      Booked by:
+                    </span>
+                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#1a1a2e' }}>
+                      {c.customerName}
+                    </span>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Footer ── */}
+        <div style={{
+          padding: '14px 24px 18px', borderTop: '1.5px solid #f0f0f8',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          background: '#fafafe', gap: 12, flexShrink: 0, flexWrap: 'wrap',
+        }}>
+          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600, flex: 1, minWidth: 180 }}>
+            Go to Step 2 and update the hoarding dates, or remove the conflicting hoardings.
+          </span>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '10px 24px', borderRadius: 11, border: 'none',
+              background: 'linear-gradient(135deg,#049edf,#6c63ff)',
+              color: '#fff', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
+              display: 'flex', alignItems: 'center', gap: 7, flexShrink: 0,
+              boxShadow: '0 4px 16px rgba(4,158,223,0.30)',
+            }}
+          >
+            <Check size={14} /> Got It, I'll Fix the Dates
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 /* ═══════════════════════════════════════════
    MERGE HOARDING MODAL
 ═══════════════════════════════════════════ */
@@ -1538,6 +1853,7 @@ function CreateContractFromQuotModal({
   const [freqID, setFreqID] = useState(String(freqOptions[0]?.value ?? 1));
   const [saving, setSaving] = useState(false);
   const [rowErrors, setRowErrors] = useState({});
+  const [occupancyWarnings, setOccupancyWarnings] = useState([]);
 
 
   /* Build one editable row per quotation line */
@@ -1724,40 +2040,41 @@ function CreateContractFromQuotModal({
       // Backend is returning wrong ID — fetch the real newly created contract
       if (savedContractID <= 1) {
         // Backend returns wrong ID — fetch by direct API call with auth token
-console.warn('[Contract] Fetching real contract ID via direct fetch...');
-try {
-  const token = localStorage.getItem('authToken');
-  const directRes = await fetch(
-    'https://api.jalaram-ad.ashtamtechnologies.com/api/CustomerContract/GetAll',
-    { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
-  );
-  const directJson = await directRes.json();
-  console.log('[Contract] Direct API response:', JSON.stringify(directJson));
+        console.warn('[Contract] Fetching real contract ID via direct fetch...');
+        try {
+          const token = localStorage.getItem('authToken');
+          const directRes = await fetch(
+            'https://api.jalaram-ad.ashtamtechnologies.com/api/CustomerContract/GetAll',
+            { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
+          );
+          const directJson = await directRes.json();
+          console.log('[Contract] Direct API response:', JSON.stringify(directJson));
 
-  const allList = Array.isArray(directJson) ? directJson
-    : Array.isArray(directJson?.data) ? directJson.data
-    : Array.isArray(directJson?.$values) ? directJson.$values
-    : [];
+          const allList = Array.isArray(directJson) ? directJson
+            : Array.isArray(directJson?.data) ? directJson.data
+              : Array.isArray(directJson?.$values) ? directJson.$values
+                : [];
 
-  console.log('[Contract] Total contracts found:', allList.length);
+          console.log('[Contract] Total contracts found:', allList.length);
 
-  // Filter by customerID and sort by highest ID = newest
-  const forThisCustomer = allList
-    .filter(c => Number(c.customerContractID ?? c.CustomerContractID) > 0)
-    .sort((a, b) =>
-      Number(b.customerContractID ?? b.CustomerContractID ?? 0) -
-      Number(a.customerContractID ?? a.CustomerContractID ?? 0)
-    );
+          // Filter by customerID and sort by highest ID = newest
+          const forThisCustomer = allList
+            .filter(c => Number(c.customerContractID ?? c.CustomerContractID) > 0)
+            .sort((a, b) =>
+              Number(b.customerContractID ?? b.CustomerContractID ?? 0) -
+              Number(a.customerContractID ?? a.CustomerContractID ?? 0)
+            );
 
-  if (forThisCustomer.length > 0) {
-    savedContractID = Number(
-      forThisCustomer[0].customerContractID ?? forThisCustomer[0].CustomerContractID
-    );
-    console.log('[Contract] Real savedContractID:', savedContractID);
-  }
-} catch (err) {
-  console.error('[Contract] Direct fetch failed:', err?.message);
-}      }
+          if (forThisCustomer.length > 0) {
+            savedContractID = Number(
+              forThisCustomer[0].customerContractID ?? forThisCustomer[0].CustomerContractID
+            );
+            console.log('[Contract] Real savedContractID:', savedContractID);
+          }
+        } catch (err) {
+          console.error('[Contract] Direct fetch failed:', err?.message);
+        }
+      }
 
       console.log('[Contract] Final savedContractID:', savedContractID);
 
@@ -1784,6 +2101,7 @@ try {
       console.log('[HoardingMap] Mapping IDs:', [...allHoardingIDsToMap]);
 
       // Step 3: Create hoarding maps
+      const occupiedMsgs = [];
       for (const hID of allHoardingIDsToMap) {
         try {
           await apiService.createCustomerContractHoardingMap({
@@ -1792,10 +2110,32 @@ try {
             customerID: Number(quot.customerID),
             hoardingID: hID,
           });
-          console.log('[HoardingMap] Mapped:', hID);
         } catch (err) {
-          console.error('[HoardingMap] Failed:', hID, err?.message);
+          // Log full error for debugging
+          console.error('[HoardingMap] Error for hID', hID,
+            '| status:', err?.response?.status,
+            '| data:', JSON.stringify(err?.response?.data),
+            '| message:', err?.message
+          );
+
+          const occ = parseOccupancyError(err);
+          if (occ) {
+            const h = hoardings.find(hh => hh.hoardingID === hID);
+            const code = h?.hoardingCode ? ` (${h.hoardingCode})` : '';
+            const msg = occ.replace(/Hoarding\s+\d+/, `Hoarding #${hID}${code}`);
+            occupiedMsgs.push(msg);
+            showToast(msg, 'error');      // ← toast so it's always visible
+          } else {
+            const fallback = err?.response?.data?.message || err?.message || `Failed to map Hoarding #${hID}`;
+            showToast(fallback, 'error'); // ← generic errors as toast too
+            console.error('[HoardingMap] Non-occupancy error:', hID, fallback);
+          }
         }
+      }
+      if (occupiedMsgs.length > 0) {
+        setOccupancyWarnings(occupiedMsgs);
+        setSaving(false);
+        return;  // keep modal open — user sees banner + toasts
       }
 
       // Step 4: Merge records — only for hoardings that were actually mapped
@@ -1853,7 +2193,15 @@ try {
           </div>
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
-
+        {/* ── Occupancy warning ── */}
+        {occupancyWarnings.length > 0 && (
+          <div style={{ padding: '14px 24px 0' }}>
+            <OccupancyWarningBanner
+              messages={occupancyWarnings}
+              onDismiss={() => setOccupancyWarnings([])}
+            />
+          </div>
+        )}
         {/* ── Customer bar ── */}
         <div style={{
           padding: '11px 24px', borderBottom: '1px solid #f0f0f8', background: '#fafafe',
@@ -2167,17 +2515,21 @@ try {
             <button className="pg-btn-cancel" onClick={onClose} disabled={saving}>Cancel</button>
             <button
               onClick={handleCreate}
-              disabled={saving || selectedRows.length === 0}
+              disabled={saving || selectedRows.length === 0 || occupancyWarnings.length > 0}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '9px 20px', borderRadius: 9, border: 'none',
-                background: selectedRows.length > 0
-                  ? 'linear-gradient(135deg,#7c3aed,#6d28d9)'
-                  : '#d0d0e0',
+                background:
+                  occupancyWarnings.length > 0 ? '#d0d0e0' :
+                    selectedRows.length > 0 ? 'linear-gradient(135deg,#7c3aed,#6d28d9)'
+                      : '#d0d0e0',
                 color: '#fff',
-                cursor: selectedRows.length > 0 && !saving ? 'pointer' : 'not-allowed',
+                cursor: saving || selectedRows.length === 0 || occupancyWarnings.length > 0
+                  ? 'not-allowed' : 'pointer',
                 fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
-                boxShadow: selectedRows.length > 0 ? '0 2px 10px rgba(124,58,237,0.30)' : 'none',
+                boxShadow: selectedRows.length > 0 && !occupancyWarnings.length
+                  ? '0 2px 10px rgba(124,58,237,0.30)' : 'none',
+                pointerEvents: saving ? 'none' : 'auto',   // ← hard block on double-click
               }}
             >
               {saving
@@ -2256,6 +2608,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [showContractModal, setShowContractModal] = useState(false);  // ← NEW
   const [contractQuot, setContractQuot] = useState(null);   // ← NEW
   const [quotMerges, setQuotMerges] = useState([]);
+  const [contractedQuotIds, setContractedQuotIds] = useState(new Set());
+  const [allContracts, setAllContracts] = useState([]);   // ← NEW
+  const [allContractMaps, setAllContractMaps] = useState([]);   // ← NEW
+  const [conflictWarnings, setConflictWarnings] = useState([]);   // ← NEW
+  const [showConflictModal, setShowConflictModal] = useState(false);// ← NEW
   /* ── Step 2 resizable table ── */
   const step2TableRef = useRef(null);
   const [step2TableReady, setStep2TableReady] = useState(false);
@@ -2340,7 +2697,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw] = await Promise.all([
+        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw,quotCustRaw] = await Promise.all([
           apiService.getAllCustomers(),
           apiService.getAllHoardings(),
           apiService.getAllSites().catch(() => []),
@@ -2348,6 +2705,9 @@ export default function QuotationPage({ onNavigateToContracts }) {
           apiService.getAllQuotations().catch(() => []),
           apiService.getAllQuotationLines().catch(() => []),
           apiService.getAllPaymentFreqs().catch(() => []),
+          apiService.getAllCustomerContracts().catch(() => []),                  // ← NEW
+          apiService.getAllCustomerContractHoardingMaps().catch(() => []),       // ← NEW
+          apiService.getAllQuotationCustomers().catch(() => []),
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
@@ -2361,7 +2721,24 @@ export default function QuotationPage({ onNavigateToContracts }) {
           value: f.paymentFreqID ?? f.PaymentFreqID,
           label: f.freqName ?? f.FreqName ?? f.name ?? String(f.paymentFreqID ?? ''),
         })));
-
+        const contractedIds = new Set(
+          normalizeList(quotCustRaw)
+            .map(qc => Number(
+              qc.quotation_ID ?? qc.quotationID ?? qc.QuotationID ??
+              qc.Quotation_ID ?? 0
+            ))
+            .filter(id => id > 0)
+        );
+        setContractedQuotIds(contractedIds);
+        // ← NEW: store contracts + maps for conflict detection
+        setAllContracts(normalizeList(contractsRaw).map(c => ({
+          customerContractID: c.customerContractID ?? c.CustomerContractID,
+          customerID: c.customerID ?? c.CustomerID,
+          startDate: (c.startDate ?? c.StartDate ?? '').split('T')[0],
+          endDate: (c.endDate ?? c.EndDate ?? '').split('T')[0],
+          status: c.status ?? c.Status ?? '',
+        })));
+        setAllContractMaps(normalizeList(mapsRaw));
       } catch (err) {
         setApiError(err?.response?.data?.message || err?.message || 'Failed to load data.');
       } finally { setLoading(false); }
@@ -2457,27 +2834,39 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
   const applyGlobalDates = useCallback(() => {
     if (!globalStart) return;
-    setRows(prev => prev.map(r => {
+    const updatedRows = rows.map(r => {
       if (r.rowType !== 'hoarding') return r;
       const end = globalEnd || addMonths(globalStart, Number(r.nos) || 1);
       return { ...r, startDate: globalStart, endDate: end };
-    }));
-  }, [globalStart, globalEnd]);
+    });
+    setRows(updatedRows);
+    // ── conflict check ──
+    const conflicts = checkHoardingDateConflicts(updatedRows, allContracts, allContractMaps, customers);
+    if (conflicts.length > 0) { setConflictWarnings(conflicts); setShowConflictModal(true); }
+  }, [globalStart, globalEnd, rows, allContracts, allContractMaps, customers]);
 
   const handleAddSelected = (selectedIds) => {
     const toAdd = hoardings
       .filter(h => selectedIds.has(h.hoardingID) && !rows.find(r => r.hoardingID === h.hoardingID))
       .map(h => newHoardingRow(h, globalStart, globalEnd || addMonths(globalStart, 1), siteMap));
-    setRows(p => [...p, ...toAdd]);
+    const nextRows = [...rows, ...toAdd];
+    setRows(nextRows);
     setShowHoardModal(false);
+    // ── conflict check ──
+    const conflicts = checkHoardingDateConflicts(nextRows, allContracts, allContractMaps, customers);
+    if (conflicts.length > 0) { setConflictWarnings(conflicts); setShowConflictModal(true); }
   };
 
   const handleAddManual = (selectedIds) => {
     const toAdd = hoardings
       .filter(h => selectedIds.has(h.hoardingID) && !rows.find(r => r.hoardingID === h.hoardingID))
       .map(h => newHoardingRow(h, globalStart, globalEnd || addMonths(globalStart, 1), siteMap));
-    setRows(p => [...p, ...toAdd]);
+    const nextRows = [...rows, ...toAdd];
+    setRows(nextRows);
     setShowManualModal(false);
+    // ── conflict check ──
+    const conflicts = checkHoardingDateConflicts(nextRows, allContracts, allContractMaps, customers);
+    if (conflicts.length > 0) { setConflictWarnings(conflicts); setShowConflictModal(true); }
   };
 
   const handleMerge = useCallback((selectedRows, direction) => {
@@ -2716,6 +3105,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
       setStep1Error(''); setStep(2);
     } else if (step === 2) {
       if (rows.length === 0) { setStep2Error('Add at least one hoarding.'); return; }
+      // ── re-check conflicts before proceeding ──
+      const conflicts = checkHoardingDateConflicts(rows, allContracts, allContractMaps, customers);
+      if (conflicts.length > 0) {
+        setConflictWarnings(conflicts);
+        setShowConflictModal(true);
+        setStep2Error(`${conflicts.length} hoarding${conflicts.length !== 1 ? 's have' : ' has'} date conflicts with existing contracts. Please resolve them before proceeding.`);
+        return;
+      }
       setStep2Error(''); setStep(3);
     }
   };
@@ -3643,16 +4040,38 @@ export default function QuotationPage({ onNavigateToContracts }) {
                             <Printer size={13} /> PDF
                           </button>
                           {/* ← NEW: Create Contract button */}
-                          <button
-                            onClick={() => {
-                              setContractQuot(latest);
-                              setShowContractModal(true);
-                            }}
-                            title="Go to Customer Contracts for this quotation"
-                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: 'none', color: '#fff', background: 'linear-gradient(135deg, #049edf, #6c63ff)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap', boxShadow: '0 2px 6px rgba(124,58,237,0.25)' }}
-                          >
-                            <FileCheck size={13} /> Contract
-                          </button>
+                          {(() => {
+                            const done = contractedQuotIds.has(latest.quotationID);
+                            return (
+                              <button
+                                onClick={() => {
+                                  if (done) return;
+                                  setContractQuot(latest);
+                                  setShowContractModal(true);
+                                }}
+                                disabled={done}
+                                title={done ? 'Contract already created for this quotation' : 'Create customer contract'}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 5,
+                                  padding: '5px 11px', borderRadius: 8, border: 'none',
+                                  color: '#fff',
+                                  background: done
+                                    ? '#16a34a'
+                                    : 'linear-gradient(135deg, #049edf, #6c63ff)',
+                                  cursor: done ? 'not-allowed' : 'pointer',
+                                  fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800,
+                                  whiteSpace: 'nowrap',
+                                  boxShadow: done ? 'none' : '0 2px 6px rgba(124,58,237,0.25)',
+                                  opacity: done ? 0.75 : 1,
+                                  pointerEvents: done ? 'none' : 'auto',
+                                }}
+                              >
+                                {done
+                                  ? <><Check size={13} /> Created</>
+                                  : <><FileCheck size={13} /> Contract</>}
+                              </button>
+                            );
+                          })()}
                           {/* Revise */}
                           <button onClick={() => handleReopenHistory(latest)} title="Create Revision"
                             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #e8e8f4', color: '#5a5a78', background: '#fff', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
@@ -3748,6 +4167,13 @@ export default function QuotationPage({ onNavigateToContracts }) {
           siteMap={siteMap}
         />
       )}
+      {/* Hoarding date conflict modal */}
+      {showConflictModal && conflictWarnings.length > 0 && (
+        <HoardingConflictModal
+          conflicts={conflictWarnings}
+          onClose={() => setShowConflictModal(false)}
+        />
+      )}
       {showTermsModal && (
         <TermsModal
           selected={selectedTerms}
@@ -3784,7 +4210,9 @@ export default function QuotationPage({ onNavigateToContracts }) {
           siteMap={siteMap}
           paymentFreqs={paymentFreqs}
           onClose={() => { setShowContractModal(false); setContractQuot(null); }}
-          onCreated={() => { }}
+          onCreated={() => {
+            setContractedQuotIds(prev => new Set([...prev, contractQuot.quotationID]));
+          }}
           showToast={showToast}
         />
       )}
