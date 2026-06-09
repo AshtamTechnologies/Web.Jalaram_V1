@@ -715,24 +715,28 @@
     getAllQuotationLines: () => api.get('/QuotationLineDTL'),
     getQuotationLineById: (lineID, quotationID, revisionID, hoardingID) =>
       api.get(`/QuotationLineDTL/${lineID}/${quotationID}/${revisionID}/${hoardingID}`),
-    createQuotationLine: (data) => api.post('/QuotationLineDTL', {
-      quotationLineNumber: Number(data.quotationLineNumber ?? 0),
-      quotationID: Number(data.quotationID),
-      quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-      hoardingID: Number(data.hoardingID ?? 0),
-      periodBeginDate: data.periodBeginDate,
-      periodEndDate: data.periodEndDate,
-      rentAmount: Number(data.rentAmount ?? 0),
-    }),
-    updateQuotationLine: (data) => api.put('/QuotationLineDTL', {
-      quotationLineNumber: Number(data.quotationLineNumber ?? 0),
-      quotationID: Number(data.quotationID),
-      quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-      hoardingID: Number(data.hoardingID ?? 0),
-      periodBeginDate: data.periodBeginDate,
-      periodEndDate: data.periodEndDate,
-      rentAmount: Number(data.rentAmount ?? 0),
-    }),
+createQuotationLine: (data) => api.post('/QuotationLineDTL', {
+  quotationLineNumber: Number(data.quotationLineNumber ?? 0),
+  quotationID: Number(data.quotationID),
+  quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
+  hoardingID: Number(data.hoardingID ?? 0),
+  purpose: String(data.purpose ?? ''),
+  periodBeginDate: data.periodBeginDate,
+  periodEndDate: data.periodEndDate,
+  rentAmount: Number(data.rentAmount ?? 0),
+  mergeFlag: Boolean(data.mergeFlag ?? false),
+}),
+updateQuotationLine: (data) => api.put('/QuotationLineDTL', {
+  quotationLineNumber: Number(data.quotationLineNumber ?? 0),
+  quotationID: Number(data.quotationID),
+  quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
+  hoardingID: Number(data.hoardingID ?? 0),
+  purpose: String(data.purpose ?? ''),
+  periodBeginDate: data.periodBeginDate,
+  periodEndDate: data.periodEndDate,
+  rentAmount: Number(data.rentAmount ?? 0),
+  mergeFlag: Boolean(data.mergeFlag ?? false),
+}),
 
     // ─────────────────────────────────────────────────────────
     // QUOTATION MERGE DTL

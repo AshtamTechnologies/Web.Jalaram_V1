@@ -4,7 +4,7 @@ import {
   IndianRupee, Users, MapPin, Layers, UserCircle,
   FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase,CreditCard,
 } from 'lucide-react';
-import Chatbot from './Chatbot';
+// import Chatbot from './Chatbot';
 import './Layout.css';
 
 /* ─────────────────────────────────────
@@ -379,7 +379,7 @@ export default function Layout({ tab, changeTab, onLogout, children }) {
           {children}
         </main>
 
-        <Chatbot />
+        {/* <Chatbot /> */}
       </div>
     </div>
   );

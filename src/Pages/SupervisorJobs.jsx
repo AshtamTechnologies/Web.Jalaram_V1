@@ -860,7 +860,7 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <JobStatusBadge status={job.jobStatus} />
           {canAccept && (
-            <button onClick={() => onAccept(job)} disabled={accepting}
+            <button onClick={() => { if (window.confirm(`Accept Job #${job.jobRequestID}?`)) onAccept(job); }} disabled={accepting}
               style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', borderRadius: 20, background: accepting ? '#e8e8f4' : 'linear-gradient(135deg,#7c3aed,#049edf)', border: 'none', cursor: accepting ? 'not-allowed' : 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: accepting ? '#b0b0c8' : '#fff', boxShadow: accepting ? 'none' : '0 3px 14px rgba(108,63,199,0.35)' }}>
               {accepting ? <><Loader2 size={13} className="pg-spin" />Accepting…</> : <><ThumbsUp size={14} />Accept Job</>}
             </button>
@@ -1338,8 +1338,8 @@ export default function SupervisorJobsPage() {
                       <td className="pg-td"><JobStatusBadge status={job.jobStatus} /></td>
                       <td className="pg-td">
                         <div className="pg-action-wrap">
-                          {canAccept && (
-                            <button className="pg-btn-view" onClick={() => handleAccept(job)} disabled={isAccepting} title="Accept"
+                         {canAccept && (
+                            <button className="pg-btn-view" onClick={() => { if (window.confirm(`Accept Job #${job.jobRequestID}?`)) handleAccept(job); }} disabled={isAccepting} title="Accept"
                               style={{ background: 'rgba(108,63,199,0.08)', color: '#7c3aed', border: '1px solid rgba(108,63,199,0.2)', boxShadow: 'none' }}>
                               {isAccepting ? <Loader2 size={12} className="pg-spin" /> : <ThumbsUp size={13} />}
                             </button>

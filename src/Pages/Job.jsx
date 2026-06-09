@@ -618,10 +618,12 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
   const [imgErrors, setImgErrors] = useState({}); // track broken images by index
   const inputRef = useRef(null);
 
-  const myAttachments = attachments.filter(
-    a => Number(a.jobTaskID ?? a.JobTaskID) === Number(task.jobTaskID)
+const taskIDs = new Set(
+    [task.jobTaskID, ...(task.mergedTaskIDs ?? [])].map(Number)
   );
-
+  const myAttachments = attachments.filter(
+    a => taskIDs.has(Number(a.jobTaskID ?? a.JobTaskID))
+  );
   const handleUpload = async () => {
     if (files.length === 0) return;
     setUploading(true);
@@ -1955,42 +1957,46 @@ export default function JobPage() {
                                 </td>
 
                                 <td className="pg-td" style={{ textAlign: 'center' }}>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'center' }}>
-                                    {row.tasks.map(t => {
-                                      const cnt = allAttachments.filter(
+                                  {(() => {
+                                    const allSaved = row.tasks.every(t => t.jobTaskID > 0);
+                                    const totalCnt = row.tasks.reduce((sum, t) =>
+                                      sum + allAttachments.filter(
                                         a => Number(a.jobTaskID ?? a.JobTaskID ?? 0) === Number(t.jobTaskID)
-                                      ).length;
-                                      return t.jobTaskID > 0 ? (
-                                        <button
-                                          key={t.jobTaskID}
-                                          className="pg-btn-view"
-                                          onClick={() => setPhotoModalTask(t)}
-                                          title={`Photos for Task #${t.jobTaskID} (${t.hoardingCode})`}
-                                          style={{ background: 'rgba(4,158,223,0.08)', color: '#049edf', boxShadow: 'none', position: 'relative', fontSize: 11 }}
-                                        >
-                                          📷
-                                          {cnt > 0 && (
-                                            <span style={{
-                                              position: 'absolute', top: -6, right: -6,
-                                              background: '#049edf', color: '#fff',
-                                              borderRadius: '50%', width: 16, height: 16,
-                                              fontSize: 9, fontWeight: 900, fontFamily: 'Nunito,sans-serif',
-                                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                              border: '1.5px solid #fff',
-                                            }}>{cnt}</span>
-                                          )}
-                                        </button>
-                                      ) : (
-                                        <span key={t._id} title="Save job first"
-                                          style={{
-                                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                                            width: 30, height: 30, borderRadius: 8,
-                                            background: '#f4f4fb', border: '1px solid #e8e8f4',
-                                            fontSize: 14, opacity: 0.4, cursor: 'not-allowed',
-                                          }}>📷</span>
-                                      );
-                                    })}
-                                  </div>
+                                      ).length, 0);
+                                    return allSaved ? (
+                                      <button
+                                        className="pg-btn-view"
+                                        onClick={() => setPhotoModalTask({
+                                          ...row.tasks[0],
+                                          mergedTaskIDs: row.tasks.map(t => t.jobTaskID),
+                                          hoardingCode: row.tasks.map(t => t.hoardingCode).filter(Boolean).join(' + '),
+                                          siteAddress: [...new Set(row.tasks.map(t => t.siteAddress).filter(Boolean))].join(', '),
+                                        })}
+                                        title="View / Upload photos for all merged hoardings"
+                                        style={{ background: 'rgba(4,158,223,0.08)', color: '#049edf', boxShadow: 'none', position: 'relative' }}
+                                      >
+                                        📷
+                                        {totalCnt > 0 && (
+                                          <span style={{
+                                            position: 'absolute', top: -6, right: -6,
+                                            background: '#049edf', color: '#fff',
+                                            borderRadius: '50%', width: 16, height: 16,
+                                            fontSize: 9, fontWeight: 900, fontFamily: 'Nunito,sans-serif',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                            border: '1.5px solid #fff',
+                                          }}>{totalCnt}</span>
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <span title="Save job first"
+                                        style={{
+                                          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                          width: 30, height: 30, borderRadius: 8,
+                                          background: '#f4f4fb', border: '1px solid #e8e8f4',
+                                          fontSize: 14, opacity: 0.4, cursor: 'not-allowed',
+                                        }}>📷</span>
+                                    );
+                                  })()}
                                 </td>
                                 <td className="pg-td" style={{ textAlign: 'center' }}>
                                   <button

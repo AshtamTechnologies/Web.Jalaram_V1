@@ -124,7 +124,13 @@ const PAYMENT_FREQ_FALLBACK = [
   { value: 3, label: 'Half-Yearly' },
   { value: 4, label: 'Yearly' },
 ];
-
+const PRINTING_TYPES = [
+  'Flex Banner Printing',
+  'Black Back Printing',
+  'Star Black Back Printing',
+  'Backlit Printing',
+  'Retro Flex Printing',
+];
 /* ═══════════════════════════════════════════
    HELPERS
 ═══════════════════════════════════════════ */
@@ -157,6 +163,52 @@ const addMonths = (dateStr, months) => {
   d.setMonth(d.getMonth() + 1, 0);
   return d.toISOString().split('T')[0];
 };
+function calcAmountByDates(startDate, endDate, monthlyRent) {
+  if (!startDate || !endDate || !monthlyRent) return Number(monthlyRent) || 0;
+  const start = new Date(startDate + 'T00:00:00');
+  const end = new Date(endDate + 'T00:00:00');
+  if (end < start) return Number(monthlyRent) || 0;
+
+  const startDay = start.getDate();
+  const endDay = end.getDate();
+  const endLastDay = new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate();
+
+  if (startDay === 1 && endDay === endLastDay) {
+    // Full calendar months
+    const months =
+      (end.getFullYear() - start.getFullYear()) * 12 +
+      (end.getMonth() - start.getMonth()) + 1;
+    return Math.round(months * Number(monthlyRent) * 100) / 100;
+  }
+
+  // Partial span — daily rate
+  const days = Math.round((end - start) / 86400000) + 1; // inclusive
+  const dailyRate = Number(monthlyRent) / 30;
+  return Math.round(days * dailyRate * 100) / 100;
+}
+
+/**
+ * calcNOSFromDates
+ * Returns whole months for full-month spans, decimal months otherwise.
+ */
+function calcNOSFromDates(startDate, endDate) {
+  if (!startDate || !endDate) return 1;
+  const start = new Date(startDate + 'T00:00:00');
+  const end = new Date(endDate + 'T00:00:00');
+  if (end < start) return 1;
+
+  const startDay = start.getDate();
+  const endDay = end.getDate();
+  const endLastDay = new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate();
+
+  if (startDay === 1 && endDay === endLastDay) {
+    return (end.getFullYear() - start.getFullYear()) * 12 +
+      (end.getMonth() - start.getMonth()) + 1;
+  }
+
+  const days = Math.round((end - start) / 86400000) + 1;
+  return Math.round((days / 30) * 100) / 100;
+}
 function checkHoardingDateConflicts(rows, allContracts, allContractMaps, customers) {
   const conflicts = [];
   const seen = new Set();
@@ -274,9 +326,11 @@ function normalizeQuotLine(raw) {
     quotationID: raw.quotationID ?? raw.QuotationID ?? 0,
     quotationRevisionNumber: raw.quotationRevisionNumber ?? raw.QuotationRevisionNumber ?? 0,
     hoardingID: raw.hoardingID ?? raw.HoardingID ?? 0,
+    purpose: raw.purpose ?? raw.Purpose ?? '',
     periodBeginDate: (raw.periodBeginDate ?? raw.PeriodBeginDate ?? '').split('T')[0],
     periodEndDate: (raw.periodEndDate ?? raw.PeriodEndDate ?? '').split('T')[0],
     rentAmount: raw.rentAmount ?? raw.RentAmount ?? 0,
+    mergeFlag: raw.mergeFlag ?? raw.MergeFlag ?? false,
   };
 }
 // Normalize siteID to number for consistent Map keys
@@ -402,12 +456,12 @@ const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = nu
   };
 };
 
-const newPrintingRow = () => ({
+const newPrintingRow = (label = 'Flex Banner Printing') => ({
   _id: uid(),
   rowType: 'printing',
   hoardingID: 0,
   siteID: null,
-  location: 'FLEX BANNER PRINTING',
+  location: label,
   hoardingCode: '',
   size: '',
   sqFt: 0,
@@ -420,7 +474,24 @@ const newPrintingRow = () => ({
   quotationLineNumber: 0,
   saved: false,
 });
-
+const newExtraChargeRow = () => ({
+  _id: uid(),
+  rowType: 'extra',
+  hoardingID: 0,
+  siteID: null,
+  location: 'Extra Charge',
+  hoardingCode: '',
+  size: '',
+  sqFt: 0,
+  nos: 1,
+  startDate: '',
+  endDate: '',
+  ratePerMonth: 0,
+  amount: 0,
+  printingCost: 0,
+  quotationLineNumber: 0,
+  saved: false,
+});
 function newMergedRow(rowsArr, direction) {
   const sizes = rowsArr.map(r => parseSize(r.size));
   const gaps = Math.max(rowsArr.length - 1, 1); // at least 1 gap
@@ -743,7 +814,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
 
   const renderRowPrint = (row, sr) => {
     const printCell = row.rowType === 'printing'
-      ? `<td class="r" style="font-style:italic;color:#888;">—</td>`
+      ? `<td class="r" style="font-weight:bold;">${row.amount > 0 ? fmtCurrency(row.amount) : '—'}</td>`
       : `<td class="r">${Number(row.printingCost || 0) > 0 ? fmtCurrency(row.printingCost) : '—'}</td>`;
     const mergeTag = row.rowType === 'merged'
       ? `<div class="merged-tag">${row.mergeDirection === 'H' ? '↔ H' : '↕ V'}</div>`
@@ -852,7 +923,13 @@ ${renderFooter(isLast)}
 
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Quotation - ${quotNo}</title><style>${css}</style></head><body>${pagesHtml}<script>window.onload=()=>setTimeout(()=>window.print(),400);</script></body></html>`;
 }
-
+function buildProformaHTML(params) {
+  const html = buildPrintHTML(params);
+  return html
+    .replace(/>QUOTATION</g, '>PROFORMA INVOICE<')
+    .replace(/>Site Address</g, '>Product Name<')
+    .replace(/>Site Address \/ Product</g, '>Product Name<');
+}
 /* ═══════════════════════════════════════════
    HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
@@ -2613,13 +2690,16 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [allContractMaps, setAllContractMaps] = useState([]);   // ← NEW
   const [conflictWarnings, setConflictWarnings] = useState([]);   // ← NEW
   const [showConflictModal, setShowConflictModal] = useState(false);// ← NEW
+  const [showPrintTypeDD, setShowPrintTypeDD] = useState(false);
   /* ── Step 2 resizable table ── */
   const step2TableRef = useRef(null);
+  const printTypeBtnRef = useRef(null);
+  const printTypePanelRef = useRef(null);
   const [step2TableReady, setStep2TableReady] = useState(false);
   const histTableRef = useRef(null);
   const [histTableReady, setHistTableReady] = useState(false);
   const step2ColWidths = withPrinting
-    ? [40, 200, 80, 60, 90, 90, 90, 46]
+    ? [40, 200, 80, 60, 148, 148, 90, 90, 46]   // added 148,148 for start/end date
     : [40, 200, 80, 64, 56, 148, 148, 90, 90, 46];
 
   useResizableColumns(step2TableRef, step2TableReady, step2ColWidths);
@@ -2691,13 +2771,154 @@ export default function QuotationPage({ onNavigateToContracts }) {
       return n;
     });
   }, []);
+const handleViewProforma = (quot) => {
+  const myLines = quotLines.filter(l =>
+    Number(l.quotationID) === Number(quot.quotationID) &&
+    Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+  );
+  const cust = customers.find(c => c.customerID === quot.customerID) || null;
 
+  /* ── Build rows from QuotationLineDTL ── */
+  const pdfRows = myLines
+    .filter(l => !l.mergeFlag)
+    .map(l => {
+      // ── Printing / Extra rows ──
+      if (!l.hoardingID && l.purpose) {
+        const isPrinting = PRINTING_TYPES.some(pt =>
+          pt.toLowerCase() === (l.purpose || '').toLowerCase()
+        );
+        return {
+          rowType: isPrinting ? 'printing' : 'extra',
+          hoardingID: 0,
+          location: l.purpose,
+          size: '',
+          sqFt: 0,
+          nos: 1,
+          startDate: l.periodBeginDate,
+          endDate: l.periodEndDate,
+          ratePerMonth: l.rentAmount,
+          amount: l.rentAmount,
+          printingCost: 0,
+        };
+      }
+      // ── Regular hoarding row ──
+      const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
+      const siteID = h?.siteID ?? h?.site?.siteID ?? null;
+      const siteObj = siteID != null
+        ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
+        : null;
+      return {
+        rowType: 'hoarding',
+        hoardingID: l.hoardingID,
+        location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+        size: h ? `${h.width} X ${h.height}` : '',
+        sqFt: h ? (h.width * h.height) : 0,
+        nos: 1,
+        startDate: l.periodBeginDate,
+        endDate: l.periodEndDate,
+        ratePerMonth: l.rentAmount,
+        amount: l.rentAmount,
+        printingCost: 0,
+      };
+    });
+
+  /* ── Merged rows from QuotationMergeDTL ── */
+  const myMerges = quotMerges.filter(m =>
+    Number(m.quotationID) === Number(quot.quotationID) &&
+    Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+  );
+
+  if (myMerges.length >= 2) {
+    const byLine = new Map();
+    for (const m of myMerges) {
+      const ln = m.quotationLineNumber;
+      if (!byLine.has(ln)) byLine.set(ln, []);
+      byLine.get(ln).push(m);
+    }
+
+    for (const ln of [...byLine.keys()].sort((a, b) => a - b)) {
+      const records = byLine.get(ln);
+      if (records.length < 2) continue;
+
+      const savedLine = myLines.find(l =>
+        l.mergeFlag && Number(l.quotationLineNumber) === Number(ln)
+      );
+
+      const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+      const hoardingObjs = records
+        .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
+        .filter(Boolean);
+
+      const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
+      const gaps = hoardingObjs.length - 1;
+      let mw, mh;
+      if (dir === 'H') {
+        mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+        mh = Math.max(...sizes.map(s => s.h));
+      } else {
+        mw = Math.max(...sizes.map(s => s.w));
+        mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+      }
+
+      const locations = hoardingObjs.map(h => {
+        const site = h.siteID ? siteMap.get(h.siteID) : null;
+        return buildSiteAddress(site, h.hoardingCode || '');
+      });
+      const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
+      const fallbackRate = hoardingObjs.reduce((s, h) => s + (h.monthlyRent || 0), 0);
+
+      pdfRows.push({
+        rowType: 'merged',
+        isMerged: true,
+        mergeDirection: dir,
+        hoardingID: 0,
+        location: savedLine?.purpose || locations.join(' + '),
+        hoardingCode: codes,
+        size: `${mw} X ${mh}`,
+        sqFt: mw * mh,
+        nos: 1,
+        startDate: savedLine?.periodBeginDate || '',
+        endDate: savedLine?.periodEndDate || '',
+        ratePerMonth: savedLine ? savedLine.rentAmount : fallbackRate,
+        amount: savedLine ? savedLine.rentAmount : fallbackRate,
+        printingCost: 0,
+      });
+    }
+  }
+
+  /* ── Open Proforma ── */
+  const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
+  const storedCgst = (storedSub * quot.cGSTPercent) / 100;
+  const storedSgst = (storedSub * quot.sGSTPercent) / 100;
+  const storedGross = storedSub + storedCgst + storedSgst;
+  const storedFinal = Math.round(storedGross);
+
+  const html = buildProformaHTML({
+    rows: pdfRows,
+    withPrinting: pdfRows.some(r => r.rowType === 'printing'),
+    selectedCustomer: cust,
+    quotNo: quot.quotationNumber,
+    quotDate: quot.quotationDate,
+    revisionNo: quot.quotationRevisionNumber,
+    cgstPct: quot.cGSTPercent,
+    sgstPct: quot.sGSTPercent,
+    subTotal: storedSub,
+    cgstAmt: storedCgst,
+    sgstAmt: storedSgst,
+    roundOff: storedFinal - storedGross,
+    finalTotal: storedFinal,
+    selectedTerms: [],
+    termsTexts: [],
+  });
+  const win = window.open('', '_blank');
+  if (win) { win.document.write(html); win.document.close(); }
+};
   /* ── Load API data ── */
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw,quotCustRaw] = await Promise.all([
+        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw, quotCustRaw] = await Promise.all([
           apiService.getAllCustomers(),
           apiService.getAllHoardings(),
           apiService.getAllSites().catch(() => []),
@@ -2759,7 +2980,17 @@ export default function QuotationPage({ onNavigateToContracts }) {
       }
     })();
   }, []);
-
+  useEffect(() => {
+    if (!showPrintTypeDD) return;
+    const handler = (e) => {
+      if (!printTypeBtnRef.current?.contains(e.target) &&
+        !printTypePanelRef.current?.contains(e.target)) {
+        setShowPrintTypeDD(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showPrintTypeDD]);
   /* ── Refresh quotations ── */
   const refreshQuotations = useCallback(async () => {
     try {
@@ -2812,18 +3043,54 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setRows(prev => prev.map(r => {
       if (r._id !== id) return r;
       const u = { ...r, [field]: val };
-      if (['ratePerMonth', 'nos', 'sqFt'].includes(field)) {
-        if (u.rowType === 'printing') {
-          u.amount = Number(u.sqFt || 0) * Number(u.ratePerMonth || 0);
-        } else {
-          u.amount = Number(u.ratePerMonth || 0) * Number(u.nos || 1);
+
+      if (u.rowType === 'extra') {
+        // extra charge: amount is directly editable — no auto-calculation
+      } else if (u.rowType === 'printing') {
+        // printing: nos × ratePerMonth
+        if (['nos', 'sqFt', 'ratePerMonth'].includes(field)) {
+          u.amount = Number(u.nos || 0) * Number(u.ratePerMonth || 0);
+        }
+      } else {
+        // hoarding: date-based if both dates present, else nos × rate
+        if (['ratePerMonth', 'nos', 'sqFt'].includes(field)) {
+          if (u.startDate && u.endDate) {
+            u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth);
+          } else {
+            u.amount = Number(u.ratePerMonth || 0) * Number(u.nos || 1);
+          }
+        }
+
+        // nos changed → recalculate endDate (keep date logic)
+        if (field === 'nos' && u.startDate) {
+          u.endDate = addMonths(u.startDate, Number(val) || 1);
+          u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth);
+        }
+
+        // startDate changed → recalculate endDate + amount
+        if (field === 'startDate' && u.startDate) {
+          u.endDate = addMonths(val, Number(u.nos) || 1);
+          u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth);
+        }
+
+        // endDate changed → recalculate amount (and nos display)
+        if (field === 'endDate' && u.startDate && u.endDate) {
+          u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth);
+          u.nos = calcNOSFromDates(u.startDate, u.endDate);
         }
       }
-      if (field === 'nos' && u.rowType === 'hoarding' && u.startDate) {
-        u.endDate = addMonths(u.startDate, Number(val) || 1);
-      }
-      if (field === 'startDate' && u.rowType === 'hoarding' && u.startDate) {
-        u.endDate = addMonths(val, Number(u.nos) || 1);
+
+      return u;
+    }));
+  }, []);
+
+  // Also add updateRowMultiple for printing-row size selection:
+  const updateRowMultiple = useCallback((id, updates) => {
+    setRows(prev => prev.map(r => {
+      if (r._id !== id) return r;
+      const u = { ...r, ...updates };
+      if (u.rowType === 'printing') {
+        u.amount = Number(u.sqFt || 0) * Number(u.ratePerMonth || 0);
       }
       return u;
     }));
@@ -2948,29 +3215,58 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setQuotNo(quot.quotationNumber);
     setQuotDate(todayISO());
     setRevisionNo((quot.quotationRevisionNumber || 1) + 1);
-    const builtRows = myLines.map(l => {
-      const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-      const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-      const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
+  // AFTER
+const builtRows = myLines
+  .filter(l => !l.mergeFlag)   // exclude merged-line records — merges are read-only on revise
+  .map(l => {
+    // ── Restore printing / extra rows from saved purpose ──
+    if (!l.hoardingID && l.purpose) {
+      const isPrinting = PRINTING_TYPES.some(pt =>
+        pt.toLowerCase() === (l.purpose || '').toLowerCase()
+      );
       return {
-        _id: uid(), rowType: 'hoarding',
-        hoardingID: l.hoardingID,
-        siteID,
-        siteObj,
-        location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
-        hoardingCode: h?.hoardingCode || '',
-        size: h ? `${h.width} X ${h.height}` : '',
-        sqFt: h ? (h.width * h.height) : 0,
+        _id: uid(),
+        rowType: isPrinting ? 'printing' : 'extra',
+        hoardingID: 0,
+        siteID: null,
+        siteObj: null,
+        location: l.purpose,
+        hoardingCode: '',
+        size: '',
+        sqFt: 0,
         nos: 1,
         startDate: l.periodBeginDate || '',
         endDate: l.periodEndDate || '',
-        ratePerMonth: l.rentAmount || h?.monthlyRent || 0,
+        ratePerMonth: l.rentAmount || 0,
         amount: l.rentAmount || 0,
         printingCost: 0,
         quotationLineNumber: l.quotationLineNumber,
-        saved: false,
+        saved: true,
       };
-    });
+    }
+    // ── Regular hoarding row ──
+    const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
+    const siteID = h?.siteID ?? h?.site?.siteID ?? null;
+    const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
+    return {
+      _id: uid(), rowType: 'hoarding',
+      hoardingID: l.hoardingID,
+      siteID,
+      siteObj,
+      location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+      hoardingCode: h?.hoardingCode || '',
+      size: h ? `${h.width} X ${h.height}` : '',
+      sqFt: h ? (h.width * h.height) : 0,
+      nos: 1,
+      startDate: l.periodBeginDate || '',
+      endDate: l.periodEndDate || '',
+      ratePerMonth: l.rentAmount || h?.monthlyRent || 0,
+      amount: l.rentAmount || 0,
+      printingCost: 0,
+      quotationLineNumber: l.quotationLineNumber,
+      saved: false,
+    };
+  });
     setRows(builtRows);
     setCgstPct(quot.cGSTPercent ?? 9);
     setSgstPct(quot.sGSTPercent ?? 9);
@@ -2982,15 +3278,37 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   };
 
-  const handleViewPDF = (quot) => {
-    const myLines = quotLines.filter(l =>
-      Number(l.quotationID) === Number(quot.quotationID) &&
-      Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
-    );
-    const cust = customers.find(c => c.customerID === quot.customerID) || null;
+const handleViewPDF = (quot) => {
+  const myLines = quotLines.filter(l =>
+    Number(l.quotationID) === Number(quot.quotationID) &&
+    Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+  );
+  const cust = customers.find(c => c.customerID === quot.customerID) || null;
 
-    /* ── Standard hoarding rows from QuotationLineDTL ── */
-    const pdfRows = myLines.map(l => {
+  /* ── Build rows from QuotationLineDTL ── */
+  const pdfRows = myLines
+    .filter(l => !l.mergeFlag)   // exclude merged-line records; those come from QuotationMergeDTL below
+    .map(l => {
+      // ── Printing / Extra rows (hoardingID = 0, purpose set) ──
+      if (!l.hoardingID && l.purpose) {
+        const isPrinting = PRINTING_TYPES.some(pt =>
+          pt.toLowerCase() === (l.purpose || '').toLowerCase()
+        );
+        return {
+          rowType: isPrinting ? 'printing' : 'extra',
+          hoardingID: 0,
+          location: l.purpose,
+          size: '',
+          sqFt: 0,
+          nos: 1,
+          startDate: l.periodBeginDate,
+          endDate: l.periodEndDate,
+          ratePerMonth: l.rentAmount,
+          amount: l.rentAmount,
+          printingCost: 0,
+        };
+      }
+      // ── Regular hoarding row ──
       const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
       const siteID = h?.siteID ?? h?.site?.siteID ?? null;
       const siteObj = siteID != null
@@ -3011,91 +3329,103 @@ export default function QuotationPage({ onNavigateToContracts }) {
       };
     });
 
-    /* ── Merged rows from QuotationMergeDTL ──
-       Group by quotationLineNumber (2 records per merge).
-       Reconstruct merged row from the two source hoardings.
-    ── */
-    const myMerges = quotMerges.filter(m =>
-      Number(m.quotationID) === Number(quot.quotationID) &&
-      Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
-    );
+  /* ── Merged rows from QuotationMergeDTL ──
+     Group by quotationLineNumber (≥2 records per merge group).
+     Reconstruct merged size + location from source hoardings.
+     Use the saved QuotationLineDTL merge-flag line for amount/dates.
+  ── */
+  const myMerges = quotMerges.filter(m =>
+    Number(m.quotationID) === Number(quot.quotationID) &&
+    Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+  );
 
-    if (myMerges.length >= 2) {
-      const byLine = new Map();
-      for (const m of myMerges) {
-        const ln = m.quotationLineNumber;
-        if (!byLine.has(ln)) byLine.set(ln, []);
-        byLine.get(ln).push(m);
-      }
-
-      const sortedKeys = [...byLine.keys()].sort((a, b) => a - b);
-      for (const ln of sortedKeys) {
-        const records = byLine.get(ln);
-        if (records.length < 2) continue;
-
-        const h1 = hoardings.find(h => h.hoardingID === records[0].hoardingID);
-        const h2 = hoardings.find(h => h.hoardingID === records[1].hoardingID);
-        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
-
-        const s1 = { w: h1?.width || 0, h: h1?.height || 0 };
-        const s2 = { w: h2?.width || 0, h: h2?.height || 0 };
-        let mw, mh;
-        if (dir === 'H') { mw = s1.w + s2.w + 1; mh = Math.max(s1.h, s2.h); }
-        else { mw = Math.max(s1.w, s2.w); mh = s1.h + s2.h + 1; }
-
-        const site1 = h1?.siteID ? siteMap.get(h1.siteID) : null;
-        const site2 = h2?.siteID ? siteMap.get(h2.siteID) : null;
-        const loc1 = buildSiteAddress(site1, h1?.hoardingCode || '');
-        const loc2 = buildSiteAddress(site2, h2?.hoardingCode || '');
-        const rate1 = h1?.monthlyRent || 0;
-        const rate2 = h2?.monthlyRent || 0;
-
-        pdfRows.push({
-          rowType: 'merged',
-          isMerged: true,
-          mergeDirection: dir,
-          hoardingID: 0,
-          location: `${loc1} + ${loc2}`,
-          hoardingCode: `${h1?.hoardingCode || ''} + ${h2?.hoardingCode || ''}`,
-          size: `${mw} X ${mh}`,
-          sqFt: mw * mh,
-          nos: 1,
-          startDate: '',
-          endDate: '',
-          ratePerMonth: rate1 + rate2,
-          amount: rate1 + rate2,
-          printingCost: 0,
-        });
-      }
+  if (myMerges.length >= 2) {
+    const byLine = new Map();
+    for (const m of myMerges) {
+      const ln = m.quotationLineNumber;
+      if (!byLine.has(ln)) byLine.set(ln, []);
+      byLine.get(ln).push(m);
     }
 
-    /* ── Open PDF ── */
-    const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
-    const storedCgst = (storedSub * quot.cGSTPercent) / 100;
-    const storedSgst = (storedSub * quot.sGSTPercent) / 100;
-    const storedGross = storedSub + storedCgst + storedSgst;
-    const storedFinal = Math.round(storedGross);
+    const sortedKeys = [...byLine.keys()].sort((a, b) => a - b);
+    for (const ln of sortedKeys) {
+      const records = byLine.get(ln);
+      if (records.length < 2) continue;
 
-    const html = buildPrintHTML({
-      rows: pdfRows,
-      withPrinting: false,
-      selectedCustomer: cust,
-      quotNo: quot.quotationNumber,
-      quotDate: quot.quotationDate,
-      revisionNo: quot.quotationRevisionNumber,
-      cgstPct: quot.cGSTPercent,
-      sgstPct: quot.sGSTPercent,
-      subTotal: storedSub,
-      cgstAmt: storedCgst,
-      sgstAmt: storedSgst,
-      roundOff: storedFinal - storedGross,
-      finalTotal: storedFinal,
-      selectedTerms: [],
-      termsTexts: [],
-    });
-    const win = window.open('', '_blank');
-    if (win) { win.document.write(html); win.document.close(); }
-  };
+      // Saved line record for this merge (has correct amount + dates)
+      const savedLine = myLines.find(l =>
+        l.mergeFlag && Number(l.quotationLineNumber) === Number(ln)
+      );
+
+      const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+      const hoardingObjs = records
+        .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
+        .filter(Boolean);
+
+      const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
+      const gaps = hoardingObjs.length - 1;
+      let mw, mh;
+      if (dir === 'H') {
+        mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+        mh = Math.max(...sizes.map(s => s.h));
+      } else {
+        mw = Math.max(...sizes.map(s => s.w));
+        mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+      }
+
+      const locations = hoardingObjs.map(h => {
+        const site = h.siteID ? siteMap.get(h.siteID) : null;
+        return buildSiteAddress(site, h.hoardingCode || '');
+      });
+      const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
+      const fallbackRate = hoardingObjs.reduce((s, h) => s + (h.monthlyRent || 0), 0);
+
+      pdfRows.push({
+        rowType: 'merged',
+        isMerged: true,
+        mergeDirection: dir,
+        hoardingID: 0,
+        location: savedLine?.purpose || locations.join(' + '),
+        hoardingCode: codes,
+        size: `${mw} X ${mh}`,
+        sqFt: mw * mh,
+        nos: 1,
+        startDate: savedLine?.periodBeginDate || '',
+        endDate: savedLine?.periodEndDate || '',
+        ratePerMonth: savedLine ? savedLine.rentAmount : fallbackRate,
+        amount: savedLine ? savedLine.rentAmount : fallbackRate,
+        printingCost: 0,
+      });
+    }
+  }
+
+  /* ── Open PDF ── */
+  const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
+  const storedCgst = (storedSub * quot.cGSTPercent) / 100;
+  const storedSgst = (storedSub * quot.sGSTPercent) / 100;
+  const storedGross = storedSub + storedCgst + storedSgst;
+  const storedFinal = Math.round(storedGross);
+
+  const html = buildPrintHTML({
+    rows: pdfRows,
+    withPrinting: pdfRows.some(r => r.rowType === 'printing'),
+    selectedCustomer: cust,
+    quotNo: quot.quotationNumber,
+    quotDate: quot.quotationDate,
+    revisionNo: quot.quotationRevisionNumber,
+    cgstPct: quot.cGSTPercent,
+    sgstPct: quot.sGSTPercent,
+    subTotal: storedSub,
+    cgstAmt: storedCgst,
+    sgstAmt: storedSgst,
+    roundOff: storedFinal - storedGross,
+    finalTotal: storedFinal,
+    selectedTerms: [],
+    termsTexts: [],
+  });
+  const win = window.open('', '_blank');
+  if (win) { win.document.write(html); win.document.close(); }
+};
 
   const goNext = () => {
     if (step === 1) {
@@ -3141,45 +3471,72 @@ export default function QuotationPage({ onNavigateToContracts }) {
       }
       const savedQuotID = savedHeader?.quotationID ?? savedHeader?.QuotationID ?? editingQuotID ?? 0;
       const savedRevNo = Number(revisionNo);
+// AFTER
+await Promise.all(
+  rows.filter(r => r.rowType === 'hoarding' || r.rowType === 'printing' || r.rowType === 'extra')
+    .map((row, idx) => {
+      // Derive the purpose string to store:
+      // - printing row  → the printing type label (e.g. "Flex Banner Printing")
+      // - extra row     → the custom description the admin typed
+      // - hoarding row  → empty string (no special purpose)
+      const purpose =
+        row.rowType === 'printing' ? (row.location || '') :
+        row.rowType === 'extra'    ? (row.location || '') :
+        '';
 
-      await Promise.all(
-        rows.filter(r => r.rowType === 'hoarding').map((row, idx) => {
-          const linePayload = {
-            quotationLineNumber: idx + 1,
-            quotationID: savedQuotID,
-            quotationRevisionNumber: savedRevNo,
-            hoardingID: row.hoardingID,
-            periodBeginDate: row.startDate || todayISO(),
-            periodEndDate: row.endDate || todayISO(),
-            rentAmount: Number(row.amount || 0),
-          };
-          if (row.saved && row.quotationLineNumber > 0) {
-            return apiService.updateQuotationLine(linePayload);
-          }
-          return apiService.createQuotationLine(linePayload);
-        })
-      );
-      /* ── Save merge records ───────────────── */
-      const mergedRows = rows.filter(r => r.rowType === 'merged');
-      let nextLineNum = rows.filter(r => r.rowType === 'hoarding').length;
-
-      for (const mergedRow of mergedRows) {
-        nextLineNum += 1;
-        const hIds = Array.isArray(mergedRow.mergedHoardingIDs)
-          ? mergedRow.mergedHoardingIDs.map(Number).filter(id => id > 0)
-          : [];
-        if (!hIds.length) continue;
-        const flag = mergedRow.mergeDirection === 'H' ? 'H' : 'V';
-        for (const hID of hIds) {
-          await apiService.createQuotationMerge({
-            quotationLineNumber: nextLineNum,
-            quotationID: savedQuotID,
-            quotationRevisionNumber: savedRevNo,
-            mergeAlongFlag: flag,
-            hoardingID: hID,
-          });
-        }
+      const linePayload = {
+        quotationLineNumber: idx + 1,
+        quotationID: savedQuotID,
+        quotationRevisionNumber: savedRevNo,
+        hoardingID: row.hoardingID || 0,
+        purpose,
+        periodBeginDate: row.startDate || todayISO(),
+        periodEndDate: row.endDate || todayISO(),
+        rentAmount: Number(row.amount || 0),
+        mergeFlag: false,
+      };
+      if (row.saved && row.quotationLineNumber > 0) {
+        return apiService.updateQuotationLine(linePayload);
       }
+      return apiService.createQuotationLine(linePayload);
+    })
+);
+      /* ── Save merge records ───────────────── *//* ── Save merge records ───────────────── */
+const mergedRows = rows.filter(r => r.rowType === 'merged');
+let nextLineNum = rows.filter(r => r.rowType === 'hoarding' || r.rowType === 'printing' || r.rowType === 'extra').length;
+
+for (const mergedRow of mergedRows) {
+  nextLineNum += 1;
+  const hIds = Array.isArray(mergedRow.mergedHoardingIDs)
+    ? mergedRow.mergedHoardingIDs.map(Number).filter(id => id > 0)
+    : [];
+  if (!hIds.length) continue;
+  const flag = mergedRow.mergeDirection === 'H' ? 'H' : 'V';
+
+  // Save a QuotationLineDTL entry for the merged row itself
+  await apiService.createQuotationLine({
+    quotationLineNumber: nextLineNum,
+    quotationID: savedQuotID,
+    quotationRevisionNumber: savedRevNo,
+    hoardingID: 0,
+    purpose: mergedRow.location || '',
+    periodBeginDate: mergedRow.startDate || todayISO(),
+    periodEndDate: mergedRow.endDate || todayISO(),
+    rentAmount: Number(mergedRow.amount || 0),
+    mergeFlag: true,
+  });
+
+  for (const hID of hIds) {
+    await apiService.createQuotationMerge({
+      quotationLineNumber: nextLineNum,
+      quotationID: savedQuotID,
+      quotationRevisionNumber: savedRevNo,
+      mergeAlongFlag: flag,
+      hoardingID: hID,
+    });
+  }
+}
+
       const html = buildPrintHTML({
         rows, withPrinting, selectedCustomer,
         quotNo: quotNo || `QT/${savedQuotID}`,
@@ -3200,6 +3557,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
       showToast(err?.response?.data?.message || err?.message || 'Failed to save quotation.', 'error');
     } finally { setSaving(false); }
   };
+
 
   /* ── History grouped table ── */
   const allGrouped = useMemo(() => {
@@ -3589,7 +3947,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
                             <th className="pg-th" style={{ minWidth: 148 }}>Start Date</th>
                             <th className="pg-th" style={{ minWidth: 148 }}>End Date</th>
                           </>}
-                          {withPrinting && <th className="pg-th">NOS / Qty</th>}
+                          {withPrinting && <>
+                            <th className="pg-th" style={{ minWidth: 120 }}>NOS / Sq.Ft</th>
+                            <th className="pg-th" style={{ minWidth: 148 }}>Start Date</th>
+                            <th className="pg-th" style={{ minWidth: 148 }}>End Date</th>
+                          </>}
                           <th className="pg-th">Rate/Mo</th>
                           {withPrinting && <th className="pg-th" style={{ color: '#7c3aed' }}>Print Cost</th>}
                           <th className="pg-th">Amount</th>
@@ -3597,151 +3959,314 @@ export default function QuotationPage({ onNavigateToContracts }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {rows.map((row, i) => {
-                          const siteColor = getRowSiteColor(row);
-                          const isMerged = row.rowType === 'merged';
-                          const isPrint = row.rowType === 'printing';
+                        {(() => {
+                          // Compute sizeMap once — used by printing row SIZE dropdown
+                          const sizeMap = {};
+                          rows.filter(r2 => r2.rowType === 'hoarding' && r2.size).forEach(r2 => {
+                            if (!sizeMap[r2.size]) sizeMap[r2.size] = { sqFt: r2.sqFt || 0, count: 0 };
+                            sizeMap[r2.size].count++;
+                          });
+                          const sizeOptions = Object.entries(sizeMap);
 
-                          const rowBg = isMerged ? 'rgba(124,58,237,0.05)'
-                            : isPrint ? 'rgba(124,58,237,0.03)'
-                              : siteColor ? siteColor.bg
-                                : '';
-                          const rowBorderLeft = isMerged ? '4px solid rgba(124,58,237,0.40)'
-                            : siteColor ? `4px solid ${siteColor.border}`
-                              : '4px solid transparent';
+                          return rows.map((row, i) => {
+                            const siteColor = getRowSiteColor(row);
+                            const isMerged = row.rowType === 'merged';
+                            const isPrint = row.rowType === 'printing';
+                            const isExtra = row.rowType === 'extra';
 
-                          return (
-                            <tr key={row._id} className="pg-tr" style={{ background: rowBg, borderLeft: rowBorderLeft }}>
-                              <td className="pg-td" style={{ textAlign: 'center' }}>
-                                {isMerged ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                                    <Link2 size={12} color="#7c3aed" />
-                                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, color: '#7c3aed' }}>{i + 1}</span>
-                                  </div>
-                                ) : (
-                                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: isPrint ? '#7c3aed' : '#9090a8' }}>{i + 1}</span>
-                                )}
-                              </td>
-                              <td className="pg-td" style={{ minWidth: 160 }}>
-                                {isMerged && (
-                                  <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                                    <span style={{
-                                      fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 800,
-                                      padding: '2px 7px', borderRadius: 4,
-                                      background: 'rgba(124,58,237,0.12)', color: '#7c3aed',
-                                      border: '1px solid rgba(124,58,237,0.25)',
-                                    }}>
-                                      {row.mergeDirection === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
-                                    </span>
+                            const rowBg = isMerged ? 'rgba(124,58,237,0.05)'
+                              : isPrint ? 'rgba(124,58,237,0.03)'
+                                : siteColor ? siteColor.bg
+                                  : '';
+                            const rowBorderLeft = isMerged ? '4px solid rgba(124,58,237,0.40)'
+                              : siteColor ? `4px solid ${siteColor.border}`
+                                : '4px solid transparent';
 
-                                    {/* Direction toggle button */}
-                                    <button
-                                      onClick={e => { e.stopPropagation(); toggleMergeDirection(row._id); }}
-                                      title={`Switch to ${row.mergeDirection === 'H' ? 'Vertical' : 'Horizontal'}`}
+                            return (
+                              <tr key={row._id} className="pg-tr" style={{ background: rowBg, borderLeft: rowBorderLeft }}>
+                                <td className="pg-td" style={{ textAlign: 'center' }}>
+                                  {isMerged ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                      <Link2 size={12} color="#7c3aed" />
+                                      <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, color: '#7c3aed' }}>{i + 1}</span>
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: isPrint ? '#7c3aed' : '#9090a8' }}>{i + 1}</span>
+                                  )}
+                                </td>
+                                <td className="pg-td" style={{ minWidth: 160 }}>
+                                  {isMerged && (
+                                    <div style={{ marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                      <span style={{
+                                        fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 800,
+                                        padding: '2px 7px', borderRadius: 4,
+                                        background: 'rgba(124,58,237,0.12)', color: '#7c3aed',
+                                        border: '1px solid rgba(124,58,237,0.25)',
+                                      }}>
+                                        {row.mergeDirection === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
+                                      </span>
+
+                                      {/* Direction toggle button */}
+                                      <button
+                                        onClick={e => { e.stopPropagation(); toggleMergeDirection(row._id); }}
+                                        title={`Switch to ${row.mergeDirection === 'H' ? 'Vertical' : 'Horizontal'}`}
+                                        style={{
+                                          display: 'flex', alignItems: 'center', gap: 3,
+                                          padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(124,58,237,0.30)',
+                                          background: 'rgba(124,58,237,0.06)', color: '#7c3aed',
+                                          cursor: 'pointer', fontFamily: 'Nunito,sans-serif',
+                                          fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        <RefreshCw size={9} />
+                                        {row.mergeDirection === 'H' ? '↕ Switch V' : '↔ Switch H'}
+                                      </button>
+                                    </div>
+                                  )}
+                                  {!isMerged && siteColor && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
+                                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: siteColor.dot, flexShrink: 0 }} />
+                                      <MapPin size={10} color={siteColor.dot} />
+                                    </div>
+                                  )}
+                                  {isExtra ? (
+                                    <input
+                                      value={row.location}
+                                      onChange={e => updateRow(row._id, 'location', e.target.value)}
                                       style={{
-                                        display: 'flex', alignItems: 'center', gap: 3,
-                                        padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(124,58,237,0.30)',
-                                        background: 'rgba(124,58,237,0.06)', color: '#7c3aed',
-                                        cursor: 'pointer', fontFamily: 'Nunito,sans-serif',
-                                        fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
+                                        width: '100%', border: 'none',
+                                        borderBottom: '1.5px dashed #e8e8f4',
+                                        fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700,
+                                        color: '#1a1a2e', background: 'transparent',
+                                        outline: 'none', padding: '2px 0',
                                       }}
-                                    >
-                                      <RefreshCw size={9} />
-                                      {row.mergeDirection === 'H' ? '↕ Switch V' : '↔ Switch H'}
+                                      placeholder="Charge description…"
+                                    />
+                                  ) : (
+                                    <div style={{
+                                      fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600,
+                                      color: isMerged ? '#7c3aed' : '#1a1a2e',
+                                      fontStyle: isPrint ? 'italic' : 'normal',
+                                      lineHeight: 1.4, paddingTop: 1,
+                                    }}>
+                                      {row.location}
+                                    </div>
+                                  )}
+                                  {!isMerged && !isPrint && !isExtra && (() => {
+                                    const { line2 } = getSiteDisplayLines(row.siteObj, '');
+                                    return line2 ? (
+                                      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#9090a8', marginTop: 2, paddingLeft: 2, lineHeight: 1.3 }}>{line2}</div>
+                                    ) : null;
+                                  })()}
+                                </td>
+                                <td className="pg-td" style={{ textAlign: 'center' }}>
+                                  {withPrinting && isPrint && !isExtra ? (
+                                    // ── Printing row: size dropdown ──
+                                    <div>
+                                      <select
+                                        value={row.size || ''}
+                                        onChange={e => {
+                                          const sel = e.target.value;
+                                          if (!sel) { updateRowMultiple(row._id, { size: '', sqFt: 0, nos: 0, amount: 0 }); return; }
+                                          const info = sizeMap[sel];
+                                          if (!info) return;
+                                          const totalSqFt = info.count * info.sqFt;
+                                          updateRowMultiple(row._id, { size: sel, sqFt: totalSqFt, nos: info.count }); // ← nos = count
+                                        }}
+                                        style={{
+                                          width: '100%', padding: '5px 6px',
+                                          border: '1.5px solid #e8e8f4', borderRadius: 8,
+                                          fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
+                                          color: '#7c3aed', background: '#fff', outline: 'none', cursor: 'pointer',
+                                        }}
+                                      >
+                                        <option value="">Size…</option>
+                                        {sizeOptions.map(([size, info]) => (
+                                          <option key={size} value={size}>
+                                            {size} ({info.count} × {info.sqFt} = {info.count * info.sqFt} sqft)
+                                          </option>
+                                        ))}
+                                      </select>
+                                      {row.sqFt > 0 && (
+                                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, color: '#7c3aed', fontWeight: 700, marginTop: 2 }}>
+                                          {row.sqFt} sq.ft
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    // ── Regular row: plain size text ──
+                                    <span style={{
+                                      fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#4a5568',
+                                    }}>
+                                      {row.size || '—'}
+                                    </span>
+                                  )}
+                                </td>
+                                {!withPrinting && <>
+                                  <td className="pg-td" style={{ textAlign: 'center' }}>
+                                    <span style={{
+                                      fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700,
+                                      color: '#4a5568',
+                                    }}>
+                                      {row.sqFt || '—'}
+                                    </span>
+                                  </td>
+                                  <td className="pg-td">
+                                    <input className="qt-inline-input" type="number" min="1" value={row.nos} onChange={e => updateRow(row._id, 'nos', e.target.value)} style={{ width: 50 }} />
+                                  </td>
+                                  <td className="pg-td">
+                                    <input className="qt-inline-input qt-date-input" type="date" value={row.startDate} onChange={e => updateRow(row._id, 'startDate', e.target.value)} />
+                                  </td>
+                                  <td className="pg-td">
+                                    <input className="qt-inline-input qt-date-input" type="date" value={row.endDate} onChange={e => updateRow(row._id, 'endDate', e.target.value)} />
+                                  </td>
+                                </>}
+                                {withPrinting && (
+                                  <>
+                                    {/* NOS / Sq.Ft column */}
+                                    <td className="pg-td" style={{ textAlign: 'center' }}>
+                                      {isPrint ? (
+                                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#7c3aed' }}>
+                                          {row.nos > 0 ? row.nos : '—'}
+                                        </span>
+                                      ) : isExtra ? (
+                                        <span style={{ color: '#c0c0d0' }}>—</span>
+                                      ) : (
+                                        <input
+                                          className="qt-inline-input" type="number"
+                                          value={row.nos}
+                                          onChange={e => updateRow(row._id, 'nos', e.target.value)}
+                                          style={{ width: 72 }}
+                                        />
+                                      )}
+                                    </td>
+
+                                    {/* Start Date */}
+                                    <td className="pg-td">
+                                      {isExtra
+                                        ? <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
+                                        : <input className="qt-inline-input qt-date-input" type="date" value={row.startDate} onChange={e => updateRow(row._id, 'startDate', e.target.value)} />
+                                      }
+                                    </td>
+                                    {/* End Date */}
+                                    <td className="pg-td">
+                                      {isExtra
+                                        ? <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
+                                        : <input className="qt-inline-input qt-date-input" type="date" value={row.endDate} onChange={e => updateRow(row._id, 'endDate', e.target.value)} />
+                                      }
+                                    </td>
+                                  </>
+                                )}
+                                <td className="pg-td">
+                                  {isExtra
+                                    ? <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
+                                    : <input className="qt-inline-input" type="number" value={row.ratePerMonth} onChange={e => updateRow(row._id, 'ratePerMonth', e.target.value)} style={{ width: 86 }} />
+                                  }
+                                </td>
+                                {withPrinting && (
+                                  <td className="pg-td">
+                                    {isPrint ? (
+                                      // Printing row: show printing cost = sqFt × rate
+                                      <span style={{
+                                        fontFamily: 'Nunito,sans-serif', fontSize: 13,
+                                        fontWeight: 900, color: '#7c3aed',
+                                      }}>
+                                        {row.amount > 0
+                                          ? Number(row.amount).toLocaleString('en-IN')
+                                          : '—'}
+                                      </span>
+                                    ) : (
+                                      // Hoarding row: editable print cost field
+                                      <input
+                                        className="qt-inline-input" type="number"
+                                        value={row.printingCost || 0}
+                                        onChange={e => updateRow(row._id, 'printingCost', e.target.value)}
+                                        style={{ width: 86, color: '#7c3aed', fontWeight: 700 }}
+                                      />
+                                    )}
+                                  </td>
+                                )}
+                                <td className="pg-td">
+                                  <input className="qt-inline-input" type="number" value={row.amount} onChange={e => updateRow(row._id, 'amount', e.target.value)} style={{ width: 86, fontWeight: 700 }} />
+                                </td>
+                                <td className="pg-td">
+                                  <div className="pg-action-wrap">
+                                    <button className="pg-btn-view" onClick={() => deleteRow(row._id)} title="Remove">
+                                      <Trash2 size={13} />
                                     </button>
                                   </div>
-                                )}
-                                {!isMerged && siteColor && (
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 2 }}>
-                                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: siteColor.dot, flexShrink: 0 }} />
-                                    <MapPin size={10} color={siteColor.dot} />
-                                  </div>
-                                )}
-                                <div style={{
-                                  fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600,
-                                  color: isMerged ? '#7c3aed' : '#1a1a2e',
-                                  fontStyle: isPrint ? 'italic' : 'normal',
-                                  lineHeight: 1.4, paddingTop: 1,
-                                }}>
-                                  {row.location}
-                                </div>
-                                {!isMerged && !isPrint && (() => {
-                                  const { line2 } = getSiteDisplayLines(row.siteObj, '');
-                                  return line2 ? (
-                                    <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#9090a8', marginTop: 2, paddingLeft: 2, lineHeight: 1.3 }}>{line2}</div>
-                                  ) : null;
-                                })()}
-                              </td>
-                              <td className="pg-td" style={{ textAlign: 'center' }}>
-                                <span style={{
-                                  fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700,
-                                  color: '#4a5568',
-                                }}>
-                                  {row.size || '—'}
-                                </span>
-                              </td>
-                              {!withPrinting && <>
-                                <td className="pg-td" style={{ textAlign: 'center' }}>
-                                  <span style={{
-                                    fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700,
-                                    color: '#4a5568',
-                                  }}>
-                                    {row.sqFt || '—'}
-                                  </span>
                                 </td>
-                                <td className="pg-td">
-                                  <input className="qt-inline-input" type="number" min="1" value={row.nos} onChange={e => updateRow(row._id, 'nos', e.target.value)} style={{ width: 50 }} />
-                                </td>
-                                <td className="pg-td">
-                                  <input className="qt-inline-input qt-date-input" type="date" value={row.startDate} onChange={e => updateRow(row._id, 'startDate', e.target.value)} />
-                                </td>
-                                <td className="pg-td">
-                                  <input className="qt-inline-input qt-date-input" type="date" value={row.endDate} onChange={e => updateRow(row._id, 'endDate', e.target.value)} />
-                                </td>
-                              </>}
-                              {withPrinting && (
-                                <td className="pg-td">
-                                  <input className="qt-inline-input" type="number"
-                                    value={isPrint ? row.sqFt : row.nos}
-                                    onChange={e => updateRow(row._id, isPrint ? 'sqFt' : 'nos', e.target.value)}
-                                    style={{ width: 72 }} />
-                                </td>
-                              )}
-                              <td className="pg-td">
-                                <input className="qt-inline-input" type="number" value={row.ratePerMonth} onChange={e => updateRow(row._id, 'ratePerMonth', e.target.value)} style={{ width: 86 }} />
-                              </td>
-                              {withPrinting && (
-                                <td className="pg-td">
-                                  {isPrint
-                                    ? <span style={{ color: '#b0b0c8', fontSize: 12, paddingLeft: 8 }}>—</span>
-                                    : <input className="qt-inline-input" type="number" value={row.printingCost || 0}
-                                      onChange={e => updateRow(row._id, 'printingCost', e.target.value)}
-                                      style={{ width: 86, color: '#7c3aed', fontWeight: 700 }} />}
-                                </td>
-                              )}
-                              <td className="pg-td">
-                                <input className="qt-inline-input" type="number" value={row.amount} onChange={e => updateRow(row._id, 'amount', e.target.value)} style={{ width: 86, fontWeight: 700 }} />
-                              </td>
-                              <td className="pg-td">
-                                <div className="pg-action-wrap">
-                                  <button className="pg-btn-view" onClick={() => deleteRow(row._id)} title="Remove">
-                                    <Trash2 size={13} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })}
+                              </tr>
+                            );
+                          });
+                        })()}
                       </tbody>
                     </table>
                   )}
                 </div>
 
-                {withPrinting && (
-                  <button onClick={() => setRows(p => [...p, newPrintingRow()])} className="qt-add-print-row">
-                    <Plus size={13} /> Add Flex Banner / Printing Row
+                <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+
+                  {/* Printing type dropdown — withPrinting mode only */}
+                  {withPrinting && (
+                    <div style={{ position: 'relative' }}>
+                      <button
+                        ref={printTypeBtnRef}
+                        onClick={() => setShowPrintTypeDD(p => !p)}
+                        className="qt-add-print-row"
+                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <Plus size={13} /> Add Printing Row <ChevronDown size={12} />
+                      </button>
+
+                      <PortalDropdown
+                        open={showPrintTypeDD}
+                        triggerRef={printTypeBtnRef}
+                        panelRef={printTypePanelRef}
+                      >
+                        <div
+                          ref={printTypePanelRef}
+                          style={{
+                            background: '#fff', border: '1.5px solid #e8e8f4', borderRadius: 12,
+                            boxShadow: '0 8px 28px rgba(0,0,0,0.12)', overflow: 'hidden',
+                          }}
+                        >
+                          {PRINTING_TYPES.map(type => (
+                            <div
+                              key={type}
+                              onClick={() => { setRows(p => [...p, newPrintingRow(type)]); setShowPrintTypeDD(false); }}
+                              style={{
+                                padding: '10px 16px', cursor: 'pointer',
+                                fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700,
+                                color: '#7c3aed', borderBottom: '1px solid #f4f4fb',
+                                display: 'flex', alignItems: 'center', gap: 8,
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,58,237,0.05)'}
+                              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            >
+                              <Printer size={13} color="#7c3aed" /> {type}
+                            </div>
+                          ))}
+                        </div>
+                      </PortalDropdown>
+                    </div>
+                  )}
+
+                  {/* Add Extra Charge — both modes */}
+                  <button
+                    onClick={() => setRows(p => [...p, newExtraChargeRow()])}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 6,
+                      padding: '8px 16px', borderRadius: 9, cursor: 'pointer',
+                      border: '1.5px dashed #e8e8f4', background: '#fafafe',
+                      fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700,
+                      color: '#5a5a78',
+                    }}
+                  >
+                    <Plus size={13} /> Add Extra Charge
                   </button>
-                )}
+
+                </div>
 
                 {step2Error && <div className="qt-error-banner"><AlertCircle size={14} /> {step2Error}</div>}
 
@@ -4038,6 +4563,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
                           <button onClick={() => handleViewPDF(latest)} title="View / Print PDF"
                             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #049edf', color: '#049edf', background: 'rgba(4,158,223,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
                             <Printer size={13} /> PDF
+                          </button>
+                          {/* Proforma Invoice */}
+                          <button onClick={() => handleViewProforma(latest)} title="Download Proforma Invoice"
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #16a34a', color: '#16a34a', background: 'rgba(22,163,74,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                            <FileText size={13} /> Proforma
                           </button>
                           {/* ← NEW: Create Contract button */}
                           {(() => {
