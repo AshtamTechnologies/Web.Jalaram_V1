@@ -9,7 +9,7 @@ import {
   CreditCard, TrendingUp, MapPin, Tag, Percent, SlidersHorizontal,
   Users, Paperclip, Upload, Image, File, Download, AlertTriangle, GitMerge, ArrowLeftRight, ArrowUpDown,
 } from 'lucide-react';
-import { apiService } from '../api/api';
+import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
 import { useResizableColumns } from '../hooks/useResizableColumns';
 
@@ -22,14 +22,31 @@ function parseOccupancyError(err) {
   if (err?.response?.status !== 400) return null;
   const raw =
     err?.response?.data?.message ||
-    err?.response?.data           ||
-    err?.message                  ||
+    err?.response?.data ||
+    err?.message ||
     '';
   const str = typeof raw === 'string' ? raw : JSON.stringify(raw);
   if (str.toLowerCase().includes('occupied')) return str.trim();
   return null;
 }
- 
+const CONTRACT_COMPANY = {
+  name: 'JALARAM AD',
+  line1: '9/B/1, Industrial Estate, Opp. Real Bakers, Nr.Borsad Crossing',
+  line2: 'Jitodiya Road, Anand - 388001',
+  phone: 'Parag Patel # 7383999444',
+};
+
+const CONTRACT_PDF_TERMS = [
+  'Advance Payment & Purchase Order is Mandatory to start the campaign. Booking Cancellation will result in 20% penalty on booking amount.',
+  'Printing & Mounting will be extra & GST @ 18% will be applicable extra.',
+  'Site available date may change in case of present display Renewal. Also, site Availability changes every minute, please double check site available dates when you confirm the sites.',
+  'When Printing, please keep 3 inches extra border on all four sides for all FL & NL Flex.',
+  'From the date of receiving the flex, campaign execution will take 2 days in city and 4 days in upcountry. Please plan your campaign accordingly.',
+  'Kindly ensure that your artwork is ready before confirming the sites. In case Design or Flex is undelivered within 5 days of confirmation, we will release the site and penalty for non-display period will be levied on negotiated rates.',
+  'In case flex / vinyl / display material is damaged, torn or vandalised, it will be your responsibility to provide us with new flex.',
+  'Renewal of site will only be entertained before 5 days of site expiry. Last moment renewal is not possible.',
+];
+
 // ── component ── (needs AlertTriangle, X from lucide — already imported)
 function OccupancyWarningBanner({ messages, onDismiss }) {
   if (!messages || messages.length === 0) return null;
@@ -250,7 +267,289 @@ function SortIcon({ col, sortKey, sortDir }) {
     </span>
   );
 }
+// Change the function signature — add `terms` parameter:
+function buildContractPDFHTML({ company, customer, contract,
+  hoardingItems, photoUrlMap, photoSelections, terms = [] }) {
 
+  const today = new Date().toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
+  const fmtD = (d) => {
+    if (!d) return '—';
+    return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', {
+      day: '2-digit', month: 'short', year: 'numeric',
+    });
+  };
+
+  const css = `
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;}
+ 
+    /* ── A4 page ── */
+    .page{
+      width:210mm; height:297mm;
+      padding:10mm 14mm 9mm;
+      page-break-after:always;
+      display:flex; flex-direction:column;
+      overflow:hidden;
+    }
+    .page:last-child{page-break-after:avoid;}
+ 
+    /* ── Page header ── */
+    .ph{
+      display:flex; justify-content:space-between; align-items:flex-end;
+      padding-bottom:5px; border-bottom:2px solid #000;
+      margin-bottom:7px; flex-shrink:0;
+    }
+    .ph-co{font-size:14px;font-weight:900;letter-spacing:1px;}
+    .ph-r{font-size:10px;color:#444;text-align:right;line-height:1.4;}
+ 
+    /* ══ COVER ══ */
+    .cov{justify-content:space-between;}
+    .cov-top{
+      display:flex;justify-content:space-between;align-items:flex-start;
+      padding-bottom:13px;border-bottom:3px solid #000;
+    }
+    .cov-co{font-size:38px;font-weight:900;letter-spacing:2px;line-height:1.1;}
+    .cov-addr{font-size:10.5px;color:#555;margin-top:6px;line-height:1.7;}
+    .cov-date{font-size:15px;font-weight:700;white-space:nowrap;}
+    .cov-body{flex:1;display:flex;flex-direction:column;justify-content:center;padding:26px 0 14px;}
+    .cov-name{font-size:30px;font-weight:700;margin-bottom:8px;}
+    .cov-phone{font-size:14px;color:#333;margin-top:5px;}
+    .cov-info{
+      margin-top:18px;padding:13px 15px;
+      background:#f4f4f4;border-left:5px solid #000;
+      font-size:13px;line-height:2;color:#111;
+    }
+    .cov-foot{
+      display:flex;justify-content:space-between;align-items:center;
+      border-top:1px solid #ccc;padding-top:8px;
+      font-size:10.5px;color:#555;font-weight:600;
+    }
+ 
+    /* ══ HOARDING PAIR (2 per page) ══
+       pair-wrap fills remaining space after the header.
+       Each .hrd-section gets flex:1 = exactly half that space.
+       When photo is ON: image fills flex:1, details is fixed.
+       When photo is OFF: only details shown, no empty space.      */
+    .pair-wrap{
+      flex:1;min-height:0;
+      display:flex;flex-direction:column;
+      gap:0;
+    }
+    .hrd-section{
+      flex:1;min-height:0;
+      display:flex;flex-direction:column;
+    }
+    .hrd-section + .hrd-section{
+      border-top:1.5px dashed #ccc;
+      padding-top:5px;
+    }
+    /* Photo — fills remaining space in the section */
+    .hrd-photo{
+      flex:1;min-height:0;overflow:hidden;
+      background:#e0e0e0;margin-bottom:4px;
+    }
+    .hrd-photo img{
+      width:100%;height:100%;object-fit:contain;display:block;
+    }
+    /* Details box — always fixed height at bottom of section */
+    .hrd-box{
+      background:#f2f2f2;padding:8px 12px;
+      border-left:4px solid #000;flex-shrink:0;
+    }
+    .hrd-title{
+      font-size:11.5px;font-weight:700;
+      margin-bottom:5px;line-height:1.4;color:#000;
+    }
+    .hrd-row{display:flex;flex-wrap:wrap;font-size:11px;}
+    .hrd-cell{flex:0 0 50%;padding-right:8px;}
+    .hrd-lbl{font-weight:700;}
+    .hrd-green{color:#16a34a;font-weight:700;}
+    .hrd-red{color:#dc2626;font-weight:700;font-size:12px;}
+ 
+    /* ══ TERMS (all on 1 page) ══ */
+    .terms-hdr{
+      font-size:13px;font-weight:700;
+      padding-bottom:6px;border-bottom:2.5px solid #000;
+      margin-bottom:11px;flex-shrink:0;
+    }
+    .terms-ol{list-style:decimal;padding-left:17px;}
+    .terms-ol li{font-size:11px;line-height:1.72;margin-bottom:5px;color:#111;}
+    .terms-foot{
+      border-top:1px solid #ccc;padding-top:8px;margin-top:auto;
+      display:flex;justify-content:space-between;
+      font-size:10.5px;color:#555;font-weight:600;flex-shrink:0;
+    }
+ 
+    /* Download bar */
+    #dl-bar{
+      position:fixed;top:0;left:0;right:0;z-index:9999;
+      background:#111;color:#fff;
+      display:flex;align-items:center;justify-content:space-between;
+      padding:10px 20px;font-family:Arial,sans-serif;font-size:13px;gap:12px;
+    }
+    .dl-btn{
+      padding:7px 22px;background:#dc2626;color:#fff;
+      border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;
+    }
+    .dl-btn:hover{background:#b91c1c;}
+    @media print{
+      #dl-bar{display:none!important;}
+      body{padding-top:0!important;}
+      .page{width:100%;height:100vh;padding:8mm 12mm 8mm;}
+    }
+    @page{size:A4 portrait;margin:0;}
+  `;
+
+  /* shared page header */
+  const ph = `
+    <div class="ph">
+      <span class="ph-co">${company.name}</span>
+      <span class="ph-r">${customer.customerName}<br>${today}</span>
+    </div>`;
+
+  /* details box helper */
+  const box = (item, idx) => `
+    <div class="hrd-box">
+      <div class="hrd-title">
+        ${idx + 1})&nbsp;${item.hoardingCode}
+        ${item.address ? `&nbsp;&mdash;&nbsp;${item.address}` : ''}
+        ${item.size ? `&nbsp;&mdash;&nbsp;${item.size} ft` : ''}
+        ${item.material ? `&nbsp;&mdash;&nbsp;${item.material}` : ''}
+      </div>
+      <div class="hrd-row">
+        <div class="hrd-cell"><span class="hrd-lbl">Media Type:</span>&nbsp;Hoarding</div>
+        <div class="hrd-cell">
+          <span class="hrd-lbl">Availability:</span>&nbsp;
+          <span class="hrd-green">${item.contractStatus || 'Available Now'}</span>
+        </div>
+        ${item.monthlyRent > 0 ? `
+        <div class="hrd-cell" style="flex:0 0 100%;margin-top:2px;">
+          <span class="hrd-lbl">Monthly Rent:</span>&nbsp;
+          <span class="hrd-red">&#8377;${Number(item.monthlyRent).toLocaleString('en-IN')}</span>
+        </div>` : ''}
+      </div>
+    </div>`;
+
+  /* single hoarding section */
+  const section = (item, idx) => {
+    const photoOn = photoSelections[item.hoardingID] !== false;
+    const photoUrl = photoUrlMap[item.hoardingID];
+
+    /* Photo ON + URL exists → show image (plain <img src>, no auth needed) */
+    if (photoOn && photoUrl) {
+      return `
+        <div class="hrd-section">
+          <div class="hrd-photo">
+            <img src="${photoUrl}" alt="${item.hoardingCode}" />
+          </div>
+          ${box(item, idx)}
+        </div>`;
+    }
+
+    /* Photo ON but no image uploaded → small grey strip */
+    if (photoOn && !photoUrl) {
+      return `
+        <div class="hrd-section">
+          <div style="
+            flex:1;min-height:0;background:#f5f5f5;
+            border:1.5px dashed #ccc;margin-bottom:4px;
+            display:flex;align-items:center;justify-content:center;
+            font-size:11px;color:#aaa;gap:6px;
+          ">📷&nbsp;No photo uploaded for ${item.hoardingCode}</div>
+          ${box(item, idx)}
+        </div>`;
+    }
+
+    /* Photo OFF → ONLY the details box, zero empty space */
+    return `
+      <div class="hrd-section" style="flex:none;">
+        ${box(item, idx)}
+      </div>`;
+  };
+
+  /* ── COVER ── */
+  const cover = `
+    <div class="page cov">
+      <div class="cov-top">
+        <div>
+          <div class="cov-co">${company.name}</div>
+          <div class="cov-addr">${company.line1}<br>${company.line2}</div>
+        </div>
+        <div class="cov-date">${today}</div>
+      </div>
+      <div class="cov-body">
+        <div class="cov-name">${customer.customerName}</div>
+        ${customer.phone1
+      ? `<div class="cov-phone">${customer.phone1}</div>` : ''}
+        ${(customer.addressLine1 || customer.city)
+      ? `<div class="cov-phone" style="font-size:12px;color:#555;margin-top:4px;">
+               ${[customer.addressLine1, customer.city, customer.district].filter(Boolean).join(', ')}
+             </div>` : ''}
+        ${contract ? `
+          <div class="cov-info">
+            <strong>Contract Period :</strong>
+              ${fmtD(contract.startDate)} &rarr; ${fmtD(contract.endDate)}<br>
+            <strong>Contract Value &nbsp;:</strong>
+              &#8377;${Number(contract.contractFinalValue || contract.contractOrigValue || 0)
+        .toLocaleString('en-IN')}<br>
+            <strong>Total Hoardings :</strong> ${hoardingItems.length}
+          </div>` : ''}
+      </div>
+      <div class="cov-foot">
+        <span>${company.phone}</span>
+        <span>${hoardingItems.length} Hoarding${hoardingItems.length !== 1 ? 's' : ''}</span>
+      </div>
+    </div>`;
+
+  /* ── HOARDING PAGES (2 per page) ── */
+  const hrdPages = [];
+  for (let i = 0; i < hoardingItems.length; i += 2) {
+    const a = hoardingItems[i];
+    const b = hoardingItems[i + 1];
+    hrdPages.push(`
+      <div class="page" style="display:flex;flex-direction:column;">
+        ${ph}
+        <div class="pair-wrap">
+          ${section(a, i)}
+          ${b ? section(b, i + 1) : ''}
+        </div>
+      </div>`);
+  }
+
+  /* ── TERMS (all 8 on 1 page) ── */
+  /* ── TERMS ── */
+  const termsPage = terms.length === 0 ? '' : `
+  <div class="page" style="display:flex;flex-direction:column;">
+    ${ph}
+    <div class="terms-hdr">Terms and Conditions &mdash;</div>
+    <ol class="terms-ol">
+      ${terms.map(t => `<li>${t}</li>`).join('')}
+    </ol>
+    <div class="terms-foot">
+      <span>${customer.authorizedName || customer.customerName}<br>${company.phone}</span>
+    </div>
+  </div>`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Contract &mdash; ${customer.customerName}</title>
+  <style>${css}</style>
+</head>
+<body style="padding-top:44px;">
+  <div id="dl-bar">
+    <span><strong>${company.name}</strong> &mdash; ${customer.customerName}</span>
+    <button class="dl-btn" onclick="window.print()">&#8681; Download / Print PDF</button>
+  </div>
+  ${cover}
+  ${hrdPages.join('')}
+  ${termsPage}
+</body>
+</html>`;
+}
 /* ─────────────────────────────────────────
    SMALL HELPERS
 ───────────────────────────────────────── */
@@ -728,7 +1027,22 @@ function AttachDeleteModal({ attach, onConfirm, onCancel }) {
 /* ═══════════════════════════════════════════
    ATTACHMENT SECTION
 ═══════════════════════════════════════════ */
-const API_ROOT_URL = 'https://api.jalaram-ad.ashtamtechnologies.com';
+async function fetchImageAsBase64(url) {
+  if (!url) return null;
+  const token = localStorage.getItem('authToken');
+  const blobToBase64 = (blob) =>
+    new Promise((resolve) => {
+      const r = new FileReader();
+      r.onloadend = () => resolve(r.result);
+      r.onerror = () => resolve(null);
+      r.readAsDataURL(blob);
+    });
+  try {
+    const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
+    if (res.ok) return blobToBase64(await res.blob());
+  } catch { /* fall through */ }
+  return null;
+}
 
 function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachmentsChange }) {
   const [attachments, setAttachments] = useState([]);
@@ -1339,16 +1653,28 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
         }),
       ]);
 
-const mapList = Array.isArray(rawMaps) ? rawMaps : [];
+      const mapList = Array.isArray(rawMaps) ? rawMaps : [];
 
-// Filter by customerContractID in case API returns all records
-const filteredMaps = mapList.filter(m =>
-  Number(m.customerContractID ?? m.CustomerContractID) === Number(customerContractID)
-);
+      // Filter by customerContractID in case API returns all records
+      const filteredMaps = mapList.filter(m =>
+        Number(m.customerContractID ?? m.CustomerContractID) === Number(customerContractID)
+      );
 
-const enriched = filteredMaps.map(m => {
+      const enriched = filteredMaps.map(m => {
         const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
-        const h = hoardings.find(hh => Number(hh.hoardingID) === hid);
+        // First try exact hoardingID match
+        let h = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? hh.id) === hid);
+
+        // If not found (deduplication may have kept a different effdt record),
+        // fall back: look up the hoarding code from the map record itself,
+        // then find by code in the hoardings array
+        if (!h) {
+          const mapRecord = maps.find(mp => Number(mp.hoardingID ?? mp.HoardingID ?? 0) === hid);
+          const codeFromMap = mapRecord?.hoardingCode ?? mapRecord?.HoardingCode;
+          if (codeFromMap) {
+            h = hoardings.find(hh => hh.hoardingCode === codeFromMap);
+          }
+        }
         return {
           customerContractLineID: m.customerContractLineID ?? m.CustomerContractLineID ?? null,
           customerContractID: Number(m.customerContractID ?? m.CustomerContractID),
@@ -1367,17 +1693,16 @@ const enriched = filteredMaps.map(m => {
       setMaps(enriched);
 
       const mergeList = Array.isArray(allMerges) ? allMerges : [];
-      console.log('[MERGE RAW sample]', JSON.stringify(mergeList[0]));
-setMerges(
-  mergeList
-    .filter(m => {
-      const mContractID = Number(
-        m.customerContractID ?? m.CustomerContractID ??
-        m.contractID ?? m.ContractID ?? 0
-      );
-      // Only match by contractID — the hoarding fallback causes cross-contract pollution
-      return mContractID > 0 && mContractID === Number(customerContractID);
-    })
+      setMerges(
+        mergeList
+          .filter(m => {
+            const mContractID = Number(
+              m.customerContractID ?? m.CustomerContractID ??
+              m.contractID ?? m.ContractID ?? 0
+            );
+            // Only match by contractID — the hoarding fallback causes cross-contract pollution
+            return mContractID > 0 && mContractID === Number(customerContractID);
+          })
           .map(m => ({
             hoardingMergeID: m.hoardingMergeID ?? m.HoardingMergeID ?? m.id ?? m.Id,
             hoardingID: Number(m.hoardingID ?? m.HoardingID ?? 0),
@@ -1411,40 +1736,40 @@ setMerges(
       setApiError(err?.response?.data?.message || err?.message || 'Failed to add hoardings.');
     } finally { setSaving(false); }
   };
-const handleAdd = async (pickedHoardings) => {
-  if (!pickedHoardings.length) return;
-  setSaving(true);
-  setApiError('');
-  setOccupancyWarnings([]);
+  const handleAdd = async (pickedHoardings) => {
+    if (!pickedHoardings.length) return;
+    setSaving(true);
+    setApiError('');
+    setOccupancyWarnings([]);
 
-  const occupiedMsgs = [];
-  let   successCount  = 0;
+    const occupiedMsgs = [];
+    let successCount = 0;
 
-  for (const h of pickedHoardings) {
-    try {
-      await apiService.createCustomerContractHoardingMap({
-        customerContractLineID: 0,
-        customerContractID,
-        customerID: Number(customerID),
-        hoardingID: Number(h.hoardingID),
-      });
-      successCount++;
-    } catch (err) {
-      const occ = parseOccupancyError(err);
-      if (occ) {
-        const code = h.hoardingCode ? ` (${h.hoardingCode})` : '';
-        occupiedMsgs.push(occ.replace(/Hoarding\s+\d+/, `Hoarding #${h.hoardingID}${code}`));
-      } else {
-        setApiError(err?.response?.data?.message || err?.message || 'Failed to add one or more hoardings.');
+    for (const h of pickedHoardings) {
+      try {
+        await apiService.createCustomerContractHoardingMap({
+          customerContractLineID: 0,
+          customerContractID,
+          customerID: Number(customerID),
+          hoardingID: Number(h.hoardingID),
+        });
+        successCount++;
+      } catch (err) {
+        const occ = parseOccupancyError(err);
+        if (occ) {
+          const code = h.hoardingCode ? ` (${h.hoardingCode})` : '';
+          occupiedMsgs.push(occ.replace(/Hoarding\s+\d+/, `Hoarding #${h.hoardingID}${code}`));
+        } else {
+          setApiError(err?.response?.data?.message || err?.message || 'Failed to add one or more hoardings.');
+        }
       }
     }
-  }
 
-  if (occupiedMsgs.length > 0) setOccupancyWarnings(occupiedMsgs);
-  if (successCount > 0)        await loadAll();
-  setSaving(false);
-};
- 
+    if (occupiedMsgs.length > 0) setOccupancyWarnings(occupiedMsgs);
+    if (successCount > 0) await loadAll();
+    setSaving(false);
+  };
+
   /* ── Remove hoarding ── */
   const handleDeleteMap = async (mapId) => {
     setDeletingMapId(mapId); setApiError('');
@@ -1502,12 +1827,7 @@ const handleAdd = async (pickedHoardings) => {
     try {
       await Promise.all(
         groupMerges.map(m => {
-          console.log('[EditMerge] Updating:', {
-            hoardingMergeID: m.hoardingMergeID,
-            hoardingID: m.hoardingID,
-            customerContractID,
-            mergeAlongFlag: newDirection,
-          });
+     
           return apiService.updateHoardingMerge(m.hoardingMergeID, {
             hoardingID: Number(m.hoardingID),
             customerContractID: Number(customerContractID),
@@ -1515,7 +1835,6 @@ const handleAdd = async (pickedHoardings) => {
           });
         })
       );
-      console.log('[EditMerge] Update successful, reloading...');
       await loadAll();
     } catch (err) {
       console.error('[EditMerge] Failed:', err?.response?.status, err?.response?.data, err?.message);
@@ -1591,7 +1910,6 @@ const handleAdd = async (pickedHoardings) => {
           <button
             onClick={() => {
               const newDir = direction === 'H' ? 'V' : 'H';
-              console.log('[Switch] groupMerges:', groupMerges, 'newDir:', newDir);
               handleEditMerge(groupMerges, newDir);
             }}
             title={`Switch to ${direction === 'H' ? 'Vertical' : 'Horizontal'}`}
@@ -1682,7 +2000,7 @@ const handleAdd = async (pickedHoardings) => {
           messages={occupancyWarnings}
           onDismiss={() => setOccupancyWarnings([])}
         />
- 
+
         {apiError && (
           <div className="pg-field-error" style={{ marginBottom: 12 }}>
             <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -2380,6 +2698,630 @@ function HoardingMergeSection({ customerContractID, hoardings, sites }) {
     </div>
   );
 }
+function ContractPDFModal({ contract, customer, hoardings, sites, onClose }) {
+  const [maps, setMaps] = useState([]);
+  const [attachments, setAttachments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [photoSelections, setPhotoSelections] = useState({});
+  const [generating, setGenerating] = useState(false);
+  const [allTerms, setAllTerms] = useState([]);
+  const [selectedTermIds, setSelectedTermIds] = useState(new Set());
+  const [termsLoading, setTermsLoading] = useState(true);
+  const [allHoardingsRaw, setAllHoardingsRaw] = useState([]);
+
+  const siteMap = useMemo(
+    () => Object.fromEntries(sites.map(s => [s.siteID, s])),
+    [sites]
+  );
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiService.getAllHoardings();
+        const list = Array.isArray(res) ? res : res?.data ?? [];
+        // Do NOT deduplicate here — keep all records so any hoardingID can be found
+        setAllHoardingsRaw(list);
+      } catch { /* silent */ }
+    })();
+  }, []);
+  useEffect(() => {
+    if (!contract?.customerContractID) { setLoading(false); return; }
+    (async () => {
+      setLoading(true);
+      try {
+        const rawMaps = await apiService.getCustomerContractHoardingMaps(
+          contract.customerContractID
+        ).catch(() => []);
+        const mapList = (Array.isArray(rawMaps) ? rawMaps : [])
+          .filter(m => Number(m.customerContractID ?? m.CustomerContractID) === Number(contract.customerContractID));
+        setMaps(mapList);
+        const defaults = {};
+        mapList.forEach(m => { defaults[Number(m.hoardingID ?? m.HoardingID ?? 0)] = true; });
+        setPhotoSelections(defaults);
+      } catch (err) {
+        console.error('[ContractPDF] load error:', err?.message);
+      } finally { setLoading(false); }
+    })();
+  }, [contract?.customerContractID]);
+  useEffect(() => {
+    (async () => {
+      setTermsLoading(true);
+      try {
+        const res = await apiService.getAllCustomerTerms();
+        const list = Array.isArray(res) ? res : [];
+        const sorted = [...list].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        setAllTerms(sorted);
+        // Default: select all
+        setSelectedTermIds(new Set(sorted.map(t => t.termID)));
+      } catch { /* silent */ }
+      finally { setTermsLoading(false); }
+    })();
+  }, []);
+
+  const [hoardingPhotos, setHoardingPhotos] = useState({});
+
+  useEffect(() => {
+  if (!maps.length || !allHoardingsRaw.length) return;
+  setHoardingPhotos({});
+  (async () => {
+    try {
+      // Fetch ALL hoarding photos at once
+      const allPhotos = await apiService.getAllHoardingPhotos?.() 
+        ?? await fetch(`${API_ROOT_URL}/api/HoardingPhoto`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
+           }).then(r => r.json());
+
+      const photoList = Array.isArray(allPhotos) ? allPhotos : [];
+
+      const photoMap = {};
+
+      for (const m of maps) {
+        const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+        if (!hid) continue;
+
+        // Find the hoardingCode for this hoardingID from allHoardingsRaw
+        const hoardingRecord = allHoardingsRaw.find(h => Number(h.hoardingID) === hid);
+        const hoardingCode = hoardingRecord?.hoardingCode;
+
+        // Get ALL hoardingIDs that share this hoardingCode
+        const allIDsForCode = hoardingCode
+          ? allHoardingsRaw
+              .filter(h => h.hoardingCode === hoardingCode)
+              .map(h => Number(h.hoardingID))
+          : [hid];
+
+        // Get all photos for any of those hoardingIDs
+        const relevantPhotos = photoList.filter(p =>
+          allIDsForCode.includes(Number(p.hoardingID ?? p.HoardingID ?? 0))
+        );
+
+        if (!relevantPhotos.length) continue;
+
+        // Sort by effdt desc, tiebreak by highest hoardingPhotoID → latest photo
+        const sorted = [...relevantPhotos].sort((a, b) => {
+          const rawA = a.effdt ?? a.Effdt ?? null;
+          const rawB = b.effdt ?? b.Effdt ?? null;
+          const da = rawA ? new Date(rawA).getTime() : 0;
+          const db = rawB ? new Date(rawB).getTime() : 0;
+          if (db !== da) return db - da;
+          return (b.hoardingPhotoID ?? 0) - (a.hoardingPhotoID ?? 0);
+        });
+
+        const best = sorted[0];
+        const path = best.photoPath ?? best.PhotoPath ?? '';
+        if (!path) continue;
+
+        const url = path.startsWith('http')
+          ? path
+          : `${API_ROOT_URL}${path.startsWith('/') ? path : '/' + path}`;
+
+        photoMap[hid] = url;
+      }
+
+      setHoardingPhotos(photoMap);
+    } catch (err) {
+      console.error('[AllPhotos] error:', err?.message);
+    }
+  })();
+}, [maps, allHoardingsRaw]);
+
+  const photoUrlMap = useMemo(() => {
+    return hoardingPhotos;
+  }, [hoardingPhotos]);
+
+  const hoardingItems = useMemo(() => maps.map(m => {
+    const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+
+    // Search in the RAW (non-deduplicated) list so exact hoardingID always matches
+    const h = allHoardingsRaw.find(hh => Number(hh.hoardingID) === hid);
+
+    const rawSiteID = h?.siteID ?? null;
+
+    const site =
+      (rawSiteID != null ? siteMap[rawSiteID] : null) ||
+      (rawSiteID != null ? siteMap[Number(rawSiteID)] : null) ||
+      (rawSiteID != null ? siteMap[String(rawSiteID)] : null) ||
+      null;
+
+    const addrParts = [
+      site?.addressLine1,
+      site?.addressLine2,
+      site?.landmark ? `Nr. ${site.landmark}` : null,
+      [site?.city, site?.district].filter(Boolean).join(', ') || null,
+    ].filter(Boolean);
+    const address = [...new Set(addrParts)].join(', ');
+
+    // hoardingCode comes directly from the raw hoarding record
+    const hoardingCode = h?.hoardingCode ?? `#${hid}`;
+
+    return {
+      hoardingID: hid,
+      hoardingCode,   // ← now always the real code e.g. "J880", "HOARDING22"
+      address,
+      size: h?.width && h?.height ? `${h.width}×${h.height}` : '',
+      material: h?.material || '',
+      contractStatus: h?.status || 'Available Now',
+      monthlyRent: h?.monthlyRent || 0,
+    };
+  }), [maps, allHoardingsRaw, siteMap]);
+
+  const togglePhoto = (hid) =>
+    setPhotoSelections(p => ({ ...p, [hid]: !p[hid] }));
+
+  const selectedCount = Object.values(photoSelections).filter(Boolean).length;
+
+  const handleGenerate = () => {
+    setGenerating(true);
+    try {
+      const selectedTerms = allTerms
+        .filter(t => selectedTermIds.has(t.termID))
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .map(t => t.description);
+
+      const html = buildContractPDFHTML({
+        company: CONTRACT_COMPANY,
+        customer,
+        contract,
+        hoardingItems,
+        photoUrlMap,
+        photoSelections,
+        terms: selectedTerms,       // ← pass selected terms
+      });
+      const win = window.open('', '_blank');
+      if (win) { win.document.write(html); win.document.close(); }
+      else alert('Popup blocked. Please allow popups for this site and try again.');
+    } finally { setGenerating(false); }
+  };
+
+  /* ── styles ── */
+  const S = {
+    overlay: {
+      position: 'fixed', inset: 0, zIndex: 99999,
+      background: 'rgba(15,23,42,0.45)', backdropFilter: 'blur(5px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    },
+    modal: {
+      background: '#fff', borderRadius: 20, width: '100%', maxWidth: 660,
+      maxHeight: '90vh', display: 'flex', flexDirection: 'column',
+      boxShadow: '0 8px 40px rgba(15,23,42,0.18)',
+      overflow: 'hidden', border: '1.5px solid #e8e8f4',
+    },
+    /* ── Header — matches "Add New Site" style ── */
+    header: {
+      display: 'flex', alignItems: 'center', gap: 14,
+      padding: '20px 24px 18px',
+      borderBottom: '1.5px solid #f0f0f8',
+      background: '#fff',
+      flexShrink: 0,
+    },
+    iconWrap: {
+      width: 46, height: 46, borderRadius: 14, flexShrink: 0,
+      background: 'linear-gradient(135deg, #e8f6fd, #ede9ff)',
+      border: '1.5px solid #d0e8f8',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    },
+    headerTitle: {
+      fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: 17, color: '#1a1a2e', margin: 0,
+    },
+    headerSub: {
+      fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600,
+      color: '#9090a8', marginTop: 2,
+    },
+    closeBtn: {
+      marginLeft: 'auto', width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+      background: '#f5f5fb', border: '1px solid #e8e8f0',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      cursor: 'pointer', color: '#9090a8', transition: 'all 0.15s',
+    },
+    /* ── Body ── */
+    body: { flex: 1, overflowY: 'auto', padding: '20px 24px' },
+    bodyLabel: {
+      fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800,
+      color: '#5a5a78', marginBottom: 14, display: 'block',
+    },
+    /* ── Hoarding card ── */
+    hoardingCard: (photoOn) => ({
+      border: `1.5px solid ${photoOn ? '#e8e8f4' : '#f0f0f8'}`,
+      borderRadius: 12, overflow: 'hidden',
+      opacity: photoOn ? 1 : 0.6, transition: 'all 0.15s',
+      marginBottom: 10,
+    }),
+    hoardingInner: {
+      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+    },
+    thumbnail: {
+      width: 76, height: 56, borderRadius: 9, flexShrink: 0, overflow: 'hidden',
+      background: '#f0f0f8', border: '1.5px solid #e8e8f4',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    },
+    hoardingCode: {
+      fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: 13.5, color: '#6c63ff',
+    },
+    hoardingSize: {
+      color: '#9090a8', fontWeight: 600, marginLeft: 7, fontSize: 11,
+    },
+    hoardingAddr: {
+      fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#6b7280',
+      fontWeight: 600, marginTop: 3,
+      display: 'flex', alignItems: 'center', gap: 4,
+      overflow: 'hidden',
+    },
+    hoardingRent: {
+      fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#16a34a',
+      fontWeight: 700, marginTop: 3,
+    },
+    noPhotoWarn: {
+      fontFamily: 'Nunito, sans-serif', fontSize: 10.5, color: '#d97706',
+      fontWeight: 700, marginTop: 3,
+    },
+    /* ── Toggle ── */
+    toggleWrap: {
+      flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+    },
+    toggleLabel: (on) => ({
+      fontFamily: 'Nunito, sans-serif', fontSize: 10.5, fontWeight: 800,
+      color: on ? '#049edf' : '#b0b0c8',
+    }),
+    toggleTrack: (on) => ({
+      width: 44, height: 24, borderRadius: 12,
+      background: on ? '#049edf' : '#d8d8e8',
+      cursor: 'pointer', position: 'relative', transition: 'background 0.2s',
+    }),
+    toggleThumb: (on) => ({
+      position: 'absolute', top: 4,
+      left: on ? 23 : 4,
+      width: 16, height: 16, borderRadius: '50%', background: '#fff',
+      transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.22)',
+    }),
+    /* ── Summary strip ── */
+    summaryStrip: {
+      marginTop: 16, padding: '10px 14px', borderRadius: 10,
+      background: '#f8f8fd', border: '1.5px solid #e8e8f4',
+      fontFamily: 'Nunito, sans-serif', fontSize: 12, color: '#7878a0', fontWeight: 600,
+    },
+    /* ── Footer ── */
+    footer: {
+      padding: '14px 24px', borderTop: '1.5px solid #f0f0f8',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      background: '#fafafe', flexShrink: 0, gap: 12,
+    },
+    generateBtn: (enabled) => ({
+      display: 'flex', alignItems: 'center', gap: 7,
+      padding: '10px 28px', borderRadius: 11, border: 'none',
+      background: enabled
+        ? 'linear-gradient(135deg, #049edf, #6c63ff)'
+        : '#e0e0f0',
+      color: enabled ? '#fff' : '#b0b0c8',
+      cursor: enabled && !generating ? 'pointer' : 'not-allowed',
+      fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 800,
+      minWidth: 190, justifyContent: 'center',
+      boxShadow: enabled ? '0 4px 18px rgba(4,158,223,0.35)' : 'none',
+      transition: 'all 0.15s',
+    }),
+  };
+
+  return ReactDOM.createPortal(
+    <div onClick={onClose} style={S.overlay}>
+      <div onClick={e => e.stopPropagation()} style={S.modal}>
+
+        {/* ── Header ── */}
+        <div style={S.header}>
+          <div style={S.iconWrap}>
+            <FileText size={20} color="#049edf" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={S.headerTitle}>Generate Contract PDF</div>
+            <div style={S.headerSub}>
+              {customer?.customerName} · Contract #{contract?.customerContractID}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            style={S.closeBtn}
+            onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.color = '#ef4444'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#f5f5fb'; e.currentTarget.style.color = '#9090a8'; }}
+          >
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* ── Body ── */}
+        <div style={S.body}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '50px 0', color: '#9090a8' }}>
+              <Loader2 size={28} className="pg-spin" style={{ marginBottom: 10 }} />
+              <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 600 }}>Loading hoarding data…</div>
+            </div>
+          ) : hoardingItems.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '50px 0', color: '#9090a8' }}>
+              <Building2 size={38} color="#d0d0e8" style={{ marginBottom: 10 }} />
+              <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: '#7878a0' }}>No hoardings linked to this contract</div>
+              <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, color: '#b0b0c8', marginTop: 4 }}>
+                Link hoardings first before generating the PDF.
+              </div>
+            </div>
+          ) : (
+            <>
+              <span style={S.bodyLabel}>
+                Toggle which hoardings should include a photo in the PDF:
+              </span>
+
+              <div>
+                {hoardingItems.map(item => {
+                  const hasPhoto = !!photoUrlMap[item.hoardingID];
+                  const photoOn = photoSelections[item.hoardingID] !== false;
+                  return (
+                    <div key={item.hoardingID} style={S.hoardingCard(photoOn)}>
+                      <div style={S.hoardingInner}>
+                        {/* Thumbnail */}
+                        <div style={S.thumbnail}>
+                          {hasPhoto ? (
+                            <img src={photoUrlMap[item.hoardingID]} alt={item.hoardingCode}
+                              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          ) : (
+                            <div style={{ textAlign: 'center', color: '#c0c0d8' }}>
+                              <Image size={20} color="#d0d0e8" />
+                              <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 9, marginTop: 2, color: '#c0c0d8' }}>No photo</div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={S.hoardingCode}>
+                            {item.hoardingCode}
+                            {item.size && <span style={S.hoardingSize}>{item.size} ft</span>}
+                          </div>
+                          {item.address && (
+                            <div style={{
+                              fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#6b7280',
+                              fontWeight: 600, marginTop: 3,
+                              display: 'flex', alignItems: 'flex-start', gap: 4,
+                              lineHeight: 1.4,
+                            }}>
+                              <MapPin size={10} color="#c0c0d8" style={{ flexShrink: 0, marginTop: 2 }} />
+                              <span>{item.address}</span>
+                            </div>
+                          )}
+                          {item.material && (
+                            <div style={{
+                              fontFamily: 'Nunito, sans-serif', fontSize: 10.5, color: '#9090a8',
+                              fontWeight: 600, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4,
+                            }}>
+                              <Tag size={9} color="#c0c0d8" />
+                              {item.material}
+                            </div>
+                          )}
+                          {item.monthlyRent > 0 && (
+                            <div style={S.hoardingRent}>
+                              ₹{Number(item.monthlyRent).toLocaleString('en-IN')}/mo
+                            </div>
+                          )}
+                          {!hasPhoto && (
+                            <div style={S.noPhotoWarn}>⚠ No banner image uploaded</div>
+                          )}
+                        </div>
+
+                        {/* Toggle */}
+                        <div style={S.toggleWrap}>
+                          <span style={S.toggleLabel(photoOn)}>
+                            {photoOn ? 'Photo ON' : 'Photo OFF'}
+                          </span>
+                          <div
+                            onClick={() => togglePhoto(item.hoardingID)}
+                            style={S.toggleTrack(photoOn)}
+                          >
+                            <div style={S.toggleThumb(photoOn)} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Summary strip */}
+              <div style={S.summaryStrip}>
+                PDF will include:{' '}
+                <strong style={{ color: '#1a1a2e' }}>{hoardingItems.length} hoarding{hoardingItems.length !== 1 ? 's' : ''}</strong>
+                {' · '}
+                <strong style={{ color: '#049edf' }}>{selectedCount} with photo</strong>
+                {' · '}Cover page · Terms &amp; Conditions
+              </div>
+              {/* ── Terms Selection ── */}
+              <div style={{ marginTop: 20 }}>
+                <div style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  marginBottom: 10,
+                }}>
+                  <span style={{
+                    fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: '#5a5a78',
+                    display: 'flex', alignItems: 'center', gap: 6,
+                  }}>
+                    <FileText size={13} color="#5a5a78" /> Terms &amp; Conditions
+                    {!termsLoading && (
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, color: '#9090a8', marginLeft: 4,
+                      }}>
+                        ({selectedTermIds.size}/{allTerms.length} selected)
+                      </span>
+                    )}
+                  </span>
+                  {!termsLoading && allTerms.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button
+                        onClick={() => setSelectedTermIds(new Set(allTerms.map(t => t.termID)))}
+                        style={{
+                          padding: '3px 10px', borderRadius: 6, border: '1px solid #e8e8f4',
+                          background: '#f8f8fd', cursor: 'pointer',
+                          fontFamily: 'Nunito, sans-serif', fontSize: 11, fontWeight: 800, color: '#049edf',
+                        }}>
+                        All
+                      </button>
+                      <button
+                        onClick={() => setSelectedTermIds(new Set())}
+                        style={{
+                          padding: '3px 10px', borderRadius: 6, border: '1px solid #e8e8f4',
+                          background: '#f8f8fd', cursor: 'pointer',
+                          fontFamily: 'Nunito, sans-serif', fontSize: 11, fontWeight: 800, color: '#9090a8',
+                        }}>
+                        None
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {termsLoading ? (
+                  <div style={{ textAlign: 'center', padding: '16px 0', color: '#9090a8' }}>
+                    <Loader2 size={18} className="pg-spin" style={{ marginBottom: 4 }} />
+                    <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12 }}>Loading terms…</div>
+                  </div>
+                ) : allTerms.length === 0 ? (
+                  <div style={{
+                    padding: '14px', borderRadius: 10, background: '#f8f8fd',
+                    border: '1.5px dashed #e0e0f0', textAlign: 'center',
+                    fontFamily: 'Nunito, sans-serif', fontSize: 12.5, color: '#b0b0c8', fontWeight: 600,
+                  }}>
+                    No terms found. Add terms in the Customer Terms section.
+                  </div>
+                ) : (
+                  <div style={{
+                    border: '1.5px solid #e8e8f4', borderRadius: 12, overflow: 'hidden',
+                  }}>
+                    {allTerms.map((term, idx) => {
+                      const isOn = selectedTermIds.has(term.termID);
+                      return (
+                        <div
+                          key={term.termID}
+                          onClick={() => setSelectedTermIds(prev => {
+                            const next = new Set(prev);
+                            isOn ? next.delete(term.termID) : next.add(term.termID);
+                            return next;
+                          })}
+                          style={{
+                            display: 'flex', alignItems: 'flex-start', gap: 10,
+                            padding: '10px 14px', cursor: 'pointer',
+                            background: isOn ? '#fff' : '#f8f8fd',
+                            borderBottom: idx < allTerms.length - 1 ? '1px solid #f0f0f8' : 'none',
+                            opacity: isOn ? 1 : 0.5, transition: 'all 0.12s',
+                          }}>
+                          {/* Checkbox */}
+                          <div style={{
+                            width: 17, height: 17, borderRadius: 5, flexShrink: 0, marginTop: 1,
+                            border: `2px solid ${isOn ? '#049edf' : '#d0d0e0'}`,
+                            background: isOn ? '#049edf' : '#fff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            transition: 'all 0.12s',
+                          }}>
+                            {isOn && <Check size={10} color="#fff" strokeWidth={3} />}
+                          </div>
+                          {/* Order badge + description */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 2 }}>
+                              <span style={{
+                                fontFamily: 'Nunito, sans-serif', fontSize: 10.5, fontWeight: 800,
+                                padding: '1px 7px', borderRadius: 10,
+                                background: 'rgba(4,158,223,0.08)', color: '#049edf',
+                                border: '1px solid rgba(4,158,223,0.2)', whiteSpace: 'nowrap',
+                              }}>
+                                #{term.order ?? idx + 1}
+                              </span>
+                            </div>
+                            <div style={{
+                              fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600,
+                              color: '#374151', lineHeight: 1.5,
+                            }}>
+                              {term.description}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div style={S.footer}>
+          <button onClick={onClose} className="pg-btn-cancel" style={{ fontSize: 13 }}>
+            Cancel
+          </button>
+          <button
+            onClick={handleGenerate}
+            disabled={generating || loading || hoardingItems.length === 0}
+            style={S.generateBtn(hoardingItems.length > 0 && !generating && !loading)}
+            onMouseEnter={e => {
+              if (hoardingItems.length > 0 && !generating) {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 8px 26px rgba(4,158,223,0.46)';
+              }
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = hoardingItems.length > 0 ? '0 4px 18px rgba(4,158,223,0.35)' : 'none';
+            }}
+          >
+            {generating
+              ? <><Loader2 size={14} className="pg-spin" /> Building PDF…</>
+              : <><FileText size={14} /> Open &amp; Download PDF</>}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+async function addHoardingEffdtRows(hoardingIDs, allHoardings, effdt, status) {
+  if (!hoardingIDs.length || !effdt) return;
+ 
+  await Promise.allSettled(
+    hoardingIDs.map(async (hid) => {
+      const h = allHoardings.find(hh =>
+        Number(hh.hoardingID ?? hh.HoardingID) === Number(hid)
+      );
+      if (!h || !h.hoardingCode) {
+        console.warn('[ContractEffdt] hoarding not found:', hid);
+        return;
+      }
+ 
+      const payload = {
+        effdt,                              // "YYYY-MM-DD"
+        material:     h.material     ?? '',
+        hoardingType: Number(h.hoardingType ?? 0),
+        status,                             // 'Occupied' or 'Available'
+        monthlyRent:  Number(h.monthlyRent  ?? 0),
+        width:        Number(h.width        ?? 0),
+        height:       Number(h.height       ?? 0),
+        siteID:       Number(h.siteID       ?? 0),
+      };
+ 
+      console.log('[ContractEffdt]', h.hoardingCode, '→', effdt, status, payload);
+      return apiService.addHoardingEffdt(h.hoardingCode, payload);
+    })
+  );
+}
 /* ═══════════════════════════════════════════
    CONTRACT FORM
 ═══════════════════════════════════════════ */
@@ -2485,6 +3427,7 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
   // Inside ContractForm, add:
   const [showEditCustomer, setShowEditCustomer] = useState(false);
   const [editedCustomer, setEditedCustomer] = useState(null);
+  const [showContractPDF, setShowContractPDF] = useState(false);
 
   const selectedCustomerObj = editedCustomer
     || customers.find(c => Number(c.customerID) === Number(form.customerID))
@@ -2499,15 +3442,14 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
   }, [form.contractOrigValue, form.discountAmount, form.adjustmentAmount]);
 
   /* ── Save contract ── */
-  const handleSave = async () => {
-    const errs = validateForm(form, contracts, currentContractID, true); // always skip hoardingID
+const handleSave = async () => {
+    const errs = validateForm(form, contracts, currentContractID, true);
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true); setApiErr('');
     try {
       const payload = {
         customerContractID: isAdd ? 0 : contract.customerContractID,
         customerID: Number(form.customerID),
-        // hoardingID: Number(form.hoardingID),
         startDate: form.startDate,
         endDate: form.endDate,
         contractOrigValue: Number(String(form.contractOrigValue).replace(/,/g, '')) || 0,
@@ -2520,19 +3462,20 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
         contractFinalValue: Number(String(form.contractFinalValue).replace(/,/g, '')) || 0,
         comments: form.comments || '',
       };
-
+ 
       let saved;
+ 
+      /* ════ ADD MODE ════ */
       if (isAdd) {
         const res = await apiService.createCustomerContract(payload);
         saved = normalizeContract(res?.data ?? res ?? payload);
-
+ 
         const hoardingsToMap = selectedHoardings.length > 0
           ? selectedHoardings
-          : form.hoardingID
-            ? [{ hoardingID: form.hoardingID }]
-            : [];
-
+          : form.hoardingID ? [{ hoardingID: form.hoardingID }] : [];
+ 
         if (saved.customerContractID && hoardingsToMap.length > 0) {
+          /* Map hoardings to contract */
           await Promise.allSettled(
             hoardingsToMap.map(h =>
               apiService.createCustomerContractHoardingMap({
@@ -2543,24 +3486,60 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
               })
             )
           );
+ 
+          /* ← NEW: add Occupied effdt row for each hoarding (startDate) */
+          await addHoardingEffdtRows(
+            hoardingsToMap.map(h => Number(h.hoardingID)),
+            hoardings,          // the hoardings prop passed to ContractForm
+            form.startDate,     // effdt = contract start date
+            'Occupied'          // hoarding is now occupied
+          );
         }
+ 
+      /* ════ EDIT MODE ════ */
       } else {
-        // Edit mode — call update API
+        const prevStatus = contract?.status ?? '';
+        const newStatus  = form.status;
+ 
         await apiService.updateCustomerContract(payload);
         saved = { ...payload, customerContractID: contract.customerContractID };
+ 
+        /* ← NEW: if status changed to Terminated or Expired, mark hoardings Available */
+        const isEnding = (newStatus === 'Terminated' || newStatus === 'Expired')
+                      && prevStatus !== 'Terminated' && prevStatus !== 'Expired';
+ 
+        if (isEnding && form.endDate) {
+          /* Fetch hoardings mapped to this contract */
+          const rawMaps = await apiService
+            .getCustomerContractHoardingMaps(contract.customerContractID)
+            .catch(() => []);
+ 
+          const maps = (Array.isArray(rawMaps) ? rawMaps : rawMaps?.data ?? [])
+            .filter(m =>
+              Number(m.customerContractID ?? m.CustomerContractID) ===
+              Number(contract.customerContractID)
+            );
+ 
+          const hoardingIDs = maps.map(m => Number(m.hoardingID ?? m.HoardingID ?? 0)).filter(Boolean);
+ 
+          /* Add Available effdt row from endDate */
+          await addHoardingEffdtRows(
+            hoardingIDs,
+            hoardings,        // the hoardings prop
+            form.endDate,     // effdt = contract end date
+            'Available'       // hoarding is now available
+          );
+        }
       }
-
+ 
       if (saved.customerContractID) setSavedContractID(saved.customerContractID);
-
       setSaveOk(true);
       onSave(saved, isAdd);
-
+ 
       if (isAdd) {
-        // Stay on the form — user must upload a Banner Design image next
         setContractSaved(true);
         setTimeout(() => setSaveOk(false), 2500);
       } else {
-        // Edit mode: navigate back after short delay
         setTimeout(() => onBack(), 900);
       }
     } catch (err) {
@@ -2700,6 +3679,30 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
             <div className="hd-topbar-sub">{isAdd ? 'Fill in the details to create a new customer contract' : 'Update customer contract details'}</div>
           </div>
         </div>
+        {!isAdd && savedContractID && (
+          <button
+            onClick={() => setShowContractPDF(true)}
+            style={{
+              marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6,
+              padding: '10px 20px', borderRadius: 13, border: 'none',
+              background: 'linear-gradient(135deg, #049edf, #6c63ff)',
+              color: '#fff', cursor: 'pointer',
+              fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 800,
+              boxShadow: '0 4px 18px rgba(4,158,223,0.35)',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 8px 26px rgba(4,158,223,0.46)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 18px rgba(4,158,223,0.35)';
+            }}
+          >
+            <FileText size={14} /> Generate PDF
+          </button>
+        )}
       </div>
 
       <div className="hd-form-body">
@@ -3172,6 +4175,15 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
           onClose={() => setHoardingModalOpen(false)}
         />
       )}
+      {showContractPDF && savedContractID && (
+        <ContractPDFModal
+          contract={{ ...contract, ...form, customerContractID: savedContractID }}
+          customer={selectedCustomerObj || { customerName: 'Customer' }}
+          hoardings={hoardings}
+          sites={sites}
+          onClose={() => setShowContractPDF(false)}
+        />
+      )}
 
       {/* ── Footer ── */}
       <div className="hd-form-footer hd-form-footer--sticky">
@@ -3231,6 +4243,7 @@ export default function CustomerContractPage() {
   const [hoardingMaps, setHoardingMaps] = useState([]);         // ← add
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadError, setLoadError] = useState('');
+
 
   const [view, setView] = useState('grid');
   const [formMode, setFormMode] = useState(null);
@@ -3365,8 +4378,12 @@ export default function CustomerContractPage() {
   if (view === 'form') {
     return (
       <ContractForm
-        mode={formMode} contract={editTarget}
-        customers={customers} hoardings={hoardings} sites={sites} paymentFreqs={freqOptions}
+        mode={formMode}
+        contract={editTarget}
+        customers={customers}
+        hoardings={hoardings}
+        sites={sites}
+        paymentFreqs={freqOptions}
         contracts={contracts}
         landContracts={landContracts}
         hoardingMaps={hoardingMaps}
@@ -3375,6 +4392,7 @@ export default function CustomerContractPage() {
       />
     );
   }
+
 
   return (
     <div className="pg-page">
@@ -3393,7 +4411,7 @@ export default function CustomerContractPage() {
         </button>
       </div>
 
-      {!loadingMeta && contracts.length > 0 && (
+      {/* {!loadingMeta && contracts.length > 0 && (
         <div className="exp-stats-strip">
           {[
             { icon: <FileText size={16} color="#049edf" />, bg: 'rgba(4,158,223,0.1)', label: 'Total Contracts', val: contracts.length },
@@ -3407,7 +4425,7 @@ export default function CustomerContractPage() {
             </div>
           ))}
         </div>
-      )}
+      )} */}
 
       {loadError && (
         <div className="pg-field-error hd-api-error mb-3" style={{ margin: '0 0 16px 0' }}>

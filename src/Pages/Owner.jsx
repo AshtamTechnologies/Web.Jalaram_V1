@@ -535,7 +535,6 @@ function DistrictCombo({ value, onChange, onBlur, hasError, stateValue }) {
    state, country, emailAddress
 ───────────────────────────────────────── */
 function normalizeOwner(raw) {
-  console.log('Owner raw from API:', raw);
 
   // Swagger confirms the PK field is "ownerID"
   const id =
@@ -750,7 +749,6 @@ function OwnerModal({ onClose, onSaved, editData }) {
       let saved;
 
       if (isEdit) {
-        console.log(`Updating owner ID: ${editData._id}`, payload);
         const response = await apiService.updateOwner(editData._id, payload);
         const raw = response?.data ?? response;
         saved = (raw && typeof raw === 'object' && (raw.ownerID ?? raw.ownerId ?? raw.id))
@@ -988,7 +986,6 @@ export default function OwnerPage() {
         : Array.isArray(response?.data)
           ? response.data
           : [];
-      console.log('Raw owners list from API:', list);
       setOwners(list.map(normalizeOwner));
     } catch (err) {
       const msg =
@@ -1105,9 +1102,9 @@ export default function OwnerPage() {
         {/* Page Header */}
         <div className="pg-header">
           <div>
-            <h1 className="pg-header__title">Owners</h1>
+            <h1 className="pg-header__title">Land Lords</h1>
             <p className="pg-header__subtitle">
-              Manage all hoarding &amp; site <strong>owners</strong> in one place.
+              Manage all hoarding &amp; site <strong>Land Lords</strong> in one place.
             </p>
           </div>
           <button className="pg-btn-add" onClick={() => { setEditOwner(null); setShowModal(true); }}>

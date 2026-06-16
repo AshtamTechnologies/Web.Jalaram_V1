@@ -9,7 +9,7 @@ import {
   ShieldCheck, MessageSquare, CreditCard, TrendingUp,
   Download, ExternalLink, MapPin, Tag, Paperclip,
 } from 'lucide-react';
-import { apiService } from '../api/api';
+import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
 import { useResizableColumns } from '../hooks/useResizableColumns';
 
@@ -41,7 +41,6 @@ const ATTACH_ALLOWED_TYPES = [
 const ATTACH_ALLOWED_LABEL = 'PDF, Word (.doc/.docx), JPG or PNG';
 const ATTACH_MAX_MB = 30;
 
-const ATTACH_BASE_URL = 'https://api.jalaram-ad.ashtamtechnologies.com';
 
 /* ── Persist original filenames in localStorage ── */
 const ATTACH_NAME_KEY = 'lc_attach_names';
@@ -133,7 +132,6 @@ function normalizeContract(raw) {
   };
 }
 function normalizeAttachment(raw) {
-  console.log('[Attach raw keys]', Object.keys(raw), raw);
 
   const filePath = raw.contractFilePath ?? raw.ContractFilePath ?? '';
   const rawName = raw.contractFilename ?? raw.ContractFilename ?? raw.fileName ?? raw.FileName ?? '';
@@ -158,8 +156,8 @@ function normalizeAttachment(raw) {
     contractFilePath: filePath,
     contractFilename: fileName,
     fileUrl: filePath
-      ? (filePath.startsWith('http') ? filePath : `${ATTACH_BASE_URL}${filePath}`)
-      : null,
+  ? (filePath.startsWith('http') ? filePath : `${API_ROOT_URL}${filePath}`)
+  : null,
     lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
   };
 }
@@ -2058,7 +2056,7 @@ export default function LandContractPage() {
         </button>
       </div>
 
-      {!loadingMeta && contracts.length > 0 && (
+      {/* {!loadingMeta && contracts.length > 0 && (
         <div className="exp-stats-strip">
           {[
             { icon: <FileText size={16} color="#049edf" />, bg: 'rgba(4,158,223,0.1)', label: 'Total Contracts', val: contracts.length },
@@ -2072,7 +2070,7 @@ export default function LandContractPage() {
             </div>
           ))}
         </div>
-      )}
+      )} */}
 
       {loadError && (
         <div className="pg-field-error hd-api-error mb-3" style={{ margin: '0 0 16px 0' }}>

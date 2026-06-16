@@ -679,7 +679,8 @@ function SortIcon({ col, sortKey, sortDir }) {
 ═══════════════════════════════════════════ */
 function buildPrintHTML({ rows, withPrinting, selectedCustomer, quotNo, quotDate,
   revisionNo, cgstPct, sgstPct, subTotal, cgstAmt, sgstAmt,
-  roundOff, finalTotal, selectedTerms, termsTexts }) {
+  roundOff, finalTotal, selectedTerms, termsTexts,
+  docNoLabel = 'Quotation No.', docNoValue = null }) {   
 
   const pages = rows.length === 0 ? [[]] : [];
   for (let i = 0; i < rows.length; i += ROWS_PER_PRINT_PAGE) pages.push(rows.slice(i, i + ROWS_PER_PRINT_PAGE));
@@ -769,7 +770,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
   </div>
   <div class="cright">
     <table>
-      <tr><td class="clbl">Invoice No.</td><td>: ${quotNo}${Number(revisionNo) > 1 ? ` Rev.${revisionNo}` : ''}</td></tr>
+      <tr><td class="clbl">${docNoLabel}</td><td>: ${docNoValue ?? `${quotNo}${Number(revisionNo) > 1 ? ` Rev.${revisionNo}` : ''}`}</td></tr>
       <tr><td class="clbl">Date</td><td>: ${fmtDateFull(quotDate)}</td></tr>
       <tr><td class="clbl">PO No.</td><td>: &nbsp;</td></tr>
     </table>
@@ -924,7 +925,13 @@ ${renderFooter(isLast)}
   return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Quotation - ${quotNo}</title><style>${css}</style></head><body>${pagesHtml}<script>window.onload=()=>setTimeout(()=>window.print(),400);</script></body></html>`;
 }
 function buildProformaHTML(params) {
-  const html = buildPrintHTML(params);
+  const html = buildPrintHTML({
+    ...params,
+    docNoLabel: 'Invoice ID',
+    docNoValue: params.invoiceID != null && params.invoiceID !== 0
+      ? String(params.invoiceID)
+      : params.quotNo,   // fallback if invoiceID isn't available
+  });
   return html
     .replace(/>QUOTATION</g, '>PROFORMA INVOICE<')
     .replace(/>Site Address</g, '>Product Name<')
@@ -1907,11 +1914,12 @@ function CreateContractFromQuotModal({
   quot, quotLines, quotMerges = [], hoardings, customers, siteMap, paymentFreqs, onClose, onCreated, showToast,
 }) {
   const myLines = quotLines.filter(l =>
-    Number(l.quotationID) === Number(quot.quotationID)
+    l.quotationID === quot.quotationID &&
+    l.quotationRevisionNumber === quot.quotationRevisionNumber
   );
-
   const myMerges = quotMerges.filter(m =>
-    Number(m.quotationID) === Number(quot.quotationID)
+    Number(m.quotationID) === Number(quot.quotationID) &&
+    Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
   );
 
   // Collect all unique hoardingIDs from merges that are NOT already in regular lines
@@ -2116,25 +2124,12 @@ function CreateContractFromQuotModal({
 
       // Backend is returning wrong ID — fetch the real newly created contract
       if (savedContractID <= 1) {
-        // Backend returns wrong ID — fetch by direct API call with auth token
-        console.warn('[Contract] Fetching real contract ID via direct fetch...');
+        console.warn('[Contract] Fetching real contract ID via apiService...');
         try {
-          const token = localStorage.getItem('authToken');
-          const directRes = await fetch(
-            'https://api.jalaram-ad.ashtamtechnologies.com/api/CustomerContract/GetAll',
-            { headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' } }
-          );
-          const directJson = await directRes.json();
-          console.log('[Contract] Direct API response:', JSON.stringify(directJson));
+          const allContracts = await apiService.getAllCustomerContracts();
+          const allList = Array.isArray(allContracts) ? allContracts : [];
 
-          const allList = Array.isArray(directJson) ? directJson
-            : Array.isArray(directJson?.data) ? directJson.data
-              : Array.isArray(directJson?.$values) ? directJson.$values
-                : [];
 
-          console.log('[Contract] Total contracts found:', allList.length);
-
-          // Filter by customerID and sort by highest ID = newest
           const forThisCustomer = allList
             .filter(c => Number(c.customerContractID ?? c.CustomerContractID) > 0)
             .sort((a, b) =>
@@ -2146,14 +2141,11 @@ function CreateContractFromQuotModal({
             savedContractID = Number(
               forThisCustomer[0].customerContractID ?? forThisCustomer[0].CustomerContractID
             );
-            console.log('[Contract] Real savedContractID:', savedContractID);
           }
         } catch (err) {
-          console.error('[Contract] Direct fetch failed:', err?.message);
+          console.error('[Contract] apiService fetch failed:', err?.message);
         }
       }
-
-      console.log('[Contract] Final savedContractID:', savedContractID);
 
     } catch (err) {
       setSaving(false);
@@ -2175,7 +2167,6 @@ function CreateContractFromQuotModal({
         }
       }
 
-      console.log('[HoardingMap] Mapping IDs:', [...allHoardingIDsToMap]);
 
       // Step 3: Create hoarding maps
       const occupiedMsgs = [];
@@ -2662,6 +2653,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [step1Error, setStep1Error] = useState('');
   const [step2Error, setStep2Error] = useState('');
   const [editingQuotID, setEditingQuotID] = useState(null);
+  const [originalQuotID, setOriginalQuotID] = useState(0);
   const [customerContracts, setCustomerContracts] = useState([]);
   /* ── Form fields ── */
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -2771,28 +2763,48 @@ export default function QuotationPage({ onNavigateToContracts }) {
       return n;
     });
   }, []);
-const handleViewProforma = (quot) => {
-  const myLines = quotLines.filter(l =>
-    Number(l.quotationID) === Number(quot.quotationID) &&
-    Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
-  );
-  const cust = customers.find(c => c.customerID === quot.customerID) || null;
+const handleViewProforma = async (quot) => {
+    const myLines = quotLines.filter(l =>
+      Number(l.quotationID) === Number(quot.quotationID) &&
+      Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+    );
+    const cust = customers.find(c => c.customerID === quot.customerID) || null;
 
-  /* ── Build rows from QuotationLineDTL ── */
-  const pdfRows = myLines
-    .filter(l => !l.mergeFlag)
-    .map(l => {
-      // ── Printing / Extra rows ──
-      if (!l.hoardingID && l.purpose) {
-        const isPrinting = PRINTING_TYPES.some(pt =>
-          pt.toLowerCase() === (l.purpose || '').toLowerCase()
-        );
+    /* ── Build rows from QuotationLineDTL ── */
+    const pdfRows = myLines
+      .filter(l => !l.mergeFlag)
+      .map(l => {
+        // ── Printing / Extra rows ──
+        if (!l.hoardingID && l.purpose) {
+          const isPrinting = PRINTING_TYPES.some(pt =>
+            pt.toLowerCase() === (l.purpose || '').toLowerCase()
+          );
+          return {
+            rowType: isPrinting ? 'printing' : 'extra',
+            hoardingID: 0,
+            location: l.purpose,
+            size: '',
+            sqFt: 0,
+            nos: 1,
+            startDate: l.periodBeginDate,
+            endDate: l.periodEndDate,
+            ratePerMonth: l.rentAmount,
+            amount: l.rentAmount,
+            printingCost: 0,
+          };
+        }
+        // ── Regular hoarding row ──
+        const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
+        const siteID = h?.siteID ?? h?.site?.siteID ?? null;
+        const siteObj = siteID != null
+          ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
+          : null;
         return {
-          rowType: isPrinting ? 'printing' : 'extra',
-          hoardingID: 0,
-          location: l.purpose,
-          size: '',
-          sqFt: 0,
+          rowType: 'hoarding',
+          hoardingID: l.hoardingID,
+          location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+          size: h ? `${h.width} X ${h.height}` : '',
+          sqFt: h ? (h.width * h.height) : 0,
           nos: 1,
           startDate: l.periodBeginDate,
           endDate: l.periodEndDate,
@@ -2800,119 +2812,118 @@ const handleViewProforma = (quot) => {
           amount: l.rentAmount,
           printingCost: 0,
         };
+      });
+
+    /* ── Merged rows from QuotationMergeDTL ── */
+    const myMerges = quotMerges.filter(m =>
+      Number(m.quotationID) === Number(quot.quotationID) &&
+      Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+    );
+
+    if (myMerges.length >= 2) {
+      const byLine = new Map();
+      for (const m of myMerges) {
+        const ln = m.quotationLineNumber;
+        if (!byLine.has(ln)) byLine.set(ln, []);
+        byLine.get(ln).push(m);
       }
-      // ── Regular hoarding row ──
-      const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-      const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-      const siteObj = siteID != null
-        ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
-        : null;
-      return {
-        rowType: 'hoarding',
-        hoardingID: l.hoardingID,
-        location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
-        size: h ? `${h.width} X ${h.height}` : '',
-        sqFt: h ? (h.width * h.height) : 0,
-        nos: 1,
-        startDate: l.periodBeginDate,
-        endDate: l.periodEndDate,
-        ratePerMonth: l.rentAmount,
-        amount: l.rentAmount,
-        printingCost: 0,
-      };
+
+      for (const ln of [...byLine.keys()].sort((a, b) => a - b)) {
+        const records = byLine.get(ln);
+        if (records.length < 2) continue;
+
+        const savedLine = myLines.find(l =>
+          l.mergeFlag && Number(l.quotationLineNumber) === Number(ln)
+        );
+
+        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const hoardingObjs = records
+          .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
+          .filter(Boolean);
+
+        const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
+        const gaps = hoardingObjs.length - 1;
+        let mw, mh;
+        if (dir === 'H') {
+          mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+          mh = Math.max(...sizes.map(s => s.h));
+        } else {
+          mw = Math.max(...sizes.map(s => s.w));
+          mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+        }
+
+        const locations = hoardingObjs.map(h => {
+          const site = h.siteID ? siteMap.get(h.siteID) : null;
+          return buildSiteAddress(site, h.hoardingCode || '');
+        });
+        const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
+        const fallbackRate = hoardingObjs.reduce((s, h) => s + (h.monthlyRent || 0), 0);
+
+        pdfRows.push({
+          rowType: 'merged',
+          isMerged: true,
+          mergeDirection: dir,
+          hoardingID: 0,
+          location: savedLine?.purpose || locations.join(' + '),
+          hoardingCode: codes,
+          size: `${mw} X ${mh}`,
+          sqFt: mw * mh,
+          nos: 1,
+          startDate: savedLine?.periodBeginDate || '',
+          endDate: savedLine?.periodEndDate || '',
+          ratePerMonth: savedLine ? savedLine.rentAmount : fallbackRate,
+          amount: savedLine ? savedLine.rentAmount : fallbackRate,
+          printingCost: 0,
+        });
+      }
+    }
+
+    /* ── Save Proforma Invoice record to API (non-blocking) ── */
+    let invoiceID = null;   // ← NEW
+    try {
+      const res = await apiService.createPerformaInvoice({
+        invoiceID: 0,
+        quotationID: Number(quot.quotationID),
+        quotationRevisionNumber: Number(quot.quotationRevisionNumber ?? 0),
+        quotationNumber: quot.quotationNumber || '',
+        invoiceDate: new Date().toISOString(),
+      });
+      // ← NEW: extract the generated invoiceID from the response
+      invoiceID = res?.invoiceID ?? res?.InvoiceID ?? res?.data?.invoiceID ?? res?.data?.InvoiceID ?? null;
+      showToast('Proforma invoice saved.', 'success');
+    } catch (err) {
+      console.warn('[PerformaInvoice] Save failed:', err?.message);
+      // Non-blocking — PDF still opens even if save fails
+    }
+
+    /* ── Open Proforma print window ── */
+    const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
+    const storedCgst = (storedSub * quot.cGSTPercent) / 100;
+    const storedSgst = (storedSub * quot.sGSTPercent) / 100;
+    const storedGross = storedSub + storedCgst + storedSgst;
+    const storedFinal = Math.round(storedGross);
+
+    const html = buildProformaHTML({
+      rows: pdfRows,
+      withPrinting: pdfRows.some(r => r.rowType === 'printing'),
+      selectedCustomer: cust,
+      quotNo: quot.quotationNumber,
+      quotDate: quot.quotationDate,
+      revisionNo: quot.quotationRevisionNumber,
+      cgstPct: quot.cGSTPercent,
+      sgstPct: quot.sGSTPercent,
+      subTotal: storedSub,
+      cgstAmt: storedCgst,
+      sgstAmt: storedSgst,
+      roundOff: storedFinal - storedGross,
+      finalTotal: storedFinal,
+      selectedTerms: [],
+      termsTexts: [],
+      invoiceID,   // ← NEW: pass through to buildProformaHTML
     });
-
-  /* ── Merged rows from QuotationMergeDTL ── */
-  const myMerges = quotMerges.filter(m =>
-    Number(m.quotationID) === Number(quot.quotationID) &&
-    Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
-  );
-
-  if (myMerges.length >= 2) {
-    const byLine = new Map();
-    for (const m of myMerges) {
-      const ln = m.quotationLineNumber;
-      if (!byLine.has(ln)) byLine.set(ln, []);
-      byLine.get(ln).push(m);
-    }
-
-    for (const ln of [...byLine.keys()].sort((a, b) => a - b)) {
-      const records = byLine.get(ln);
-      if (records.length < 2) continue;
-
-      const savedLine = myLines.find(l =>
-        l.mergeFlag && Number(l.quotationLineNumber) === Number(ln)
-      );
-
-      const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
-      const hoardingObjs = records
-        .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
-        .filter(Boolean);
-
-      const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
-      const gaps = hoardingObjs.length - 1;
-      let mw, mh;
-      if (dir === 'H') {
-        mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
-        mh = Math.max(...sizes.map(s => s.h));
-      } else {
-        mw = Math.max(...sizes.map(s => s.w));
-        mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
-      }
-
-      const locations = hoardingObjs.map(h => {
-        const site = h.siteID ? siteMap.get(h.siteID) : null;
-        return buildSiteAddress(site, h.hoardingCode || '');
-      });
-      const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
-      const fallbackRate = hoardingObjs.reduce((s, h) => s + (h.monthlyRent || 0), 0);
-
-      pdfRows.push({
-        rowType: 'merged',
-        isMerged: true,
-        mergeDirection: dir,
-        hoardingID: 0,
-        location: savedLine?.purpose || locations.join(' + '),
-        hoardingCode: codes,
-        size: `${mw} X ${mh}`,
-        sqFt: mw * mh,
-        nos: 1,
-        startDate: savedLine?.periodBeginDate || '',
-        endDate: savedLine?.periodEndDate || '',
-        ratePerMonth: savedLine ? savedLine.rentAmount : fallbackRate,
-        amount: savedLine ? savedLine.rentAmount : fallbackRate,
-        printingCost: 0,
-      });
-    }
-  }
-
-  /* ── Open Proforma ── */
-  const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
-  const storedCgst = (storedSub * quot.cGSTPercent) / 100;
-  const storedSgst = (storedSub * quot.sGSTPercent) / 100;
-  const storedGross = storedSub + storedCgst + storedSgst;
-  const storedFinal = Math.round(storedGross);
-
-  const html = buildProformaHTML({
-    rows: pdfRows,
-    withPrinting: pdfRows.some(r => r.rowType === 'printing'),
-    selectedCustomer: cust,
-    quotNo: quot.quotationNumber,
-    quotDate: quot.quotationDate,
-    revisionNo: quot.quotationRevisionNumber,
-    cgstPct: quot.cGSTPercent,
-    sgstPct: quot.sGSTPercent,
-    subTotal: storedSub,
-    cgstAmt: storedCgst,
-    sgstAmt: storedSgst,
-    roundOff: storedFinal - storedGross,
-    finalTotal: storedFinal,
-    selectedTerms: [],
-    termsTexts: [],
-  });
-  const win = window.open('', '_blank');
-  if (win) { win.document.write(html); win.document.close(); }
-};
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
   /* ── Load API data ── */
   useEffect(() => {
     (async () => {
@@ -3195,15 +3206,156 @@ const handleViewProforma = (quot) => {
     setSelectedTerms([]);
     setStep1Error(''); setStep2Error('');
     setEditingQuotID(null);
+    setOriginalQuotID(0);   // ← NEW
     setGlobalStart(''); setGlobalEnd('');
   };
 
-  const handleStartNew = () => {
+  const handleStartNew = async () => {
     resetForm();
+    setStep(1);
+    setIsCreating(true);
+    // Fetch auto-generated quotation number from backend
+    try {
+      const res = await apiService.getNextQuotationNumber();
+      // res could be a string, or object with a field
+      const num = typeof res === 'string' ? res
+        : res?.quotationNumber ?? res?.number ?? res?.nextNumber
+        ?? res?.seriesNumber ?? res?.value ?? res?.data ?? '';
+      if (num) setQuotNo(String(num));
+    } catch (err) {
+      console.warn('[QuotNo] Could not fetch auto number:', err?.message);
+    }
+    setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
+  };
+const handleEditQuotation = (quot) => {
+  const myLines = quotLines.filter(l =>
+    Number(l.quotationID) === Number(quot.quotationID) &&
+    Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+  );
+  const myMerges = quotMerges.filter(m =>
+    Number(m.quotationID) === Number(quot.quotationID) &&
+    Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+  );
+  // ...rest unchanged
+    const cust = customers.find(c => c.customerID === quot.customerID) || null;
+
+    setSelectedCustomer(cust);
+    setWithPrinting(false);
+    setQuotNo(quot.quotationNumber);
+    setQuotDate(quot.quotationDate ? quot.quotationDate.split('T')[0] : todayISO());
+    setRevisionNo(quot.quotationRevisionNumber || 1);   // ← SAME revision, not +1
+    setEditingQuotID(quot.quotationID);                  // ← PUT updates this row in place
+
+    const regularRows = myLines
+      .filter(l => !l.mergeFlag)
+      .map(l => {
+        if (!l.hoardingID && l.purpose) {
+          const isPrinting = PRINTING_TYPES.some(pt =>
+            pt.toLowerCase() === (l.purpose || '').toLowerCase()
+          );
+          return {
+            _id: uid(),
+            rowType: isPrinting ? 'printing' : 'extra',
+            hoardingID: 0, siteID: null, siteObj: null,
+            location: l.purpose, hoardingCode: '', size: '', sqFt: 0, nos: 1,
+            startDate: l.periodBeginDate || '', endDate: l.periodEndDate || '',
+            ratePerMonth: l.rentAmount || 0, amount: l.rentAmount || 0,
+            printingCost: 0,
+            quotationLineNumber: l.quotationLineNumber,
+            saved: true,
+          };
+        }
+        const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
+        const siteID = h?.siteID ?? h?.site?.siteID ?? null;
+        const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
+        return {
+          _id: uid(), rowType: 'hoarding',
+          hoardingID: l.hoardingID, siteID, siteObj,
+          location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+          hoardingCode: h?.hoardingCode || '',
+          size: h ? `${h.width} X ${h.height}` : '',
+          sqFt: h ? (h.width * h.height) : 0,
+          nos: 1,
+          startDate: l.periodBeginDate || '', endDate: l.periodEndDate || '',
+          ratePerMonth: l.rentAmount || h?.monthlyRent || 0,
+          amount: l.rentAmount || 0,
+          printingCost: 0,
+          quotationLineNumber: l.quotationLineNumber,
+          saved: true,
+        };
+      });
+
+    // Reconstruct merged rows (kept as "saved" so existing merge records aren't duplicated)
+    const mergedRows = [];
+    if (myMerges.length >= 2) {
+      const byLine = new Map();
+      for (const m of myMerges) {
+        const ln = m.quotationLineNumber;
+        if (!byLine.has(ln)) byLine.set(ln, []);
+        byLine.get(ln).push(m);
+      }
+      for (const [ln, records] of byLine.entries()) {
+        if (records.length < 2) continue;
+        const savedLine = myLines.find(l => l.mergeFlag && Number(l.quotationLineNumber) === Number(ln));
+        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const hoardingObjs = records.map(r => hoardings.find(h => h.hoardingID === r.hoardingID)).filter(Boolean);
+
+        const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
+        const gaps = hoardingObjs.length - 1;
+        let mw, mh;
+        if (dir === 'H') { mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps; mh = Math.max(...sizes.map(s => s.h)); }
+        else { mw = Math.max(...sizes.map(s => s.w)); mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps; }
+
+        const locations = hoardingObjs.map(h => {
+          const site = h.siteID ? siteMap.get(h.siteID) : null;
+          return buildSiteAddress(site, h.hoardingCode || '');
+        });
+        const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
+
+        mergedRows.push({
+          _id: uid(),
+          rowType: 'merged',
+          isMerged: true,
+          mergeDirection: dir,
+          mergedHoardingIDs: hoardingObjs.map(h => h.hoardingID),
+          hoardingID: 0, siteID: null,
+          location: savedLine?.purpose || locations.join(' + '),
+          hoardingCode: codes,
+          size: `${mw} X ${mh}`,
+          sqFt: mw * mh,
+          nos: 1,
+          startDate: savedLine?.periodBeginDate || '',
+          endDate: savedLine?.periodEndDate || '',
+          ratePerMonth: savedLine?.rentAmount || 0,
+          amount: savedLine?.rentAmount || 0,
+          printingCost: 0,
+          quotationLineNumber: savedLine?.quotationLineNumber || 0,
+          saved: true,
+        });
+      }
+    }
+
+    const allRows = [...regularRows, ...mergedRows];
+    setRows(allRows);
+    setCgstPct(quot.cGSTPercent ?? 9);
+    setSgstPct(quot.sGSTPercent ?? 9);
+    setSelectedTerms([]);
+    setStep1Error(''); setStep2Error('');
+
+    // ── Derive global period from the loaded rows ──
+    const datedRows = allRows.filter(r => r.startDate && r.endDate);
+    if (datedRows.length > 0) {
+      const gStart = datedRows.reduce((min, r) => (r.startDate < min ? r.startDate : min), datedRows[0].startDate);
+      const gEnd = datedRows.reduce((max, r) => (r.endDate > max ? r.endDate : max), datedRows[0].endDate);
+      setGlobalStart(gStart);
+      setGlobalEnd(gEnd);
+    } else {
+      setGlobalStart(''); setGlobalEnd('');
+    }
+
     setStep(1); setIsCreating(true);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   };
-
   const handleReopenHistory = async (quot) => {
     const myLines = quotLines.filter(l =>
       l.quotationID === quot.quotationID &&
@@ -3215,91 +3367,123 @@ const handleViewProforma = (quot) => {
     setQuotNo(quot.quotationNumber);
     setQuotDate(todayISO());
     setRevisionNo((quot.quotationRevisionNumber || 1) + 1);
-  // AFTER
-const builtRows = myLines
-  .filter(l => !l.mergeFlag)   // exclude merged-line records — merges are read-only on revise
-  .map(l => {
-    // ── Restore printing / extra rows from saved purpose ──
-    if (!l.hoardingID && l.purpose) {
-      const isPrinting = PRINTING_TYPES.some(pt =>
-        pt.toLowerCase() === (l.purpose || '').toLowerCase()
-      );
-      return {
-        _id: uid(),
-        rowType: isPrinting ? 'printing' : 'extra',
-        hoardingID: 0,
-        siteID: null,
-        siteObj: null,
-        location: l.purpose,
-        hoardingCode: '',
-        size: '',
-        sqFt: 0,
-        nos: 1,
-        startDate: l.periodBeginDate || '',
-        endDate: l.periodEndDate || '',
-        ratePerMonth: l.rentAmount || 0,
-        amount: l.rentAmount || 0,
-        printingCost: 0,
-        quotationLineNumber: l.quotationLineNumber,
-        saved: true,
-      };
-    }
-    // ── Regular hoarding row ──
-    const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-    const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-    const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
-    return {
-      _id: uid(), rowType: 'hoarding',
-      hoardingID: l.hoardingID,
-      siteID,
-      siteObj,
-      location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
-      hoardingCode: h?.hoardingCode || '',
-      size: h ? `${h.width} X ${h.height}` : '',
-      sqFt: h ? (h.width * h.height) : 0,
-      nos: 1,
-      startDate: l.periodBeginDate || '',
-      endDate: l.periodEndDate || '',
-      ratePerMonth: l.rentAmount || h?.monthlyRent || 0,
-      amount: l.rentAmount || 0,
-      printingCost: 0,
-      quotationLineNumber: l.quotationLineNumber,
-      saved: false,
-    };
-  });
+    // AFTER
+    const builtRows = myLines
+      .filter(l => !l.mergeFlag)   // exclude merged-line records — merges are read-only on revise
+      .map(l => {
+        // ── Restore printing / extra rows from saved purpose ──
+        if (!l.hoardingID && l.purpose) {
+          const isPrinting = PRINTING_TYPES.some(pt =>
+            pt.toLowerCase() === (l.purpose || '').toLowerCase()
+          );
+          return {
+            _id: uid(),
+            rowType: isPrinting ? 'printing' : 'extra',
+            hoardingID: 0,
+            siteID: null,
+            siteObj: null,
+            location: l.purpose,
+            hoardingCode: '',
+            size: '',
+            sqFt: 0,
+            nos: 1,
+            startDate: l.periodBeginDate || '',
+            endDate: l.periodEndDate || '',
+            ratePerMonth: l.rentAmount || 0,
+            amount: l.rentAmount || 0,
+            printingCost: 0,
+            quotationLineNumber: l.quotationLineNumber,
+            saved: true,
+          };
+        }
+        // ── Regular hoarding row ──
+        const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
+        const siteID = h?.siteID ?? h?.site?.siteID ?? null;
+        const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
+        return {
+          _id: uid(), rowType: 'hoarding',
+          hoardingID: l.hoardingID,
+          siteID,
+          siteObj,
+          location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+          hoardingCode: h?.hoardingCode || '',
+          size: h ? `${h.width} X ${h.height}` : '',
+          sqFt: h ? (h.width * h.height) : 0,
+          nos: 1,
+          startDate: l.periodBeginDate || '',
+          endDate: l.periodEndDate || '',
+          ratePerMonth: l.rentAmount || h?.monthlyRent || 0,
+          amount: l.rentAmount || 0,
+          printingCost: 0,
+          quotationLineNumber: l.quotationLineNumber,
+          saved: false,
+        };
+      });
     setRows(builtRows);
     setCgstPct(quot.cGSTPercent ?? 9);
     setSgstPct(quot.sGSTPercent ?? 9);
     setSelectedTerms([]);
     setStep1Error(''); setStep2Error('');
     setEditingQuotID(null);
-    setGlobalStart(''); setGlobalEnd('');
+    setOriginalQuotID(quot.quotationID);   // ← NEW: same quotationID family, so backend keeps the number
+
+    // ── Derive global period from the loaded rows ──
+    const datedRows = builtRows.filter(r => r.startDate && r.endDate);
+    if (datedRows.length > 0) {
+      const gStart = datedRows.reduce((min, r) => (r.startDate < min ? r.startDate : min), datedRows[0].startDate);
+      const gEnd = datedRows.reduce((max, r) => (r.endDate > max ? r.endDate : max), datedRows[0].endDate);
+      setGlobalStart(gStart);
+      setGlobalEnd(gEnd);
+    } else {
+      setGlobalStart(''); setGlobalEnd('');
+    }
+
     setStep(1); setIsCreating(true);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   };
 
-const handleViewPDF = (quot) => {
-  const myLines = quotLines.filter(l =>
-    Number(l.quotationID) === Number(quot.quotationID) &&
-    Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
-  );
-  const cust = customers.find(c => c.customerID === quot.customerID) || null;
+  const handleViewPDF = (quot) => {
+    const myLines = quotLines.filter(l =>
+      Number(l.quotationID) === Number(quot.quotationID) &&
+      Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+    );
+    const cust = customers.find(c => c.customerID === quot.customerID) || null;
 
-  /* ── Build rows from QuotationLineDTL ── */
-  const pdfRows = myLines
-    .filter(l => !l.mergeFlag)   // exclude merged-line records; those come from QuotationMergeDTL below
-    .map(l => {
-      // ── Printing / Extra rows (hoardingID = 0, purpose set) ──
-      if (!l.hoardingID && l.purpose) {
-        const isPrinting = PRINTING_TYPES.some(pt =>
-          pt.toLowerCase() === (l.purpose || '').toLowerCase()
-        );
+    /* ── Build rows from QuotationLineDTL ── */
+    const pdfRows = myLines
+      .filter(l => !l.mergeFlag)   // exclude merged-line records; those come from QuotationMergeDTL below
+      .map(l => {
+        // ── Printing / Extra rows (hoardingID = 0, purpose set) ──
+        if (!l.hoardingID && l.purpose) {
+          const isPrinting = PRINTING_TYPES.some(pt =>
+            pt.toLowerCase() === (l.purpose || '').toLowerCase()
+          );
+          return {
+            rowType: isPrinting ? 'printing' : 'extra',
+            hoardingID: 0,
+            location: l.purpose,
+            size: '',
+            sqFt: 0,
+            nos: 1,
+            startDate: l.periodBeginDate,
+            endDate: l.periodEndDate,
+            ratePerMonth: l.rentAmount,
+            amount: l.rentAmount,
+            printingCost: 0,
+          };
+        }
+        // ── Regular hoarding row ──
+        const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
+        const siteID = h?.siteID ?? h?.site?.siteID ?? null;
+        const siteObj = siteID != null
+          ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
+          : null;
         return {
-          rowType: isPrinting ? 'printing' : 'extra',
-          hoardingID: 0,
-          location: l.purpose,
-          size: '',
-          sqFt: 0,
+          rowType: 'hoarding',
+          hoardingID: l.hoardingID,
+          location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+          size: h ? `${h.width} X ${h.height}` : '',
+          sqFt: h ? (h.width * h.height) : 0,
           nos: 1,
           startDate: l.periodBeginDate,
           endDate: l.periodEndDate,
@@ -3307,125 +3491,105 @@ const handleViewPDF = (quot) => {
           amount: l.rentAmount,
           printingCost: 0,
         };
+      });
+
+    /* ── Merged rows from QuotationMergeDTL ──
+       Group by quotationLineNumber (≥2 records per merge group).
+       Reconstruct merged size + location from source hoardings.
+       Use the saved QuotationLineDTL merge-flag line for amount/dates.
+    ── */
+    const myMerges = quotMerges.filter(m =>
+      Number(m.quotationID) === Number(quot.quotationID) &&
+      Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+    );
+
+    if (myMerges.length >= 2) {
+      const byLine = new Map();
+      for (const m of myMerges) {
+        const ln = m.quotationLineNumber;
+        if (!byLine.has(ln)) byLine.set(ln, []);
+        byLine.get(ln).push(m);
       }
-      // ── Regular hoarding row ──
-      const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-      const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-      const siteObj = siteID != null
-        ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
-        : null;
-      return {
-        rowType: 'hoarding',
-        hoardingID: l.hoardingID,
-        location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
-        size: h ? `${h.width} X ${h.height}` : '',
-        sqFt: h ? (h.width * h.height) : 0,
-        nos: 1,
-        startDate: l.periodBeginDate,
-        endDate: l.periodEndDate,
-        ratePerMonth: l.rentAmount,
-        amount: l.rentAmount,
-        printingCost: 0,
-      };
+
+      const sortedKeys = [...byLine.keys()].sort((a, b) => a - b);
+      for (const ln of sortedKeys) {
+        const records = byLine.get(ln);
+        if (records.length < 2) continue;
+
+        // Saved line record for this merge (has correct amount + dates)
+        const savedLine = myLines.find(l =>
+          l.mergeFlag && Number(l.quotationLineNumber) === Number(ln)
+        );
+
+        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const hoardingObjs = records
+          .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
+          .filter(Boolean);
+
+        const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
+        const gaps = hoardingObjs.length - 1;
+        let mw, mh;
+        if (dir === 'H') {
+          mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+          mh = Math.max(...sizes.map(s => s.h));
+        } else {
+          mw = Math.max(...sizes.map(s => s.w));
+          mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+        }
+
+        const locations = hoardingObjs.map(h => {
+          const site = h.siteID ? siteMap.get(h.siteID) : null;
+          return buildSiteAddress(site, h.hoardingCode || '');
+        });
+        const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
+        const fallbackRate = hoardingObjs.reduce((s, h) => s + (h.monthlyRent || 0), 0);
+
+        pdfRows.push({
+          rowType: 'merged',
+          isMerged: true,
+          mergeDirection: dir,
+          hoardingID: 0,
+          location: savedLine?.purpose || locations.join(' + '),
+          hoardingCode: codes,
+          size: `${mw} X ${mh}`,
+          sqFt: mw * mh,
+          nos: 1,
+          startDate: savedLine?.periodBeginDate || '',
+          endDate: savedLine?.periodEndDate || '',
+          ratePerMonth: savedLine ? savedLine.rentAmount : fallbackRate,
+          amount: savedLine ? savedLine.rentAmount : fallbackRate,
+          printingCost: 0,
+        });
+      }
+    }
+
+    /* ── Open PDF ── */
+    const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
+    const storedCgst = (storedSub * quot.cGSTPercent) / 100;
+    const storedSgst = (storedSub * quot.sGSTPercent) / 100;
+    const storedGross = storedSub + storedCgst + storedSgst;
+    const storedFinal = Math.round(storedGross);
+
+    const html = buildPrintHTML({
+      rows: pdfRows,
+      withPrinting: pdfRows.some(r => r.rowType === 'printing'),
+      selectedCustomer: cust,
+      quotNo: quot.quotationNumber,
+      quotDate: quot.quotationDate,
+      revisionNo: quot.quotationRevisionNumber,
+      cgstPct: quot.cGSTPercent,
+      sgstPct: quot.sGSTPercent,
+      subTotal: storedSub,
+      cgstAmt: storedCgst,
+      sgstAmt: storedSgst,
+      roundOff: storedFinal - storedGross,
+      finalTotal: storedFinal,
+      selectedTerms: [],
+      termsTexts: [],
     });
-
-  /* ── Merged rows from QuotationMergeDTL ──
-     Group by quotationLineNumber (≥2 records per merge group).
-     Reconstruct merged size + location from source hoardings.
-     Use the saved QuotationLineDTL merge-flag line for amount/dates.
-  ── */
-  const myMerges = quotMerges.filter(m =>
-    Number(m.quotationID) === Number(quot.quotationID) &&
-    Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
-  );
-
-  if (myMerges.length >= 2) {
-    const byLine = new Map();
-    for (const m of myMerges) {
-      const ln = m.quotationLineNumber;
-      if (!byLine.has(ln)) byLine.set(ln, []);
-      byLine.get(ln).push(m);
-    }
-
-    const sortedKeys = [...byLine.keys()].sort((a, b) => a - b);
-    for (const ln of sortedKeys) {
-      const records = byLine.get(ln);
-      if (records.length < 2) continue;
-
-      // Saved line record for this merge (has correct amount + dates)
-      const savedLine = myLines.find(l =>
-        l.mergeFlag && Number(l.quotationLineNumber) === Number(ln)
-      );
-
-      const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
-      const hoardingObjs = records
-        .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
-        .filter(Boolean);
-
-      const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
-      const gaps = hoardingObjs.length - 1;
-      let mw, mh;
-      if (dir === 'H') {
-        mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
-        mh = Math.max(...sizes.map(s => s.h));
-      } else {
-        mw = Math.max(...sizes.map(s => s.w));
-        mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
-      }
-
-      const locations = hoardingObjs.map(h => {
-        const site = h.siteID ? siteMap.get(h.siteID) : null;
-        return buildSiteAddress(site, h.hoardingCode || '');
-      });
-      const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
-      const fallbackRate = hoardingObjs.reduce((s, h) => s + (h.monthlyRent || 0), 0);
-
-      pdfRows.push({
-        rowType: 'merged',
-        isMerged: true,
-        mergeDirection: dir,
-        hoardingID: 0,
-        location: savedLine?.purpose || locations.join(' + '),
-        hoardingCode: codes,
-        size: `${mw} X ${mh}`,
-        sqFt: mw * mh,
-        nos: 1,
-        startDate: savedLine?.periodBeginDate || '',
-        endDate: savedLine?.periodEndDate || '',
-        ratePerMonth: savedLine ? savedLine.rentAmount : fallbackRate,
-        amount: savedLine ? savedLine.rentAmount : fallbackRate,
-        printingCost: 0,
-      });
-    }
-  }
-
-  /* ── Open PDF ── */
-  const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
-  const storedCgst = (storedSub * quot.cGSTPercent) / 100;
-  const storedSgst = (storedSub * quot.sGSTPercent) / 100;
-  const storedGross = storedSub + storedCgst + storedSgst;
-  const storedFinal = Math.round(storedGross);
-
-  const html = buildPrintHTML({
-    rows: pdfRows,
-    withPrinting: pdfRows.some(r => r.rowType === 'printing'),
-    selectedCustomer: cust,
-    quotNo: quot.quotationNumber,
-    quotDate: quot.quotationDate,
-    revisionNo: quot.quotationRevisionNumber,
-    cgstPct: quot.cGSTPercent,
-    sgstPct: quot.sGSTPercent,
-    subTotal: storedSub,
-    cgstAmt: storedCgst,
-    sgstAmt: storedSgst,
-    roundOff: storedFinal - storedGross,
-    finalTotal: storedFinal,
-    selectedTerms: [],
-    termsTexts: [],
-  });
-  const win = window.open('', '_blank');
-  if (win) { win.document.write(html); win.document.close(); }
-};
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
 
   const goNext = () => {
     if (step === 1) {
@@ -3465,77 +3629,99 @@ const handleViewPDF = (quot) => {
       };
       let savedHeader;
       if (editingQuotID) {
+        // EDIT: same quotationID + same revision number → PUT, updates row in place
         savedHeader = await apiService.updateQuotation({ ...headerPayload, quotationID: editingQuotID });
+      } else if (Number(revisionNo) > 1 && originalQuotID > 0) {
+        // REVISE: pass the original quotationID so the backend recognizes this as
+        // revisionNumber > 1 for that quotation family and keeps the same quotationNumber
+        savedHeader = await apiService.createQuotation({ ...headerPayload, quotationID: originalQuotID });
       } else {
+        // Brand new quotation (revisionNumber === 1) — backend auto-generates a fresh quotationNumber
         savedHeader = await apiService.createQuotation(headerPayload);
       }
-      const savedQuotID = savedHeader?.quotationID ?? savedHeader?.QuotationID ?? editingQuotID ?? 0;
+
+      const savedQuotID = savedHeader?.quotationID ?? savedHeader?.QuotationID ?? editingQuotID ?? originalQuotID ?? 0;
       const savedRevNo = Number(revisionNo);
-// AFTER
-await Promise.all(
-  rows.filter(r => r.rowType === 'hoarding' || r.rowType === 'printing' || r.rowType === 'extra')
-    .map((row, idx) => {
-      // Derive the purpose string to store:
-      // - printing row  → the printing type label (e.g. "Flex Banner Printing")
-      // - extra row     → the custom description the admin typed
-      // - hoarding row  → empty string (no special purpose)
-      const purpose =
-        row.rowType === 'printing' ? (row.location || '') :
-        row.rowType === 'extra'    ? (row.location || '') :
-        '';
+      // AFTER
+      await Promise.all(
+        rows.filter(r => r.rowType === 'hoarding' || r.rowType === 'printing' || r.rowType === 'extra')
+          .map((row, idx) => {
+            // Derive the purpose string to store:
+            // - printing row  → the printing type label (e.g. "Flex Banner Printing")
+            // - extra row     → the custom description the admin typed
+            // - hoarding row  → empty string (no special purpose)
+            const purpose =
+              row.rowType === 'printing' ? (row.location || '') :
+                row.rowType === 'extra' ? (row.location || '') :
+                  '';
 
-      const linePayload = {
-        quotationLineNumber: idx + 1,
-        quotationID: savedQuotID,
-        quotationRevisionNumber: savedRevNo,
-        hoardingID: row.hoardingID || 0,
-        purpose,
-        periodBeginDate: row.startDate || todayISO(),
-        periodEndDate: row.endDate || todayISO(),
-        rentAmount: Number(row.amount || 0),
-        mergeFlag: false,
-      };
-      if (row.saved && row.quotationLineNumber > 0) {
-        return apiService.updateQuotationLine(linePayload);
-      }
-      return apiService.createQuotationLine(linePayload);
-    })
-);
+            const linePayload = {
+              quotationLineNumber: idx + 1,
+              quotationID: savedQuotID,
+              quotationRevisionNumber: savedRevNo,
+              hoardingID: row.hoardingID || 0,
+              purpose,
+              periodBeginDate: row.startDate || todayISO(),
+              periodEndDate: row.endDate || todayISO(),
+              rentAmount: Number(row.amount || 0),
+              mergeFlag: false,
+            };
+            if (row.saved && row.quotationLineNumber > 0) {
+              return apiService.updateQuotationLine(linePayload);
+            }
+            return apiService.createQuotationLine(linePayload);
+          })
+      );
       /* ── Save merge records ───────────────── *//* ── Save merge records ───────────────── */
-const mergedRows = rows.filter(r => r.rowType === 'merged');
-let nextLineNum = rows.filter(r => r.rowType === 'hoarding' || r.rowType === 'printing' || r.rowType === 'extra').length;
+      const mergedRows = rows.filter(r => r.rowType === 'merged');
+      let nextLineNum = rows.filter(r => r.rowType === 'hoarding' || r.rowType === 'printing' || r.rowType === 'extra').length;
 
-for (const mergedRow of mergedRows) {
-  nextLineNum += 1;
-  const hIds = Array.isArray(mergedRow.mergedHoardingIDs)
-    ? mergedRow.mergedHoardingIDs.map(Number).filter(id => id > 0)
-    : [];
-  if (!hIds.length) continue;
-  const flag = mergedRow.mergeDirection === 'H' ? 'H' : 'V';
+      for (const mergedRow of mergedRows) {
+        const hIds = Array.isArray(mergedRow.mergedHoardingIDs)
+          ? mergedRow.mergedHoardingIDs.map(Number).filter(id => id > 0)
+          : [];
+        if (!hIds.length) continue;
+        const flag = mergedRow.mergeDirection === 'H' ? 'H' : 'V';
 
-  // Save a QuotationLineDTL entry for the merged row itself
-  await apiService.createQuotationLine({
-    quotationLineNumber: nextLineNum,
-    quotationID: savedQuotID,
-    quotationRevisionNumber: savedRevNo,
-    hoardingID: 0,
-    purpose: mergedRow.location || '',
-    periodBeginDate: mergedRow.startDate || todayISO(),
-    periodEndDate: mergedRow.endDate || todayISO(),
-    rentAmount: Number(mergedRow.amount || 0),
-    mergeFlag: true,
-  });
+        if (mergedRow.saved && mergedRow.quotationLineNumber > 0) {
+          // EDIT MODE: update existing merge line, don't re-create merge records
+          await apiService.updateQuotationLine({
+            quotationLineNumber: mergedRow.quotationLineNumber,
+            quotationID: savedQuotID,
+            quotationRevisionNumber: savedRevNo,
+            hoardingID: 0,
+            purpose: mergedRow.location || '',
+            periodBeginDate: mergedRow.startDate || todayISO(),
+            periodEndDate: mergedRow.endDate || todayISO(),
+            rentAmount: Number(mergedRow.amount || 0),
+            mergeFlag: true,
+          });
+          continue; // merge records (QuotationMergeDTL) unchanged
+        }
 
-  for (const hID of hIds) {
-    await apiService.createQuotationMerge({
-      quotationLineNumber: nextLineNum,
-      quotationID: savedQuotID,
-      quotationRevisionNumber: savedRevNo,
-      mergeAlongFlag: flag,
-      hoardingID: hID,
-    });
-  }
-}
+        nextLineNum += 1;
+        await apiService.createQuotationLine({
+          quotationLineNumber: nextLineNum,
+          quotationID: savedQuotID,
+          quotationRevisionNumber: savedRevNo,
+          hoardingID: 0,
+          purpose: mergedRow.location || '',
+          periodBeginDate: mergedRow.startDate || todayISO(),
+          periodEndDate: mergedRow.endDate || todayISO(),
+          rentAmount: Number(mergedRow.amount || 0),
+          mergeFlag: true,
+        });
+
+        for (const hID of hIds) {
+          await apiService.createQuotationMerge({
+            quotationLineNumber: nextLineNum,
+            quotationID: savedQuotID,
+            quotationRevisionNumber: savedRevNo,
+            mergeAlongFlag: flag,
+            hoardingID: hID,
+          });
+        }
+      }
 
       const html = buildPrintHTML({
         rows, withPrinting, selectedCustomer,
@@ -3552,6 +3738,8 @@ for (const mergedRow of mergedRows) {
       if (win) { win.document.write(html); win.document.close(); }
       showToast('Quotation saved successfully!', 'success');
       await refreshQuotations();
+      setEditingQuotID(null);
+      setOriginalQuotID(0);
       setIsCreating(false);
     } catch (err) {
       showToast(err?.response?.data?.message || err?.message || 'Failed to save quotation.', 'error');
@@ -3785,20 +3973,30 @@ for (const mergedRow of mergedRows) {
                           · locked for revision
                         </span>
                       )}
+                      {revisionNo <= 1 && (
+                        <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 800, color: '#16a34a', background: 'rgba(22,163,74,0.08)', padding: '1px 6px', borderRadius: 4 }}>
+                          Auto Generated
+                        </span>
+                      )}
                     </label>
-                    <div className="qt-input-wrap" style={revisionNo > 1 ? { background: 'rgba(102, 102, 102, 0.04)', borderBottomColor: '#7c7c7c', cursor: 'not-allowed' } : {}}>
-                      <Hash size={14} color={revisionNo > 1 ? '#7c7c7c' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+                    <div className="qt-input-wrap" style={{
+                      background: 'rgba(4,158,223,0.03)',
+                      borderBottomColor: revisionNo > 1 ? '#7c7c7c' : '#049edf',
+                      cursor: 'not-allowed',
+                    }}>
+                      <Hash size={14} color={revisionNo > 1 ? '#7c7c7c' : '#049edf'} style={{ flexShrink: 0 }} />
                       <input
                         className="qt-input"
-                        value={quotNo}
-                        onChange={e => setQuotNo(e.target.value)}
-                        placeholder="e.g. QT1/25-26"
-                        readOnly={revisionNo > 1}
-                        style={revisionNo > 1 ? { color: '#7c7c7c', fontWeight: 800, cursor: 'not-allowed', pointerEvents: 'none' } : {}}
+                        value={quotNo || 'Generating…'}
+                        readOnly
+                        style={{
+                          color: revisionNo > 1 ? '#7c7c7c' : '#049edf',
+                          fontWeight: 800,
+                          cursor: 'not-allowed',
+                          pointerEvents: 'none',
+                        }}
                       />
-                      {revisionNo > 1 && (
-                        <span title="Quotation number is fixed for revisions" style={{ fontSize: 11, color: '#7c7c7c', flexShrink: 0 }}>🔒</span>
-                      )}
+                      <span title={revisionNo > 1 ? 'Quotation number is fixed for revisions' : 'Auto-generated by system'} style={{ fontSize: 11, color: revisionNo > 1 ? '#7c7c7c' : '#049edf', flexShrink: 0 }}>🔒</span>
                     </div>
                   </div>
                   <div>
@@ -3962,9 +4160,16 @@ for (const mergedRow of mergedRows) {
                         {(() => {
                           // Compute sizeMap once — used by printing row SIZE dropdown
                           const sizeMap = {};
-                          rows.filter(r2 => r2.rowType === 'hoarding' && r2.size).forEach(r2 => {
-                            if (!sizeMap[r2.size]) sizeMap[r2.size] = { sqFt: r2.sqFt || 0, count: 0 };
-                            sizeMap[r2.size].count++;
+                          rows.forEach(r2 => {
+                            if (r2.rowType === 'hoarding' && r2.size) {
+                              if (!sizeMap[r2.size]) sizeMap[r2.size] = { sqFt: r2.sqFt || 0, count: 0, isMerged: false };
+                              sizeMap[r2.size].count++;
+                            } else if (r2.rowType === 'merged' && r2.size) {
+                              // unique key so merged sizes don't collide/combine with regular hoarding sizes
+                              const key = `${r2.size} (Merged)`;
+                              if (!sizeMap[key]) sizeMap[key] = { sqFt: r2.sqFt || 0, count: 0, isMerged: true };
+                              sizeMap[key].count++;   // ← CHANGED: increment instead of staying fixed at 1
+                            }
                           });
                           const sizeOptions = Object.entries(sizeMap);
 
@@ -4083,7 +4288,7 @@ for (const mergedRow of mergedRows) {
                                         <option value="">Size…</option>
                                         {sizeOptions.map(([size, info]) => (
                                           <option key={size} value={size}>
-                                            {size} ({info.count} × {info.sqFt} = {info.count * info.sqFt} sqft)
+                                            {`${size} (${info.count} × ${info.sqFt} = ${info.count * info.sqFt} sqft)`}
                                           </option>
                                         ))}
                                       </select>
@@ -4602,6 +4807,11 @@ for (const mergedRow of mergedRows) {
                               </button>
                             );
                           })()}
+                          {/* Edit — edits this exact revision in place */}
+                          <button onClick={() => handleEditQuotation(latest)} title="Edit this quotation (same number & revision)"
+                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #f59e0b', color: '#f59e0b', background: 'rgba(245,158,11,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                            <Edit2 size={13} /> Edit
+                          </button>
                           {/* Revise */}
                           <button onClick={() => handleReopenHistory(latest)} title="Create Revision"
                             style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #e8e8f4', color: '#5a5a78', background: '#fff', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>

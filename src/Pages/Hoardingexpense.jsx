@@ -895,20 +895,17 @@ useEffect(() => {
   const ids = rows.map(r => r._expenseID).filter(Boolean);
   if (!ids.length) { setAttachLoadDone(true); return; }
   
-  console.log('🔍 Loading attachments for expense IDs:', ids); // ADD THIS
   
   let cancelled = false;
   Promise.allSettled(ids.map(id => apiService.getExpenseAttachByExpenseId(id))).then(results => {
     if (cancelled) return;
     
-    console.log('📦 Attach results:', results); // ADD THIS
     
     const map = {};
     results.forEach((res, i) => { 
       if (res.status === 'fulfilled' && res.value) map[ids[i]] = res.value; 
     });
     
-    console.log('🗺️ Attach map built:', map); // ADD THIS
     
     setExistingAttaches(map);
     setAttachLoadDone(true);

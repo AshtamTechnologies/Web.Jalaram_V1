@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   LogOut, Menu, X, ChevronDown, ChevronRight,
-  IndianRupee, Users, MapPin, Layers, UserCircle,
-  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase,CreditCard,
+  IndianRupee, Users, MapPin, Layers, UserCircle, Hash, FileX,
+  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard,
 } from 'lucide-react';
 // import Chatbot from './Chatbot';
 import './Layout.css';
@@ -12,16 +12,16 @@ import './Layout.css';
 ───────────────────────────────────── */
 const MENU = [
   {
-  id: 'job',
-  icon: Briefcase,
-  label: 'Job',
-  badge: null,
-  children: [
-    { id: 'Jobs', icon: Briefcase, label: 'Jobs', badge: null },
-    { id: 'JobPayment', icon: CreditCard, label: 'Job Payment', badge: null },
-  ]
-},
- {
+    id: 'job',
+    icon: Briefcase,
+    label: 'Job',
+    badge: null,
+    children: [
+      { id: 'Jobs', icon: Briefcase, label: 'Jobs', badge: null },
+      { id: 'JobPayment', icon: CreditCard, label: 'Job Payment', badge: null },
+    ]
+  },
+  {
     id: 'customer',
     icon: Users,
     label: 'Customer',
@@ -30,10 +30,14 @@ const MENU = [
       { id: 'customer-details', icon: UserCircle, label: 'Customer Details' },
       { id: 'customer-contract', icon: FileText, label: 'Customer Contract' },
       { id: 'quotation', icon: BarChart3, label: 'Quotation' },
+      { id: 'DissloveContract', icon: FileX, label: 'Disslove Contract' },
+
     ],
   },
-  { id: 'owners', icon: UserCircle, label: 'Land Lord', badge: null },
+  { id: 'owners', icon: UserCircle, label: 'LandLord', badge: null },
   { id: 'sites', icon: MapPin, label: 'Sites', badge: null },
+  { id: 'Registration', icon: MapPin, label: 'Registration', badge: null },
+
   {
     id: 'hoardings',
     icon: Layers,
@@ -46,7 +50,7 @@ const MENU = [
     ],
   },
   { id: 'reports', icon: BarChart3, label: 'Reports', badge: null },
-  
+
   {
     id: 'land-contract',
     icon: FileText,
@@ -65,6 +69,9 @@ const MENU = [
     badge: null,
     children: [
       { id: 'terms', icon: FileText, label: 'Terms' },
+      { id: 'FinancialYear', icon: FileText, label: 'Financial Year' },
+      { id: 'SeriesSetup', icon: Hash, label: 'Series Setup' },
+
     ],
   },
 ];

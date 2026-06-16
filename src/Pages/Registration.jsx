@@ -14,14 +14,23 @@ import { useResizableColumns } from '../hooks/useResizableColumns';
 /* ═══════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════ */
-const ROLE_OPTIONS      = ['Admin', 'Supervisor', 'Worker'];
+const ROLE_OPTIONS = ['Admin', 'Supervisor', 'Worker'];
 const PAGE_SIZE_OPTIONS = [10, 12, 15, 20];
 
 const ROLE_COLORS = {
-  'Admin':      { color: '#dc2626', bg: 'rgba(220,38,38,0.09)',  border: 'rgba(220,38,38,0.22)'  },
-  'Supervisor': { color: '#049edf', bg: 'rgba(4,158,223,0.09)',  border: 'rgba(4,158,223,0.22)'  },
-  'Worker':     { color: '#16a34a', bg: 'rgba(22,163,74,0.09)',  border: 'rgba(22,163,74,0.22)'  },
+  'Admin': { color: '#4a5568', bg: 'rgba(74,85,104,0.08)', border: 'rgba(74,85,104,0.20)' },
+  'Supervisor': { color: '#4a5568', bg: 'rgba(74,85,104,0.08)', border: 'rgba(74,85,104,0.20)' },
+  'Worker': { color: '#4a5568', bg: 'rgba(74,85,104,0.08)', border: 'rgba(74,85,104,0.20)' },
 };
+const GUJARAT_DISTRICTS = [
+  'Ahmedabad', 'Amreli', 'Anand', 'Aravalli', 'Banaskantha',
+  'Bharuch', 'Bhavnagar', 'Botad', 'Chhota Udaipur', 'Dahod',
+  'Dang', 'Devbhoomi Dwarka', 'Gandhinagar', 'Gir Somnath',
+  'Jamnagar', 'Junagadh', 'Kheda', 'Kutch', 'Mahisagar',
+  'Mehsana', 'Morbi', 'Narmada', 'Navsari', 'Panchmahal',
+  'Patan', 'Porbandar', 'Rajkot', 'Sabarkantha', 'Surat',
+  'Surendranagar', 'Tapi', 'Vadodara', 'Valsad',
+];
 
 const EMPTY_FORM = {
   firstName: '', lastName: '', phone1: '', phone2: '',
@@ -30,27 +39,27 @@ const EMPTY_FORM = {
 };
 
 const FIELDS = [
-  { key: 'firstName',    label: 'First Name',     placeholder: 'e.g. Ramesh',             required: true,  type: 'text',     col: 6  },
-  { key: 'lastName',     label: 'Last Name',      placeholder: 'e.g. Patel',              required: true,  type: 'text',     col: 6  },
-  { key: 'phone1',       label: 'Phone 1',        placeholder: 'e.g. 9876543210',         required: true,  type: 'tel',      col: 6  },
-  { key: 'phone2',       label: 'Phone 2',        placeholder: 'e.g. 9876543211',         required: false, type: 'tel',      col: 6  },
-  { key: 'email',        label: 'Email',          placeholder: 'e.g. ramesh@example.com', required: true,  type: 'email',    col: 12 },
-  { key: 'addressLine1', label: 'Address Line 1', placeholder: 'Street / Building name',  required: true,  type: 'address',  col: 12 },
-  { key: 'addressLine2', label: 'Address Line 2', placeholder: 'Area / Locality',         required: false, type: 'address',  col: 12 },
-  { key: 'addressLine3', label: 'Address Line 3', placeholder: 'Landmark',                required: false, type: 'address',  col: 12 },
-  { key: 'city',         label: 'City',           placeholder: 'e.g. Ahmedabad',          required: true,  type: 'text',     col: 6  },
-  { key: 'district',     label: 'District',       placeholder: 'e.g. Ahmedabad',          required: true,  type: 'text',     col: 6  },
-  { key: 'country',      label: 'Country',        placeholder: 'India',                   required: true,  type: 'readonly', col: 6  },
-  { key: 'role',         label: 'Role',           placeholder: 'Select role…',            required: true,  type: 'select',   col: 6, options: ROLE_OPTIONS },
+  { key: 'firstName', label: 'First Name', placeholder: 'e.g. Ramesh', required: true, type: 'text', col: 6 },
+  { key: 'lastName', label: 'Last Name', placeholder: 'e.g. Patel', required: true, type: 'text', col: 6 },
+  { key: 'phone1', label: 'Phone 1', placeholder: 'e.g. 9876543210', required: true, type: 'tel', col: 6 },
+  { key: 'phone2', label: 'Phone 2', placeholder: 'e.g. 9876543211', required: false, type: 'tel', col: 6 },
+  { key: 'email', label: 'Email', placeholder: 'e.g. ramesh@example.com', required: true, type: 'email', col: 12 },
+  { key: 'addressLine1', label: 'Address Line 1', placeholder: 'Street / Building name', required: true, type: 'address', col: 12 },
+  { key: 'addressLine2', label: 'Address Line 2', placeholder: 'Area / Locality', required: false, type: 'address', col: 12 },
+  { key: 'addressLine3', label: 'Address Line 3', placeholder: 'Landmark', required: false, type: 'address', col: 12 },
+  { key: 'city', label: 'City', placeholder: 'e.g. Ahmedabad', required: true, type: 'text', col: 6 },
+  { key: 'district', label: 'District', placeholder: 'Select district…', required: true, type: 'district', col: 6 },
+  { key: 'country', label: 'Country', placeholder: 'India', required: true, type: 'readonly', col: 6 },
+  { key: 'role', label: 'Role', placeholder: 'Select role…', required: true, type: 'select', col: 6, options: ROLE_OPTIONS },
 ];
 
 /* ═══════════════════════════════════════════
    VALIDATION
 ═══════════════════════════════════════════ */
 const ADDRESS_REGEX = /^[\w\s,.\-/'&#()]{1,200}$/;
-const TEXT_REGEX    = /^[a-zA-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s.\-]{0,99}$/;
-const EMAIL_REGEX   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PHONE_REGEX   = /^\d{10}$/;
+const TEXT_REGEX = /^[a-zA-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s.\-]{0,99}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^\d{10}$/;
 
 function validateField(key, value, type, required) {
   const v = (value || '').trim();
@@ -58,9 +67,9 @@ function validateField(key, value, type, required) {
   if (!v) return '';
   if (type === 'select' || type === 'readonly') return '';
   if (type === 'address' && !ADDRESS_REGEX.test(v)) return "Only letters, digits, spaces and , . - / ' & # ( ) are allowed";
-  if (type === 'text'    && !TEXT_REGEX.test(v))    return 'Only letters, spaces, hyphens and dots are allowed';
-  if (type === 'email'   && !EMAIL_REGEX.test(v))   return 'Enter a valid email address';
-  if (type === 'tel'     && !PHONE_REGEX.test(v))   return 'Enter a valid 10-digit phone number';
+  if (type === 'text' && !TEXT_REGEX.test(v)) return 'Only letters, spaces, hyphens and dots are allowed';
+  if (type === 'email' && !EMAIL_REGEX.test(v)) return 'Enter a valid email address';
+  if (type === 'tel' && !PHONE_REGEX.test(v)) return 'Enter a valid 10-digit phone number';
   return '';
 }
 
@@ -79,12 +88,12 @@ function runValidate(form) {
 function normalizeUser(raw) {
   // Exhaustive ID lookup — covers every casing the .NET backend might return
   const id =
-    raw.id        ?? raw.Id        ??   // ← API returns lowercase "id"
-    raw.ID        ??
-    raw.userID    ?? raw.UserID    ??
-    raw.userId    ?? raw.UserId    ??
-    raw.user_Id   ?? raw.user_ID   ??
-    raw.user_id   ?? raw.User_Id   ?? null;
+    raw.id ?? raw.Id ??   // ← API returns lowercase "id"
+    raw.ID ??
+    raw.userID ?? raw.UserID ??
+    raw.userId ?? raw.UserId ??
+    raw.user_Id ?? raw.user_ID ??
+    raw.user_id ?? raw.User_Id ?? null;
 
   // Last-resort: scan all keys for the first one that contains "id" and is numeric
   const resolvedId = id !== null ? id : (() => {
@@ -101,19 +110,19 @@ function normalizeUser(raw) {
   })();
 
   return {
-    _id:          resolvedId,
-    firstName:    raw.firstName ?? raw.FirstName ?? raw.first_Name              ?? '',
-    lastName:     raw.lastName  ?? raw.LastName  ?? raw.last_Name               ?? '',
-    phone1:       raw.phone1    ?? raw.Phone1    ?? raw.phone_1                 ?? '',
-    phone2:       raw.phone2    ?? raw.Phone2    ?? raw.phone_2                 ?? '',
-    email:        raw.email     ?? raw.Email                                    ?? '',
-    addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? raw.address_Line_1   ?? '',
-    addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? raw.address_Line_2   ?? '',
-    addressLine3: raw.addressLine3 ?? raw.AddressLine3 ?? raw.address_Line_3   ?? '',
-    city:         raw.city      ?? raw.City                                     ?? '',
-    district:     raw.district  ?? raw.District                                 ?? '',
-    country:      raw.country   ?? raw.Country                                  ?? 'India',
-    role:         raw.role      ?? raw.Role      ?? raw.roleName                ?? '',
+    _id: resolvedId,
+    firstName: raw.firstName ?? raw.FirstName ?? raw.first_Name ?? '',
+    lastName: raw.lastName ?? raw.LastName ?? raw.last_Name ?? '',
+    phone1: raw.phone1 ?? raw.Phone1 ?? raw.phone_1 ?? '',
+    phone2: raw.phone2 ?? raw.Phone2 ?? raw.phone_2 ?? '',
+    email: raw.email ?? raw.Email ?? '',
+    addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? raw.address_Line_1 ?? '',
+    addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? raw.address_Line_2 ?? '',
+    addressLine3: raw.addressLine3 ?? raw.AddressLine3 ?? raw.address_Line_3 ?? '',
+    city: raw.city ?? raw.City ?? '',
+    district: raw.district ?? raw.District ?? '',
+    country: raw.country ?? raw.Country ?? 'India',
+    role: raw.role ?? raw.Role ?? raw.roleName ?? '',
   };
 }
 
@@ -126,8 +135,8 @@ function SortIcon({ col, sortKey, sortDir }) {
   const active = sortKey === col;
   return (
     <span className="pg-sort-icon">
-      <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"  />
-      <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down"/>
+      <ChevronUp size={10} color={active && sortDir === 'asc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
+      <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
     </span>
   );
 }
@@ -186,16 +195,16 @@ function ViewModal({ user, onClose, onEdit }) {
 
         <div className="pg-view__body">
           <div className="pg-view__section-label">Contact</div>
-          <InfoRow icon={Phone} label="Phone 1"       value={user.phone1}  highlight />
-          <InfoRow icon={Phone} label="Phone 2"       value={user.phone2} />
-          <InfoRow icon={Mail}  label="Email Address" value={user.email}   highlight />
+          <InfoRow icon={Phone} label="Phone 1" value={user.phone1} highlight />
+          <InfoRow icon={Phone} label="Phone 2" value={user.phone2} />
+          <InfoRow icon={Mail} label="Email Address" value={user.email} highlight />
           <div className="pg-view__section-label pg-view__section-label--mt">Address</div>
-          <InfoRow icon={Home}      label="Address Line 1" value={user.addressLine1} />
-          <InfoRow icon={Home}      label="Address Line 2" value={user.addressLine2} />
-          <InfoRow icon={Home}      label="Address Line 3" value={user.addressLine3} />
-          <InfoRow icon={Building2} label="City"           value={user.city} />
-          <InfoRow icon={MapPin}    label="District"       value={user.district} />
-          <InfoRow icon={Globe}     label="Country"        value={user.country} />
+          <InfoRow icon={Home} label="Address Line 1" value={user.addressLine1} />
+          <InfoRow icon={Home} label="Address Line 2" value={user.addressLine2} />
+          <InfoRow icon={Home} label="Address Line 3" value={user.addressLine3} />
+          <InfoRow icon={Building2} label="City" value={user.city} />
+          <InfoRow icon={MapPin} label="District" value={user.district} />
+          <InfoRow icon={Globe} label="Country" value={user.country} />
         </div>
 
         <div className="pg-view__foot">
@@ -209,7 +218,215 @@ function ViewModal({ user, onClose, onEdit }) {
     document.body
   );
 }
+function PortalDropdown({ open, triggerRef, panelRef, children }) {
+  const [style, setStyle] = useState({ position: 'fixed', top: 0, left: 0, width: 0, zIndex: 99999 });
+  useEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const panelH = panelRef.current?.offsetHeight || 260;
+      const flipUp = (window.innerHeight - r.bottom) < panelH + 8 && r.top > panelH + 8;
+      setStyle({ position: 'fixed', top: flipUp ? r.top - panelH - 4 : r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => { window.removeEventListener('scroll', update, true); window.removeEventListener('resize', update); };
+  }, [open, triggerRef, panelRef]);
+  if (!open) return null;
+  return ReactDOM.createPortal(<div ref={panelRef} style={style}>{children}</div>, document.body);
+}
 
+function DistrictCombo({ value, onChange, onBlur, hasError }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [wasOpened, setWasOpened] = useState(false);
+  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
+
+  const close = useCallback(() => {
+    setOpen(false); setQuery('');
+    if (wasOpened) { onBlur?.(); setWasOpened(false); }
+  }, [wasOpened, onBlur]);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (!wrapRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) close();
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open, close]);
+
+  const filtered = GUJARAT_DISTRICTS.filter(d => d.toLowerCase().includes(query.toLowerCase()));
+  const openDD = () => { setOpen(true); setWasOpened(true); setQuery(''); setTimeout(() => inputRef.current?.focus(), 0); };
+  const select = (d) => { onChange(d); setOpen(false); setQuery(''); setWasOpened(false); };
+  const clear = (e) => { e.stopPropagation(); onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.(); };
+  const nav = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') close();
+  };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef}>
+      <div
+        ref={triggerRef}
+        className={`pg-field-wrap pg-combo-trigger ${hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
+        onClick={openDD} tabIndex={0}
+        onKeyDown={e => {
+          if (!open) { if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDD(); } }
+          else nav(e);
+        }}
+      >
+        <MapPin size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+        <span className={`pg-combo-display${!value ? ' pg-combo-display--placeholder' : ''}`}>
+          {value || 'Select district…'}
+        </span>
+        {value
+          ? <X size={13} className="pg-combo-clear" onClick={clear} />
+          : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+      </div>
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static' }}>
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              className="pg-combo-search__input"
+              placeholder="Search district…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'ArrowDown') { e.preventDefault(); listRef.current?.querySelectorAll('.pg-combo-option')?.[0]?.focus(); }
+                else if (e.key === 'Escape') close();
+              }}
+            />
+            {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+          </div>
+          <div className="pg-combo-list" ref={listRef}>
+            {filtered.length === 0
+              ? <div className="pg-combo-empty">No districts match</div>
+              : filtered.map(d => (
+                <div
+                  key={d}
+                  className={`pg-combo-option${d === value ? ' pg-combo-option--active' : ''}`}
+                  onClick={() => select(d)} tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(d); } else nav(e); }}
+                >
+                  <span className="pg-combo-option__name">{d}</span>
+                  {d === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                </div>
+              ))}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
+/* ═══════════════════════════════════════════
+   ROLE DROPDOWN  — matches SiteTypeDropdown pattern
+═══════════════════════════════════════════ */
+function RoleDropdown({ value, onChange, onBlur, hasError }) {
+  const [open, setOpen] = useState(false);
+  const [wasOpened, setWasOpened] = useState(false);
+  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const listRef = useRef(null);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    if (wasOpened) { onBlur?.(); setWasOpened(false); }
+  }, [wasOpened, onBlur]);
+
+  // need PortalDropdown + useOutsideClick — copy from Site.jsx into Registration.jsx
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (!wrapRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) close();
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open, close]);
+
+  const select = (v) => { onChange(v); setOpen(false); setWasOpened(false); };
+  const clear = (e) => { e.stopPropagation(); onChange(''); setOpen(false); setWasOpened(false); onBlur?.(); };
+  const openDD = () => { setOpen(o => !o); setWasOpened(true); setTimeout(() => listRef.current?.querySelectorAll('.pg-combo-option')?.[0]?.focus(), 0); };
+  const nav = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') close();
+  };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef}>
+      <div
+        ref={triggerRef}
+        className={`pg-field-wrap pg-combo-trigger ${hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
+        onClick={openDD}
+        tabIndex={0}
+        onKeyDown={e => {
+          if (!open) { if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDD(); } }
+          else nav(e);
+        }}
+      >
+        <UserCircle size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+        <span className={`pg-combo-display${!value ? ' pg-combo-display--placeholder' : ''}`}>
+          {value || 'Select role…'}
+        </span>
+        {value
+          ? <X size={13} className="pg-combo-clear" onClick={clear} />
+          : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+      </div>
+
+      {/* Portal dropdown panel */}
+      {open && ReactDOM.createPortal(
+        <div ref={panelRef} style={(() => {
+          const r = triggerRef.current?.getBoundingClientRect();
+          if (!r) return {};
+          return { position: 'fixed', top: r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 };
+        })()}>
+          <div className="pg-combo-panel pg-combo-panel--sm" style={{ position: 'static' }}>
+            <div className="pg-combo-list" ref={listRef}>
+              {ROLE_OPTIONS.map(opt => (
+                <div
+                  key={opt}
+                  className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
+                  onClick={() => select(opt)}
+                  tabIndex={0}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+                    else nav(e);
+                  }}
+                >
+                  <span style={{
+                    fontFamily: 'Nunito, sans-serif',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: ROLE_COLORS[opt]?.color || '#4a5568',
+                  }}>
+                    {opt}
+                  </span>
+                  {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
 /* ═══════════════════════════════════════════
    ADD / EDIT MODAL
    isEdit = true  → calls updateUser (PUT /Login/update)
@@ -218,12 +435,12 @@ function ViewModal({ user, onClose, onEdit }) {
 function UserModal({ onClose, onSaved, editData }) {
   const isEdit = !!editData;
 
-  const [form,       setForm]       = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
-  const [errors,     setErrors]     = useState({});
-  const [touched,    setTouched]    = useState({});
+  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
-  const [success,    setSuccess]    = useState(false);
-  const [apiError,   setApiError]   = useState('');
+  const [success, setSuccess] = useState(false);
+  const [apiError, setApiError] = useState('');
 
   const handleChange = (key, value) => {
     setForm(p => ({ ...p, [key]: value }));
@@ -269,8 +486,8 @@ function UserModal({ onClose, onSaved, editData }) {
     } catch (err) {
       setApiError(
         err?.response?.data?.message ||
-        err?.response?.data?.title   ||
-        err?.message                 ||
+        err?.response?.data?.title ||
+        err?.message ||
         `${isEdit ? 'Update' : 'Registration'} failed. Please try again.`
       );
     } finally { setSubmitting(false); }
@@ -303,23 +520,24 @@ function UserModal({ onClose, onSaved, editData }) {
 
         <div className="pg-modal__body">
           {success && (
-            <div style={{ display:'flex',alignItems:'center',gap:9,padding:'12px 14px',background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:12,marginBottom:16,fontFamily:'Nunito,sans-serif',fontSize:13,fontWeight:700,color:'#16a34a' }}>
-              <CheckCircle2 size={16}/>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, marginBottom: 16, fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#16a34a' }}>
+              <CheckCircle2 size={16} />
               {isEdit ? 'User updated successfully!' : 'User registered successfully!'}
             </div>
           )}
           {apiError && (
-            <div style={{ display:'flex',alignItems:'flex-start',gap:9,padding:'12px 14px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:12,marginBottom:16,fontFamily:'Nunito,sans-serif',fontSize:13,fontWeight:700,color:'#dc2626' }}>
-              <AlertCircle size={16} style={{ flexShrink:0, marginTop:1 }}/> {apiError}
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, marginBottom: 16, fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#dc2626' }}>
+              <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} /> {apiError}
             </div>
           )}
 
           <div className="row g-3">
             {FIELDS.map(({ key, label, placeholder, required, type, col, options }) => {
               const hasErr = !!errors[key];
-              const isRO   = type === 'readonly';
-              const isSel  = type === 'select';
-              const wrapCls = `pg-field-wrap ${isRO ? 'pg-field-wrap--readonly' : hasErr ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`;
+              const isRO = type === 'readonly';
+              const isSel = type === 'select';
+              const isDist = type === 'district';
+              const wrapCls = `pg-field-wrap ${isRO ? 'pg-field-wrap--readonly' : hasErr ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}${isSel ? ' pg-field-wrap--select' : ''}`;
 
               return (
                 <div key={key} className={`col-12 col-sm-${col}`}>
@@ -334,29 +552,30 @@ function UserModal({ onClose, onSaved, editData }) {
 
                   {isSel ? (
                     <>
-                      <div className={wrapCls}>
-                        <select
-                          className="pg-field-input"
-                          value={form[key]}
-                          onChange={e => handleChange(key, e.target.value)}
-                          onBlur={() => handleBlur(key)}
-                          style={{
-                            cursor: 'pointer',
-                            appearance: 'none', WebkitAppearance: 'none',
-                            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239090a8' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
-                            backgroundRepeat: 'no-repeat',
-                            backgroundPosition: 'right 12px center',
-                            paddingRight: 32,
-                            color: form[key] ? '#1a1a2e' : '#b0b0c8',
-                          }}
-                        >
-                          <option value="">{placeholder}</option>
-                          {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
-                      </div>
+                      <RoleDropdown
+                        value={form[key]}
+                        onChange={val => handleChange(key, val)}
+                        onBlur={() => handleBlur(key)}
+                        hasError={hasErr}
+                      />
                       {hasErr && (
                         <div className="pg-field-error">
-                          <AlertCircle size={11} style={{ flexShrink:0, marginTop:1 }}/>
+                          <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
+                          <span>{errors[key]}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : isDist ? (
+                    <>
+                      <DistrictCombo
+                        value={form[key]}
+                        onChange={val => handleChange(key, val)}
+                        onBlur={() => handleBlur(key)}
+                        hasError={hasErr}
+                      />
+                      {hasErr && (
+                        <div className="pg-field-error">
+                          <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
                           <span>{errors[key]}</span>
                         </div>
                       )}
@@ -376,7 +595,7 @@ function UserModal({ onClose, onSaved, editData }) {
                       </div>
                       {hasErr && (
                         <div className="pg-field-error">
-                          <AlertCircle size={11} style={{ flexShrink:0, marginTop:1 }}/>
+                          <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
                           <span>{errors[key]}</span>
                         </div>
                       )}
@@ -398,10 +617,10 @@ function UserModal({ onClose, onSaved, editData }) {
           </button>
           <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
             {success
-              ? <><Check size={14}/> {isEdit ? 'Saved!' : 'Registered!'}</>
+              ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Registered!'}</>
               : submitting
-                ? <><RefreshCw size={13} className="pg-spin"/> Saving…</>
-                : <><Plus size={14}/> {isEdit ? 'Save Changes' : 'Save Registration'}</>}
+                ? <><RefreshCw size={13} className="pg-spin" /> Saving…</>
+                : <><Plus size={14} /> {isEdit ? 'Save Changes' : 'Save Registration'}</>}
           </button>
         </div>
 
@@ -433,24 +652,24 @@ function UserCard({ u, onView, onEdit }) {
       <div className="pg-card__body">
         <div className="pg-card__grid2">
           <div className="pg-card__grid-cell">
-            <Phone size={12} color="#c0c0d8" style={{ flexShrink: 0 }}/>
+            <Phone size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
             <span className="pg-card__grid-text">{u.phone1 || '—'}</span>
           </div>
           {u.phone2 && (
             <div className="pg-card__grid-cell pg-card__grid-cell--muted">
-              <Phone size={12} color="#c0c0d8" style={{ flexShrink: 0 }}/>
+              <Phone size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
               <span className="pg-card__grid-text">{u.phone2}</span>
             </div>
           )}
         </div>
         {u.email && (
           <div className="pg-card__row">
-            <Mail size={12} color="#c0c0d8" className="pg-card__row-icon"/>
+            <Mail size={12} color="#c0c0d8" className="pg-card__row-icon" />
             <span className="pg-card__row-text--ellipsis">{u.email}</span>
           </div>
         )}
         <div className="pg-card__row">
-          <Building2 size={12} color="#c0c0d8" className="pg-card__row-icon"/>
+          <Building2 size={12} color="#c0c0d8" className="pg-card__row-icon" />
           <span className="pg-card__row-text">{[u.city, u.district].filter(Boolean).join(', ') || '—'}</span>
         </div>
       </div>
@@ -463,18 +682,18 @@ function UserCard({ u, onView, onEdit }) {
 ═══════════════════════════════════════════ */
 export default function RegistrationPage() {
 
-  const [users,      setUsers]      = useState([]);
-  const [loading,    setLoading]    = useState(true);
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
 
   const [showModal, setShowModal] = useState(false);
-  const [editUser,  setEditUser]  = useState(null);   // null = Add, object = Edit
-  const [viewUser,  setViewUser]  = useState(null);
+  const [editUser, setEditUser] = useState(null);   // null = Add, object = Edit
+  const [viewUser, setViewUser] = useState(null);
 
-  const [search,   setSearch]   = useState('');
-  const [sortKey,  setSortKey]  = useState('firstName');
-  const [sortDir,  setSortDir]  = useState('asc');
-  const [page,     setPage]     = useState(1);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('firstName');
+  const [sortDir, setSortDir] = useState('asc');
+  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
 
   /* ── Resizable columns ── */
@@ -490,14 +709,14 @@ export default function RegistrationPage() {
     try {
       const res = await apiService.getAllUsers();
       const list =
-        Array.isArray(res)          ? res        :
-        Array.isArray(res?.data)    ? res.data   :
-        Array.isArray(res?.$values) ? res.$values : [];
+        Array.isArray(res) ? res :
+          Array.isArray(res?.data) ? res.data :
+            Array.isArray(res?.$values) ? res.$values : [];
       setUsers(list.map(normalizeUser));
     } catch (err) {
       setFetchError(
         err?.response?.data?.message ||
-        err?.message                 ||
+        err?.message ||
         'Failed to load users. Please try again.'
       );
     } finally {
@@ -511,19 +730,19 @@ export default function RegistrationPage() {
 
   /* ── Open add or edit modal ── */
   const handleStartNew = () => { setEditUser(null); setShowModal(true); };
-  const handleEdit     = (u) => { setEditUser({ ...u }); setShowModal(true); };
-  const closeModal     = () => { setShowModal(false); setEditUser(null); };
+  const handleEdit = (u) => { setEditUser({ ...u }); setShowModal(true); };
+  const closeModal = () => { setShowModal(false); setEditUser(null); };
 
   /* ── Filter / sort / paginate ── */
   const filtered = users.filter(u => {
     const q = search.toLowerCase();
     return (
       fullName(u).toLowerCase().includes(q) ||
-      (u.email    || '').toLowerCase().includes(q) ||
-      (u.phone1   || '').includes(search)          ||
-      (u.city     || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.phone1 || '').includes(search) ||
+      (u.city || '').toLowerCase().includes(q) ||
       (u.district || '').toLowerCase().includes(q) ||
-      (u.role     || '').toLowerCase().includes(q)
+      (u.role || '').toLowerCase().includes(q)
     );
   });
 
@@ -534,7 +753,7 @@ export default function RegistrationPage() {
   });
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
+  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -543,14 +762,14 @@ export default function RegistrationPage() {
   };
 
   const COLS = [
-    { key: '_name',    label: 'Name',     w: '16%' },
-    { key: 'phone1',   label: 'Phone 1',  w: '12%' },
-    { key: 'phone2',   label: 'Phone 2',  w: '12%', tabletHide: true },
-    { key: 'email',    label: 'Email',    w: '18%', tabletHide: true },
-    { key: 'city',     label: 'City',     w: '10%' },
+    { key: '_name', label: 'Name', w: '16%' },
+    { key: 'phone1', label: 'Phone 1', w: '12%' },
+    { key: 'phone2', label: 'Phone 2', w: '12%', tabletHide: true },
+    { key: 'email', label: 'Email', w: '18%', tabletHide: true },
+    { key: 'city', label: 'City', w: '10%' },
     { key: 'district', label: 'District', w: '10%', tabletHide: true },
-    { key: 'role',     label: 'Role',     w: '10%' },
-    { key: '_action',  label: 'Actions',  w: '9%',  noSort: true },
+    { key: 'role', label: 'Role', w: '10%' },
+    { key: '_action', label: 'Actions', w: '9%', noSort: true },
   ];
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -563,18 +782,18 @@ export default function RegistrationPage() {
 
   /* ── Loading ── */
   if (loading) return (
-    <div style={{ display:'flex',alignItems:'center',justifyContent:'center',height:'60vh',gap:14,flexDirection:'column' }}>
-      <Loader2 size={32} color="#049edf" className="pg-spin"/>
-      <span style={{ fontFamily:'Nunito,sans-serif',color:'#9090a8',fontSize:14 }}>Loading users…</span>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 14, flexDirection: 'column' }}>
+      <Loader2 size={32} color="#049edf" className="pg-spin" />
+      <span style={{ fontFamily: 'Nunito,sans-serif', color: '#9090a8', fontSize: 14 }}>Loading users…</span>
     </div>
   );
 
   /* ── Fetch error ── */
   if (fetchError) return (
-    <div style={{ display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'60vh',gap:14 }}>
-      <AlertCircle size={28} color="#ef4444"/>
-      <span style={{ fontFamily:'Nunito,sans-serif',color:'#ef4444',fontSize:14,fontWeight:600 }}>{fetchError}</span>
-      <button className="pg-btn-add" onClick={fetchData}><RefreshCw size={13}/> Retry</button>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 14 }}>
+      <AlertCircle size={28} color="#ef4444" />
+      <span style={{ fontFamily: 'Nunito,sans-serif', color: '#ef4444', fontSize: 14, fontWeight: 600 }}>{fetchError}</span>
+      <button className="pg-btn-add" onClick={fetchData}><RefreshCw size={13} /> Retry</button>
     </div>
   );
 
@@ -591,7 +810,7 @@ export default function RegistrationPage() {
             </p>
           </div>
           <button className="pg-btn-add" onClick={handleStartNew}>
-            <Plus size={14}/> Add Registration
+            <Plus size={14} /> Add Registration
           </button>
         </div>
 
@@ -602,20 +821,20 @@ export default function RegistrationPage() {
           <div className="pg-toolbar">
             <div className="pg-toolbar__inner">
               <div className="pg-toolbar__count">
-                <Users size={14} color="#9090a8"/>
+                <Users size={14} color="#9090a8" />
                 <span><strong>{filtered.length}</strong> user{filtered.length !== 1 ? 's' : ''}</span>
               </div>
               <div className="pg-search-box">
-                <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }}/>
+                <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
                 <input
                   placeholder="Search by name, email, city, district, role…"
                   value={search}
                   onChange={e => { setSearch(e.target.value); setPage(1); }}
                 />
-                {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')}/>}
+                {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
               </div>
               <button className="pg-pg-btn" onClick={fetchData} title="Refresh list" style={{ marginLeft: 'auto' }}>
-                <RefreshCw size={13}/>
+                <RefreshCw size={13} />
               </button>
             </div>
           </div>
@@ -631,7 +850,7 @@ export default function RegistrationPage() {
                       style={{ width: col.w }}
                       className={[
                         'pg-th',
-                        col.noSort     ? '' : 'pg-th--sort',
+                        col.noSort ? '' : 'pg-th--sort',
                         col.tabletHide ? 'pg-tablet-hide' : '',
                       ].filter(Boolean).join(' ')}
                       onClick={() => !col.noSort && handleSort(col.key)}
@@ -639,8 +858,8 @@ export default function RegistrationPage() {
                       <div className="pg-th__inner">
                         {col.label}
                         {!col.noSort
-                          ? <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir}/>
-                          : <Filter size={10} color="#d0d0e4" style={{ marginLeft: 5 }}/>}
+                          ? <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />
+                          : <Filter size={10} color="#d0d0e4" style={{ marginLeft: 5 }} />}
                       </div>
                     </th>
                   ))}
@@ -651,7 +870,7 @@ export default function RegistrationPage() {
                   <tr>
                     <td colSpan={COLS.length} className="pg-td pg-empty" style={{ maxWidth: 'none' }}>
                       <div className="pg-empty__inner">
-                        <Users size={36} color="#d0d0e8"/>
+                        <Users size={36} color="#d0d0e8" />
                         <span className="pg-empty__label">No users found</span>
                       </div>
                     </td>
@@ -693,16 +912,16 @@ export default function RegistrationPage() {
                     </td>
 
                     {/* Role */}
-                    <td className="pg-td"><RoleBadge role={u.role}/></td>
+                    <td className="pg-td"><RoleBadge role={u.role} /></td>
 
                     {/* Actions — Edit + View (matches OwnerPage / SitePage pattern) */}
                     <td className="pg-td">
                       <div className="pg-action-wrap">
                         <button className="pg-btn-edit" onClick={() => handleEdit(u)} title="Edit">
-                          <Edit2 size={13}/>
+                          <Edit2 size={13} />
                         </button>
                         <button className="pg-btn-view" onClick={() => setViewUser(u)} title="View">
-                          <Eye size={13}/>
+                          <Eye size={13} />
                         </button>
                       </div>
                     </td>
@@ -717,11 +936,11 @@ export default function RegistrationPage() {
           <div className="pg-mobile-cards">
             {paginated.length === 0 ? (
               <div className="pg-empty__inner" style={{ padding: '40px 20px' }}>
-                <Users size={36} color="#d0d0e8"/>
+                <Users size={36} color="#d0d0e8" />
                 <span className="pg-empty__label">No users found</span>
               </div>
             ) : paginated.map((u, idx) => (
-              <UserCard key={u._id ?? idx} u={u} onView={setViewUser} onEdit={handleEdit}/>
+              <UserCard key={u._id ?? idx} u={u} onView={setViewUser} onEdit={handleEdit} />
             ))}
           </div>
 
@@ -729,22 +948,22 @@ export default function RegistrationPage() {
           <div className="pg-pagination">
             <div className="pg-pagination__left">
               <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}>
-                <ChevronsLeft size={13}/>
+                <ChevronsLeft size={13} />
               </button>
               <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
-                <ChevronLeft size={13}/>
+                <ChevronLeft size={13} />
               </button>
               {pageNums.map((p, i) =>
                 p === '…'
                   ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
                   : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`}
-                      onClick={() => setPage(p)}>{p}</button>
+                    onClick={() => setPage(p)}>{p}</button>
               )}
               <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
-                <ChevronRight size={13}/>
+                <ChevronRight size={13} />
               </button>
               <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}>
-                <ChevronsRight size={13}/>
+                <ChevronsRight size={13} />
               </button>
             </div>
             <div className="pg-pagination__right">

@@ -95,7 +95,7 @@ useEffect(() => {
         <div>
           <h1 className="page-title">Dashboard Overview</h1>
           <p className="page-subtitle">
-            Welcome back, <strong>{adminName}</strong>!</p>
+            Welcome, <strong>{adminName}</strong>!</p>
           <span style={{ fontSize: 13, color: '#9090a8', fontWeight: 600 }}>Here's what's happening {today}.</span>
         </div>
         <button className="refresh-btn" onClick={handleRefresh} disabled={refreshing}>

@@ -202,8 +202,7 @@ function BannerStrip({ customerContractID }) {
 function TaskPhotosSection({ jobTaskID }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [lightbox, setLightbox] = useState(null); // { url, index }
-  // const API_BASE = 'https://api.jalaram-ad.ashtamtechnologies.com';
+  const [lightbox, setLightbox] = useState(null); 
 
 
   useEffect(() => {
@@ -214,8 +213,7 @@ function TaskPhotosSection({ jobTaskID }) {
           : Array.isArray(res?.data) ? res.data
             : Array.isArray(res?.$values) ? res.$values : [];
 
-        console.log('[ATTACH] total:', all.length);
-        console.log('[ATTACH] first item:', JSON.stringify(all[0]));
+  
 
         const mine = all.filter(a => {
           const id = Number(
@@ -225,7 +223,7 @@ function TaskPhotosSection({ jobTaskID }) {
           return id === Number(jobTaskID);
         });
 
-        console.log('[ATTACH] mine for task', jobTaskID, ':', mine.length, JSON.stringify(mine[0]));
+    
         setPhotos(mine);
       })
       .catch(err => { console.error('[ATTACH] error:', err); setPhotos([]); })
@@ -244,7 +242,7 @@ function TaskPhotosSection({ jobTaskID }) {
   const allPhotos = photos; // for lightbox navigation
   const buildUrl = (att) => {
     // Log to confirm field names — remove after fix confirmed
-    console.log('[BUILD URL att]', JSON.stringify(att));
+
 
 
     const path =
@@ -259,7 +257,6 @@ function TaskPhotosSection({ jobTaskID }) {
       att.url ??
       att.Url ?? '';
 
-    console.log('[BUILD URL path]', path);
 
     if (!path || path === '') return null;
     if (path.startsWith('http')) return path;

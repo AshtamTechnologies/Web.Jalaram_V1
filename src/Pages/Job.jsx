@@ -11,10 +11,9 @@ import {
   Calendar, MapPin, LayoutGrid, CheckCircle2,
   Briefcase, Building2, Clock, UserCheck, Tag, Hash,
 } from 'lucide-react';
-import { apiService } from '../api/api';
+import { apiService, API_ROOT_URL } from '../api/api';
 import { useResizableColumns } from '../hooks/useResizableColumns';
 import "./Common1.css";
-const API_BASE = 'https://api.jalaram-ad.ashtamtechnologies.com';
 /* ═══════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════ */
@@ -52,10 +51,16 @@ const fmtDateTime = (d) => {
 
 
 function buildImageUrl(att) {
-  const path = att.photoFilePath ?? att.PhotoFilePath ?? '';
+  const path = att.photoFilePath ?? att.PhotoFilePath
+    ?? att.filePath ?? att.FilePath
+    ?? att.imagePath ?? att.ImagePath
+    ?? '';
   if (!path) return null;
-  if (path.startsWith('http')) return path;   // already full URL
-  return `${API_BASE}${path}`;               // e.g. /JobTaskAttach/2026/2/20002_1.jpg
+  if (path.startsWith('http')) return path;
+  // Normalize: strip trailing slash from base, ensure leading slash on path
+  const base = (API_ROOT_URL || '').replace(/\/$/, '');
+  const rel = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${rel}`;
 }
 
 function normalizeList(res) {
@@ -222,21 +227,26 @@ function JobStatusBadge({ status }) {
 
 function TaskStatusSelect({ value, onChange }) {
   const s = TASK_STATUS_COLORS[value] || TASK_STATUS_COLORS['Open'];
+  const isSubmitted = value === 'Submitted';
+
   return (
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
+      disabled={isSubmitted}
       style={{
         fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
         padding: '4px 10px', borderRadius: 7,
         border: `1.5px solid ${s.border}`,
         background: s.bg, color: s.color,
-        cursor: 'pointer', outline: 'none',
+        cursor: isSubmitted ? 'not-allowed' : 'pointer',
+        outline: 'none',
         appearance: 'none', WebkitAppearance: 'none',
-        paddingRight: 22,
-        backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239090a8' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+        paddingRight: isSubmitted ? 10 : 22,
+        backgroundImage: isSubmitted ? 'none' : `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239090a8' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
         backgroundRepeat: 'no-repeat',
         backgroundPosition: 'right 6px center',
+        opacity: isSubmitted ? 0.8 : 1,
       }}
     >
       {TASK_STATUS_LIST.map(st => <option key={st} value={st}>{st}</option>)}
@@ -618,7 +628,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
   const [imgErrors, setImgErrors] = useState({}); // track broken images by index
   const inputRef = useRef(null);
 
-const taskIDs = new Set(
+  const taskIDs = new Set(
     [task.jobTaskID, ...(task.mergedTaskIDs ?? [])].map(Number)
   );
   const myAttachments = attachments.filter(
@@ -921,7 +931,161 @@ const taskIDs = new Set(
     document.body
   );
 }
+function CompleteJobModal({ job, tasks, allHoardings, onConfirm, onCancel, completing }) {
+  const [completionDate, setCompletionDate] = useState(
+    job.actualCompletionDate || todayISO()
+  );
 
+  /* Build preview: for each task find the hoarding's current (latest) status */
+  const hoardingPreviews = tasks.map(t => {
+    const h = allHoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
+    return {
+      hoardingCode: t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`,
+      currentStatus: h?.status || 'Active',   // ← last effdt row's status
+      siteAddress: t.siteAddress || '',
+    };
+  });
+
+  return ReactDOM.createPortal(
+    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && !completing && onCancel()}>
+      <div className="pg-modal" style={{ maxWidth: 480 }}>
+
+        {/* Header */}
+        <div style={{
+          background: 'linear-gradient(135deg,#16a34a,#15803d)',
+          padding: '24px 26px 18px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+        }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.20)', border: '2px solid rgba(255,255,255,0.35)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26,
+          }}>✅</div>
+          <div style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#fff' }}>
+            Mark Job Complete
+          </div>
+          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: 'rgba(255,255,255,0.82)', fontWeight: 600 }}>
+            Job #{job.jobRequestID} · {tasks.length} hoarding{tasks.length !== 1 ? 's' : ''}
+          </div>
+        </div>
+
+        <div style={{ padding: '20px 24px 22px' }}>
+
+          {/* Completion date */}
+          <div style={{ marginBottom: 18 }}>
+            <label style={{
+              display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8,
+              fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#5a5a78',
+            }}>
+              <Calendar size={13} color="#16a34a" /> Completion Date <span style={{ color: '#dc2626' }}>*</span>
+            </label>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '10px 14px', borderRadius: 10,
+              border: '1.5px solid rgba(22,163,74,0.30)',
+              background: 'rgba(22,163,74,0.03)',
+            }}>
+              <Calendar size={14} color="#16a34a" style={{ flexShrink: 0 }} />
+              <input
+                type="date"
+                value={completionDate}
+                onChange={e => setCompletionDate(e.target.value)}
+                style={{
+                  flex: 1, border: 'none', outline: 'none', background: 'transparent',
+                  fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 700, color: '#1a1a2e',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Hoarding effdt preview */}
+          {hoardingPreviews.length > 0 && (
+            <div style={{
+              background: '#f0fdf4', border: '1.5px solid #bbf7d0',
+              borderRadius: 11, padding: '12px 14px', marginBottom: 20,
+            }}>
+              <div style={{
+                fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 900,
+                color: '#15803d', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <Building2 size={13} color="#16a34a" />
+                {hoardingPreviews.length} New Effdt Row{hoardingPreviews.length !== 1 ? 's' : ''} Will Be Added
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {hoardingPreviews.map((h, i) => (
+                  <div key={i} style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    padding: '7px 10px', borderRadius: 8,
+                    background: '#fff', border: '1px solid #dcfce7',
+                    fontFamily: 'Nunito,sans-serif', fontSize: 11.5,
+                  }}>
+                    {/* Hoarding code */}
+                    <span style={{ fontWeight: 800, color: '#15803d', minWidth: 70 }}>
+                      {h.hoardingCode}
+                    </span>
+                    {/* Arrow */}
+                    <span style={{ color: '#9090a8', fontWeight: 700, fontSize: 11 }}>effdt =</span>
+                    {/* Date */}
+                    <span style={{ fontWeight: 700, color: '#1a1a2e' }}>
+                      {completionDate ? fmtDate(completionDate) : '—'}
+                    </span>
+                    {/* Status (from last effdt row) */}
+                    <span style={{ marginLeft: 'auto', flexShrink: 0 }}>
+                      <span style={{
+                        padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 800,
+                        background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0',
+                      }}>
+                        {h.currentStatus}
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{
+                marginTop: 9, fontFamily: 'Nunito,sans-serif', fontSize: 11,
+                color: '#15803d', fontWeight: 600,
+              }}>
+                💡 Status copied from each hoarding's last effective date row
+              </div>
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              className="pg-btn-cancel"
+              onClick={onCancel}
+              disabled={completing}
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onConfirm(completionDate)}
+              disabled={completing || !completionDate}
+              style={{
+                flex: 1.6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                padding: '11px 0', borderRadius: 11, border: 'none',
+                background: (completing || !completionDate) ? '#e8e8f4' : 'linear-gradient(135deg,#16a34a,#15803d)',
+                color: (completing || !completionDate) ? '#b0b0c8' : '#fff',
+                fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+                cursor: (completing || !completionDate) ? 'not-allowed' : 'pointer',
+                boxShadow: (completing || !completionDate) ? 'none' : '0 4px 16px rgba(22,163,74,0.35)',
+              }}
+            >
+              {completing
+                ? <><Loader2 size={14} className="pg-spin" /> Completing…</>
+                : <>✅ Mark as Completed</>}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 /* ═══════════════════════════════════════════
    MAIN JOB PAGE
 ═══════════════════════════════════════════ */
@@ -936,6 +1100,8 @@ export default function JobPage() {
   const [allJobTasks, setAllJobTasks] = useState([]);
   const [allAttachments, setAllAttachments] = useState([]);
   const [photoModalTask, setPhotoModalTask] = useState(null); // task row for photo modal
+  const [completeTarget, setCompleteTarget] = useState(null); // { job, tasks }
+  const [completing, setCompleting] = useState(false);
 
   /* ── UI ── */
   const [loading, setLoading] = useState(true);
@@ -1103,13 +1269,113 @@ export default function JobPage() {
       }
     });
 
-    console.log('[FILTER] scopeContracts:', [...scopeContractIDs]);
-    console.log('[FILTER] result ids:', [...result]);
 
     return result.size > 0 ? result : null;
 
   }, [selectedContract, selectedCustomer, contracts, contractHoardingMaps, hoardingMerges, anyIdToLatestId]);
+  const handleComplete = async (completionDate) => {
+    if (!completeTarget) return;
+    const { job, tasks: jobTasks } = completeTarget;
+    setCompleting(true);
+    try {
 
+      /* STEP 1: Update job → Completed + actualCompletionDate */
+      await apiService.updateJobRequest({
+        customerID: job.customerID,
+        customerContractID: job.customerContractID,
+        jobType: job.jobType,
+        jobDescription: job.jobDescription || '',
+        iD: String(job.supervisorID ?? ''),
+        noofHoardings: String(jobTasks.length),
+        supervisorAcceptDttm: job.supervisorAcceptDttm || new Date().toISOString(),
+        rateperSQFT: Number(job.rateperSQFT || 0),
+        totalAreaSQFT: Number(job.totalAreaSQFT || 0),
+        targetCompletionDate: job.targetCompletionDate,
+        actualCompletionDate: completionDate,
+        jobStatus: 'Completed',
+        jobRequestID: job.jobRequestID,
+      });
+
+      /* STEP 2: For each task's hoarding, insert a new effdt row */
+      const results = await Promise.allSettled(
+        jobTasks.map(async (task) => {
+          const rawHid = Number(task.hoardingID ?? 0);
+          if (!rawHid) return;
+
+          // ← KEY FIX: resolve any old effdt ID → latest deduplicated ID
+          const hid = anyIdToLatestId.get(rawHid) ?? rawHid;
+
+          const h = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
+          if (!h) {
+            console.warn('[Complete] hoarding not found, rawHid:', rawHid, '→ resolvedHid:', hid);
+            return;
+          }
+
+          // Normalize fields — same pattern as DissolveContractPage (known working)
+          const hoardingCode = h.hoardingCode ?? h.HoardingCode ?? '';
+          const material = h.material ?? h.Material ?? '';
+          const hoardingType = h.hoardingType ?? h.HoardingType ?? 0;
+          const monthlyRent = Number(h.monthlyRent ?? h.MonthlyRent ?? 0);
+          const width = Number(h.width ?? h.Width ?? 0);
+          const height = Number(h.height ?? h.Height ?? 0);
+          const siteID = Number(h.siteID ?? h.SiteID ?? 0);
+          const status = h.status ?? h.Status ?? 'Active';
+
+          if (!hoardingCode) {
+            console.warn('[Complete] missing hoardingCode for hid:', hid, h);
+            return;
+          }
+
+          const payload = {
+            effdt: completionDate,        // "YYYY-MM-DD"
+            material,
+            hoardingType: Number(hoardingType),  // must be a number
+            status,                              // from last effdt row
+            monthlyRent,
+            width,
+            height,
+            siteID,
+          };
+
+          console.log('[Complete] addHoardingEffdt →', hoardingCode, payload);
+          return apiService.addHoardingEffdt(hoardingCode, payload);
+        })
+      );
+
+      const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== undefined).length;
+      const failCount = results.filter(r => r.status === 'rejected').length;
+
+      results
+        .filter(r => r.status === 'rejected')
+        .forEach(r => console.error('[Complete] effdt failed:', r.reason?.response?.data || r.reason?.message));
+
+      /* STEP 3: Update local state */
+      setJobRequests(prev =>
+        prev.map(j =>
+          j.jobRequestID === job.jobRequestID
+            ? { ...j, jobStatus: 'Completed', actualCompletionDate: completionDate }
+            : j
+        )
+      );
+
+      showToast(
+        `Job #${job.jobRequestID} marked as Completed! ` +
+        `${successCount} hoarding row${successCount !== 1 ? 's' : ''} inserted.` +
+        (failCount > 0 ? ` ⚠ ${failCount} failed — check console.` : ''),
+        failCount > 0 ? 'error' : 'success'
+      );
+      setCompleteTarget(null);
+
+      if (editingJobID === job.jobRequestID) {
+        setActualCompletionDate(completionDate);
+      }
+
+    } catch (err) {
+      showToast(err?.response?.data?.message || err?.message || 'Failed to complete job.', 'error');
+    } finally {
+      setCompleting(false);
+    }
+  };
   const existingTaskHoardingIds = useMemo(() =>
     new Set(tasks.map(t => t.hoardingID).filter(Boolean)), [tasks]);
   useEffect(() => {
@@ -1192,18 +1458,14 @@ export default function JobPage() {
           };
         });
 
-        // Debug — now safe to reference enrichedHoardings
-        console.log('[LATEST IDs]', enrichedHoardings.map(h => h.hoardingID));
-        console.log('[anyIdToLatestId 20029]', anyIdToLatestId.get(20029));
-        console.log('[anyIdToLatestId 20038]', anyIdToLatestId.get(20038));
+
 
         setHoardings(enrichedHoardings);
         setAnyIdToLatestId(anyIdToLatestId); // ← new state, see below
 
         setContractHoardingMaps(normalizeList(chmRaw));
         setHoardingMerges(normalizeList(mergeRaw));
-        console.log('[MERGE RAW SAMPLE]', normalizeList(mergeRaw)[0]);
-        console.log('[CHM RAW SAMPLE]', normalizeList(chmRaw)[0]);
+
         rawHoardings.forEach(h => {
           const code = h.hoardingCode ?? h.HoardingCode ?? '';
           const existing = latestByCode.get(code);
@@ -1220,7 +1482,6 @@ export default function JobPage() {
         setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
         setAllJobTasks(normalizeList(jtRaw).map(normalizeJobTask));
         setAllAttachments(normalizeList(attRaw));  // ✅ loaded on startup
-        console.log('[ATTACH] sample:', normalizeList(attRaw)?.[0]);
 
       } catch (err) {
         setApiError(err?.response?.data?.message || err?.message || 'Failed to load data.');
@@ -1559,7 +1820,7 @@ export default function JobPage() {
                     {/* Thumbnails */}
                     {contractBanners.map((banner, i) => {
                       const rawPath = banner.imageUrl ?? banner.ImageUrl ?? banner.contractFilePath ?? banner.ContractFilePath ?? '';
-                      const imgUrl = rawPath.startsWith('http') ? rawPath : `${API_BASE}${rawPath}`;
+                      const imgUrl = rawPath.startsWith('http') ? rawPath : `${API_ROOT_URL}${rawPath}`;
                       const filename = banner.contractFilename ?? banner.ContractFilename ?? `Banner ${i + 1}`;
                       const fileType = banner.fileUploadType ?? banner.FileUploadType ?? '';
 
@@ -2148,17 +2409,77 @@ export default function JobPage() {
                       <ArrowLeft size={13} /> Back
                     </button>
                   </div>
+
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    {/* Show hint when tasks are unsaved */}
+                    {/* Unsaved hint */}
                     {tasks.some(t => !t.saved || t.jobTaskID === 0) && (
                       <span style={{
                         fontFamily: 'Nunito,sans-serif', fontSize: 12,
                         color: '#f59e0b', fontWeight: 600,
-                        display: 'flex', alignItems: 'center', gap: 5
+                        display: 'flex', alignItems: 'center', gap: 5,
                       }}>
                         <AlertCircle size={12} /> Save first to enable photo uploads
                       </span>
                     )}
+
+                    {/* ✅ Mark Complete — shown only when editing a non-completed job */}
+                    {/* ✅ Mark Complete — shown only when editing a non-completed job */}
+                    {(() => {
+                      const savedJob = jobRequests.find(j => j.jobRequestID === editingJobID);
+                      const alreadyCompleted = savedJob?.jobStatus === 'Completed' || completing;
+                      return editingJobID && !alreadyCompleted && (
+                        <button
+                          onClick={() => {
+                            if (completing) return;          // hard guard — ignore double-clicks
+                            setCompleteTarget({
+                              job: {
+                                ...jobRequests.find(j => j.jobRequestID === editingJobID),
+                                jobRequestID: editingJobID,
+                                customerID: selectedCustomer?.customerID || 0,
+                                customerContractID: selectedContract?.customerContractID || 0,
+                                jobType,
+                                jobDescription,
+                                supervisorID: selectedSupervisor?.userID || '',
+                                rateperSQFT: Number(ratePerSQFT || 0),
+                                totalAreaSQFT,
+                                targetCompletionDate: targetDate,
+                                supervisorAcceptDttm,
+                                actualCompletionDate,
+                              },
+                              tasks: tasks.map(t => ({
+                                jobTaskID: t.jobTaskID,
+                                hoardingID: t.hoardingID,
+                                hoardingCode: t.hoardingCode,
+                                siteAddress: t.siteAddress,
+                                status: t.status,
+                              })),
+                            });
+                          }}
+                          disabled={completing}                    // ← disable while in-flight
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 7,
+                            padding: '10px 20px', borderRadius: 11, border: 'none',
+                            background: completing
+                              ? '#e8e8f4'
+                              : 'linear-gradient(135deg,#16a34a,#15803d)',
+                            color: completing ? '#b0b0c8' : '#fff',
+                            cursor: completing ? 'not-allowed' : 'pointer',
+                            fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
+                            boxShadow: completing ? 'none' : '0 3px 12px rgba(22,163,74,0.30)',
+                            transition: 'all 0.18s',
+                            pointerEvents: completing ? 'none' : 'auto',   // ← belt-and-suspenders
+                          }}
+                          onMouseEnter={e => { if (!completing) e.currentTarget.style.transform = 'scale(1.03)'; }}
+                          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)'; }}
+                        >
+                          {completing
+                            ? <><Loader2 size={14} className="pg-spin" /> Completing…</>
+                            : <>✅ Mark Complete</>}
+                        </button>
+                      );
+                    })()}
+
+                    {/* Save / Update */}
                     <button
                       className="pg-btn-save"
                       onClick={handleSave}
@@ -2167,10 +2488,10 @@ export default function JobPage() {
                     >
                       {saving
                         ? <><Loader2 size={14} className="pg-spin" /> Saving…</>
-                        : <><Check size={15} /> {editingJobID ? 'Update Job' : 'Create Job'}</>
-                      }
+                        : <><Check size={15} /> {editingJobID ? 'Update Job' : 'Create Job'}</>}
                     </button>
-                    {/* Close button only appears after save */}
+
+                    {/* Done — shown after save */}
                     {editingJobID && (
                       <button
                         className="pg-btn-cancel"
@@ -2312,11 +2633,67 @@ export default function JobPage() {
                       <td className="pg-td"><JobStatusBadge status={job.jobStatus} /></td>
                       <td className="pg-td">
                         <div className="pg-action-wrap">
+                          {/* Edit */}
                           <button className="pg-btn-view" onClick={() => handleEdit(job)} title="Edit">
                             <Edit2 size={13} />
                           </button>
+
+                          {/* Complete — green ✅ for non-completed jobs */}
+                          {job.jobStatus !== 'Completed' && (
+                            <button
+                              onClick={() => {
+                                if (completing) return;
+                                const jobTasks = getMyTasks(job.jobRequestID).map(jt => {
+                                  const h = hoardings.find(hh => hh.hoardingID === jt.hoardingID);
+                                  return {
+                                    jobTaskID: jt.jobTaskID,
+                                    hoardingID: jt.hoardingID,
+                                    hoardingCode: h?.hoardingCode || '',
+                                    siteAddress: getSiteAddress(h),
+                                    status: jt.status,
+                                  };
+                                });
+                                setCompleteTarget({ job, tasks: jobTasks });
+                              }}
+                              disabled={completing}
+                              title="Mark as Completed"
+                              style={{
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                width: 30, height: 30, borderRadius: 8,
+                                border: '1.5px solid rgba(22,163,74,0.30)',
+                                background: completing ? '#f4f4fb' : 'rgba(22,163,74,0.08)',
+                                color: completing ? '#c0c0d8' : '#16a34a',
+                                cursor: completing ? 'not-allowed' : 'pointer',
+                                transition: 'all 0.15s',
+                                pointerEvents: completing ? 'none' : 'auto',
+                              }}
+                              onMouseEnter={e => {
+                                if (completing) return;
+                                e.currentTarget.style.background = 'rgba(22,163,74,0.18)';
+                                e.currentTarget.style.borderColor = '#16a34a';
+                              }}
+                              onMouseLeave={e => {
+                                if (completing) return;
+                                e.currentTarget.style.background = 'rgba(22,163,74,0.08)';
+                                e.currentTarget.style.borderColor = 'rgba(22,163,74,0.30)';
+                              }}
+                            >
+                              {completing ? <Loader2 size={13} className="pg-spin" /> : '✅'}
+                            </button>
+                          )}
+
+                          {/* Static completed indicator */}
+                          {job.jobStatus === 'Completed' && (
+                            <span title="Completed" style={{
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              width: 30, height: 30, borderRadius: 8,
+                              background: 'rgba(22,163,74,0.06)', border: '1px solid rgba(22,163,74,0.20)',
+                              fontSize: 14,
+                            }}>✅</span>
+                          )}
                         </div>
                       </td>
+
                     </tr>
                   );
                 })}
@@ -2371,6 +2748,16 @@ export default function JobPage() {
           onClose={() => setPhotoModalTask(null)}
           showToast={showToast}
           onUploaded={refreshAttachments}
+        />
+      )}
+      {completeTarget && (
+        <CompleteJobModal
+          job={completeTarget.job}
+          tasks={completeTarget.tasks}
+          allHoardings={hoardings}
+          onConfirm={handleComplete}
+          onCancel={() => !completing && setCompleteTarget(null)}
+          completing={completing}
         />
       )}
     </>
