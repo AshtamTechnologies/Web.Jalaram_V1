@@ -67,6 +67,20 @@ export const apiService = {
   loginUser: async ({ email, password }) => {
     const response = await api.post('/Login/login', { email, password });
     if (response.forcePasswordChange === true) return response;
+
+    // ── Inactive account — API returns 200 with a plain message string ──
+    if (typeof response === 'string' && response.toLowerCase().includes('inactive')) {
+      const err = new Error(response);
+      err.response = { data: { message: response } };
+      throw err;
+    }
+    // Also handles if it comes back as an object with a message field but no token
+    if (!response.token && !response.accessToken && response.message) {
+      const err = new Error(response.message);
+      err.response = { data: { message: response.message } };
+      throw err;
+    }
+
     const rawToken = response.token || response.accessToken;
     if (!isValidJWT(rawToken)) {
       localStorage.clear();
@@ -644,13 +658,13 @@ export const apiService = {
 
   // REPORTS
   getAvailableHoardingsReport: () => api.get('/Report/GetAvailableHoardings'),
-_exportReport: async (reportType, format, defaultExt) => {
-  const token = localStorage.getItem('authToken');
-  const today = new Date().toISOString().slice(0, 10);
-  const response = await fetch(
-    `${API_ROOT_URL}/api/Report/ExportReport?reportType=${reportType}`,
-    { method: 'GET', headers: { 'Accept': '*/*', ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
-  );
+  _exportReport: async (reportType, format, defaultExt) => {
+    const token = localStorage.getItem('authToken');
+    const today = new Date().toISOString().slice(0, 10);
+    const response = await fetch(
+      `${API_ROOT_URL}/api/Report/ExportReport?reportType=${reportType}`,
+      { method: 'GET', headers: { 'Accept': '*/*', ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
+    );
     if (!response.ok) throw new Error(`Server error: ${response.status}`);
     const blob = await response.blob();
     if (blob.size === 0) throw new Error('Server returned an empty file.');
@@ -684,18 +698,18 @@ _exportReport: async (reportType, format, defaultExt) => {
   getAllQuotations: () => api.get('/Quotation'),
   getQuotationById: (quotationID, revisionNumber, customerID) =>
     api.get(`/Quotation/${quotationID}/${revisionNumber}/${customerID}`),
-createQuotation: (data) => api.post('/Quotation', {
-  quotationID: Number(data.quotationID ?? 0),
-  quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-  customerID: Number(data.customerID),
-  quotationNumber: String(data.quotationNumber),
-  quotationDate: data.quotationDate,
-  cGSTPercent: Number(data.cGSTPercent ?? 0),
-  cGSTAmount: Number(data.cGSTAmount ?? 0),
-  sGSTPercent: Number(data.sGSTPercent ?? 0),
-  sGSTAmount: Number(data.sGSTAmount ?? 0),
-  totalAmount: Number(data.totalAmount ?? 0),
-}),
+  createQuotation: (data) => api.post('/Quotation', {
+    quotationID: Number(data.quotationID ?? 0),
+    quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
+    customerID: Number(data.customerID),
+    quotationNumber: String(data.quotationNumber),
+    quotationDate: data.quotationDate,
+    cGSTPercent: Number(data.cGSTPercent ?? 0),
+    cGSTAmount: Number(data.cGSTAmount ?? 0),
+    sGSTPercent: Number(data.sGSTPercent ?? 0),
+    sGSTAmount: Number(data.sGSTAmount ?? 0),
+    totalAmount: Number(data.totalAmount ?? 0),
+  }),
   updateQuotation: (data) => api.put('/Quotation', {
     quotationID: Number(data.quotationID),
     quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
@@ -872,6 +886,7 @@ createQuotation: (data) => api.post('/Quotation', {
     city: String(data.city || '').trim(),
     district: String(data.district || '').trim(),
     country: String(data.country || 'India').trim(),
+    status: String(data.status || 'Active').trim(),
     role: String(data.role || '').trim(),
   }),
   updateUser: (userId, data) => api.put('/Login/update', {
@@ -887,6 +902,7 @@ createQuotation: (data) => api.post('/Quotation', {
     city: String(data.city || '').trim(),
     district: String(data.district || '').trim(),
     country: String(data.country || 'India').trim(),
+    status: String(data.status || 'Active').trim(),
     role: String(data.role || '').trim(),
   }),
 
@@ -1012,19 +1028,19 @@ createQuotation: (data) => api.post('/Quotation', {
     return response.data;
   },
 
-getContractBannerImages: async (customerContractID) => {
-  try {
-    const res = await api.get(`/CustContractAttach/ViewImage/${customerContractID}`);
-    const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
-    return list
-      .filter(item => item.fileUploadType === 'Banner Design' || item.imageUrl)
-      .map(item => ({
-        custContractAttachID: item.custContractAttachID,
-        contractFilename: item.contractFilename,
-        imageUrl: `${API_ROOT_URL}${item.imageUrl}`,
-      }));
-  } catch { return []; }
-},
+  getContractBannerImages: async (customerContractID) => {
+    try {
+      const res = await api.get(`/CustContractAttach/ViewImage/${customerContractID}`);
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      return list
+        .filter(item => item.fileUploadType === 'Banner Design' || item.imageUrl)
+        .map(item => ({
+          custContractAttachID: item.custContractAttachID,
+          contractFilename: item.contractFilename,
+          imageUrl: `${API_ROOT_URL}${item.imageUrl}`,
+        }));
+    } catch { return []; }
+  },
 
 
 
@@ -1086,49 +1102,49 @@ getContractBannerImages: async (customerContractID) => {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
-    // FINANCIAL YEAR SETUP
-getAllFinancialYears: () => api.get('/FinancialYearSetup'),
-createFinancialYear: (data) => api.post('/FinancialYearSetup', {
-  financialYearID: 0,
-  financialYearBeginDate: data.financialYearBeginDate,
-  financialYearEndDate: data.financialYearEndDate,
-  financialYearAbbrevation: data.financialYearAbbrevation,
-  currentlyOpen: data.currentlyOpen,
-}),
-updateFinancialYear: (data) => api.put('/FinancialYearSetup', {
-  financialYearID: Number(data.financialYearID),
-  financialYearBeginDate: data.financialYearBeginDate,
-  financialYearEndDate: data.financialYearEndDate,
-  financialYearAbbrevation: data.financialYearAbbrevation,
-  currentlyOpen: data.currentlyOpen,
-}),
+  // FINANCIAL YEAR SETUP
+  getAllFinancialYears: () => api.get('/FinancialYearSetup'),
+  createFinancialYear: (data) => api.post('/FinancialYearSetup', {
+    financialYearID: 0,
+    financialYearBeginDate: data.financialYearBeginDate,
+    financialYearEndDate: data.financialYearEndDate,
+    financialYearAbbrevation: data.financialYearAbbrevation,
+    currentlyOpen: data.currentlyOpen,
+  }),
+  updateFinancialYear: (data) => api.put('/FinancialYearSetup', {
+    financialYearID: Number(data.financialYearID),
+    financialYearBeginDate: data.financialYearBeginDate,
+    financialYearEndDate: data.financialYearEndDate,
+    financialYearAbbrevation: data.financialYearAbbrevation,
+    currentlyOpen: data.currentlyOpen,
+  }),
 
-// SERIES ID SETUP
-getAllSeriesIDs: () => api.get('/SeriesID'),
-createSeriesID: (data) => api.post('/SeriesID', {
-  seriesID:          0,
-  seriesType:        data.seriesType,
-  initialCharacters: data.initialCharacters,
-  delimiter:         data.delimiter,
-  lastNumberUsed:    Number(data.lastNumberUsed) || 0,
-  useCurrentFY:      data.useCurrentFY,
-  format:            data.format,
-  isActive:          data.isActive,
-}),
-updateSeriesID: (id, data) => api.put('/SeriesID', {
-  seriesID:          Number(id),
-  seriesType:        data.seriesType,
-  initialCharacters: data.initialCharacters,
-  delimiter:         data.delimiter,
-  lastNumberUsed:    Number(data.lastNumberUsed) || 0,
-  useCurrentFY:      data.useCurrentFY,
-  format:            data.format,
-  isActive:          data.isActive,
-}),
+  // SERIES ID SETUP
+  getAllSeriesIDs: () => api.get('/SeriesID'),
+  createSeriesID: (data) => api.post('/SeriesID', {
+    seriesID: 0,
+    seriesType: data.seriesType,
+    initialCharacters: data.initialCharacters,
+    delimiter: data.delimiter,
+    lastNumberUsed: Number(data.lastNumberUsed) || 0,
+    useCurrentFY: data.useCurrentFY,
+    format: data.format,
+    isActive: data.isActive,
+  }),
+  updateSeriesID: (id, data) => api.put('/SeriesID', {
+    seriesID: Number(id),
+    seriesType: data.seriesType,
+    initialCharacters: data.initialCharacters,
+    delimiter: data.delimiter,
+    lastNumberUsed: Number(data.lastNumberUsed) || 0,
+    useCurrentFY: data.useCurrentFY,
+    format: data.format,
+    isActive: data.isActive,
+  }),
 
-getAllHoardingPhotos: () => api.get('/HoardingPhoto'),
+  getAllHoardingPhotos: () => api.get('/HoardingPhoto'),
 
-createPerformaInvoice: (data) => api.post('/PerformaInvoice', data),
+  createPerformaInvoice: (data) => api.post('/PerformaInvoice', data),
 
 };
 

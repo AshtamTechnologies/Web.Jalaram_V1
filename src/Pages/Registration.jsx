@@ -22,6 +22,11 @@ const ROLE_COLORS = {
   'Supervisor': { color: '#4a5568', bg: 'rgba(74,85,104,0.08)', border: 'rgba(74,85,104,0.20)' },
   'Worker': { color: '#4a5568', bg: 'rgba(74,85,104,0.08)', border: 'rgba(74,85,104,0.20)' },
 };
+const STATUS_OPTIONS = ['Active', 'Inactive'];
+const STATUS_COLORS = {
+  'Active': { color: '#16a34a', bg: 'rgba(22,163,74,0.08)', border: 'rgba(22,163,74,0.20)' },
+  'Inactive': { color: '#dc2626', bg: 'rgba(220,38,38,0.08)', border: 'rgba(220,38,38,0.20)' },
+};
 const GUJARAT_DISTRICTS = [
   'Ahmedabad', 'Amreli', 'Anand', 'Aravalli', 'Banaskantha',
   'Bharuch', 'Bhavnagar', 'Botad', 'Chhota Udaipur', 'Dahod',
@@ -35,7 +40,7 @@ const GUJARAT_DISTRICTS = [
 const EMPTY_FORM = {
   firstName: '', lastName: '', phone1: '', phone2: '',
   email: '', addressLine1: '', addressLine2: '', addressLine3: '',
-  city: '', district: '', country: 'India', role: '',
+  city: '', district: '', country: 'India', status: 'Active', role: '',
 };
 
 const FIELDS = [
@@ -50,6 +55,7 @@ const FIELDS = [
   { key: 'city', label: 'City', placeholder: 'e.g. Ahmedabad', required: true, type: 'text', col: 6 },
   { key: 'district', label: 'District', placeholder: 'Select district…', required: true, type: 'district', col: 6 },
   { key: 'country', label: 'Country', placeholder: 'India', required: true, type: 'readonly', col: 6 },
+  { key: 'status', label: 'Status', placeholder: 'Select status…', required: true, type: 'status', col: 6 },
   { key: 'role', label: 'Role', placeholder: 'Select role…', required: true, type: 'select', col: 6, options: ROLE_OPTIONS },
 ];
 
@@ -122,6 +128,7 @@ function normalizeUser(raw) {
     city: raw.city ?? raw.City ?? '',
     district: raw.district ?? raw.District ?? '',
     country: raw.country ?? raw.Country ?? 'India',
+    status: raw.status ?? raw.Status ?? 'Active',
     role: raw.role ?? raw.Role ?? raw.roleName ?? '',
   };
 }
@@ -148,6 +155,16 @@ function RoleBadge({ role }) {
   const c = ROLE_COLORS[role];
   if (!c) return <span className="pg-td__dash">—</span>;
   return <span className="pg-sitetype-pill" style={{ color: c.color }}>{role}</span>;
+}
+function StatusBadge({ status }) {
+  const c = STATUS_COLORS[status];
+  if (!c) return <span className="pg-td__dash">—</span>;
+  return (
+    <span className="pg-sitetype-pill" style={{ color: c.color, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: c.color, flexShrink: 0 }} />
+      {status}
+    </span>
+  );
 }
 
 /* ═══════════════════════════════════════════
@@ -178,13 +195,33 @@ function ViewModal({ user, onClose, onEdit }) {
             <div className="pg-view__avatar"><UserCircle size={30} color="#fff" /></div>
             <div>
               <h4 className="pg-view__name">{fullName(user)}</h4>
+
+              {/* Role pill */}
               {user.role && (
                 <div className="pg-view__pill pg-view__pill--type" style={{ marginTop: 8 }}>
                   <span className="pg-view__pill-text pg-view__pill-text--type">{user.role}</span>
                 </div>
               )}
+
+              {/* Status pill */}
+              {user.status && (
+                <div className="pg-view__pill" style={{ marginTop: 6 }}>
+                  <span style={{
+                    width: 7, height: 7, borderRadius: '50%',
+                    background: STATUS_COLORS[user.status]?.color || '#c0c0d8',
+                    flexShrink: 0,
+                  }} />
+                  <span
+                    className="pg-view__pill-text"
+                    style={{ color: STATUS_COLORS[user.status]?.color }}
+                  >
+                    {user.status}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
+
           <div className="pg-view__pill">
             <MapPin size={11} color="rgba(255,255,255,0.85)" />
             <span className="pg-view__pill-text">
@@ -195,16 +232,17 @@ function ViewModal({ user, onClose, onEdit }) {
 
         <div className="pg-view__body">
           <div className="pg-view__section-label">Contact</div>
-          <InfoRow icon={Phone} label="Phone 1" value={user.phone1} highlight />
-          <InfoRow icon={Phone} label="Phone 2" value={user.phone2} />
-          <InfoRow icon={Mail} label="Email Address" value={user.email} highlight />
+          <InfoRow icon={Phone} label="Phone 1"       value={user.phone1}  highlight />
+          <InfoRow icon={Phone} label="Phone 2"       value={user.phone2} />
+          <InfoRow icon={Mail}  label="Email Address" value={user.email}   highlight />
+
           <div className="pg-view__section-label pg-view__section-label--mt">Address</div>
-          <InfoRow icon={Home} label="Address Line 1" value={user.addressLine1} />
-          <InfoRow icon={Home} label="Address Line 2" value={user.addressLine2} />
-          <InfoRow icon={Home} label="Address Line 3" value={user.addressLine3} />
-          <InfoRow icon={Building2} label="City" value={user.city} />
-          <InfoRow icon={MapPin} label="District" value={user.district} />
-          <InfoRow icon={Globe} label="Country" value={user.country} />
+          <InfoRow icon={Home}      label="Address Line 1" value={user.addressLine1} />
+          <InfoRow icon={Home}      label="Address Line 2" value={user.addressLine2} />
+          <InfoRow icon={Home}      label="Address Line 3" value={user.addressLine3} />
+          <InfoRow icon={Building2} label="City"           value={user.city} />
+          <InfoRow icon={MapPin}    label="District"       value={user.district} />
+          <InfoRow icon={Globe}     label="Country"        value={user.country} />
         </div>
 
         <div className="pg-view__foot">
@@ -327,6 +365,107 @@ function DistrictCombo({ value, onChange, onBlur, hasError }) {
           </div>
         </div>
       </PortalDropdown>
+    </div>
+  );
+}
+function StatusDropdown({ value, onChange, onBlur, hasError }) {
+  const [open, setOpen] = useState(false);
+  const [wasOpened, setWasOpened] = useState(false);
+  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const listRef = useRef(null);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    if (wasOpened) { onBlur?.(); setWasOpened(false); }
+  }, [wasOpened, onBlur]);
+
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (!wrapRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) close();
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open, close]);
+
+  const select = (v) => { onChange(v); setOpen(false); setWasOpened(false); };
+  const clear = (e) => { e.stopPropagation(); onChange(''); setOpen(false); setWasOpened(false); onBlur?.(); };
+  const openDD = () => { setOpen(o => !o); setWasOpened(true); setTimeout(() => listRef.current?.querySelectorAll('.pg-combo-option')?.[0]?.focus(), 0); };
+  const nav = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') close();
+  };
+
+  const activeColor = value ? STATUS_COLORS[value]?.color : '#c0c0d8';
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef}>
+      <div
+        ref={triggerRef}
+        className={`pg-field-wrap pg-combo-trigger ${hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
+        onClick={openDD}
+        tabIndex={0}
+        onKeyDown={e => {
+          if (!open) { if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDD(); } }
+          else nav(e);
+        }}
+      >
+        {/* coloured dot */}
+        <span style={{
+          width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+          background: value ? STATUS_COLORS[value]?.color : '#c0c0d8',
+          transition: 'background 0.2s',
+        }} />
+        <span className={`pg-combo-display${!value ? ' pg-combo-display--placeholder' : ''}`}
+          style={{ color: value ? activeColor : undefined }}>
+          {value || 'Select status…'}
+        </span>
+        {value
+          ? <X size={13} className="pg-combo-clear" onClick={clear} />
+          : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+      </div>
+
+      {open && ReactDOM.createPortal(
+        <div ref={panelRef} style={(() => {
+          const r = triggerRef.current?.getBoundingClientRect();
+          if (!r) return {};
+          return { position: 'fixed', top: r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 };
+        })()}>
+          <div className="pg-combo-panel pg-combo-panel--sm" style={{ position: 'static' }}>
+            <div className="pg-combo-list" ref={listRef}>
+              {STATUS_OPTIONS.map(opt => {
+                const sc = STATUS_COLORS[opt];
+                return (
+                  <div
+                    key={opt}
+                    className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
+                    onClick={() => select(opt)}
+                    tabIndex={0}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+                      else nav(e);
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: sc?.color, flexShrink: 0 }} />
+                      <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: sc?.color }}>
+                        {opt}
+                      </span>
+                    </span>
+                    {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }
@@ -537,6 +676,7 @@ function UserModal({ onClose, onSaved, editData }) {
               const isRO = type === 'readonly';
               const isSel = type === 'select';
               const isDist = type === 'district';
+              const isStatus = type === 'status';
               const wrapCls = `pg-field-wrap ${isRO ? 'pg-field-wrap--readonly' : hasErr ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}${isSel ? ' pg-field-wrap--select' : ''}`;
 
               return (
@@ -568,6 +708,21 @@ function UserModal({ onClose, onSaved, editData }) {
                   ) : isDist ? (
                     <>
                       <DistrictCombo
+                        value={form[key]}
+                        onChange={val => handleChange(key, val)}
+                        onBlur={() => handleBlur(key)}
+                        hasError={hasErr}
+                      />
+                      {hasErr && (
+                        <div className="pg-field-error">
+                          <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
+                          <span>{errors[key]}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : isStatus ? (
+                    <>
+                      <StatusDropdown
                         value={form[key]}
                         onChange={val => handleChange(key, val)}
                         onBlur={() => handleBlur(key)}
@@ -769,6 +924,7 @@ export default function RegistrationPage() {
     { key: 'city', label: 'City', w: '10%' },
     { key: 'district', label: 'District', w: '10%', tabletHide: true },
     { key: 'role', label: 'Role', w: '10%' },
+    { key: 'status', label: 'Status', w: '9%' },
     { key: '_action', label: 'Actions', w: '9%', noSort: true },
   ];
 
@@ -913,6 +1069,8 @@ export default function RegistrationPage() {
 
                     {/* Role */}
                     <td className="pg-td"><RoleBadge role={u.role} /></td>
+                    {/* Status */}
+                    <td className="pg-td"><StatusBadge status={u.status} /></td>
 
                     {/* Actions — Edit + View (matches OwnerPage / SitePage pattern) */}
                     <td className="pg-td">
@@ -990,7 +1148,7 @@ export default function RegistrationPage() {
         />
       )}
 
-      {/* View modal */}
+{/* View modal */}
       {viewUser && (
         <ViewModal
           user={viewUser}
@@ -998,6 +1156,7 @@ export default function RegistrationPage() {
           onEdit={u => { setViewUser(null); handleEdit(u); }}
         />
       )}
+      
     </>
   );
 }
