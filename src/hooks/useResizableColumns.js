@@ -9,8 +9,8 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
     const ths = Array.from(table.querySelectorAll('thead th'));
     const DEFAULT_WIDTH = 120;
 
-    // Set table to fixed layout so width changes take effect
-    table.style.tableLayout = 'fixed';
+    // Set table to fixed layout so width changes take effect (with important priority to override any stylesheets)
+    table.style.setProperty('table-layout', 'fixed', 'important');
 
     ths.forEach((th, i) => {
       th.style.width    = (initialWidths[i] ?? DEFAULT_WIDTH) + 'px';

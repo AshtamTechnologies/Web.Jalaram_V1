@@ -2691,8 +2691,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const histTableRef = useRef(null);
   const [histTableReady, setHistTableReady] = useState(false);
   const step2ColWidths = withPrinting
-    ? [40, 200, 80, 60, 148, 148, 90, 90, 46]   // added 148,148 for start/end date
-    : [40, 200, 80, 64, 56, 148, 148, 90, 90, 46];
+    ? [40, 240, 80, 110, 140, 140, 90, 90, 90, 46]
+    : [40, 240, 80, 64, 56, 140, 140, 90, 90, 46];
 
   useResizableColumns(step2TableRef, step2TableReady, step2ColWidths);
   useResizableColumns(histTableRef, histTableReady, [44, 140, 200, 110, 110, 120, 220]);
@@ -3058,9 +3058,9 @@ const handleViewProforma = async (quot) => {
       if (u.rowType === 'extra') {
         // extra charge: amount is directly editable — no auto-calculation
       } else if (u.rowType === 'printing') {
-        // printing: nos × ratePerMonth
+        // printing: sqFt × ratePerMonth
         if (['nos', 'sqFt', 'ratePerMonth'].includes(field)) {
-          u.amount = Number(u.nos || 0) * Number(u.ratePerMonth || 0);
+          u.amount = Number(u.sqFt || 0) * Number(u.ratePerMonth || 0);
         }
       } else {
         // hoarding: date-based if both dates present, else nos × rate
@@ -3599,6 +3599,23 @@ const handleEditQuotation = (quot) => {
       setStep1Error(''); setStep(2);
     } else if (step === 2) {
       if (rows.length === 0) { setStep2Error('Add at least one hoarding.'); return; }
+      
+      if (withPrinting) {
+        // 1. Verify there is at least one hoarding row (or merged hoarding)
+        const hasHoarding = rows.some(r => r.rowType === 'hoarding' || r.rowType === 'merged');
+        if (!hasHoarding) {
+          setStep2Error('Select any hoarding.');
+          return;
+        }
+
+        // 2. Verify all printing rows have a size selected
+        const hasUnselectedSize = rows.some(r => r.rowType === 'printing' && !r.size);
+        if (hasUnselectedSize) {
+          setStep2Error('Select the size from the dropdown.');
+          return;
+        }
+      }
+
       // ── re-check conflicts before proceeding ──
       const conflicts = checkHoardingDateConflicts(rows, allContracts, allContractMaps, customers);
       if (conflicts.length > 0) {
@@ -4136,24 +4153,24 @@ const handleEditQuotation = (quot) => {
                     <table className="pg-table" ref={step2TableRef}>
                       <thead>
                         <tr>
-                          <th className="pg-th" style={{ width: 40 }}>#</th>
+                          <th className="pg-th">#</th>
                           <th className="pg-th" style={{ textAlign: 'left' }}>Site Address / Product</th>
                           <th className="pg-th">Size</th>
                           {!withPrinting && <>
-                            <th className="pg-th" style={{ minWidth: 64 }}>Sq.Ft</th>
-                            <th className="pg-th" style={{ minWidth: 56 }}>NOS</th>
-                            <th className="pg-th" style={{ minWidth: 148 }}>Start Date</th>
-                            <th className="pg-th" style={{ minWidth: 148 }}>End Date</th>
+                            <th className="pg-th">Sq.Ft</th>
+                            <th className="pg-th">NOS</th>
+                            <th className="pg-th">Start Date</th>
+                            <th className="pg-th">End Date</th>
                           </>}
                           {withPrinting && <>
-                            <th className="pg-th" style={{ minWidth: 120 }}>NOS / Sq.Ft</th>
-                            <th className="pg-th" style={{ minWidth: 148 }}>Start Date</th>
-                            <th className="pg-th" style={{ minWidth: 148 }}>End Date</th>
+                            <th className="pg-th">NOS / Sq.Ft</th>
+                            <th className="pg-th">Start Date</th>
+                            <th className="pg-th">End Date</th>
                           </>}
                           <th className="pg-th">Rate/Mo</th>
                           {withPrinting && <th className="pg-th" style={{ color: '#7c3aed' }}>Print Cost</th>}
                           <th className="pg-th">Amount</th>
-                          <th className="pg-th" style={{ width: 46 }}></th>
+                          <th className="pg-th"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -4330,19 +4347,26 @@ const handleEditQuotation = (quot) => {
                                   <>
                                     {/* NOS / Sq.Ft column */}
                                     <td className="pg-td" style={{ textAlign: 'center' }}>
-                                      {isPrint ? (
-                                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#7c3aed' }}>
-                                          {row.nos > 0 ? row.nos : '—'}
-                                        </span>
-                                      ) : isExtra ? (
+                                      {isExtra ? (
                                         <span style={{ color: '#c0c0d0' }}>—</span>
                                       ) : (
-                                        <input
-                                          className="qt-inline-input" type="number"
-                                          value={row.nos}
-                                          onChange={e => updateRow(row._id, 'nos', e.target.value)}
-                                          style={{ width: 72 }}
-                                        />
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                                          {isPrint ? (
+                                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#7c3aed' }}>
+                                              {row.nos > 0 ? row.nos : '—'}
+                                            </span>
+                                          ) : (
+                                            <input
+                                              className="qt-inline-input" type="number"
+                                              value={row.nos}
+                                              onChange={e => updateRow(row._id, 'nos', e.target.value)}
+                                              style={{ width: 64, textAlign: 'center' }}
+                                            />
+                                          )}
+                                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 700, color: '#7c3aed' }}>
+                                            {row.sqFt > 0 ? `${row.sqFt} sq.ft` : '—'}
+                                          </span>
+                                        </div>
                                       )}
                                     </td>
 
@@ -4384,9 +4408,15 @@ const handleEditQuotation = (quot) => {
                                       // Hoarding row: editable print cost field
                                       <input
                                         className="qt-inline-input" type="number"
-                                        value={row.printingCost || 0}
+                                        value={isExtra ? 0 : (row.printingCost || 0)}
                                         onChange={e => updateRow(row._id, 'printingCost', e.target.value)}
-                                        style={{ width: 86, color: '#7c3aed', fontWeight: 700 }}
+                                        style={{
+                                          width: 86,
+                                          color: isExtra ? '#c0c0d0' : '#7c3aed',
+                                          fontWeight: 700,
+                                          cursor: isExtra ? 'not-allowed' : 'text'
+                                        }}
+                                        disabled={isExtra}
                                       />
                                     )}
                                   </td>

@@ -5,6 +5,7 @@ import {
   FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard,
 } from 'lucide-react';
 // import Chatbot from './Chatbot';
+import Notification from './Notification';
 import './Layout.css';
 
 /* ─────────────────────────────────────
@@ -353,6 +354,9 @@ export default function Layout({ tab, changeTab, onLogout, children }) {
           </div>
 
           <div className="topbar-right">
+            {/* Notification Bell Dropdown & Toasts */}
+            <Notification handleTabChange={handleTabChange} />
+
             <div ref={dropRef} style={{ position: 'relative' }}>
               <button className="profile-btn" onClick={() => setDropOpen(v => !v)}>
                 <div className="profile-avatar">
