@@ -6,7 +6,7 @@
 
 /* ── Table helper (shared across data pages) ── */
 .pg-table {
-  table-layout: auto !important;
+  table-layout: auto;
 }
 .pg-table th {
   position: relative !important;

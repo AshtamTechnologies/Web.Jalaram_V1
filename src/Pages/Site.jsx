@@ -137,8 +137,8 @@ function validateTextField(key, value, type, required) {
 }
 const TEXT_FIELDS = [
   { key:'addressLine1', label:'Address Line 1', icon:Home,       placeholder:'e.g. 14, Navrangpura',      col:12, required:true,  type:'address' },
-  { key:'addressLine2', label:'Address Line 2', icon:Home,       placeholder:'e.g. Near Gujarat College', col:6,  required:false, type:'address' },
-  { key:'addressLine3', label:'Address Line 3', icon:Home,       placeholder:'e.g. Opp. Fire Station',    col:6,  required:false, type:'address' },
+  { key:'addressLine2', label:'Add-Facing', icon:Home,       placeholder:'e.g. Near Gujarat College', col:6,  required:false, type:'address' },
+  { key:'addressLine3', label:'Add-Towords', icon:Home,       placeholder:'e.g. Opp. Fire Station',    col:6,  required:false, type:'address' },
   { key:'landmark',     label:'Landmark',       icon:Navigation, placeholder:'e.g. Gujarat College',      col:6,  required:false, type:'address' },
   { key:'city',         label:'City',           icon:Building2,  placeholder:'e.g. Ahmedabad',            col:6,  required:true,  type:'text'    },
 ];

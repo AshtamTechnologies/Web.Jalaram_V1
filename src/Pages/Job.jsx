@@ -18,7 +18,7 @@ import "./Common1.css";
    CONSTANTS
 ═══════════════════════════════════════════ */
 const JOB_TYPES = [
-  { value: 'Banner', label: 'Banner', icon: '🪧' },
+  { value: 'Mounting', label: 'Mounting', icon: '🪧' },
   { value: 'Repair', label: 'Repair', icon: '🔧' },
   { value: 'Erection', label: 'Erection', icon: '🏗️' },
 ];
@@ -1942,7 +1942,7 @@ export default function JobPage() {
                       icon={Tag}
                       getLabel={o => `${o.icon} ${o.label}`}
                       getValue={o => o.value}
-                      searchPlaceholder="Banner / Repair / Erection"
+                      searchPlaceholder="Mounting / Repair / Erection"
                     />
                   </div>
 

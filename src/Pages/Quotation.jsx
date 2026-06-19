@@ -330,7 +330,7 @@ function normalizeQuotLine(raw) {
     periodBeginDate: (raw.periodBeginDate ?? raw.PeriodBeginDate ?? '').split('T')[0],
     periodEndDate: (raw.periodEndDate ?? raw.PeriodEndDate ?? '').split('T')[0],
     rentAmount: raw.rentAmount ?? raw.RentAmount ?? 0,
-    mergeFlag: raw.mergeFlag ?? raw.MergeFlag ?? false,
+    mergeFlag: (raw.mergeFlag ?? raw.MergeFlag ?? false) === true || String(raw.mergeFlag ?? raw.MergeFlag ?? '').toLowerCase() === 'true',
   };
 }
 // Normalize siteID to number for consistent Map keys
@@ -433,7 +433,9 @@ const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = nu
     : (rawSiteID != null ? (siteMap?.get(rawSiteID) ?? null) : null);
   const siteID = toSID(site?.siteID) ?? rawSiteID ?? null;
 
-
+  const start = globalStart || '';
+  const end = globalEnd || (globalStart ? addMonths(globalStart, 1) : '');
+  const baseRent = (start && end) ? calcAmountByDates(start, end, h?.monthlyRent || 0) : (h?.monthlyRent || 0);
 
   return {
     _id: uid(),
@@ -446,17 +448,17 @@ const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = nu
     size: h ? `${h.width} X ${h.height}` : '',
     sqFt: h ? (h.width * h.height) : 0,
     nos: 1,
-    startDate: globalStart || '',
-    endDate: globalEnd || '',
+    startDate: start,
+    endDate: end,
     ratePerMonth: h?.monthlyRent || 0,
-    amount: h?.monthlyRent || 0,
+    amount: baseRent,
     printingCost: 0,
     quotationLineNumber: 0,
     saved: false,
   };
 };
 
-const newPrintingRow = (label = 'Flex Banner Printing') => ({
+const newPrintingRow = (label = 'Flex Banner Printing', globalStart = '', globalEnd = '') => ({
   _id: uid(),
   rowType: 'printing',
   hoardingID: 0,
@@ -466,8 +468,8 @@ const newPrintingRow = (label = 'Flex Banner Printing') => ({
   size: '',
   sqFt: 0,
   nos: 1,
-  startDate: '',
-  endDate: '',
+  startDate: globalStart,
+  endDate: globalEnd,
   ratePerMonth: 8,
   amount: 0,
   printingCost: 0,
@@ -680,7 +682,7 @@ function SortIcon({ col, sortKey, sortDir }) {
 function buildPrintHTML({ rows, withPrinting, selectedCustomer, quotNo, quotDate,
   revisionNo, cgstPct, sgstPct, subTotal, cgstAmt, sgstAmt,
   roundOff, finalTotal, selectedTerms, termsTexts,
-  docNoLabel = 'Quotation No.', docNoValue = null }) {   
+  docNoLabel = 'Quotation No.', docNoValue = null }) {
 
   const pages = rows.length === 0 ? [[]] : [];
   for (let i = 0; i < rows.length; i += ROWS_PER_PRINT_PAGE) pages.push(rows.slice(i, i + ROWS_PER_PRINT_PAGE));
@@ -709,7 +711,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
 .dright{padding:3px 8px;border-left:1px solid #000;width:18%;text-align:right;font-weight:bold;font-size:11px;}
 .cust-row{border:1px solid #000;border-bottom:none;display:flex;}
 .cleft{padding:6px 8px;flex:1;border-right:1px solid #000;font-size:10.5px;line-height:1.5;}
-.cright{padding:5px 8px;width:200px;}
+.cright{padding:5px 8px;width:250px;}
 .cright table{width:100%;border-collapse:collapse;}
 .cright td{padding:2px 2px;font-size:10.5px;vertical-align:top;}
 .clbl{white-space:nowrap;font-weight:bold;width:88px;}
@@ -761,7 +763,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
 </div>
 <div class="cust-row">
   <div class="cleft">
-    <span style="font-size:9.5px;color:#555;">M/s. :</span><br>
+    <span style="font-size:9.5px;color:#555;">M/s. :</span>
     <strong style="font-size:11px;">${c?.customerName || '&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;'}</strong>
     ${first && c?.addressLine1 ? `<br>${c.addressLine1}` : ''}
     ${first && c?.city ? `<br>${[c.city, c.district].filter(Boolean).join(', ')}` : ''}
@@ -772,12 +774,12 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
     <table>
       <tr><td class="clbl">${docNoLabel}</td><td>: ${docNoValue ?? `${quotNo}${Number(revisionNo) > 1 ? ` Rev.${revisionNo}` : ''}`}</td></tr>
       <tr><td class="clbl">Date</td><td>: ${fmtDateFull(quotDate)}</td></tr>
-      <tr><td class="clbl">PO No.</td><td>: &nbsp;</td></tr>
+      
     </table>
   </div>
 </div>`;
   };
-
+  {/* <tr><td class="clbl">PO No.</td><td>: &nbsp;</td></tr> */ }
   const renderTblHdr = () => withPrinting
     ? `<tr>
         <th style="width:30px;">SR No.</th>
@@ -864,8 +866,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
     <div class="f-totals">
       <table>
         <tr><td>Sub Total</td><td class="gr">${isLast ? `&#8377;&nbsp;${fmtCurrency(subTotal)}` : ''}</td></tr>
-        <tr><td>CGST Expense ${cgstPct}%</td><td class="gr">${val(fmtCurrency(cgstAmt))}</td></tr>
-        <tr><td>SGST Expense ${sgstPct}%</td><td class="gr">${val(fmtCurrency(sgstAmt))}</td></tr>
+        <tr><td>CGST  ${cgstPct}%</td><td class="gr">${val(fmtCurrency(cgstAmt))}</td></tr>
+        <tr><td>SGST  ${sgstPct}%</td><td class="gr">${val(fmtCurrency(sgstAmt))}</td></tr>
         <tr><td style="font-size:9px;color:#666;">${Number(cgstPct) + Number(sgstPct)}%</td><td></td></tr>
         <tr class="f-grand"><td>ROUND OFF</td><td class="gr">${val(fmtCurrency(roundOff))}</td></tr>
         <tr class="f-grand"><td>Grand Total</td><td class="gr">${isLast ? `&#8377;&nbsp;${fmtCurrency(finalTotal)}` : ''}</td></tr>
@@ -1484,7 +1486,7 @@ function HoardingConflictModal({ conflicts, onClose }) {
 function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
   const hoardingRows = rows.filter(r => r.rowType === 'hoarding');
   const [sel, setSel] = useState([]);
-  const [dir, setDir] = useState('H');
+  const [dir, setDir] = useState('V');
 
   const firstSiteID = sel.length > 0
     ? (hoardingRows.find(r => r._id === sel[0])?.siteID ?? null)
@@ -2011,6 +2013,7 @@ function CreateContractFromQuotModal({
           Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber) &&
           records.some(m => Number(m.quotationLineNumber) === Number(l.quotationLineNumber))
         );
+        const rentVal = matchingLine?.rentAmount || totalRent || 0;
         // Dates: from quotation date or today
         const startDate = quot.quotationDate?.split('T')[0] || '';
         const endDate = matchingLine?.periodEndDate || '';
@@ -2027,8 +2030,8 @@ function CreateContractFromQuotModal({
           size: `${mw} X ${mh}`,
           startDate,
           endDate,
-          contractOrigValue: totalRent,
-          amountPerFreq: totalRent,
+          contractOrigValue: rentVal,
+          amountPerFreq: rentVal,
           status: 'Active',
         });
       }
@@ -2699,11 +2702,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
   useEffect(() => {
     setStep2TableReady(false);
-    if (step === 2) {
+    if (step === 2 && rows.length > 0) {
       const t = setTimeout(() => setStep2TableReady(true), 120);
       return () => clearTimeout(t);
     }
-  }, [step, withPrinting]);
+  }, [step, withPrinting, rows.length]);
   useEffect(() => {
     if (!loading && !isCreating) {
       setHistTableReady(false);
@@ -2763,7 +2766,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
       return n;
     });
   }, []);
-const handleViewProforma = async (quot) => {
+  const handleViewProforma = async (quot) => {
     const myLines = quotLines.filter(l =>
       Number(l.quotationID) === Number(quot.quotationID) &&
       Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
@@ -2799,18 +2802,34 @@ const handleViewProforma = async (quot) => {
         const siteObj = siteID != null
           ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
           : null;
+
+        const parts = (l.purpose || '').split('|');
+        const meta = parts[1] || '';
+        let ratePerMonth = h?.monthlyRent || 0;
+        let printingCost = 0;
+        if (meta) {
+          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
+          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
+          if (matchRate) ratePerMonth = Number(matchRate[1]);
+          if (matchPrint) printingCost = Number(matchPrint[1]);
+        } else {
+          // fallback if no meta
+          const nos = calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1;
+          ratePerMonth = (l.rentAmount || 0) / nos;
+        }
+
         return {
           rowType: 'hoarding',
           hoardingID: l.hoardingID,
           location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
-          nos: 1,
+          nos: calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1,
           startDate: l.periodBeginDate,
           endDate: l.periodEndDate,
-          ratePerMonth: l.rentAmount,
+          ratePerMonth: ratePerMonth,
           amount: l.rentAmount,
-          printingCost: 0,
+          printingCost: printingCost,
         };
       });
 
@@ -2831,10 +2850,6 @@ const handleViewProforma = async (quot) => {
       for (const ln of [...byLine.keys()].sort((a, b) => a - b)) {
         const records = byLine.get(ln);
         if (records.length < 2) continue;
-
-        const savedLine = myLines.find(l =>
-          l.mergeFlag && Number(l.quotationLineNumber) === Number(ln)
-        );
 
         const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
         const hoardingObjs = records
@@ -2857,23 +2872,53 @@ const handleViewProforma = async (quot) => {
           return buildSiteAddress(site, h.hoardingCode || '');
         });
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
-        const fallbackRate = hoardingObjs.reduce((s, h) => s + (h.monthlyRent || 0), 0);
+        const locFallback = locations.join(' + ');
+
+        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
+            l.purpose.includes(locFallback) || 
+            locFallback.includes(l.purpose.split('|')[0]) ||
+            (codes && l.purpose.includes(codes))
+          ));
+        }
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+            const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
+            return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
+          }));
+        }
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag);
+        }
+
+        const parts = (savedLine?.purpose || '').split('|');
+        const loc = parts[0] || locFallback;
+        const meta = parts[1] || '';
+        let ratePerMonth = savedLine ? savedLine.rentAmount : 0;
+        let printingCost = 0;
+        if (meta) {
+          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
+          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
+          if (matchRate) ratePerMonth = Number(matchRate[1]);
+          if (matchPrint) printingCost = Number(matchPrint[1]);
+        }
 
         pdfRows.push({
           rowType: 'merged',
           isMerged: true,
           mergeDirection: dir,
           hoardingID: 0,
-          location: savedLine?.purpose || locations.join(' + '),
+          location: loc,
           hoardingCode: codes,
           size: `${mw} X ${mh}`,
           sqFt: mw * mh,
           nos: 1,
           startDate: savedLine?.periodBeginDate || '',
           endDate: savedLine?.periodEndDate || '',
-          ratePerMonth: savedLine ? savedLine.rentAmount : fallbackRate,
-          amount: savedLine ? savedLine.rentAmount : fallbackRate,
-          printingCost: 0,
+          ratePerMonth: ratePerMonth,
+          amount: savedLine ? savedLine.rentAmount : 0,
+          printingCost: printingCost,
         });
       }
     }
@@ -3041,6 +3086,44 @@ const handleViewProforma = async (quot) => {
     }
   }, [selectedCustomer]);
 
+  // Keep printing rows in sync with available hoarding sizes
+  useEffect(() => {
+    const hoardingSizes = {};
+    rows.forEach(r => {
+      if (r.rowType === 'hoarding' && r.size) {
+        if (!hoardingSizes[r.size]) hoardingSizes[r.size] = { sqFt: r.sqFt || 0, count: 0 };
+        hoardingSizes[r.size].count++;
+      } else if (r.rowType === 'merged' && r.size) {
+        const key = `${r.size} (Merged)`;
+        if (!hoardingSizes[key]) hoardingSizes[key] = { sqFt: r.sqFt || 0, count: 0 };
+        hoardingSizes[key].count++;
+      }
+    });
+
+    let needsUpdate = false;
+    const updated = rows.map(r => {
+      if (r.rowType !== 'printing' || !r.size) return r;
+      const info = hoardingSizes[r.size];
+      if (!info) {
+        // Size no longer exists, reset print row size info
+        needsUpdate = true;
+        return { ...r, size: '', sqFt: 0, nos: 0, amount: 0 };
+      }
+      const targetSqFt = info.count * info.sqFt;
+      const targetNos = info.count;
+      const targetAmt = targetSqFt * Number(r.ratePerMonth || 0);
+      if (r.sqFt !== targetSqFt || r.nos !== targetNos || r.amount !== targetAmt) {
+        needsUpdate = true;
+        return { ...r, sqFt: targetSqFt, nos: targetNos, amount: targetAmt };
+      }
+      return r;
+    });
+
+    if (needsUpdate) {
+      setRows(updated);
+    }
+  }, [rows]);
+
   /* ── Calculations ── */
   const subTotal = useMemo(() => rows.reduce((s, r) => s + Number(r.amount || 0), 0), [rows]);
   const cgstAmt = useMemo(() => (subTotal * Number(cgstPct || 0)) / 100, [subTotal, cgstPct]);
@@ -3053,6 +3136,25 @@ const handleViewProforma = async (quot) => {
   const updateRow = useCallback((id, field, val) => {
     setRows(prev => prev.map(r => {
       if (r._id !== id) return r;
+
+      // Validation for date select: end date not smaller than start date
+      if (field === 'endDate' && val && r.startDate && val < r.startDate) {
+        showToast('End date cannot be earlier than start date', 'error');
+        return r;
+      }
+      if (field === 'startDate' && val && r.endDate && val > r.endDate) {
+        showToast('Start date cannot be later than end date', 'error');
+        return r;
+      }
+
+      // Validation to prevent negative values
+      if (['ratePerMonth', 'printingCost', 'amount'].includes(field)) {
+        if (Number(val) < 0) {
+          showToast(`${field === 'ratePerMonth' ? 'Rate' : field === 'printingCost' ? 'Print Cost' : 'Amount'} cannot be negative`, 'error');
+          return r;
+        }
+      }
+
       const u = { ...r, [field]: val };
 
       if (u.rowType === 'extra') {
@@ -3064,30 +3166,30 @@ const handleViewProforma = async (quot) => {
         }
       } else {
         // hoarding: date-based if both dates present, else nos × rate
-        if (['ratePerMonth', 'nos', 'sqFt'].includes(field)) {
+        if (['ratePerMonth', 'nos', 'sqFt', 'printingCost'].includes(field)) {
           if (u.startDate && u.endDate) {
-            u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth);
+            u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth) + Number(u.printingCost || 0);
           } else {
-            u.amount = Number(u.ratePerMonth || 0) * Number(u.nos || 1);
+            u.amount = (Number(u.ratePerMonth || 0) * Number(u.nos || 1)) + Number(u.printingCost || 0);
           }
         }
 
-        // nos changed → recalculate endDate (keep date logic)
-        if (field === 'nos' && u.startDate) {
-          u.endDate = addMonths(u.startDate, Number(val) || 1);
-          u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth);
-        }
-
-        // startDate changed → recalculate endDate + amount
+        // startDate changed → recalculate amount based on dates (no change to endDate or nos)
         if (field === 'startDate' && u.startDate) {
-          u.endDate = addMonths(val, Number(u.nos) || 1);
-          u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth);
+          if (u.endDate) {
+            u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth) + Number(u.printingCost || 0);
+          } else {
+            u.amount = (Number(u.ratePerMonth || 0) * Number(u.nos || 1)) + Number(u.printingCost || 0);
+          }
         }
 
-        // endDate changed → recalculate amount (and nos display)
-        if (field === 'endDate' && u.startDate && u.endDate) {
-          u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth);
-          u.nos = calcNOSFromDates(u.startDate, u.endDate);
+        // endDate changed → recalculate amount based on dates (no change to nos)
+        if (field === 'endDate' && u.endDate) {
+          if (u.startDate) {
+            u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth) + Number(u.printingCost || 0);
+          } else {
+            u.amount = (Number(u.ratePerMonth || 0) * Number(u.nos || 1)) + Number(u.printingCost || 0);
+          }
         }
       }
 
@@ -3112,10 +3214,16 @@ const handleViewProforma = async (quot) => {
 
   const applyGlobalDates = useCallback(() => {
     if (!globalStart) return;
+    if (globalEnd && globalEnd < globalStart) {
+      showToast('Global End Date cannot be earlier than Global Start Date', 'error');
+      return;
+    }
     const updatedRows = rows.map(r => {
-      if (r.rowType !== 'hoarding') return r;
+      if (r.rowType !== 'hoarding' && r.rowType !== 'merged') return r;
       const end = globalEnd || addMonths(globalStart, Number(r.nos) || 1);
-      return { ...r, startDate: globalStart, endDate: end };
+      const baseRent = calcAmountByDates(globalStart, end, r.ratePerMonth);
+      const amount = baseRent + Number(r.printingCost || 0);
+      return { ...r, startDate: globalStart, endDate: end, amount };
     });
     setRows(updatedRows);
     // ── conflict check ──
@@ -3227,20 +3335,19 @@ const handleViewProforma = async (quot) => {
     }
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   };
-const handleEditQuotation = (quot) => {
-  const myLines = quotLines.filter(l =>
-    Number(l.quotationID) === Number(quot.quotationID) &&
-    Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
-  );
-  const myMerges = quotMerges.filter(m =>
-    Number(m.quotationID) === Number(quot.quotationID) &&
-    Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
-  );
-  // ...rest unchanged
+  const handleEditQuotation = (quot) => {
+    const myLines = quotLines.filter(l =>
+      Number(l.quotationID) === Number(quot.quotationID) &&
+      Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+    );
+    const myMerges = quotMerges.filter(m =>
+      Number(m.quotationID) === Number(quot.quotationID) &&
+      Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+    );
+    // ...rest unchanged
     const cust = customers.find(c => c.customerID === quot.customerID) || null;
 
     setSelectedCustomer(cust);
-    setWithPrinting(false);
     setQuotNo(quot.quotationNumber);
     setQuotDate(quot.quotationDate ? quot.quotationDate.split('T')[0] : todayISO());
     setRevisionNo(quot.quotationRevisionNumber || 1);   // ← SAME revision, not +1
@@ -3268,6 +3375,22 @@ const handleEditQuotation = (quot) => {
         const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
         const siteID = h?.siteID ?? h?.site?.siteID ?? null;
         const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
+
+        const parts = (l.purpose || '').split('|');
+        const meta = parts[1] || '';
+        let ratePerMonth = h?.monthlyRent || 0;
+        let printingCost = 0;
+        if (meta) {
+          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
+          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
+          if (matchRate) ratePerMonth = Number(matchRate[1]);
+          if (matchPrint) printingCost = Number(matchPrint[1]);
+        } else {
+          // fallback
+          const nos = calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1;
+          ratePerMonth = (l.rentAmount || 0) / nos;
+        }
+
         return {
           _id: uid(), rowType: 'hoarding',
           hoardingID: l.hoardingID, siteID, siteObj,
@@ -3275,11 +3398,11 @@ const handleEditQuotation = (quot) => {
           hoardingCode: h?.hoardingCode || '',
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
-          nos: 1,
+          nos: calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1,
           startDate: l.periodBeginDate || '', endDate: l.periodEndDate || '',
-          ratePerMonth: l.rentAmount || h?.monthlyRent || 0,
+          ratePerMonth: ratePerMonth,
           amount: l.rentAmount || 0,
-          printingCost: 0,
+          printingCost: printingCost,
           quotationLineNumber: l.quotationLineNumber,
           saved: true,
         };
@@ -3296,7 +3419,7 @@ const handleEditQuotation = (quot) => {
       }
       for (const [ln, records] of byLine.entries()) {
         if (records.length < 2) continue;
-        const savedLine = myLines.find(l => l.mergeFlag && Number(l.quotationLineNumber) === Number(ln));
+
         const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
         const hoardingObjs = records.map(r => hoardings.find(h => h.hoardingID === r.hoardingID)).filter(Boolean);
 
@@ -3311,6 +3434,37 @@ const handleEditQuotation = (quot) => {
           return buildSiteAddress(site, h.hoardingCode || '');
         });
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
+        const locFallback = locations.join(' + ');
+
+        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
+            l.purpose.includes(locFallback) || 
+            locFallback.includes(l.purpose.split('|')[0]) ||
+            (codes && l.purpose.includes(codes))
+          ));
+        }
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+            const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
+            return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
+          }));
+        }
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag);
+        }
+
+        const parts = (savedLine?.purpose || '').split('|');
+        const loc = parts[0] || locFallback;
+        const meta = parts[1] || '';
+        let ratePerMonth = savedLine ? savedLine.rentAmount : 0;
+        let printingCost = 0;
+        if (meta) {
+          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
+          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
+          if (matchRate) ratePerMonth = Number(matchRate[1]);
+          if (matchPrint) printingCost = Number(matchPrint[1]);
+        }
 
         mergedRows.push({
           _id: uid(),
@@ -3319,16 +3473,16 @@ const handleEditQuotation = (quot) => {
           mergeDirection: dir,
           mergedHoardingIDs: hoardingObjs.map(h => h.hoardingID),
           hoardingID: 0, siteID: null,
-          location: savedLine?.purpose || locations.join(' + '),
+          location: loc,
           hoardingCode: codes,
           size: `${mw} X ${mh}`,
           sqFt: mw * mh,
           nos: 1,
           startDate: savedLine?.periodBeginDate || '',
           endDate: savedLine?.periodEndDate || '',
-          ratePerMonth: savedLine?.rentAmount || 0,
+          ratePerMonth: ratePerMonth,
           amount: savedLine?.rentAmount || 0,
-          printingCost: 0,
+          printingCost: printingCost,
           quotationLineNumber: savedLine?.quotationLineNumber || 0,
           saved: true,
         });
@@ -3337,6 +3491,8 @@ const handleEditQuotation = (quot) => {
 
     const allRows = [...regularRows, ...mergedRows];
     setRows(allRows);
+    const hasPrinting = allRows.some(r => r.rowType === 'printing') || allRows.some(r => Number(r.printingCost || 0) > 0);
+    setWithPrinting(hasPrinting);
     setCgstPct(quot.cGSTPercent ?? 9);
     setSgstPct(quot.sGSTPercent ?? 9);
     setSelectedTerms([]);
@@ -3358,18 +3514,21 @@ const handleEditQuotation = (quot) => {
   };
   const handleReopenHistory = async (quot) => {
     const myLines = quotLines.filter(l =>
-      l.quotationID === quot.quotationID &&
-      l.quotationRevisionNumber === quot.quotationRevisionNumber
+      Number(l.quotationID) === Number(quot.quotationID) &&
+      Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+    );
+    const myMerges = quotMerges.filter(m =>
+      Number(m.quotationID) === Number(quot.quotationID) &&
+      Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
     );
     const cust = customers.find(c => c.customerID === quot.customerID) || null;
     setSelectedCustomer(cust);
-    setWithPrinting(false);
     setQuotNo(quot.quotationNumber);
     setQuotDate(todayISO());
     setRevisionNo((quot.quotationRevisionNumber || 1) + 1);
-    // AFTER
-    const builtRows = myLines
-      .filter(l => !l.mergeFlag)   // exclude merged-line records — merges are read-only on revise
+
+    const regularRows = myLines
+      .filter(l => !l.mergeFlag)
       .map(l => {
         // ── Restore printing / extra rows from saved purpose ──
         if (!l.hoardingID && l.purpose) {
@@ -3393,13 +3552,29 @@ const handleEditQuotation = (quot) => {
             amount: l.rentAmount || 0,
             printingCost: 0,
             quotationLineNumber: l.quotationLineNumber,
-            saved: true,
+            saved: false, // must be false on Revise so it saves new copy of lines
           };
         }
         // ── Regular hoarding row ──
         const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
         const siteID = h?.siteID ?? h?.site?.siteID ?? null;
         const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
+
+        const parts = (l.purpose || '').split('|');
+        const meta = parts[1] || '';
+        let ratePerMonth = h?.monthlyRent || 0;
+        let printingCost = 0;
+        if (meta) {
+          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
+          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
+          if (matchRate) ratePerMonth = Number(matchRate[1]);
+          if (matchPrint) printingCost = Number(matchPrint[1]);
+        } else {
+          // fallback
+          const nos = calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1;
+          ratePerMonth = (l.rentAmount || 0) / nos;
+        }
+
         return {
           _id: uid(), rowType: 'hoarding',
           hoardingID: l.hoardingID,
@@ -3409,17 +3584,104 @@ const handleEditQuotation = (quot) => {
           hoardingCode: h?.hoardingCode || '',
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
-          nos: 1,
+          nos: calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1,
           startDate: l.periodBeginDate || '',
           endDate: l.periodEndDate || '',
-          ratePerMonth: l.rentAmount || h?.monthlyRent || 0,
+          ratePerMonth: ratePerMonth,
           amount: l.rentAmount || 0,
-          printingCost: 0,
+          printingCost: printingCost,
           quotationLineNumber: l.quotationLineNumber,
-          saved: false,
+          saved: false, // must be false on Revise so it saves new copy of lines
         };
       });
-    setRows(builtRows);
+
+    // Reconstruct merged rows for revision
+    const mergedRows = [];
+    if (myMerges.length >= 2) {
+      const byLine = new Map();
+      for (const m of myMerges) {
+        const ln = m.quotationLineNumber;
+        if (!byLine.has(ln)) byLine.set(ln, []);
+        byLine.get(ln).push(m);
+      }
+      for (const [ln, records] of byLine.entries()) {
+        if (records.length < 2) continue;
+
+        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const hoardingObjs = records.map(r => hoardings.find(h => h.hoardingID === r.hoardingID)).filter(Boolean);
+
+        const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
+        const gaps = hoardingObjs.length - 1;
+        let mw, mh;
+        if (dir === 'H') { mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps; mh = Math.max(...sizes.map(s => s.h)); }
+        else { mw = Math.max(...sizes.map(s => s.w)); mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps; }
+
+        const locations = hoardingObjs.map(h => {
+          const site = h.siteID ? siteMap.get(h.siteID) : null;
+          return buildSiteAddress(site, h.hoardingCode || '');
+        });
+        const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
+        const locFallback = locations.join(' + ');
+
+        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
+            l.purpose.includes(locFallback) || 
+            locFallback.includes(l.purpose.split('|')[0]) ||
+            (codes && l.purpose.includes(codes))
+          ));
+        }
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+            const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
+            return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
+          }));
+        }
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag);
+        }
+
+        const parts = (savedLine?.purpose || '').split('|');
+        const loc = parts[0] || locFallback;
+        const meta = parts[1] || '';
+        let ratePerMonth = savedLine ? savedLine.rentAmount : 0;
+        let printingCost = 0;
+        if (meta) {
+          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
+          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
+          if (matchRate) ratePerMonth = Number(matchRate[1]);
+          if (matchPrint) printingCost = Number(matchPrint[1]);
+        }
+
+        mergedRows.push({
+          _id: uid(),
+          rowType: 'merged',
+          isMerged: true,
+          mergeDirection: dir,
+          mergedHoardingIDs: hoardingObjs.map(h => h.hoardingID),
+          hoardingID: 0, siteID: null,
+          location: loc,
+          hoardingCode: codes,
+          size: `${mw} X ${mh}`,
+          sqFt: mw * mh,
+          nos: 1,
+          startDate: savedLine?.periodBeginDate || '',
+          endDate: savedLine?.periodEndDate || '',
+          ratePerMonth: ratePerMonth,
+          amount: savedLine?.rentAmount || 0,
+          printingCost: printingCost,
+          quotationLineNumber: savedLine?.quotationLineNumber || 0,
+          saved: false, // must be false on Revise so it saves a new copy of lines
+        });
+      }
+    }
+
+    const allRows = [...regularRows, ...mergedRows];
+    setRows(allRows);
+
+    const hasPrinting = allRows.some(r => r.rowType === 'printing') || allRows.some(r => Number(r.printingCost || 0) > 0);
+    setWithPrinting(hasPrinting);
+
     setCgstPct(quot.cGSTPercent ?? 9);
     setSgstPct(quot.sGSTPercent ?? 9);
     setSelectedTerms([]);
@@ -3428,7 +3690,7 @@ const handleEditQuotation = (quot) => {
     setOriginalQuotID(quot.quotationID);   // ← NEW: same quotationID family, so backend keeps the number
 
     // ── Derive global period from the loaded rows ──
-    const datedRows = builtRows.filter(r => r.startDate && r.endDate);
+    const datedRows = allRows.filter(r => r.startDate && r.endDate);
     if (datedRows.length > 0) {
       const gStart = datedRows.reduce((min, r) => (r.startDate < min ? r.startDate : min), datedRows[0].startDate);
       const gEnd = datedRows.reduce((max, r) => (r.endDate > max ? r.endDate : max), datedRows[0].endDate);
@@ -3478,18 +3740,34 @@ const handleEditQuotation = (quot) => {
         const siteObj = siteID != null
           ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
           : null;
+
+        const parts = (l.purpose || '').split('|');
+        const meta = parts[1] || '';
+        let ratePerMonth = h?.monthlyRent || 0;
+        let printingCost = 0;
+        if (meta) {
+          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
+          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
+          if (matchRate) ratePerMonth = Number(matchRate[1]);
+          if (matchPrint) printingCost = Number(matchPrint[1]);
+        } else {
+          // fallback
+          const nos = calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1;
+          ratePerMonth = (l.rentAmount || 0) / nos;
+        }
+
         return {
           rowType: 'hoarding',
           hoardingID: l.hoardingID,
           location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
-          nos: 1,
+          nos: calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1,
           startDate: l.periodBeginDate,
           endDate: l.periodEndDate,
-          ratePerMonth: l.rentAmount,
+          ratePerMonth: ratePerMonth,
           amount: l.rentAmount,
-          printingCost: 0,
+          printingCost: printingCost,
         };
       });
 
@@ -3516,11 +3794,6 @@ const handleEditQuotation = (quot) => {
         const records = byLine.get(ln);
         if (records.length < 2) continue;
 
-        // Saved line record for this merge (has correct amount + dates)
-        const savedLine = myLines.find(l =>
-          l.mergeFlag && Number(l.quotationLineNumber) === Number(ln)
-        );
-
         const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
         const hoardingObjs = records
           .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
@@ -3542,23 +3815,53 @@ const handleEditQuotation = (quot) => {
           return buildSiteAddress(site, h.hoardingCode || '');
         });
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
-        const fallbackRate = hoardingObjs.reduce((s, h) => s + (h.monthlyRent || 0), 0);
+
+        const locFallback = locations.join(' + ');
+        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
+            l.purpose.includes(locFallback) || 
+            locFallback.includes(l.purpose.split('|')[0]) ||
+            (codes && l.purpose.includes(codes))
+          ));
+        }
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+            const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
+            return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
+          }));
+        }
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag);
+        }
+
+        const parts = (savedLine?.purpose || '').split('|');
+        const loc = parts[0] || locFallback;
+        const meta = parts[1] || '';
+        let ratePerMonth = savedLine ? savedLine.rentAmount : 0;
+        let printingCost = 0;
+        if (meta) {
+          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
+          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
+          if (matchRate) ratePerMonth = Number(matchRate[1]);
+          if (matchPrint) printingCost = Number(matchPrint[1]);
+        }
 
         pdfRows.push({
           rowType: 'merged',
           isMerged: true,
           mergeDirection: dir,
           hoardingID: 0,
-          location: savedLine?.purpose || locations.join(' + '),
+          location: loc,
           hoardingCode: codes,
           size: `${mw} X ${mh}`,
           sqFt: mw * mh,
           nos: 1,
           startDate: savedLine?.periodBeginDate || '',
           endDate: savedLine?.periodEndDate || '',
-          ratePerMonth: savedLine ? savedLine.rentAmount : fallbackRate,
-          amount: savedLine ? savedLine.rentAmount : fallbackRate,
-          printingCost: 0,
+          ratePerMonth: ratePerMonth,
+          amount: savedLine ? savedLine.rentAmount : 0,
+          printingCost: printingCost,
         });
       }
     }
@@ -3596,10 +3899,11 @@ const handleEditQuotation = (quot) => {
       if (!selectedCustomer) { setStep1Error('Please select a customer.'); return; }
       if (!globalStart) { setStep1Error('Global Period From date is required.'); return; }
       if (!globalEnd) { setStep1Error('Global Period To date is required.'); return; }
+      if (globalEnd < globalStart) { setStep1Error('Global Period To date cannot be earlier than From date.'); return; }
       setStep1Error(''); setStep(2);
     } else if (step === 2) {
       if (rows.length === 0) { setStep2Error('Add at least one hoarding.'); return; }
-      
+
       if (withPrinting) {
         // 1. Verify there is at least one hoarding row (or merged hoarding)
         const hasHoarding = rows.some(r => r.rowType === 'hoarding' || r.rowType === 'merged');
@@ -3670,7 +3974,7 @@ const handleEditQuotation = (quot) => {
             const purpose =
               row.rowType === 'printing' ? (row.location || '') :
                 row.rowType === 'extra' ? (row.location || '') :
-                  '';
+                  `|rate:${Number(row.ratePerMonth || 0)},print:${Number(row.printingCost || 0)}`;
 
             const linePayload = {
               quotationLineNumber: idx + 1,
@@ -3700,6 +4004,8 @@ const handleEditQuotation = (quot) => {
         if (!hIds.length) continue;
         const flag = mergedRow.mergeDirection === 'H' ? 'H' : 'V';
 
+        const purpose = (mergedRow.location || '') + `|rate:${Number(mergedRow.ratePerMonth || 0)},print:${Number(mergedRow.printingCost || 0)}`;
+
         if (mergedRow.saved && mergedRow.quotationLineNumber > 0) {
           // EDIT MODE: update existing merge line, don't re-create merge records
           await apiService.updateQuotationLine({
@@ -3707,7 +4013,7 @@ const handleEditQuotation = (quot) => {
             quotationID: savedQuotID,
             quotationRevisionNumber: savedRevNo,
             hoardingID: 0,
-            purpose: mergedRow.location || '',
+            purpose,
             periodBeginDate: mergedRow.startDate || todayISO(),
             periodEndDate: mergedRow.endDate || todayISO(),
             rentAmount: Number(mergedRow.amount || 0),
@@ -3722,7 +4028,7 @@ const handleEditQuotation = (quot) => {
           quotationID: savedQuotID,
           quotationRevisionNumber: savedRevNo,
           hoardingID: 0,
-          purpose: mergedRow.location || '',
+          purpose,
           periodBeginDate: mergedRow.startDate || todayISO(),
           periodEndDate: mergedRow.endDate || todayISO(),
           rentAmount: Number(mergedRow.amount || 0),
@@ -4334,7 +4640,7 @@ const handleEditQuotation = (quot) => {
                                     </span>
                                   </td>
                                   <td className="pg-td">
-                                    <input className="qt-inline-input" type="number" min="1" value={row.nos} onChange={e => updateRow(row._id, 'nos', e.target.value)} style={{ width: 50 }} />
+                                    <input className="qt-inline-input" type="number" min="1" value={row.nos} readOnly style={{ width: 50, cursor: 'not-allowed', background: 'rgba(0,0,0,0.03)' }} />
                                   </td>
                                   <td className="pg-td">
                                     <input className="qt-inline-input qt-date-input" type="date" value={row.startDate} onChange={e => updateRow(row._id, 'startDate', e.target.value)} />
@@ -4359,8 +4665,8 @@ const handleEditQuotation = (quot) => {
                                             <input
                                               className="qt-inline-input" type="number"
                                               value={row.nos}
-                                              onChange={e => updateRow(row._id, 'nos', e.target.value)}
-                                              style={{ width: 64, textAlign: 'center' }}
+                                              readOnly
+                                              style={{ width: 64, textAlign: 'center', cursor: 'not-allowed' }}
                                             />
                                           )}
                                           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 700, color: '#7c3aed' }}>
@@ -4389,7 +4695,7 @@ const handleEditQuotation = (quot) => {
                                 <td className="pg-td">
                                   {isExtra
                                     ? <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
-                                    : <input className="qt-inline-input" type="number" value={row.ratePerMonth} onChange={e => updateRow(row._id, 'ratePerMonth', e.target.value)} style={{ width: 86 }} />
+                                    : <input className="qt-inline-input" type="number" min="0" value={row.ratePerMonth || ''} onChange={e => updateRow(row._id, 'ratePerMonth', e.target.value)} style={{ width: 86 }} />
                                   }
                                 </td>
                                 {withPrinting && (
@@ -4408,8 +4714,16 @@ const handleEditQuotation = (quot) => {
                                       // Hoarding row: editable print cost field
                                       <input
                                         className="qt-inline-input" type="number"
-                                        value={isExtra ? 0 : (row.printingCost || 0)}
-                                        onChange={e => updateRow(row._id, 'printingCost', e.target.value)}
+                                        min="0"
+                                        value={isExtra ? 0 : (row.printingCost ?? 0)}
+                                        onFocus={e => { if (Number(e.target.value) === 0) e.target.select(); }}
+                                        onChange={e => {
+                                          let val = e.target.value;
+                                          if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
+                                            val = val.substring(1);
+                                          }
+                                          updateRow(row._id, 'printingCost', val);
+                                        }}
                                         style={{
                                           width: 86,
                                           color: isExtra ? '#c0c0d0' : '#7c3aed',
@@ -4422,7 +4736,7 @@ const handleEditQuotation = (quot) => {
                                   </td>
                                 )}
                                 <td className="pg-td">
-                                  <input className="qt-inline-input" type="number" value={row.amount} onChange={e => updateRow(row._id, 'amount', e.target.value)} style={{ width: 86, fontWeight: 700 }} />
+                                  <input className="qt-inline-input" type="number" min="0" value={row.amount || ''} onChange={e => updateRow(row._id, 'amount', e.target.value)} style={{ width: 86, fontWeight: 700 }} />
                                 </td>
                                 <td className="pg-td">
                                   <div className="pg-action-wrap">
@@ -4469,7 +4783,7 @@ const handleEditQuotation = (quot) => {
                           {PRINTING_TYPES.map(type => (
                             <div
                               key={type}
-                              onClick={() => { setRows(p => [...p, newPrintingRow(type)]); setShowPrintTypeDD(false); }}
+                              onClick={() => { setRows(p => [...p, newPrintingRow(type, globalStart, globalEnd)]); setShowPrintTypeDD(false); }}
                               style={{
                                 padding: '10px 16px', cursor: 'pointer',
                                 fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700,

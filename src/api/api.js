@@ -2,6 +2,10 @@ import axios from 'axios';
 
 const API_BASE_URL = 'https://api.jalaram-ad.ashtamtechnologies.com/api';
 export const API_ROOT_URL = 'https://api.jalaram-ad.ashtamtechnologies.com';
+// https://uatapi.jalaram-ad.ashtamtechnologies.com/swagger/index.htmls
+
+// const API_BASE_URL = 'https://uatapi.jalaram-ad.ashtamtechnologies.com/api';
+// export const API_ROOT_URL = 'https://uatapi.jalaram-ad.ashtamtechnologies.com';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
