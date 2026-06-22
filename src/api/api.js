@@ -753,6 +753,8 @@ export const apiService = {
     rentAmount: Number(data.rentAmount ?? 0),
     mergeFlag: Boolean(data.mergeFlag ?? false),
   }),
+  deleteQuotationLine: (lineID, quotationID, revisionID, hoardingID) =>
+    api.delete(`/QuotationLineDTL/${lineID}/${quotationID}/${revisionID}/${hoardingID}`),
 
   // ─────────────────────────────────────────────────────────
   // QUOTATION MERGE DTL

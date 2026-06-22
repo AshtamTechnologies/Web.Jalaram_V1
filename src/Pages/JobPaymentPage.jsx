@@ -50,48 +50,48 @@ function normalizeList(res) {
 
 function normalizeJobRequest(raw) {
   return {
-    jobRequestID:        raw.jobRequestID        ?? raw.JobRequestID        ?? 0,
-    customerID:          raw.customerID           ?? raw.CustomerID           ?? 0,
-    jobType:             raw.jobType              ?? raw.JobType              ?? '',
-    jobDescription:      raw.jobDescription       ?? raw.JobDescription       ?? '',
-    totalAreaSQFT:       Number(raw.totalAreaSQFT ?? raw.TotalAreaSQFT        ?? 0),
-    rateperSQFT:         Number(raw.rateperSQFT   ?? raw.RateperSQFT          ?? 0),
-    targetCompletionDate:(raw.targetCompletionDate ?? raw.TargetCompletionDate ?? '').split('T')[0],
-    jobStatus:           raw.jobStatus            ?? raw.JobStatus            ?? '',
+    jobRequestID: raw.jobRequestID ?? raw.JobRequestID ?? 0,
+    customerID: raw.customerID ?? raw.CustomerID ?? 0,
+    jobType: raw.jobType ?? raw.JobType ?? '',
+    jobDescription: raw.jobDescription ?? raw.JobDescription ?? '',
+    totalAreaSQFT: Number(raw.totalAreaSQFT ?? raw.TotalAreaSQFT ?? 0),
+    rateperSQFT: Number(raw.rateperSQFT ?? raw.RateperSQFT ?? 0),
+    targetCompletionDate: (raw.targetCompletionDate ?? raw.TargetCompletionDate ?? '').split('T')[0],
+    jobStatus: raw.jobStatus ?? raw.JobStatus ?? '',
   };
 }
 
 function normalizeCustomer(raw) {
   return {
-    customerID:   raw.customerID   ?? raw.CustomerID   ?? 0,
+    customerID: raw.customerID ?? raw.CustomerID ?? 0,
     customerName: raw.customerName ?? raw.CustomerName ?? '',
-    city:         raw.city         ?? raw.City         ?? '',
+    city: raw.city ?? raw.City ?? '',
   };
 }
 
 function normalizePayment(raw) {
   return {
-    jobPaymentID:      raw.jobPaymentID      ?? raw.JobPaymentID      ?? 0,
-    jobRequestID:      raw.jobRequestID      ?? raw.JobRequestID      ?? 0,
-    paymentDate:       (raw.paymentDate      ?? raw.PaymentDate       ?? '').split('T')[0],
-    calculatedAmount:  Number(raw.calculatedAmount  ?? raw.CalculatedAmount  ?? 0),
-    paidAmount:        Number(raw.paidAmount        ?? raw.PaidAmount        ?? 0),
-    remainingAmount:   Number(raw.remainingAmount   ?? raw.RemainingAmount   ?? 0),
-    paidBY:            raw.paidBY  ?? raw.PaidBY  ?? raw.paidBy  ?? raw.PaidBy  ?? '',
-    receiptPhoto:      raw.receiptPhoto      ?? raw.ReceiptPhoto      ?? '',
-    comments:          raw.comments          ?? raw.Comments          ?? '',
-    lastUpdateDttm:    raw.lastUpdateDttm    ?? raw.LastUpdateDttm    ?? '',
-    lastUpdatedBy:     raw.lastUpdatedBy     ?? raw.LastUpdatedBy     ?? 0,
+    jobPaymentID: raw.jobPaymentID ?? raw.JobPaymentID ?? 0,
+    jobRequestID: raw.jobRequestID ?? raw.JobRequestID ?? 0,
+    paymentDate: (raw.paymentDate ?? raw.PaymentDate ?? '').split('T')[0],
+    calculatedAmount: Number(raw.calculatedAmount ?? raw.CalculatedAmount ?? 0),
+    paidAmount: Number(raw.paidAmount ?? raw.PaidAmount ?? 0),
+    remainingAmount: Number(raw.remainingAmount ?? raw.RemainingAmount ?? 0),
+    paidBY: raw.paidBY ?? raw.PaidBY ?? raw.paidBy ?? raw.PaidBy ?? '',
+    receiptPhoto: raw.receiptPhoto ?? raw.ReceiptPhoto ?? '',
+    comments: raw.comments ?? raw.Comments ?? '',
+    lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
+    lastUpdatedBy: raw.lastUpdatedBy ?? raw.LastUpdatedBy ?? 0,
   };
 }
 
 function normalizeAttachment(raw) {
   return {
     jobPaymentAttachID: raw.jobPaymentAttachID ?? raw.JobPaymentAttachID ?? raw.id ?? raw.ID ?? 0,
-    jobPaymentID:       raw.jobPaymentID       ?? raw.JobPaymentID       ?? 0,
-    jobRequestID:       raw.jobRequestID       ?? raw.JobRequestID       ?? 0,
-    receiptFilePath:    raw.receiptFilePath    ?? raw.ReceiptFilePath    ?? '',
-    receiptFilename:    raw.receiptFilename    ?? raw.ReceiptFilename    ?? '',
+    jobPaymentID: raw.jobPaymentID ?? raw.JobPaymentID ?? 0,
+    jobRequestID: raw.jobRequestID ?? raw.JobRequestID ?? 0,
+    receiptFilePath: raw.receiptFilePath ?? raw.ReceiptFilePath ?? '',
+    receiptFilename: raw.receiptFilename ?? raw.ReceiptFilename ?? '',
   };
 }
 
@@ -106,9 +106,9 @@ function buildImageUrl(att) {
    STATUS BADGE
 ═══════════════════════════════════════════ */
 const PAYMENT_STATUS_COLORS = {
-  'Paid':     { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
-  'Partial':  { bg: '#fffbeb', color: '#d97706', border: '#fde68a' },
-  'Unpaid':   { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
+  'Paid': { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+  'Partial': { bg: '#fffbeb', color: '#d97706', border: '#fde68a' },
+  'Unpaid': { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
   'Overpaid': { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe' },
 };
 
@@ -142,7 +142,7 @@ function SortIcon({ col, sortKey, sortDir }) {
   const active = sortKey === col;
   return (
     <span className="pg-sort-icon">
-      <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"   />
+      <ChevronUp size={10} color={active && sortDir === 'asc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
       <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
     </span>
   );
@@ -211,12 +211,12 @@ function useOutsideClick(wrapRef, panelRef, open, onClose) {
    JOB REQUEST COMBO
 ═══════════════════════════════════════════ */
 function JobComboField({ value, onChange, options, disabled }) {
-  const [open, setOpen]   = useState(false);
+  const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const wrapRef    = useRef(null);
+  const wrapRef = useRef(null);
   const triggerRef = useRef(null);
-  const panelRef   = useRef(null);
-  const inputRef   = useRef(null);
+  const panelRef = useRef(null);
+  const inputRef = useRef(null);
 
   const close = useCallback(() => { setOpen(false); setQuery(''); }, []);
   useOutsideClick(wrapRef, panelRef, open, close);
@@ -234,7 +234,7 @@ function JobComboField({ value, onChange, options, disabled }) {
 
   const openDD = () => { if (disabled) return; setOpen(true); setTimeout(() => inputRef.current?.focus(), 0); };
   const select = (o) => { onChange(o); setOpen(false); setQuery(''); };
-  const clear  = (e) => { e.stopPropagation(); onChange(null); };
+  const clear = (e) => { e.stopPropagation(); onChange(null); };
 
   return (
     <div className="pg-combo-wrap" ref={wrapRef}>
@@ -301,10 +301,10 @@ function JobComboField({ value, onChange, options, disabled }) {
 function AttachmentModal({ payment, onClose, showToast }) {
   const [attachments, setAttachments] = useState([]);
   const [loadingAtts, setLoadingAtts] = useState(true);
-  const [files,       setFiles]       = useState([]);
-  const [uploading,   setUploading]   = useState(false);
-  const [lightbox,    setLightbox]    = useState(null);
-  const [imgErrors,   setImgErrors]   = useState({});
+  const [files, setFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
+  const [imgErrors, setImgErrors] = useState({});
   const inputRef = useRef(null);
 
   /* ── load attachments via apiService ── */
@@ -461,8 +461,8 @@ function AttachmentModal({ payment, onClose, showToast }) {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 12 }}>
                 {attachments.map((att, i) => {
-                  const url      = buildImageUrl(att);
-                  const name     = att.receiptFilename || `Receipt ${i + 1}`;
+                  const url = buildImageUrl(att);
+                  const name = att.receiptFilename || `Receipt ${i + 1}`;
                   const hasError = imgErrors[i];
                   return (
                     <div
@@ -474,13 +474,13 @@ function AttachmentModal({ payment, onClose, showToast }) {
                         transition: 'transform 0.15s, box-shadow 0.15s, border-color 0.15s',
                       }}
                       onMouseEnter={e => {
-                        e.currentTarget.style.transform    = 'scale(1.04)';
-                        e.currentTarget.style.boxShadow   = '0 6px 20px rgba(4,158,223,0.20)';
+                        e.currentTarget.style.transform = 'scale(1.04)';
+                        e.currentTarget.style.boxShadow = '0 6px 20px rgba(4,158,223,0.20)';
                         e.currentTarget.style.borderColor = '#049edf';
                       }}
                       onMouseLeave={e => {
-                        e.currentTarget.style.transform    = 'scale(1)';
-                        e.currentTarget.style.boxShadow   = '0 1px 5px rgba(0,0,0,0.07)';
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = '0 1px 5px rgba(0,0,0,0.07)';
                         e.currentTarget.style.borderColor = '#e8e8f4';
                       }}
                     >
@@ -542,18 +542,18 @@ function AttachmentModal({ payment, onClose, showToast }) {
 function PaymentFormModal({ payment, jobOptions, onSave, onClose, showToast }) {
   const isEdit = !!payment?.jobPaymentID;
 
-  const [jobRequestID,      setJobRequestID]      = useState(payment?.jobRequestID      || 0);
-  const [paymentDate,       setPaymentDate]        = useState(payment?.paymentDate       || todayISO());
-  const [calculatedAmount,  setCalculatedAmount]   = useState(String(payment?.calculatedAmount  ?? ''));
-  const [paidAmount,        setPaidAmount]         = useState(String(payment?.paidAmount         ?? ''));
-  const [paidBY,            setPaidBY]             = useState(payment?.paidBY            || '');
-  const [comments,          setComments]           = useState(payment?.comments          || '');
-  const [saving,            setSaving]             = useState(false);
-  const [error,             setError]              = useState('');
+  const [jobRequestID, setJobRequestID] = useState(payment?.jobRequestID || 0);
+  const [paymentDate, setPaymentDate] = useState(payment?.paymentDate || todayISO());
+  const [calculatedAmount, setCalculatedAmount] = useState(String(payment?.calculatedAmount ?? ''));
+  const [paidAmount, setPaidAmount] = useState(String(payment?.paidAmount ?? ''));
+  const [paidBY, setPaidBY] = useState(payment?.paidBY || '');
+  const [comments, setComments] = useState(payment?.comments || '');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const remainingAmount = useMemo(() => {
     const calc = Number(calculatedAmount) || 0;
-    const paid = Number(paidAmount)       || 0;
+    const paid = Number(paidAmount) || 0;
     return calc - paid;
   }, [calculatedAmount, paidAmount]);
 
@@ -563,14 +563,14 @@ function PaymentFormModal({ payment, jobOptions, onSave, onClose, showToast }) {
     if (selectedJob && !isEdit && !calculatedAmount) {
       setCalculatedAmount((selectedJob.totalAreaSQFT * selectedJob.rateperSQFT).toFixed(2));
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedJob]);
 
   const validate = () => {
-    if (!jobRequestID)                                        return 'Please select a job request.';
-    if (!paymentDate)                                         return 'Payment date is required.';
-    if (!calculatedAmount || Number(calculatedAmount) <= 0)   return 'Calculated amount must be greater than 0.';
-    if (paidAmount === '' || Number(paidAmount) < 0)          return 'Paid amount cannot be negative.';
+    if (!jobRequestID) return 'Please select a job request.';
+    if (!paymentDate) return 'Payment date is required.';
+    if (!calculatedAmount || Number(calculatedAmount) <= 0) return 'Calculated amount must be greater than 0.';
+    if (paidAmount === '' || Number(paidAmount) < 0) return 'Paid amount cannot be negative.';
     return '';
   };
 
@@ -584,11 +584,11 @@ function PaymentFormModal({ payment, jobOptions, onSave, onClose, showToast }) {
         jobRequestID,
         paymentDate,
         calculatedAmount: Number(calculatedAmount),
-        paidAmount:       Number(paidAmount) || 0,
+        paidAmount: Number(paidAmount) || 0,
         remainingAmount,
-        paidBY:           paidBY    || '',
-        receiptPhoto:     payment?.receiptPhoto || '',
-        comments:         comments  || '',
+        paidBY: paidBY || '',
+        receiptPhoto: payment?.receiptPhoto || '',
+        comments: comments || '',
       };
 
       if (isEdit) {
@@ -607,7 +607,8 @@ function PaymentFormModal({ payment, jobOptions, onSave, onClose, showToast }) {
   };
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 600 }}>
 
         {/* Head */}
@@ -750,23 +751,23 @@ function PaymentFormModal({ payment, jobOptions, onSave, onClose, showToast }) {
 export default function JobPaymentPage() {
 
   /* ── Data ── */
-  const [payments,     setPayments]     = useState([]);
-  const [jobRequests,  setJobRequests]  = useState([]);
-  const [customers,    setCustomers]    = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [jobRequests, setJobRequests] = useState([]);
+  const [customers, setCustomers] = useState([]);
 
   /* ── UI ── */
-  const [loading,           setLoading]           = useState(true);
-  const [apiError,          setApiError]          = useState('');
-  const [toast,             setToast]             = useState(null);
-  const [showForm,          setShowForm]          = useState(false);
-  const [editingPayment,    setEditingPayment]    = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState('');
+  const [toast, setToast] = useState(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingPayment, setEditingPayment] = useState(null);
   const [attachmentPayment, setAttachmentPayment] = useState(null);
 
   /* ── Table ── */
-  const [search,   setSearch]   = useState('');
-  const [sortKey,  setSortKey]  = useState('jobPaymentID');
-  const [sortDir,  setSortDir]  = useState('desc');
-  const [page,     setPage]     = useState(1);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('jobPaymentID');
+  const [sortDir, setSortDir] = useState('desc');
+  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type }), []);
@@ -838,7 +839,7 @@ export default function JobPaymentPage() {
         getPaymentStatus(p).toLowerCase().includes(q)
       );
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payments, search, jobRequests, customers]);
 
   const sorted = useMemo(() =>
@@ -851,7 +852,7 @@ export default function JobPaymentPage() {
   );
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
+  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -870,8 +871,8 @@ export default function JobPaymentPage() {
   /* ── Job-type badge style ── */
   const jobTypeBadgeStyle = (type) => {
     const styles = {
-      'Banner':   { bg: 'rgba(4,158,223,0.09)',  color: '#049edf', border: 'rgba(4,158,223,0.25)' },
-      'Repair':   { bg: 'rgba(245,158,11,0.09)', color: '#d97706', border: 'rgba(245,158,11,0.25)' },
+      'Banner': { bg: 'rgba(4,158,223,0.09)', color: '#049edf', border: 'rgba(4,158,223,0.25)' },
+      'Repair': { bg: 'rgba(245,158,11,0.09)', color: '#d97706', border: 'rgba(245,158,11,0.25)' },
       'Erection': { bg: 'rgba(124,58,237,0.09)', color: '#7c3aed', border: 'rgba(124,58,237,0.25)' },
     };
     return styles[type] || styles['Banner'];
@@ -974,17 +975,17 @@ export default function JobPaymentPage() {
               <thead>
                 <tr>
                   {[
-                    { key: 'jobPaymentID',    label: 'Pay ID',    w: '7%' },
-                    { key: 'jobRequestID',    label: 'Job #',     w: '7%' },
-                    { key: '_customer',       label: 'Customer',  w: '14%', noSort: true },
-                    { key: '_jobType',        label: 'Type',      w: '9%',  noSort: true },
-                    { key: 'paymentDate',     label: 'Date',      w: '10%' },
-                    { key: 'calculatedAmount',label: 'Calculated',w: '11%' },
-                    { key: 'paidAmount',      label: 'Paid',      w: '10%' },
+                    { key: 'jobPaymentID', label: 'Pay ID', w: '7%' },
+                    { key: 'jobRequestID', label: 'Job #', w: '7%' },
+                    { key: '_customer', label: 'Customer', w: '14%', noSort: true },
+                    { key: '_jobType', label: 'Type', w: '9%', noSort: true },
+                    { key: 'paymentDate', label: 'Date', w: '10%' },
+                    { key: 'calculatedAmount', label: 'Calculated', w: '11%' },
+                    { key: 'paidAmount', label: 'Paid', w: '10%' },
                     { key: 'remainingAmount', label: 'Remaining', w: '10%' },
-                    { key: 'paidBY',          label: 'Paid By',   w: '9%' },
-                    { key: '_status',         label: 'Status',    w: '8%',  noSort: true },
-                    { key: '_action',         label: 'Actions',   w: '9%',  noSort: true },
+                    { key: 'paidBY', label: 'Paid By', w: '9%' },
+                    { key: '_status', label: 'Status', w: '8%', noSort: true },
+                    { key: '_action', label: 'Actions', w: '9%', noSort: true },
                   ].map(col => (
                     <th
                       key={col.key} style={{ width: col.w }}
@@ -1014,8 +1015,8 @@ export default function JobPaymentPage() {
                 ) : paginated.map(p => {
                   const cName = custName(p.jobRequestID);
                   const jType = jobType(p.jobRequestID);
-                  const jts   = jobTypeBadgeStyle(jType);
-                  const rem   = Number(p.remainingAmount ?? 0);
+                  const jts = jobTypeBadgeStyle(jType);
+                  const rem = Number(p.remainingAmount ?? 0);
                   return (
                     <tr key={p.jobPaymentID} className="pg-tr">
                       <td className="pg-td">
@@ -1087,8 +1088,8 @@ export default function JobPaymentPage() {
           {sorted.length > pageSize && (
             <div className="pg-pagination">
               <div className="pg-pagination__left">
-                <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(1)}><ChevronsLeft size={13} /></button>
-                <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(p => p - 1)}><ChevronLeft size={13} /></button>
+                <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}><ChevronsLeft size={13} /></button>
+                <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}><ChevronLeft size={13} /></button>
                 {pageNums.map((p, i) => p === '…'
                   ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
                   : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>

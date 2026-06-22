@@ -16,7 +16,7 @@ import { useResizableColumns } from '../hooks/useResizableColumns'; // ← adjus
    API WRAPPER
 ───────────────────────────────────────── */
 const seriesApi = {
-    getAll: ()     => apiService.getAllSeriesIDs(),
+    getAll: () => apiService.getAllSeriesIDs(),
     create: (data) => apiService.createSeriesID(data),
     update: (id, data) => apiService.updateSeriesID(id, data),
 };
@@ -26,14 +26,14 @@ const seriesApi = {
 ───────────────────────────────────────── */
 function normalizeRecord(raw) {
     return {
-        seriesID:          raw.seriesID          ?? raw.SeriesID          ?? 0,
-        seriesType:        raw.seriesType        ?? raw.SeriesType        ?? '',
+        seriesID: raw.seriesID ?? raw.SeriesID ?? 0,
+        seriesType: raw.seriesType ?? raw.SeriesType ?? '',
         initialCharacters: raw.initialCharacters ?? raw.InitialCharacters ?? '',
-        delimiter:         raw.delimiter         ?? raw.Delimiter         ?? '',
-        lastNumberUsed:    raw.lastNumberUsed    ?? raw.LastNumberUsed    ?? 0,
-        useCurrentFY:      raw.useCurrentFY      ?? raw.UseCurrentFY      ?? false,
-        format:            raw.format            ?? raw.Format            ?? '',
-        isActive:          raw.isActive          ?? raw.IsActive          ?? false,
+        delimiter: raw.delimiter ?? raw.Delimiter ?? '',
+        lastNumberUsed: raw.lastNumberUsed ?? raw.LastNumberUsed ?? 0,
+        useCurrentFY: raw.useCurrentFY ?? raw.UseCurrentFY ?? false,
+        format: raw.format ?? raw.Format ?? '',
+        isActive: raw.isActive ?? raw.IsActive ?? false,
     };
 }
 
@@ -41,13 +41,13 @@ function normalizeRecord(raw) {
    HELPERS
 ───────────────────────────────────────── */
 const EMPTY_FORM = {
-    seriesType:        '',
+    seriesType: '',
     initialCharacters: '',
-    delimiter:         '',
-    lastNumberUsed:    '',
-    useCurrentFY:      false,
-    format:            '',
-    isActive:          true,
+    delimiter: '',
+    lastNumberUsed: '',
+    useCurrentFY: false,
+    format: '',
+    isActive: true,
 };
 
 const PAGE_SIZE_OPTIONS = [10, 12, 15, 20];
@@ -80,7 +80,7 @@ function SortIcon({ col, sortKey, sortDir }) {
     const active = sortKey === col;
     return (
         <span className="pg-sort-icon">
-            <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"   />
+            <ChevronUp size={10} color={active && sortDir === 'asc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
             <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
         </span>
     );
@@ -163,7 +163,7 @@ function ToggleRow({ value, onChange, label, activeLabel, inactiveLabel, activeC
             }}>
             {value
                 ? <ToggleRight size={22} color={activeColor} style={{ flexShrink: 0 }} />
-                : <ToggleLeft  size={22} color="#c0c0d8"    style={{ flexShrink: 0 }} />}
+                : <ToggleLeft size={22} color="#c0c0d8" style={{ flexShrink: 0 }} />}
             <div>
                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: value ? activeColor : '#7878a0' }}>
                     {value ? activeLabel : inactiveLabel}
@@ -181,14 +181,14 @@ function ToggleRow({ value, onChange, label, activeLabel, inactiveLabel, activeC
 ══════════════════════════════════════════ */
 function SeriesModal({ onClose, onSaved, editData }) {
     const isEdit = !!editData;
-    const [form,       setForm]       = useState(isEdit
+    const [form, setForm] = useState(isEdit
         ? { ...editData, lastNumberUsed: String(editData.lastNumberUsed ?? 0) }
         : { ...EMPTY_FORM });
-    const [errors,     setErrors]     = useState({});
-    const [touched,    setTouched]    = useState({});
+    const [errors, setErrors] = useState({});
+    const [touched, setTouched] = useState({});
     const [submitting, setSubmitting] = useState(false);
-    const [success,    setSuccess]    = useState(false);
-    const [apiError,   setApiError]   = useState('');
+    const [success, setSuccess] = useState(false);
+    const [apiError, setApiError] = useState('');
 
     const handleChange = (key, val) => {
         setForm(p => ({ ...p, [key]: val }));
@@ -215,13 +215,13 @@ function SeriesModal({ onClose, onSaved, editData }) {
         setApiError('');
         try {
             const payload = {
-                seriesType:        form.seriesType.trim(),
+                seriesType: form.seriesType.trim(),
                 initialCharacters: form.initialCharacters.trim(),
-                delimiter:         form.delimiter,
-                lastNumberUsed:    Number(form.lastNumberUsed) || 0,
-                useCurrentFY:      form.useCurrentFY,
-                format:            form.format.trim(),
-                isActive:          form.isActive,
+                delimiter: form.delimiter,
+                lastNumberUsed: Number(form.lastNumberUsed) || 0,
+                useCurrentFY: form.useCurrentFY,
+                format: form.format.trim(),
+                isActive: form.isActive,
             };
             if (isEdit) {
                 await seriesApi.update(editData.seriesID, payload);
@@ -235,8 +235,8 @@ function SeriesModal({ onClose, onSaved, editData }) {
         } catch (err) {
             const msg =
                 err?.response?.data?.message ||
-                err?.response?.data?.title   ||
-                err?.message                 ||
+                err?.response?.data?.title ||
+                err?.message ||
                 'Something went wrong.';
             setApiError(msg);
         } finally {
@@ -245,7 +245,8 @@ function SeriesModal({ onClose, onSaved, editData }) {
     };
 
     return ReactDOM.createPortal(
-        <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+        // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="pg-overlay">
             <div className="pg-modal" style={{ maxWidth: 580 }}>
 
                 {/* Head */}
@@ -429,7 +430,7 @@ function SeriesModal({ onClose, onSaved, editData }) {
                 {/* Footer */}
                 <div className="pg-modal__foot">
                     <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
-                    <button className="pg-btn-save"   onClick={handleSubmit} disabled={submitting}>
+                    <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
                         {success
                             ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Added!'}</>
                             : submitting
@@ -484,19 +485,19 @@ function SeriesCard({ rec, onEdit }) {
    SERIES SETUP PAGE  (main export)
 ══════════════════════════════════════════ */
 export default function SeriesSetupPage() {
-    const [records,      setRecords]      = useState([]);
-    const [loading,      setLoading]      = useState(true);
-    const [fetchError,   setFetchError]   = useState('');
-    const [showModal,    setShowModal]    = useState(false);
-    const [editRecord,   setEditRecord]   = useState(null);
-    const [search,       setSearch]       = useState('');
+    const [records, setRecords] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState('');
+    const [showModal, setShowModal] = useState(false);
+    const [editRecord, setEditRecord] = useState(null);
+    const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'active' | 'inactive'
-    const [sortKey,      setSortKey]      = useState('seriesType');
-    const [sortDir,      setSortDir]      = useState('asc');
-    const [page,         setPage]         = useState(1);
-    const [pageSize,     setPageSize]     = useState(12);
-    const tableRef                        = useRef(null);
-    const [tableReady,   setTableReady]   = useState(false);
+    const [sortKey, setSortKey] = useState('seriesType');
+    const [sortDir, setSortDir] = useState('asc');
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(12);
+    const tableRef = useRef(null);
+    const [tableReady, setTableReady] = useState(false);
 
     // Column widths: ID | Series Type | Prefix | Delimiter | Format | Last# | Use FY | Status | Action
     useResizableColumns(tableRef, tableReady, [60, 160, 110, 90, 180, 90, 90, 100, 80]);
@@ -506,7 +507,7 @@ export default function SeriesSetupPage() {
         setLoading(true);
         setFetchError('');
         try {
-            const raw  = await seriesApi.getAll();
+            const raw = await seriesApi.getAll();
             const list = Array.isArray(raw)
                 ? raw
                 : Array.isArray(raw?.data)
@@ -520,8 +521,8 @@ export default function SeriesSetupPage() {
         } catch (err) {
             const msg =
                 err?.response?.data?.message ||
-                err?.response?.data?.title   ||
-                err?.message                 ||
+                err?.response?.data?.title ||
+                err?.message ||
                 'Failed to load series setup.';
             setFetchError(msg);
         } finally {
@@ -535,13 +536,13 @@ export default function SeriesSetupPage() {
     const filtered = records.filter(r => {
         const q = search.toLowerCase();
         const matchSearch =
-            r.seriesType.toLowerCase().includes(q)        ||
+            r.seriesType.toLowerCase().includes(q) ||
             r.initialCharacters.toLowerCase().includes(q) ||
-            r.format.toLowerCase().includes(q)            ||
+            r.format.toLowerCase().includes(q) ||
             String(r.seriesID).includes(q);
         const matchStatus =
-            statusFilter === 'all'                             ||
-            (statusFilter === 'active'   &&  r.isActive)      ||
+            statusFilter === 'all' ||
+            (statusFilter === 'active' && r.isActive) ||
             (statusFilter === 'inactive' && !r.isActive);
         return matchSearch && matchStatus;
     });
@@ -549,15 +550,15 @@ export default function SeriesSetupPage() {
     const sorted = [...filtered].sort((a, b) => {
         let av = a[sortKey], bv = b[sortKey];
         if (typeof av === 'boolean') { av = av ? 1 : 0; bv = bv ? 1 : 0; }
-        if (typeof av === 'string')  av = av.toLowerCase();
-        if (typeof bv === 'string')  bv = bv.toLowerCase();
-        if (av < bv) return sortDir === 'asc' ? -1 :  1;
-        if (av > bv) return sortDir === 'asc' ?  1 : -1;
+        if (typeof av === 'string') av = av.toLowerCase();
+        if (typeof bv === 'string') bv = bv.toLowerCase();
+        if (av < bv) return sortDir === 'asc' ? -1 : 1;
+        if (av > bv) return sortDir === 'asc' ? 1 : -1;
         return 0;
     });
 
     const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-    const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
+    const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
 
     const handleSort = (key) => {
         if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -565,19 +566,19 @@ export default function SeriesSetupPage() {
         setPage(1);
     };
 
-    const activeCount   = records.filter(r =>  r.isActive).length;
+    const activeCount = records.filter(r => r.isActive).length;
     const inactiveCount = records.filter(r => !r.isActive).length;
 
     const COLS = [
-        { key: 'seriesID',          label: 'ID',          w: '6%'  },
-        { key: 'seriesType',        label: 'Series Type', w: '13%' },
-        { key: 'initialCharacters', label: 'Prefix',      w: '10%' },
-        { key: 'delimiter',         label: 'Delimiter',   w: '8%'  },
-        { key: 'format',            label: 'Format',      w: '18%' },
-        { key: 'lastNumberUsed',    label: 'Last #',      w: '8%'  },
-        { key: 'useCurrentFY',      label: 'Use FY',      w: '8%'  },
-        { key: 'isActive',          label: 'Status',      w: '9%'  },
-        { key: '_action',           label: 'Action',      w: '7%', noSort: true },
+        { key: 'seriesID', label: 'ID', w: '6%' },
+        { key: 'seriesType', label: 'Series Type', w: '13%' },
+        { key: 'initialCharacters', label: 'Prefix', w: '10%' },
+        { key: 'delimiter', label: 'Delimiter', w: '8%' },
+        { key: 'format', label: 'Format', w: '18%' },
+        { key: 'lastNumberUsed', label: 'Last #', w: '8%' },
+        { key: 'useCurrentFY', label: 'Use FY', w: '8%' },
+        { key: 'isActive', label: 'Status', w: '9%' },
+        { key: '_action', label: 'Action', w: '7%', noSort: true },
     ];
 
     const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -656,8 +657,8 @@ export default function SeriesSetupPage() {
                             {/* Status filter pills */}
                             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                                 {[
-                                    { key: 'all',      label: 'All'      },
-                                    { key: 'active',   label: 'Active'   },
+                                    { key: 'all', label: 'All' },
+                                    { key: 'active', label: 'Active' },
                                     { key: 'inactive', label: 'Inactive' },
                                 ].map(f => (
                                     <button
@@ -836,14 +837,14 @@ export default function SeriesSetupPage() {
                     {/* ── Pagination ── */}
                     <div className="pg-pagination">
                         <div className="pg-pagination__left">
-                            <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(1)}>              <ChevronsLeft  size={13} /></button>
-                            <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(p => p - 1)}>     <ChevronLeft   size={13} /></button>
+                            <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}>              <ChevronsLeft size={13} /></button>
+                            <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>     <ChevronLeft size={13} /></button>
                             {pageNums.map((p, i) =>
                                 p === '…'
                                     ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
                                     : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>
                             )}
-                            <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>     <ChevronRight  size={13} /></button>
+                            <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>     <ChevronRight size={13} /></button>
                             <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}>     <ChevronsRight size={13} /></button>
                         </div>
                         <div className="pg-pagination__right">

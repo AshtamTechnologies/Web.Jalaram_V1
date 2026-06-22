@@ -232,17 +232,17 @@ function ViewModal({ user, onClose, onEdit }) {
 
         <div className="pg-view__body">
           <div className="pg-view__section-label">Contact</div>
-          <InfoRow icon={Phone} label="Phone 1"       value={user.phone1}  highlight />
-          <InfoRow icon={Phone} label="Phone 2"       value={user.phone2} />
-          <InfoRow icon={Mail}  label="Email Address" value={user.email}   highlight />
+          <InfoRow icon={Phone} label="Phone 1" value={user.phone1} highlight />
+          <InfoRow icon={Phone} label="Phone 2" value={user.phone2} />
+          <InfoRow icon={Mail} label="Email Address" value={user.email} highlight />
 
           <div className="pg-view__section-label pg-view__section-label--mt">Address</div>
-          <InfoRow icon={Home}      label="Address Line 1" value={user.addressLine1} />
-          <InfoRow icon={Home}      label="Address Line 2" value={user.addressLine2} />
-          <InfoRow icon={Home}      label="Address Line 3" value={user.addressLine3} />
-          <InfoRow icon={Building2} label="City"           value={user.city} />
-          <InfoRow icon={MapPin}    label="District"       value={user.district} />
-          <InfoRow icon={Globe}     label="Country"        value={user.country} />
+          <InfoRow icon={Home} label="Address Line 1" value={user.addressLine1} />
+          <InfoRow icon={Home} label="Address Line 2" value={user.addressLine2} />
+          <InfoRow icon={Home} label="Address Line 3" value={user.addressLine3} />
+          <InfoRow icon={Building2} label="City" value={user.city} />
+          <InfoRow icon={MapPin} label="District" value={user.district} />
+          <InfoRow icon={Globe} label="Country" value={user.country} />
         </div>
 
         <div className="pg-view__foot">
@@ -641,7 +641,8 @@ function UserModal({ onClose, onSaved, editData }) {
   };
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal">
 
         <div className="pg-modal__head">
@@ -1148,7 +1149,7 @@ export default function RegistrationPage() {
         />
       )}
 
-{/* View modal */}
+      {/* View modal */}
       {viewUser && (
         <ViewModal
           user={viewUser}
@@ -1156,7 +1157,7 @@ export default function RegistrationPage() {
           onEdit={u => { setViewUser(null); handleEdit(u); }}
         />
       )}
-      
+
     </>
   );
 }

@@ -135,7 +135,13 @@ const PRINTING_TYPES = [
    HELPERS
 ═══════════════════════════════════════════ */
 const uid = () => Math.random().toString(36).substr(2, 9);
-const todayISO = () => new Date().toISOString().split('T')[0];
+const todayISO = () => {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
 
 const fmtCurrency = (n) =>
   Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -161,7 +167,10 @@ const addMonths = (dateStr, months) => {
   const d = new Date(dateStr + 'T00:00:00');
   d.setMonth(d.getMonth() + Math.max(0, Number(months) - 1));
   d.setMonth(d.getMonth() + 1, 0);
-  return d.toISOString().split('T')[0];
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
 };
 function calcAmountByDates(startDate, endDate, monthlyRent) {
   if (!startDate || !endDate || !monthlyRent) return Number(monthlyRent) || 0;
@@ -208,6 +217,51 @@ function calcNOSFromDates(startDate, endDate) {
 
   const days = Math.round((end - start) / 86400000) + 1;
   return Math.round((days / 30) * 100) / 100;
+}
+function calculateEndDate(startDateStr, days) {
+  if (!startDateStr || !days) return '';
+  const d = new Date(startDateStr + 'T00:00:00');
+  d.setDate(d.getDate() + Number(days) - 1);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function calculateDays(startDateStr, endDateStr) {
+  if (!startDateStr || !endDateStr) return 0;
+  const start = new Date(startDateStr + 'T00:00:00');
+  const end = new Date(endDateStr + 'T00:00:00');
+  const diffTime = Math.abs(end - start);
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // inclusive
+  return diffDays;
+}
+
+function calcNOSFromDays(days) {
+  const d = Number(days);
+  if (isNaN(d) || d <= 0) return 0;
+  if (d >= 28 && d <= 31) return 1;
+  return Math.round((d / 30) * 100) / 100;
+}
+function parsePurposeMeta(purpose, defaultRate = 0) {
+  const parts = (purpose || '').split('|');
+  const location = parts[0] || '';
+  const meta = parts[1] || '';
+  let ratePerMonth = defaultRate;
+  let printingCost = 0;
+  let printType = '';
+  let printRate = 0;
+  if (meta) {
+    const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
+    const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
+    const matchPrintType = meta.match(/printType:([^,]*)/);
+    const matchPrintRate = meta.match(/printRate:(\d+(\.\d+)?)/);
+    if (matchRate) ratePerMonth = Number(matchRate[1]);
+    if (matchPrint) printingCost = Number(matchPrint[1]);
+    if (matchPrintType) printType = matchPrintType[1] || '';
+    if (matchPrintRate) printRate = Number(matchPrintRate[1]);
+  }
+  return { location, ratePerMonth, printingCost, printType, printRate };
 }
 function checkHoardingDateConflicts(rows, allContracts, allContractMaps, customers) {
   const conflicts = [];
@@ -434,8 +488,11 @@ const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = nu
   const siteID = toSID(site?.siteID) ?? rawSiteID ?? null;
 
   const start = globalStart || '';
-  const end = globalEnd || (globalStart ? addMonths(globalStart, 1) : '');
-  const baseRent = (start && end) ? calcAmountByDates(start, end, h?.monthlyRent || 0) : (h?.monthlyRent || 0);
+  const end = globalEnd || '';
+  const days = (start && end) ? calculateDays(start, end) : 30;
+  const computedEnd = end || (start ? calculateEndDate(start, days) : '');
+  const nos = calcNOSFromDays(days);
+  const baseRent = nos * (h?.monthlyRent || 0);
 
   return {
     _id: uid(),
@@ -447,11 +504,14 @@ const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = nu
     hoardingCode: h?.hoardingCode || '',
     size: h ? `${h.width} X ${h.height}` : '',
     sqFt: h ? (h.width * h.height) : 0,
-    nos: 1,
+    nos: nos,
     startDate: start,
-    endDate: end,
+    endDate: computedEnd,
+    days: days,
     ratePerMonth: h?.monthlyRent || 0,
     amount: baseRent,
+    printType: '',
+    printRate: 0,
     printingCost: 0,
     quotationLineNumber: 0,
     saved: false,
@@ -509,7 +569,11 @@ function newMergedRow(rowsArr, direction) {
 
   const sqFt = mw * mh;
   const combinedRate = rowsArr.reduce((s, r) => s + Number(r.ratePerMonth || 0), 0);
-  const combinedAmt = rowsArr.reduce((s, r) => s + Number(r.amount || 0), 0);
+  const start = rowsArr[0]?.startDate || '';
+  const end = rowsArr[0]?.endDate || '';
+  const days = (start && end) ? calculateDays(start, end) : 30;
+  const nos = calcNOSFromDays(days);
+  const combinedAmt = nos * combinedRate;
 
   return {
     _id: uid(),
@@ -520,13 +584,19 @@ function newMergedRow(rowsArr, direction) {
     mergedHoardingIDs: rowsArr.map(r => Number(r.hoardingID) || 0).filter(id => id > 0),
     hoardingID: 0,
     siteID: null,
-    location: rowsArr.map(r => r.location).join(' + '),
+    location: [...new Set(rowsArr.map(r => {
+      if (r.rowType === 'hoarding' && r.siteObj) {
+        return `${r.siteObj.addressLine1 || ''}${r.siteObj.city ? `, ${r.siteObj.city}` : ''}`;
+      }
+      return r.location || '';
+    }).filter(Boolean))].join(' + '),
     hoardingCode: rowsArr.map(r => r.hoardingCode || '').join(' + '),
     size: `${mw} X ${mh}`,
     sqFt,
-    nos: 1,
-    startDate: rowsArr[0]?.startDate || '',
-    endDate: rowsArr[0]?.endDate || '',
+    nos: nos,
+    startDate: start,
+    endDate: end,
+    days: days,
     ratePerMonth: combinedRate,
     amount: combinedAmt,
     printingCost: 0,
@@ -800,7 +870,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
       </tr>`;
 
   const renderRowStd = (row, sr) => {
-    const dates = row.startDate && row.endDate
+    const dates = (row.rowType !== 'extra' && row.rowType !== 'printing') && row.startDate && row.endDate
       ? `<br><span style="font-size:9px;color:#555;">${fmtDateShort(row.startDate)} TO ${fmtDateShort(row.endDate)}</span>` : '';
     const mergeTag = row.rowType === 'merged'
       ? `<div class="merged-tag">${row.mergeDirection === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}</div>`
@@ -816,6 +886,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
   };
 
   const renderRowPrint = (row, sr) => {
+    const dates = (row.rowType !== 'extra' && row.rowType !== 'printing') && row.startDate && row.endDate
+      ? `<br><span style="font-size:9px;color:#555;">${fmtDateShort(row.startDate)} TO ${fmtDateShort(row.endDate)}</span>` : '';
     const printCell = row.rowType === 'printing'
       ? `<td class="r" style="font-weight:bold;">${row.amount > 0 ? fmtCurrency(row.amount) : '—'}</td>`
       : `<td class="r">${Number(row.printingCost || 0) > 0 ? fmtCurrency(row.printingCost) : '—'}</td>`;
@@ -824,7 +896,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
       : '';
     return `<tr${row.rowType === 'merged' ? ' style="background:#faf5ff;"' : ''}>
       <td class="c">${sr}</td>
-      <td class="l">${mergeTag}${row.location || ''}</td>
+      <td class="l">${mergeTag}${row.location || ''}${dates}</td>
       <td class="c">${row.size || ''}</td>
       <td class="c">${row.rowType === 'printing' ? fmtCurrency(row.sqFt) : (row.nos || 1)}</td>
       <td class="r">${fmtCurrency(row.ratePerMonth)}</td>
@@ -970,7 +1042,7 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
   };
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 660 }}>
         <div className="pg-modal__head">
           <div className="pg-modal__head-left">
@@ -1084,7 +1156,7 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap 
   });
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 540 }}>
         <div className="pg-modal__head">
           <div className="pg-modal__head-left">
@@ -1235,7 +1307,7 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap 
 function TermsModal({ selected, onSelect, termsList, onClose }) {
   const sorted = useMemo(() => [...termsList].sort((a, b) => (a.order || 0) - (b.order || 0)), [termsList]);
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 560 }}>
         <div className="pg-modal__head">
           <div className="pg-modal__head-left">
@@ -1284,7 +1356,6 @@ function TermsModal({ selected, onSelect, termsList, onClose }) {
 function HoardingConflictModal({ conflicts, onClose }) {
   return ReactDOM.createPortal(
     <div
-      onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 99998,
         background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)',
@@ -1531,7 +1602,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
 
   if (hoardingRows.length < 2) {
     return ReactDOM.createPortal(
-      <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="pg-overlay">
         <div className="pg-modal" style={{ maxWidth: 440 }}>
           <div className="pg-modal__head">
             <div className="pg-modal__head-left">
@@ -1554,7 +1625,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
   }
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 580 }}>
         <div className="pg-modal__head">
           <div className="pg-modal__head-left">
@@ -1822,7 +1893,7 @@ function CustomerEditModal({ customer, onSave, onClose }) {
   ];
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 600 }}>
         <div className="pg-modal__head">
           <div className="pg-modal__head-left">
@@ -2240,7 +2311,7 @@ function CreateContractFromQuotModal({
   const totalAmtPerFreq = selectedRows.reduce((s, r) => s + Number(r.amountPerFreq || 0), 0);
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 940 }}>
 
         {/* ── Head ── */}
@@ -2670,6 +2741,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [selectedTerms, setSelectedTerms] = useState([]);
   const [globalStart, setGlobalStart] = useState('');
   const [globalEnd, setGlobalEnd] = useState('');
+  const [globalDays, setGlobalDays] = useState('');
 
   /* ── Modals ── */
   const [showHoardModal, setShowHoardModal] = useState(false);
@@ -2694,8 +2766,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const histTableRef = useRef(null);
   const [histTableReady, setHistTableReady] = useState(false);
   const step2ColWidths = withPrinting
-    ? [40, 240, 80, 110, 140, 140, 90, 90, 90, 46]
-    : [40, 240, 80, 64, 56, 140, 140, 90, 90, 46];
+    ? [40, 160, 70, 50, 50, 100, 50, 100, 80, 110, 80, 80, 80, 46]
+    : [40, 200, 80, 60, 60, 120, 60, 120, 80, 80, 46];
 
   useResizableColumns(step2TableRef, step2TableReady, step2ColWidths);
   useResizableColumns(histTableRef, histTableReady, [44, 140, 200, 110, 110, 120, 220]);
@@ -2803,32 +2875,25 @@ export default function QuotationPage({ onNavigateToContracts }) {
           ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
           : null;
 
-        const parts = (l.purpose || '').split('|');
-        const meta = parts[1] || '';
-        let ratePerMonth = h?.monthlyRent || 0;
-        let printingCost = 0;
-        if (meta) {
-          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
-          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
-          if (matchRate) ratePerMonth = Number(matchRate[1]);
-          if (matchPrint) printingCost = Number(matchPrint[1]);
-        } else {
-          // fallback if no meta
-          const nos = calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1;
-          ratePerMonth = (l.rentAmount || 0) / nos;
-        }
+        const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
+        const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
         return {
           rowType: 'hoarding',
           hoardingID: l.hoardingID,
-          location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+          location: siteObj
+            ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
+            : h?.hoardingCode || '',
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
-          nos: calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1,
+          nos: calcNOSFromDays(days),
           startDate: l.periodBeginDate,
           endDate: l.periodEndDate,
+          days: days,
           ratePerMonth: ratePerMonth,
           amount: l.rentAmount,
+          printType: printType,
+          printRate: printRate,
           printingCost: printingCost,
         };
       });
@@ -2869,15 +2934,17 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
         const locations = hoardingObjs.map(h => {
           const site = h.siteID ? siteMap.get(h.siteID) : null;
-          return buildSiteAddress(site, h.hoardingCode || '');
+          return site
+            ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
+            : h.hoardingCode || '';
         });
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
-        const locFallback = locations.join(' + ');
+        const locFallback = [...new Set(locations)].join(' + ');
 
         let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
         if (!savedLine) {
           savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
-            l.purpose.includes(locFallback) || 
+            l.purpose.includes(locFallback) ||
             locFallback.includes(l.purpose.split('|')[0]) ||
             (codes && l.purpose.includes(codes))
           ));
@@ -2892,32 +2959,27 @@ export default function QuotationPage({ onNavigateToContracts }) {
           savedLine = myLines.find(l => l.mergeFlag);
         }
 
-        const parts = (savedLine?.purpose || '').split('|');
-        const loc = parts[0] || locFallback;
-        const meta = parts[1] || '';
-        let ratePerMonth = savedLine ? savedLine.rentAmount : 0;
-        let printingCost = 0;
-        if (meta) {
-          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
-          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
-          if (matchRate) ratePerMonth = Number(matchRate[1]);
-          if (matchPrint) printingCost = Number(matchPrint[1]);
-        }
+        const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
+        const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(savedLine?.purpose, totalRent);
+        const days = calculateDays(savedLine?.periodBeginDate, savedLine?.periodEndDate) || 30;
 
         pdfRows.push({
           rowType: 'merged',
           isMerged: true,
           mergeDirection: dir,
           hoardingID: 0,
-          location: loc,
+          location: locFallback,
           hoardingCode: codes,
           size: `${mw} X ${mh}`,
           sqFt: mw * mh,
-          nos: 1,
+          nos: calcNOSFromDays(days),
           startDate: savedLine?.periodBeginDate || '',
           endDate: savedLine?.periodEndDate || '',
+          days: days,
           ratePerMonth: ratePerMonth,
           amount: savedLine ? savedLine.rentAmount : 0,
+          printType: printType,
+          printRate: printRate,
           printingCost: printingCost,
         });
       }
@@ -2950,7 +3012,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
     const html = buildProformaHTML({
       rows: pdfRows,
-      withPrinting: pdfRows.some(r => r.rowType === 'printing'),
+      withPrinting: pdfRows.some(r => r.rowType === 'printing') || pdfRows.some(r => Number(r.printingCost || 0) > 0),
       selectedCustomer: cust,
       quotNo: quot.quotationNumber,
       quotDate: quot.quotationDate,
@@ -3137,25 +3199,15 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setRows(prev => prev.map(r => {
       if (r._id !== id) return r;
 
-      // Validation for date select: end date not smaller than start date
-      if (field === 'endDate' && val && r.startDate && val < r.startDate) {
-        showToast('End date cannot be earlier than start date', 'error');
-        return r;
-      }
-      if (field === 'startDate' && val && r.endDate && val > r.endDate) {
-        showToast('Start date cannot be later than end date', 'error');
-        return r;
-      }
-
       // Validation to prevent negative values
-      if (['ratePerMonth', 'printingCost', 'amount'].includes(field)) {
+      if (['ratePerMonth', 'printingCost', 'amount', 'days', 'printRate'].includes(field)) {
         if (Number(val) < 0) {
-          showToast(`${field === 'ratePerMonth' ? 'Rate' : field === 'printingCost' ? 'Print Cost' : 'Amount'} cannot be negative`, 'error');
+          showToast(`${field === 'ratePerMonth' ? 'Rate' : field === 'printingCost' ? 'Print Cost' : field === 'printRate' ? 'Print Rate/Sq.Ft' : field} cannot be negative`, 'error');
           return r;
         }
       }
 
-      const u = { ...r, [field]: val };
+      let u = { ...r, [field]: val };
 
       if (u.rowType === 'extra') {
         // extra charge: amount is directly editable — no auto-calculation
@@ -3165,31 +3217,26 @@ export default function QuotationPage({ onNavigateToContracts }) {
           u.amount = Number(u.sqFt || 0) * Number(u.ratePerMonth || 0);
         }
       } else {
-        // hoarding: date-based if both dates present, else nos × rate
-        if (['ratePerMonth', 'nos', 'sqFt', 'printingCost'].includes(field)) {
-          if (u.startDate && u.endDate) {
-            u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth) + Number(u.printingCost || 0);
-          } else {
-            u.amount = (Number(u.ratePerMonth || 0) * Number(u.nos || 1)) + Number(u.printingCost || 0);
-          }
-        }
-
-        // startDate changed → recalculate amount based on dates (no change to endDate or nos)
-        if (field === 'startDate' && u.startDate) {
-          if (u.endDate) {
-            u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth) + Number(u.printingCost || 0);
-          } else {
-            u.amount = (Number(u.ratePerMonth || 0) * Number(u.nos || 1)) + Number(u.printingCost || 0);
-          }
-        }
-
-        // endDate changed → recalculate amount based on dates (no change to nos)
-        if (field === 'endDate' && u.endDate) {
-          if (u.startDate) {
-            u.amount = calcAmountByDates(u.startDate, u.endDate, u.ratePerMonth) + Number(u.printingCost || 0);
-          } else {
-            u.amount = (Number(u.ratePerMonth || 0) * Number(u.nos || 1)) + Number(u.printingCost || 0);
-          }
+        // hoarding & merged rows:
+        if (field === 'startDate') {
+          const computedEnd = calculateEndDate(val, u.days);
+          u.endDate = computedEnd;
+          u.nos = calcNOSFromDays(u.days);
+          u.printingCost = Number(u.sqFt || 0) * Number(u.printRate || 0);
+          u.amount = (u.nos * Number(u.ratePerMonth || 0)) + u.printingCost;
+        } else if (field === 'days') {
+          const computedEnd = calculateEndDate(u.startDate, val);
+          u.endDate = computedEnd;
+          u.nos = calcNOSFromDays(val);
+          u.printingCost = Number(u.sqFt || 0) * Number(u.printRate || 0);
+          u.amount = (u.nos * Number(u.ratePerMonth || 0)) + u.printingCost;
+        } else if (field === 'printRate') {
+          u.printingCost = Number(u.sqFt || 0) * Number(val);
+          u.amount = (u.nos * Number(u.ratePerMonth || 0)) + u.printingCost;
+        } else if (field === 'ratePerMonth') {
+          u.amount = (u.nos * Number(val || 0)) + Number(u.printingCost || 0);
+        } else if (field === 'printType') {
+          // just update the printType
         }
       }
 
@@ -3214,27 +3261,36 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
   const applyGlobalDates = useCallback(() => {
     if (!globalStart) return;
-    if (globalEnd && globalEnd < globalStart) {
-      showToast('Global End Date cannot be earlier than Global Start Date', 'error');
-      return;
-    }
+    if (!globalDays) return;
+
+    const computedEnd = calculateEndDate(globalStart, globalDays);
+    const nos = calcNOSFromDays(globalDays);
+
     const updatedRows = rows.map(r => {
       if (r.rowType !== 'hoarding' && r.rowType !== 'merged') return r;
-      const end = globalEnd || addMonths(globalStart, Number(r.nos) || 1);
-      const baseRent = calcAmountByDates(globalStart, end, r.ratePerMonth);
-      const amount = baseRent + Number(r.printingCost || 0);
-      return { ...r, startDate: globalStart, endDate: end, amount };
+      const printingCost = Number(r.sqFt || 0) * Number(r.printRate || 0);
+      const baseRent = nos * Number(r.ratePerMonth || 0);
+      const amount = baseRent + printingCost;
+      return {
+        ...r,
+        startDate: globalStart,
+        endDate: computedEnd,
+        days: Number(globalDays),
+        nos: nos,
+        printingCost,
+        amount
+      };
     });
     setRows(updatedRows);
     // ── conflict check ──
     const conflicts = checkHoardingDateConflicts(updatedRows, allContracts, allContractMaps, customers);
     if (conflicts.length > 0) { setConflictWarnings(conflicts); setShowConflictModal(true); }
-  }, [globalStart, globalEnd, rows, allContracts, allContractMaps, customers]);
+  }, [globalStart, globalDays, rows, allContracts, allContractMaps, customers]);
 
   const handleAddSelected = (selectedIds) => {
     const toAdd = hoardings
       .filter(h => selectedIds.has(h.hoardingID) && !rows.find(r => r.hoardingID === h.hoardingID))
-      .map(h => newHoardingRow(h, globalStart, globalEnd || addMonths(globalStart, 1), siteMap));
+      .map(h => newHoardingRow(h, globalStart, globalEnd, siteMap));
     const nextRows = [...rows, ...toAdd];
     setRows(nextRows);
     setShowHoardModal(false);
@@ -3246,7 +3302,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const handleAddManual = (selectedIds) => {
     const toAdd = hoardings
       .filter(h => selectedIds.has(h.hoardingID) && !rows.find(r => r.hoardingID === h.hoardingID))
-      .map(h => newHoardingRow(h, globalStart, globalEnd || addMonths(globalStart, 1), siteMap));
+      .map(h => newHoardingRow(h, globalStart, globalEnd, siteMap));
     const nextRows = [...rows, ...toAdd];
     setRows(nextRows);
     setShowManualModal(false);
@@ -3316,6 +3372,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setEditingQuotID(null);
     setOriginalQuotID(0);   // ← NEW
     setGlobalStart(''); setGlobalEnd('');
+    setGlobalDays('');
   };
 
   const handleStartNew = async () => {
@@ -3335,6 +3392,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
     }
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   };
+
   const handleEditQuotation = (quot) => {
     const myLines = quotLines.filter(l =>
       Number(l.quotationID) === Number(quot.quotationID) &&
@@ -3344,14 +3402,13 @@ export default function QuotationPage({ onNavigateToContracts }) {
       Number(m.quotationID) === Number(quot.quotationID) &&
       Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
     );
-    // ...rest unchanged
     const cust = customers.find(c => c.customerID === quot.customerID) || null;
 
     setSelectedCustomer(cust);
     setQuotNo(quot.quotationNumber);
     setQuotDate(quot.quotationDate ? quot.quotationDate.split('T')[0] : todayISO());
-    setRevisionNo(quot.quotationRevisionNumber || 1);   // ← SAME revision, not +1
-    setEditingQuotID(quot.quotationID);                  // ← PUT updates this row in place
+    setRevisionNo(quot.quotationRevisionNumber || 1);
+    setEditingQuotID(quot.quotationID);
 
     const regularRows = myLines
       .filter(l => !l.mergeFlag)
@@ -3360,13 +3417,16 @@ export default function QuotationPage({ onNavigateToContracts }) {
           const isPrinting = PRINTING_TYPES.some(pt =>
             pt.toLowerCase() === (l.purpose || '').toLowerCase()
           );
+          const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
           return {
             _id: uid(),
             rowType: isPrinting ? 'printing' : 'extra',
             hoardingID: 0, siteID: null, siteObj: null,
             location: l.purpose, hoardingCode: '', size: '', sqFt: 0, nos: 1,
             startDate: l.periodBeginDate || '', endDate: l.periodEndDate || '',
+            days: days,
             ratePerMonth: l.rentAmount || 0, amount: l.rentAmount || 0,
+            printType: '', printRate: 0,
             printingCost: 0,
             quotationLineNumber: l.quotationLineNumber,
             saved: true,
@@ -3376,39 +3436,30 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const siteID = h?.siteID ?? h?.site?.siteID ?? null;
         const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
 
-        const parts = (l.purpose || '').split('|');
-        const meta = parts[1] || '';
-        let ratePerMonth = h?.monthlyRent || 0;
-        let printingCost = 0;
-        if (meta) {
-          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
-          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
-          if (matchRate) ratePerMonth = Number(matchRate[1]);
-          if (matchPrint) printingCost = Number(matchPrint[1]);
-        } else {
-          // fallback
-          const nos = calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1;
-          ratePerMonth = (l.rentAmount || 0) / nos;
-        }
+        const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
+        const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
         return {
-          _id: uid(), rowType: 'hoarding',
+          _id: uid(),
+          rowType: 'hoarding',
           hoardingID: l.hoardingID, siteID, siteObj,
           location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
           hoardingCode: h?.hoardingCode || '',
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
-          nos: calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1,
+          nos: calcNOSFromDays(days),
           startDate: l.periodBeginDate || '', endDate: l.periodEndDate || '',
+          days: days,
           ratePerMonth: ratePerMonth,
           amount: l.rentAmount || 0,
+          printType: printType,
+          printRate: printRate,
           printingCost: printingCost,
           quotationLineNumber: l.quotationLineNumber,
           saved: true,
         };
       });
 
-    // Reconstruct merged rows (kept as "saved" so existing merge records aren't duplicated)
     const mergedRows = [];
     if (myMerges.length >= 2) {
       const byLine = new Map();
@@ -3421,25 +3472,34 @@ export default function QuotationPage({ onNavigateToContracts }) {
         if (records.length < 2) continue;
 
         const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
-        const hoardingObjs = records.map(r => hoardings.find(h => h.hoardingID === r.hoardingID)).filter(Boolean);
+        const hoardingObjs = records
+          .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
+          .filter(Boolean);
 
         const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
         const gaps = hoardingObjs.length - 1;
         let mw, mh;
-        if (dir === 'H') { mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps; mh = Math.max(...sizes.map(s => s.h)); }
-        else { mw = Math.max(...sizes.map(s => s.w)); mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps; }
+        if (dir === 'H') {
+          mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+          mh = Math.max(...sizes.map(s => s.h));
+        } else {
+          mw = Math.max(...sizes.map(s => s.w));
+          mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+        }
 
         const locations = hoardingObjs.map(h => {
           const site = h.siteID ? siteMap.get(h.siteID) : null;
-          return buildSiteAddress(site, h.hoardingCode || '');
+          return site
+            ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
+            : h.hoardingCode || '';
         });
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
-        const locFallback = locations.join(' + ');
+        const locFallback = [...new Set(locations)].join(' + ');
 
         let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
         if (!savedLine) {
           savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
-            l.purpose.includes(locFallback) || 
+            l.purpose.includes(locFallback) ||
             locFallback.includes(l.purpose.split('|')[0]) ||
             (codes && l.purpose.includes(codes))
           ));
@@ -3454,34 +3514,29 @@ export default function QuotationPage({ onNavigateToContracts }) {
           savedLine = myLines.find(l => l.mergeFlag);
         }
 
-        const parts = (savedLine?.purpose || '').split('|');
-        const loc = parts[0] || locFallback;
-        const meta = parts[1] || '';
-        let ratePerMonth = savedLine ? savedLine.rentAmount : 0;
-        let printingCost = 0;
-        if (meta) {
-          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
-          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
-          if (matchRate) ratePerMonth = Number(matchRate[1]);
-          if (matchPrint) printingCost = Number(matchPrint[1]);
-        }
+        const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
+        const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(savedLine?.purpose, totalRent);
+        const days = calculateDays(savedLine?.periodBeginDate, savedLine?.periodEndDate) || 30;
 
         mergedRows.push({
           _id: uid(),
           rowType: 'merged',
           isMerged: true,
           mergeDirection: dir,
-          mergedHoardingIDs: hoardingObjs.map(h => h.hoardingID),
+          mergedHoardingIDs: hoardingObjs.map(ho => ho.hoardingID),
           hoardingID: 0, siteID: null,
-          location: loc,
+          location: savedLine?.purpose?.split('|')?.[0] || locFallback,
           hoardingCode: codes,
           size: `${mw} X ${mh}`,
           sqFt: mw * mh,
-          nos: 1,
+          nos: calcNOSFromDays(days),
           startDate: savedLine?.periodBeginDate || '',
           endDate: savedLine?.periodEndDate || '',
+          days: days,
           ratePerMonth: ratePerMonth,
           amount: savedLine?.rentAmount || 0,
+          printType: printType,
+          printRate: printRate,
           printingCost: printingCost,
           quotationLineNumber: savedLine?.quotationLineNumber || 0,
           saved: true,
@@ -3489,7 +3544,9 @@ export default function QuotationPage({ onNavigateToContracts }) {
       }
     }
 
-    const allRows = [...regularRows, ...mergedRows];
+    const allRows = [...regularRows, ...mergedRows].sort((a, b) =>
+      Number(a.quotationLineNumber || 0) - Number(b.quotationLineNumber || 0)
+    );
     setRows(allRows);
     const hasPrinting = allRows.some(r => r.rowType === 'printing') || allRows.some(r => Number(r.printingCost || 0) > 0);
     setWithPrinting(hasPrinting);
@@ -3499,19 +3556,22 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setStep1Error(''); setStep2Error('');
 
     // ── Derive global period from the loaded rows ──
-    const datedRows = allRows.filter(r => r.startDate && r.endDate);
+    const datedRows = allRows.filter(r => (r.rowType === 'hoarding' || r.rowType === 'merged') && r.startDate && r.endDate);
     if (datedRows.length > 0) {
       const gStart = datedRows.reduce((min, r) => (r.startDate < min ? r.startDate : min), datedRows[0].startDate);
       const gEnd = datedRows.reduce((max, r) => (r.endDate > max ? r.endDate : max), datedRows[0].endDate);
       setGlobalStart(gStart);
       setGlobalEnd(gEnd);
+      setGlobalDays(calculateDays(gStart, gEnd) || '');
     } else {
       setGlobalStart(''); setGlobalEnd('');
+      setGlobalDays('');
     }
 
     setStep(1); setIsCreating(true);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   };
+
   const handleReopenHistory = async (quot) => {
     const myLines = quotLines.filter(l =>
       Number(l.quotationID) === Number(quot.quotationID) &&
@@ -3530,11 +3590,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
     const regularRows = myLines
       .filter(l => !l.mergeFlag)
       .map(l => {
-        // ── Restore printing / extra rows from saved purpose ──
         if (!l.hoardingID && l.purpose) {
           const isPrinting = PRINTING_TYPES.some(pt =>
             pt.toLowerCase() === (l.purpose || '').toLowerCase()
           );
+          const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
           return {
             _id: uid(),
             rowType: isPrinting ? 'printing' : 'extra',
@@ -3548,35 +3608,26 @@ export default function QuotationPage({ onNavigateToContracts }) {
             nos: 1,
             startDate: l.periodBeginDate || '',
             endDate: l.periodEndDate || '',
+            days: days,
             ratePerMonth: l.rentAmount || 0,
             amount: l.rentAmount || 0,
+            printType: '',
+            printRate: 0,
             printingCost: 0,
             quotationLineNumber: l.quotationLineNumber,
-            saved: false, // must be false on Revise so it saves new copy of lines
+            saved: false,
           };
         }
-        // ── Regular hoarding row ──
         const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
         const siteID = h?.siteID ?? h?.site?.siteID ?? null;
         const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
 
-        const parts = (l.purpose || '').split('|');
-        const meta = parts[1] || '';
-        let ratePerMonth = h?.monthlyRent || 0;
-        let printingCost = 0;
-        if (meta) {
-          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
-          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
-          if (matchRate) ratePerMonth = Number(matchRate[1]);
-          if (matchPrint) printingCost = Number(matchPrint[1]);
-        } else {
-          // fallback
-          const nos = calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1;
-          ratePerMonth = (l.rentAmount || 0) / nos;
-        }
+        const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
+        const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
         return {
-          _id: uid(), rowType: 'hoarding',
+          _id: uid(),
+          rowType: 'hoarding',
           hoardingID: l.hoardingID,
           siteID,
           siteObj,
@@ -3584,18 +3635,20 @@ export default function QuotationPage({ onNavigateToContracts }) {
           hoardingCode: h?.hoardingCode || '',
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
-          nos: calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1,
+          nos: calcNOSFromDays(days),
           startDate: l.periodBeginDate || '',
           endDate: l.periodEndDate || '',
+          days: days,
           ratePerMonth: ratePerMonth,
           amount: l.rentAmount || 0,
+          printType: printType,
+          printRate: printRate,
           printingCost: printingCost,
           quotationLineNumber: l.quotationLineNumber,
-          saved: false, // must be false on Revise so it saves new copy of lines
+          saved: false,
         };
       });
 
-    // Reconstruct merged rows for revision
     const mergedRows = [];
     if (myMerges.length >= 2) {
       const byLine = new Map();
@@ -3618,15 +3671,17 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
         const locations = hoardingObjs.map(h => {
           const site = h.siteID ? siteMap.get(h.siteID) : null;
-          return buildSiteAddress(site, h.hoardingCode || '');
+          return site
+            ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
+            : h.hoardingCode || '';
         });
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
-        const locFallback = locations.join(' + ');
+        const locFallback = [...new Set(locations)].join(' + ');
 
         let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
         if (!savedLine) {
           savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
-            l.purpose.includes(locFallback) || 
+            l.purpose.includes(locFallback) ||
             locFallback.includes(l.purpose.split('|')[0]) ||
             (codes && l.purpose.includes(codes))
           ));
@@ -3641,17 +3696,9 @@ export default function QuotationPage({ onNavigateToContracts }) {
           savedLine = myLines.find(l => l.mergeFlag);
         }
 
-        const parts = (savedLine?.purpose || '').split('|');
-        const loc = parts[0] || locFallback;
-        const meta = parts[1] || '';
-        let ratePerMonth = savedLine ? savedLine.rentAmount : 0;
-        let printingCost = 0;
-        if (meta) {
-          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
-          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
-          if (matchRate) ratePerMonth = Number(matchRate[1]);
-          if (matchPrint) printingCost = Number(matchPrint[1]);
-        }
+        const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
+        const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(savedLine?.purpose, totalRent);
+        const days = calculateDays(savedLine?.periodBeginDate, savedLine?.periodEndDate) || 30;
 
         mergedRows.push({
           _id: uid(),
@@ -3660,23 +3707,28 @@ export default function QuotationPage({ onNavigateToContracts }) {
           mergeDirection: dir,
           mergedHoardingIDs: hoardingObjs.map(h => h.hoardingID),
           hoardingID: 0, siteID: null,
-          location: loc,
+          location: savedLine?.purpose?.split('|')?.[0] || locFallback,
           hoardingCode: codes,
           size: `${mw} X ${mh}`,
           sqFt: mw * mh,
-          nos: 1,
+          nos: calcNOSFromDays(days),
           startDate: savedLine?.periodBeginDate || '',
           endDate: savedLine?.periodEndDate || '',
+          days: days,
           ratePerMonth: ratePerMonth,
           amount: savedLine?.rentAmount || 0,
+          printType: printType,
+          printRate: printRate,
           printingCost: printingCost,
           quotationLineNumber: savedLine?.quotationLineNumber || 0,
-          saved: false, // must be false on Revise so it saves a new copy of lines
+          saved: false,
         });
       }
     }
 
-    const allRows = [...regularRows, ...mergedRows];
+    const allRows = [...regularRows, ...mergedRows].sort((a, b) =>
+      Number(a.quotationLineNumber || 0) - Number(b.quotationLineNumber || 0)
+    );
     setRows(allRows);
 
     const hasPrinting = allRows.some(r => r.rowType === 'printing') || allRows.some(r => Number(r.printingCost || 0) > 0);
@@ -3687,17 +3739,19 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setSelectedTerms([]);
     setStep1Error(''); setStep2Error('');
     setEditingQuotID(null);
-    setOriginalQuotID(quot.quotationID);   // ← NEW: same quotationID family, so backend keeps the number
+    setOriginalQuotID(quot.quotationID);
 
     // ── Derive global period from the loaded rows ──
-    const datedRows = allRows.filter(r => r.startDate && r.endDate);
+    const datedRows = allRows.filter(r => (r.rowType === 'hoarding' || r.rowType === 'merged') && r.startDate && r.endDate);
     if (datedRows.length > 0) {
       const gStart = datedRows.reduce((min, r) => (r.startDate < min ? r.startDate : min), datedRows[0].startDate);
       const gEnd = datedRows.reduce((max, r) => (r.endDate > max ? r.endDate : max), datedRows[0].endDate);
       setGlobalStart(gStart);
       setGlobalEnd(gEnd);
+      setGlobalDays(calculateDays(gStart, gEnd) || '');
     } else {
       setGlobalStart(''); setGlobalEnd('');
+      setGlobalDays('');
     }
 
     setStep(1); setIsCreating(true);
@@ -3741,32 +3795,25 @@ export default function QuotationPage({ onNavigateToContracts }) {
           ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
           : null;
 
-        const parts = (l.purpose || '').split('|');
-        const meta = parts[1] || '';
-        let ratePerMonth = h?.monthlyRent || 0;
-        let printingCost = 0;
-        if (meta) {
-          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
-          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
-          if (matchRate) ratePerMonth = Number(matchRate[1]);
-          if (matchPrint) printingCost = Number(matchPrint[1]);
-        } else {
-          // fallback
-          const nos = calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1;
-          ratePerMonth = (l.rentAmount || 0) / nos;
-        }
+        const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
+        const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
         return {
           rowType: 'hoarding',
           hoardingID: l.hoardingID,
-          location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+          location: siteObj
+            ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
+            : h?.hoardingCode || '',
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
-          nos: calcNOSFromDates(l.periodBeginDate, l.periodEndDate) || 1,
+          nos: calcNOSFromDays(days),
           startDate: l.periodBeginDate,
           endDate: l.periodEndDate,
+          days: days,
           ratePerMonth: ratePerMonth,
           amount: l.rentAmount,
+          printType: printType,
+          printRate: printRate,
           printingCost: printingCost,
         };
       });
@@ -3812,15 +3859,17 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
         const locations = hoardingObjs.map(h => {
           const site = h.siteID ? siteMap.get(h.siteID) : null;
-          return buildSiteAddress(site, h.hoardingCode || '');
+          return site
+            ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
+            : h.hoardingCode || '';
         });
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
-        const locFallback = locations.join(' + ');
+        const locFallback = [...new Set(locations)].join(' + ');
         let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
         if (!savedLine) {
           savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
-            l.purpose.includes(locFallback) || 
+            l.purpose.includes(locFallback) ||
             locFallback.includes(l.purpose.split('|')[0]) ||
             (codes && l.purpose.includes(codes))
           ));
@@ -3835,32 +3884,27 @@ export default function QuotationPage({ onNavigateToContracts }) {
           savedLine = myLines.find(l => l.mergeFlag);
         }
 
-        const parts = (savedLine?.purpose || '').split('|');
-        const loc = parts[0] || locFallback;
-        const meta = parts[1] || '';
-        let ratePerMonth = savedLine ? savedLine.rentAmount : 0;
-        let printingCost = 0;
-        if (meta) {
-          const matchRate = meta.match(/rate:(\d+(\.\d+)?)/);
-          const matchPrint = meta.match(/print:(\d+(\.\d+)?)/);
-          if (matchRate) ratePerMonth = Number(matchRate[1]);
-          if (matchPrint) printingCost = Number(matchPrint[1]);
-        }
+        const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
+        const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(savedLine?.purpose, totalRent);
+        const days = calculateDays(savedLine?.periodBeginDate, savedLine?.periodEndDate) || 30;
 
         pdfRows.push({
           rowType: 'merged',
           isMerged: true,
           mergeDirection: dir,
           hoardingID: 0,
-          location: loc,
+          location: locFallback,
           hoardingCode: codes,
           size: `${mw} X ${mh}`,
           sqFt: mw * mh,
-          nos: 1,
+          nos: calcNOSFromDays(days),
           startDate: savedLine?.periodBeginDate || '',
           endDate: savedLine?.periodEndDate || '',
+          days: days,
           ratePerMonth: ratePerMonth,
           amount: savedLine ? savedLine.rentAmount : 0,
+          printType: printType,
+          printRate: printRate,
           printingCost: printingCost,
         });
       }
@@ -3875,7 +3919,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
     const html = buildPrintHTML({
       rows: pdfRows,
-      withPrinting: pdfRows.some(r => r.rowType === 'printing'),
+      withPrinting: pdfRows.some(r => r.rowType === 'printing') || pdfRows.some(r => Number(r.printingCost || 0) > 0),
       selectedCustomer: cust,
       quotNo: quot.quotationNumber,
       quotDate: quot.quotationDate,
@@ -3898,6 +3942,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
     if (step === 1) {
       if (!selectedCustomer) { setStep1Error('Please select a customer.'); return; }
       if (!globalStart) { setStep1Error('Global Period From date is required.'); return; }
+      if (!globalDays) { setStep1Error('Global Period Days is required.'); return; }
       if (!globalEnd) { setStep1Error('Global Period To date is required.'); return; }
       if (globalEnd < globalStart) { setStep1Error('Global Period To date cannot be earlier than From date.'); return; }
       setStep1Error(''); setStep(2);
@@ -3935,6 +3980,48 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const handleBackToList = () => { setIsCreating(false); setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80); };
 
   const generatePDF = async () => {
+    // ── Input Validation ──
+    if (!selectedCustomer?.customerID) {
+      showToast('Please select a customer before saving.', 'error');
+      return;
+    }
+    if (rows.length === 0) {
+      showToast('Please add at least one hoarding/item before saving.', 'error');
+      return;
+    }
+
+    // Validate details of each row
+    for (const r of rows) {
+      if (r.rowType === 'hoarding') {
+        if (!r.hoardingID) {
+          showToast('Invalid hoarding row detected.', 'error');
+          return;
+        }
+        if (!r.startDate || !r.endDate) {
+          showToast(`Dates are required for hoarding ${r.hoardingCode || ''}`, 'error');
+          return;
+        }
+      } else if (r.rowType === 'merged') {
+        if (!r.mergedHoardingIDs || r.mergedHoardingIDs.length === 0) {
+          showToast('Invalid merged row detected.', 'error');
+          return;
+        }
+        if (!r.startDate || !r.endDate) {
+          showToast(`Dates are required for merged hoarding ${r.hoardingCode || ''}`, 'error');
+          return;
+        }
+      } else if (r.rowType === 'printing') {
+        if (!r.size) {
+          showToast('Please select size for all printing rows.', 'error');
+          return;
+        }
+      }
+      if (Number(r.amount || 0) < 0) {
+        showToast('Negative amount detected in rows.', 'error');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const headerPayload = {
@@ -3948,6 +4035,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         sGSTAmount: sgstAmt,
         totalAmount: finalTotal,
       };
+
       let savedHeader;
       if (editingQuotID) {
         // EDIT: same quotationID + same revision number → PUT, updates row in place
@@ -3962,19 +4050,62 @@ export default function QuotationPage({ onNavigateToContracts }) {
       }
 
       const savedQuotID = savedHeader?.quotationID ?? savedHeader?.QuotationID ?? editingQuotID ?? originalQuotID ?? 0;
+      if (!savedQuotID || savedQuotID === 0) {
+        throw new Error('Failed to retrieve a valid Quotation ID from the database.');
+      }
       const savedRevNo = Number(revisionNo);
-      // AFTER
+
+      // ── Clean up existing lines/merges from database for this quotation revision ──
+      const [allLinesRaw, allMergesRaw] = await Promise.all([
+        apiService.getAllQuotationLines(),
+        apiService.getAllQuotationMerges(),
+      ]);
+
+      const lines = normalizeList(allLinesRaw).map(normalizeQuotLine);
+      const merges = normalizeList(allMergesRaw).map(m => ({
+        quotationMergeID: m.quotationMergeID ?? m.QuotationMergeID ?? 0,
+        quotationLineNumber: m.quotationLineNumber ?? m.QuotationLineNumber ?? 0,
+        quotationID: m.quotationID ?? m.QuotationID ?? 0,
+        quotationRevisionNumber: m.quotationRevisionNumber ?? m.QuotationRevisionNumber ?? 0,
+        hoardingID: m.hoardingID ?? m.HoardingID ?? 0,
+      }));
+
+      const existingLines = lines.filter(l =>
+        Number(l.quotationID) === Number(savedQuotID) &&
+        Number(l.quotationRevisionNumber) === Number(savedRevNo)
+      );
+      const existingMerges = merges.filter(m =>
+        Number(m.quotationID) === Number(savedQuotID) &&
+        Number(m.quotationRevisionNumber) === Number(savedRevNo)
+      );
+
+      // Delete existing merges
+      await Promise.all(
+        existingMerges.map(m =>
+          apiService.deleteQuotationMerge(m.quotationMergeID, m.hoardingID)
+        )
+      );
+
+      // Delete existing lines
+      await Promise.all(
+        existingLines.map(l =>
+          apiService.deleteQuotationLine(
+            l.quotationLineNumber,
+            l.quotationID,
+            l.quotationRevisionNumber,
+            l.hoardingID
+          )
+        )
+      );
+
+      // Save lines (all treated as fresh since we cleared existing ones)
       await Promise.all(
         rows.filter(r => r.rowType === 'hoarding' || r.rowType === 'printing' || r.rowType === 'extra')
           .map((row, idx) => {
-            // Derive the purpose string to store:
-            // - printing row  → the printing type label (e.g. "Flex Banner Printing")
-            // - extra row     → the custom description the admin typed
-            // - hoarding row  → empty string (no special purpose)
             const purpose =
               row.rowType === 'printing' ? (row.location || '') :
                 row.rowType === 'extra' ? (row.location || '') :
-                  `|rate:${Number(row.ratePerMonth || 0)},print:${Number(row.printingCost || 0)}`;
+                  `|rate:${Number(row.ratePerMonth || 0)},print:${Number(row.printingCost || 0)},printType:${row.printType || ''},printRate:${Number(row.printRate || 0)}`;
 
             const linePayload = {
               quotationLineNumber: idx + 1,
@@ -3987,13 +4118,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
               rentAmount: Number(row.amount || 0),
               mergeFlag: false,
             };
-            if (row.saved && row.quotationLineNumber > 0) {
-              return apiService.updateQuotationLine(linePayload);
-            }
             return apiService.createQuotationLine(linePayload);
           })
       );
-      /* ── Save merge records ───────────────── *//* ── Save merge records ───────────────── */
+
+      /* ── Save merge records ───────────────── */
       const mergedRows = rows.filter(r => r.rowType === 'merged');
       let nextLineNum = rows.filter(r => r.rowType === 'hoarding' || r.rowType === 'printing' || r.rowType === 'extra').length;
 
@@ -4004,23 +4133,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         if (!hIds.length) continue;
         const flag = mergedRow.mergeDirection === 'H' ? 'H' : 'V';
 
-        const purpose = (mergedRow.location || '') + `|rate:${Number(mergedRow.ratePerMonth || 0)},print:${Number(mergedRow.printingCost || 0)}`;
-
-        if (mergedRow.saved && mergedRow.quotationLineNumber > 0) {
-          // EDIT MODE: update existing merge line, don't re-create merge records
-          await apiService.updateQuotationLine({
-            quotationLineNumber: mergedRow.quotationLineNumber,
-            quotationID: savedQuotID,
-            quotationRevisionNumber: savedRevNo,
-            hoardingID: 0,
-            purpose,
-            periodBeginDate: mergedRow.startDate || todayISO(),
-            periodEndDate: mergedRow.endDate || todayISO(),
-            rentAmount: Number(mergedRow.amount || 0),
-            mergeFlag: true,
-          });
-          continue; // merge records (QuotationMergeDTL) unchanged
-        }
+        const purpose = (mergedRow.location || '') + `|rate:${Number(mergedRow.ratePerMonth || 0)},print:${Number(mergedRow.printingCost || 0)},printType:${mergedRow.printType || ''},printRate:${Number(mergedRow.printRate || 0)}`;
 
         nextLineNum += 1;
         await apiService.createQuotationLine({
@@ -4046,17 +4159,202 @@ export default function QuotationPage({ onNavigateToContracts }) {
         }
       }
 
+      // ── Fetch saved data from Database to Print ──
+      const [allQuotsRaw, printLinesRaw, printMergesRaw] = await Promise.all([
+        apiService.getAllQuotations(),
+        apiService.getAllQuotationLines(),
+        apiService.getAllQuotationMerges(),
+      ]);
+
+      const quots = normalizeList(allQuotsRaw).map(normalizeQuotation);
+      const printLines = normalizeList(printLinesRaw).map(normalizeQuotLine);
+      const printMerges = normalizeList(printMergesRaw).map(m => ({
+        quotationMergeID: m.quotationMergeID ?? m.QuotationMergeID ?? 0,
+        quotationLineNumber: m.quotationLineNumber ?? m.QuotationLineNumber ?? 0,
+        quotationID: m.quotationID ?? m.QuotationID ?? 0,
+        quotationRevisionNumber: m.quotationRevisionNumber ?? m.QuotationRevisionNumber ?? 0,
+        hoardingID: m.hoardingID ?? m.HoardingID ?? 0,
+        mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
+      }));
+
+      const dbQuot = quots.find(q =>
+        Number(q.quotationID) === Number(savedQuotID) &&
+        Number(q.quotationRevisionNumber) === Number(savedRevNo)
+      ) || headerPayload;
+
+      const dbLines = printLines.filter(l =>
+        Number(l.quotationID) === Number(savedQuotID) &&
+        Number(l.quotationRevisionNumber) === Number(savedRevNo)
+      );
+
+      const dbMerges = printMerges.filter(m =>
+        Number(m.quotationID) === Number(savedQuotID) &&
+        Number(m.quotationRevisionNumber) === Number(savedRevNo)
+      );
+
+      /* ── Build rows from DB fetched QuotationLineDTL ── */
+      const pdfRows = dbLines
+        .filter(l => !l.mergeFlag)
+        .map(l => {
+          if (!l.hoardingID && l.purpose) {
+            const isPrinting = PRINTING_TYPES.some(pt =>
+              pt.toLowerCase() === (l.purpose || '').toLowerCase()
+            );
+            return {
+              rowType: isPrinting ? 'printing' : 'extra',
+              hoardingID: 0,
+              location: l.purpose,
+              size: '',
+              sqFt: 0,
+              nos: 1,
+              startDate: l.periodBeginDate,
+              endDate: l.periodEndDate,
+              ratePerMonth: l.rentAmount,
+              amount: l.rentAmount,
+              printingCost: 0,
+            };
+          }
+          const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
+          const siteID = h?.siteID ?? h?.site?.siteID ?? null;
+          const siteObj = siteID != null
+            ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
+            : null;
+
+          const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
+          const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
+
+          return {
+            rowType: 'hoarding',
+            hoardingID: l.hoardingID,
+            location: siteObj
+              ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
+              : h?.hoardingCode || '',
+            size: h ? `${h.width} X ${h.height}` : '',
+            sqFt: h ? (h.width * h.height) : 0,
+            nos: calcNOSFromDays(days),
+            startDate: l.periodBeginDate,
+            endDate: l.periodEndDate,
+            days: days,
+            ratePerMonth: ratePerMonth,
+            amount: l.rentAmount,
+            printType: printType,
+            printRate: printRate,
+            printingCost: printingCost,
+          };
+        });
+
+      /* ── Merged rows from DB fetched QuotationMergeDTL ── */
+      if (dbMerges.length >= 2) {
+        const byLine = new Map();
+        for (const m of dbMerges) {
+          const ln = m.quotationLineNumber;
+          if (!byLine.has(ln)) byLine.set(ln, []);
+          byLine.get(ln).push(m);
+        }
+
+        const sortedKeys = [...byLine.keys()].sort((a, b) => a - b);
+        for (const ln of sortedKeys) {
+          const records = byLine.get(ln);
+          if (records.length < 2) continue;
+
+          const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+          const hoardingObjs = records
+            .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
+            .filter(Boolean);
+
+          const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
+          const gaps = hoardingObjs.length - 1;
+          let mw, mh;
+          if (dir === 'H') {
+            mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+            mh = Math.max(...sizes.map(s => s.h));
+          } else {
+            mw = Math.max(...sizes.map(s => s.w));
+            mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+          }
+
+          const locations = hoardingObjs.map(h => {
+            const site = h.siteID ? siteMap.get(h.siteID) : null;
+            return site
+              ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
+              : h.hoardingCode || '';
+          });
+          const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
+
+          const locFallback = [...new Set(locations)].join(' + ');
+          let savedLine = dbLines.find(l => Number(l.quotationLineNumber) === Number(ln));
+          if (!savedLine) {
+            savedLine = dbLines.find(l => l.mergeFlag && l.purpose && (
+              l.purpose.includes(locFallback) ||
+              locFallback.includes(l.purpose.split('|')[0]) ||
+              (codes && l.purpose.includes(codes))
+            ));
+          }
+          if (!savedLine) {
+            savedLine = dbLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+              const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
+              return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
+            }));
+          }
+          if (!savedLine) {
+            savedLine = dbLines.find(l => l.mergeFlag);
+          }
+
+          const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
+          const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(savedLine?.purpose, totalRent);
+          const days = calculateDays(savedLine?.periodBeginDate, savedLine?.periodEndDate) || 30;
+
+          pdfRows.push({
+            rowType: 'merged',
+            isMerged: true,
+            mergeDirection: dir,
+            hoardingID: 0,
+            location: locFallback,
+            hoardingCode: codes,
+            size: `${mw} X ${mh}`,
+            sqFt: mw * mh,
+            nos: calcNOSFromDays(days),
+            startDate: savedLine?.periodBeginDate || '',
+            endDate: savedLine?.periodEndDate || '',
+            days: days,
+            ratePerMonth: ratePerMonth,
+            amount: savedLine ? savedLine.rentAmount : 0,
+            printType: printType,
+            printRate: printRate,
+            printingCost: printingCost,
+          });
+        }
+      }
+
+      /* ── Calculate DB Totals ── */
+      const totalAmountVal = Number(dbQuot.totalAmount ?? dbQuot.TotalAmount ?? finalTotal);
+      const storedSub = totalAmountVal / (1 + (dbQuot.cGSTPercent + dbQuot.sGSTPercent) / 100);
+      const storedCgst = (storedSub * dbQuot.cGSTPercent) / 100;
+      const storedSgst = (storedSub * dbQuot.sGSTPercent) / 100;
+      const storedGross = storedSub + storedCgst + storedSgst;
+      const storedFinal = Math.round(storedGross);
+
       const html = buildPrintHTML({
-        rows, withPrinting, selectedCustomer,
-        quotNo: quotNo || `QT/${savedQuotID}`,
-        quotDate, revisionNo, cgstPct, sgstPct,
-        subTotal, cgstAmt, sgstAmt, roundOff, finalTotal,
+        rows: pdfRows,
+        withPrinting: withPrinting || pdfRows.some(r => r.rowType === 'printing') || pdfRows.some(r => Number(r.printingCost || 0) > 0),
+        selectedCustomer: selectedCustomer,
+        quotNo: dbQuot.quotationNumber,
+        quotDate: dbQuot.quotationDate,
+        revisionNo: dbQuot.quotationRevisionNumber,
+        cgstPct: dbQuot.cGSTPercent,
+        sgstPct: dbQuot.sGSTPercent,
+        subTotal: storedSub,
+        cgstAmt: storedCgst,
+        sgstAmt: storedSgst,
+        roundOff: storedFinal - storedGross,
+        finalTotal: storedFinal,
         selectedTerms,
         termsTexts: selectedTerms.map(id => {
           const t = termsList.find(t => t.termID === id);
           return t?.description || '';
         }),
       });
+
       const win = window.open('', '_blank');
       if (win) { win.document.write(html); win.document.close(); }
       showToast('Quotation saved successfully!', 'success');
@@ -4065,7 +4363,25 @@ export default function QuotationPage({ onNavigateToContracts }) {
       setOriginalQuotID(0);
       setIsCreating(false);
     } catch (err) {
-      showToast(err?.response?.data?.message || err?.message || 'Failed to save quotation.', 'error');
+      console.error(err);
+      let errorMsg = 'Failed to save quotation.';
+      if (err?.response?.data) {
+        const data = err.response.data;
+        if (typeof data === 'string') {
+          errorMsg = data;
+        } else if (data.message) {
+          errorMsg = data.message;
+        } else if (data.title) {
+          errorMsg = data.title;
+        } else if (data.errors) {
+          errorMsg = typeof data.errors === 'object' ? JSON.stringify(data.errors) : String(data.errors);
+        } else {
+          errorMsg = JSON.stringify(data);
+        }
+      } else if (err?.message) {
+        errorMsg = err.message;
+      }
+      showToast(errorMsg, 'error');
     } finally { setSaving(false); }
   };
 
@@ -4355,9 +4671,23 @@ export default function QuotationPage({ onNavigateToContracts }) {
                       <span className="qt-date-banner__label"><Calendar size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />Period:</span>
                       <div className="qt-date-banner__field">
                         <span className="qt-date-banner__sep">From</span>
-                        <input type="date" className="qt-date-banner__input" value={globalStart} onChange={e => setGlobalStart(e.target.value)} />
+                        <input type="date" className="qt-date-banner__input" value={globalStart} onChange={e => {
+                          const val = e.target.value;
+                          setGlobalStart(val);
+                          if (val && globalDays) {
+                            setGlobalEnd(calculateEndDate(val, globalDays));
+                          }
+                        }} />
+                        <span className="qt-date-banner__sep">Days</span>
+                        <input type="number" min="1" className="qt-date-banner__input" style={{ width: 80 }} value={globalDays} onChange={e => {
+                          const val = e.target.value;
+                          setGlobalDays(val);
+                          if (globalStart && val) {
+                            setGlobalEnd(calculateEndDate(globalStart, val));
+                          }
+                        }} />
                         <span className="qt-date-banner__sep">To</span>
-                        <input type="date" className="qt-date-banner__input" value={globalEnd} onChange={e => setGlobalEnd(e.target.value)} />
+                        <input type="date" className="qt-date-banner__input" value={globalEnd} readOnly disabled style={{ cursor: 'not-allowed', background: '#f0f0f8' }} />
                       </div>
                     </div>
                   </div>
@@ -4388,7 +4718,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                   <div className="qt-date-banner" style={{ marginBottom: 14 }}>
                     <span className="qt-date-banner__label"><Calendar size={13} style={{ marginRight: 4, verticalAlign: 'middle' }} />Global Period:</span>
                     <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#1a1a2e' }}>
-                      {globalStart ? fmtDateDisplay(globalStart) : '—'} → {globalEnd ? fmtDateDisplay(globalEnd) : 'Auto'}
+                      {globalStart ? fmtDateDisplay(globalStart) : '—'} ({globalDays ? `${globalDays} Days` : '—'}) → {globalEnd ? fmtDateDisplay(globalEnd) : 'Auto'}
                     </span>
                     <button className="qt-date-banner__apply" onClick={applyGlobalDates}>
                       <RefreshCw size={12} /> Apply to All
@@ -4462,19 +4792,17 @@ export default function QuotationPage({ onNavigateToContracts }) {
                           <th className="pg-th">#</th>
                           <th className="pg-th" style={{ textAlign: 'left' }}>Site Address / Product</th>
                           <th className="pg-th">Size</th>
-                          {!withPrinting && <>
-                            <th className="pg-th">Sq.Ft</th>
-                            <th className="pg-th">NOS</th>
-                            <th className="pg-th">Start Date</th>
-                            <th className="pg-th">End Date</th>
-                          </>}
-                          {withPrinting && <>
-                            <th className="pg-th">NOS / Sq.Ft</th>
-                            <th className="pg-th">Start Date</th>
-                            <th className="pg-th">End Date</th>
-                          </>}
+                          <th className="pg-th">Sq.Ft</th>
+                          <th className="pg-th">NOS</th>
+                          <th className="pg-th">Start Date</th>
+                          <th className="pg-th">Days</th>
+                          <th className="pg-th">End Date</th>
                           <th className="pg-th">Rate/Mo</th>
-                          {withPrinting && <th className="pg-th" style={{ color: '#7c3aed' }}>Print Cost</th>}
+                          {withPrinting && <>
+                            <th className="pg-th" style={{ color: '#7c3aed' }}>Printing Type</th>
+                            <th className="pg-th" style={{ color: '#7c3aed' }}>Print Cost/Sq.Ft</th>
+                            <th className="pg-th" style={{ color: '#7c3aed' }}>Print Cost</th>
+                          </>}
                           <th className="pg-th">Amount</th>
                           <th className="pg-th"></th>
                         </tr>
@@ -4577,15 +4905,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
                                       fontStyle: isPrint ? 'italic' : 'normal',
                                       lineHeight: 1.4, paddingTop: 1,
                                     }}>
-                                      {row.location}
+                                      {row.rowType === 'hoarding' && row.siteObj ? (
+                                        `${row.siteObj.addressLine1 || ''}${row.siteObj.city ? `, ${row.siteObj.city}` : ''}`
+                                      ) : row.location}
                                     </div>
                                   )}
-                                  {!isMerged && !isPrint && !isExtra && (() => {
-                                    const { line2 } = getSiteDisplayLines(row.siteObj, '');
-                                    return line2 ? (
-                                      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#9090a8', marginTop: 2, paddingLeft: 2, lineHeight: 1.3 }}>{line2}</div>
-                                    ) : null;
-                                  })()}
                                 </td>
                                 <td className="pg-td" style={{ textAlign: 'center' }}>
                                   {withPrinting && isPrint && !isExtra ? (
@@ -4599,7 +4923,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                                           const info = sizeMap[sel];
                                           if (!info) return;
                                           const totalSqFt = info.count * info.sqFt;
-                                          updateRowMultiple(row._id, { size: sel, sqFt: totalSqFt, nos: info.count }); // ← nos = count
+                                          updateRowMultiple(row._id, { size: sel, sqFt: totalSqFt, nos: info.count });
                                         }}
                                         style={{
                                           width: '100%', padding: '5px 6px',
@@ -4630,113 +4954,114 @@ export default function QuotationPage({ onNavigateToContracts }) {
                                     </span>
                                   )}
                                 </td>
-                                {!withPrinting && <>
-                                  <td className="pg-td" style={{ textAlign: 'center' }}>
-                                    <span style={{
-                                      fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700,
-                                      color: '#4a5568',
-                                    }}>
-                                      {row.sqFt || '—'}
+                                <td className="pg-td" style={{ textAlign: 'center' }}>
+                                  <span style={{
+                                    fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700,
+                                    color: '#4a5568',
+                                  }}>
+                                    {isExtra ? '—' : (row.sqFt || '—')}
+                                  </span>
+                                </td>
+                                <td className="pg-td" style={{ textAlign: 'center' }}>
+                                  {isExtra ? (
+                                    <span style={{ color: '#c0c0d0' }}>—</span>
+                                  ) : isPrint ? (
+                                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#7c3aed' }}>
+                                      {row.nos > 0 ? row.nos : '—'}
                                     </span>
-                                  </td>
-                                  <td className="pg-td">
-                                    <input className="qt-inline-input" type="number" min="1" value={row.nos} readOnly style={{ width: 50, cursor: 'not-allowed', background: 'rgba(0,0,0,0.03)' }} />
-                                  </td>
-                                  <td className="pg-td">
+                                  ) : (
+                                    <input
+                                      className="qt-inline-input" type="number"
+                                      value={row.nos}
+                                      readOnly
+                                      style={{ width: 64, textAlign: 'center', cursor: 'not-allowed', background: 'rgba(0,0,0,0.03)' }}
+                                    />
+                                  )}
+                                </td>
+                                <td className="pg-td">
+                                  {isExtra || isPrint ? (
+                                    <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
+                                  ) : (
                                     <input className="qt-inline-input qt-date-input" type="date" value={row.startDate} onChange={e => updateRow(row._id, 'startDate', e.target.value)} />
-                                  </td>
-                                  <td className="pg-td">
-                                    <input className="qt-inline-input qt-date-input" type="date" value={row.endDate} onChange={e => updateRow(row._id, 'endDate', e.target.value)} />
-                                  </td>
-                                </>}
+                                  )}
+                                </td>
+                                <td className="pg-td">
+                                  {isExtra || isPrint ? (
+                                    <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
+                                  ) : (
+                                    <input className="qt-inline-input" type="number" min="1" value={row.days || ''} onChange={e => updateRow(row._id, 'days', e.target.value)} style={{ width: 64, textAlign: 'center' }} />
+                                  )}
+                                </td>
+                                <td className="pg-td">
+                                  {isExtra || isPrint ? (
+                                    <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
+                                  ) : (
+                                    <input className="qt-inline-input qt-date-input" type="date" value={row.endDate} readOnly disabled style={{ cursor: 'not-allowed', background: 'rgba(0,0,0,0.03)' }} />
+                                  )}
+                                </td>
+                                <td className="pg-td">
+                                  {isExtra ? (
+                                    <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
+                                  ) : (
+                                    <input className="qt-inline-input" type="number" min="0" value={row.ratePerMonth || ''} onChange={e => updateRow(row._id, 'ratePerMonth', e.target.value)} style={{ width: 86 }} />
+                                  )}
+                                </td>
                                 {withPrinting && (
                                   <>
-                                    {/* NOS / Sq.Ft column */}
-                                    <td className="pg-td" style={{ textAlign: 'center' }}>
-                                      {isExtra ? (
-                                        <span style={{ color: '#c0c0d0' }}>—</span>
+                                    <td className="pg-td">
+                                      {isExtra || isPrint ? (
+                                        <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
                                       ) : (
-                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                                          {isPrint ? (
-                                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#7c3aed' }}>
-                                              {row.nos > 0 ? row.nos : '—'}
-                                            </span>
-                                          ) : (
-                                            <input
-                                              className="qt-inline-input" type="number"
-                                              value={row.nos}
-                                              readOnly
-                                              style={{ width: 64, textAlign: 'center', cursor: 'not-allowed' }}
-                                            />
-                                          )}
-                                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 700, color: '#7c3aed' }}>
-                                            {row.sqFt > 0 ? `${row.sqFt} sq.ft` : '—'}
-                                          </span>
-                                        </div>
+                                        <select
+                                          value={row.printType || ''}
+                                          onChange={e => updateRow(row._id, 'printType', e.target.value)}
+                                          style={{
+                                            width: '100%', padding: '5px 6px',
+                                            border: '1.5px solid #e8e8f4', borderRadius: 8,
+                                            fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
+                                            color: '#1a1a2e', background: '#fff', outline: 'none', cursor: 'pointer',
+                                          }}
+                                        >
+                                          <option value="">Select Type…</option>
+                                          {PRINTING_TYPES.map(type => (
+                                            <option key={type} value={type}>{type}</option>
+                                          ))}
+                                        </select>
                                       )}
                                     </td>
-
-                                    {/* Start Date */}
                                     <td className="pg-td">
-                                      {isExtra
-                                        ? <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
-                                        : <input className="qt-inline-input qt-date-input" type="date" value={row.startDate} onChange={e => updateRow(row._id, 'startDate', e.target.value)} />
-                                      }
+                                      {isExtra || isPrint ? (
+                                        <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
+                                      ) : (
+                                        <input
+                                          className="qt-inline-input" type="number" min="0"
+                                          value={row.printRate || ''}
+                                          onChange={e => updateRow(row._id, 'printRate', e.target.value)}
+                                          style={{ width: 80, fontWeight: 700, color: '#7c3aed' }}
+                                        />
+                                      )}
                                     </td>
-                                    {/* End Date */}
                                     <td className="pg-td">
-                                      {isExtra
-                                        ? <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
-                                        : <input className="qt-inline-input qt-date-input" type="date" value={row.endDate} onChange={e => updateRow(row._id, 'endDate', e.target.value)} />
-                                      }
+                                      {isPrint ? (
+                                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#7c3aed' }}>
+                                          {row.amount > 0 ? Number(row.amount).toLocaleString('en-IN') : '—'}
+                                        </span>
+                                      ) : isExtra ? (
+                                        <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
+                                      ) : (
+                                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#7c3aed' }}>
+                                          {row.printingCost > 0 ? Number(row.printingCost).toLocaleString('en-IN') : '—'}
+                                        </span>
+                                      )}
                                     </td>
                                   </>
                                 )}
                                 <td className="pg-td">
-                                  {isExtra
-                                    ? <span style={{ color: '#c0c0d0', paddingLeft: 8 }}>—</span>
-                                    : <input className="qt-inline-input" type="number" min="0" value={row.ratePerMonth || ''} onChange={e => updateRow(row._id, 'ratePerMonth', e.target.value)} style={{ width: 86 }} />
-                                  }
-                                </td>
-                                {withPrinting && (
-                                  <td className="pg-td">
-                                    {isPrint ? (
-                                      // Printing row: show printing cost = sqFt × rate
-                                      <span style={{
-                                        fontFamily: 'Nunito,sans-serif', fontSize: 13,
-                                        fontWeight: 900, color: '#7c3aed',
-                                      }}>
-                                        {row.amount > 0
-                                          ? Number(row.amount).toLocaleString('en-IN')
-                                          : '—'}
-                                      </span>
-                                    ) : (
-                                      // Hoarding row: editable print cost field
-                                      <input
-                                        className="qt-inline-input" type="number"
-                                        min="0"
-                                        value={isExtra ? 0 : (row.printingCost ?? 0)}
-                                        onFocus={e => { if (Number(e.target.value) === 0) e.target.select(); }}
-                                        onChange={e => {
-                                          let val = e.target.value;
-                                          if (val.length > 1 && val.startsWith('0') && !val.startsWith('0.')) {
-                                            val = val.substring(1);
-                                          }
-                                          updateRow(row._id, 'printingCost', val);
-                                        }}
-                                        style={{
-                                          width: 86,
-                                          color: isExtra ? '#c0c0d0' : '#7c3aed',
-                                          fontWeight: 700,
-                                          cursor: isExtra ? 'not-allowed' : 'text'
-                                        }}
-                                        disabled={isExtra}
-                                      />
-                                    )}
-                                  </td>
-                                )}
-                                <td className="pg-td">
-                                  <input className="qt-inline-input" type="number" min="0" value={row.amount || ''} onChange={e => updateRow(row._id, 'amount', e.target.value)} style={{ width: 86, fontWeight: 700 }} />
+                                  {isExtra ? (
+                                    <input className="qt-inline-input" type="number" min="0" value={row.amount || ''} onChange={e => updateRow(row._id, 'amount', e.target.value)} style={{ width: 86, fontWeight: 700 }} />
+                                  ) : (
+                                    <input className="qt-inline-input" type="number" value={row.amount || ''} readOnly disabled style={{ width: 86, fontWeight: 700, cursor: 'not-allowed', background: 'rgba(0,0,0,0.03)' }} />
+                                  )}
                                 </td>
                                 <td className="pg-td">
                                   <div className="pg-action-wrap">

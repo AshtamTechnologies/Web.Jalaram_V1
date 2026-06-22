@@ -16,9 +16,9 @@ import { useResizableColumns } from '../hooks/useResizableColumns'; // ← adjus
    THIN API WRAPPER  (uses centralised apiService)
 ───────────────────────────────────────── */
 const fyApi = {
-    getAll:  ()     => apiService.getAllFinancialYears(),
-    create:  (data) => apiService.createFinancialYear(data),
-    update:  (data) => apiService.updateFinancialYear(data),
+    getAll: () => apiService.getAllFinancialYears(),
+    create: (data) => apiService.createFinancialYear(data),
+    update: (data) => apiService.updateFinancialYear(data),
 };
 
 /* ─────────────────────────────────────────
@@ -26,11 +26,11 @@ const fyApi = {
 ───────────────────────────────────────── */
 function normalizeRecord(raw) {
     return {
-        financialYearID:           raw.financialYearID           ?? raw.FinancialYearID           ?? 0,
-        financialYearBeginDate:   (raw.financialYearBeginDate    ?? raw.FinancialYearBeginDate    ?? '').split('T')[0],
-        financialYearEndDate:     (raw.financialYearEndDate      ?? raw.FinancialYearEndDate      ?? '').split('T')[0],
-        financialYearAbbrevation:  raw.financialYearAbbrevation  ?? raw.FinancialYearAbbrevation  ?? '',
-        currentlyOpen:             raw.currentlyOpen             ?? raw.CurrentlyOpen             ?? false,
+        financialYearID: raw.financialYearID ?? raw.FinancialYearID ?? 0,
+        financialYearBeginDate: (raw.financialYearBeginDate ?? raw.FinancialYearBeginDate ?? '').split('T')[0],
+        financialYearEndDate: (raw.financialYearEndDate ?? raw.FinancialYearEndDate ?? '').split('T')[0],
+        financialYearAbbrevation: raw.financialYearAbbrevation ?? raw.FinancialYearAbbrevation ?? '',
+        currentlyOpen: raw.currentlyOpen ?? raw.CurrentlyOpen ?? false,
     };
 }
 
@@ -47,10 +47,10 @@ function fmtDate(d) {
 }
 
 const EMPTY_FORM = {
-    financialYearBeginDate:  '',
-    financialYearEndDate:    '',
+    financialYearBeginDate: '',
+    financialYearEndDate: '',
     financialYearAbbrevation: '',
-    currentlyOpen:           false,
+    currentlyOpen: false,
 };
 
 const PAGE_SIZE_OPTIONS = [10, 12, 15, 20];
@@ -84,7 +84,7 @@ function SortIcon({ col, sortKey, sortDir }) {
     const active = sortKey === col;
     return (
         <span className="pg-sort-icon">
-            <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"   />
+            <ChevronUp size={10} color={active && sortDir === 'asc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
             <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
         </span>
     );
@@ -122,12 +122,12 @@ function StatusBadge({ open }) {
 ══════════════════════════════════════════ */
 function FYModal({ onClose, onSaved, editData }) {
     const isEdit = !!editData;
-    const [form,       setForm]       = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
-    const [errors,     setErrors]     = useState({});
-    const [touched,    setTouched]    = useState({});
+    const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+    const [errors, setErrors] = useState({});
+    const [touched, setTouched] = useState({});
     const [submitting, setSubmitting] = useState(false);
-    const [success,    setSuccess]    = useState(false);
-    const [apiError,   setApiError]   = useState('');
+    const [success, setSuccess] = useState(false);
+    const [apiError, setApiError] = useState('');
 
     const handleChange = (key, val) => {
         setForm(p => ({ ...p, [key]: val }));
@@ -166,8 +166,8 @@ function FYModal({ onClose, onSaved, editData }) {
             // apiService axios interceptor rejects with the axios error object
             const msg =
                 err?.response?.data?.message ||
-                err?.response?.data?.title   ||
-                err?.message                 ||
+                err?.response?.data?.title ||
+                err?.message ||
                 'Something went wrong.';
             setApiError(msg);
         } finally {
@@ -184,7 +184,8 @@ function FYModal({ onClose, onSaved, editData }) {
     );
 
     return ReactDOM.createPortal(
-        <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+        // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="pg-overlay">
             <div className="pg-modal" style={{ maxWidth: 540 }}>
 
                 {/* Head */}
@@ -301,7 +302,7 @@ function FYModal({ onClose, onSaved, editData }) {
                                 }}>
                                 {form.currentlyOpen
                                     ? <ToggleRight size={22} color="#16a34a" style={{ flexShrink: 0 }} />
-                                    : <ToggleLeft  size={22} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+                                    : <ToggleLeft size={22} color="#c0c0d8" style={{ flexShrink: 0 }} />}
                                 <div>
                                     <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: form.currentlyOpen ? '#16a34a' : '#7878a0' }}>
                                         {form.currentlyOpen ? 'Currently Open' : 'Closed'}
@@ -325,7 +326,7 @@ function FYModal({ onClose, onSaved, editData }) {
                 {/* Footer */}
                 <div className="pg-modal__foot">
                     <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
-                    <button className="pg-btn-save"   onClick={handleSubmit} disabled={submitting}>
+                    <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
                         {success
                             ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Added!'}</>
                             : submitting
@@ -378,18 +379,18 @@ function FYCard({ fy, onEdit }) {
    FINANCIAL YEAR PAGE  (main export)
 ══════════════════════════════════════════ */
 export default function FinancialYearPage() {
-    const [records,     setRecords]     = useState([]);
-    const [loading,     setLoading]     = useState(true);
-    const [fetchError,  setFetchError]  = useState('');
-    const [showModal,   setShowModal]   = useState(false);
-    const [editRecord,  setEditRecord]  = useState(null);
-    const [search,      setSearch]      = useState('');
+    const [records, setRecords] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState('');
+    const [showModal, setShowModal] = useState(false);
+    const [editRecord, setEditRecord] = useState(null);
+    const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'open' | 'closed'
-    const [sortKey,     setSortKey]     = useState('financialYearBeginDate');
-    const [sortDir,     setSortDir]     = useState('desc');
-    const [page,        setPage]        = useState(1);
-    const [pageSize,    setPageSize]    = useState(12);
-    const tableRef   = useRef(null);
+    const [sortKey, setSortKey] = useState('financialYearBeginDate');
+    const [sortDir, setSortDir] = useState('desc');
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(12);
+    const tableRef = useRef(null);
     const [tableReady, setTableReady] = useState(false);
 
     // Column widths match COLS order:
@@ -401,7 +402,7 @@ export default function FinancialYearPage() {
         setLoading(true);
         setFetchError('');
         try {
-            const raw  = await fyApi.getAll();
+            const raw = await fyApi.getAll();
             const list = Array.isArray(raw)
                 ? raw
                 : Array.isArray(raw?.data)
@@ -415,8 +416,8 @@ export default function FinancialYearPage() {
         } catch (err) {
             const msg =
                 err?.response?.data?.message ||
-                err?.response?.data?.title   ||
-                err?.message                 ||
+                err?.response?.data?.title ||
+                err?.message ||
                 'Failed to load financial years.';
             setFetchError(msg);
         } finally {
@@ -431,12 +432,12 @@ export default function FinancialYearPage() {
         const q = search.toLowerCase();
         const matchSearch =
             r.financialYearAbbrevation.toLowerCase().includes(q) ||
-            String(r.financialYearID).includes(q)               ||
-            r.financialYearBeginDate.includes(q)                ||
+            String(r.financialYearID).includes(q) ||
+            r.financialYearBeginDate.includes(q) ||
             r.financialYearEndDate.includes(q);
         const matchStatus =
-            statusFilter === 'all'                               ||
-            (statusFilter === 'open'   &&  r.currentlyOpen)     ||
+            statusFilter === 'all' ||
+            (statusFilter === 'open' && r.currentlyOpen) ||
             (statusFilter === 'closed' && !r.currentlyOpen);
         return matchSearch && matchStatus;
     });
@@ -444,15 +445,15 @@ export default function FinancialYearPage() {
     const sorted = [...filtered].sort((a, b) => {
         let av = a[sortKey], bv = b[sortKey];
         if (typeof av === 'boolean') { av = av ? 1 : 0; bv = bv ? 1 : 0; }
-        if (typeof av === 'string')  av = av.toLowerCase();
-        if (typeof bv === 'string')  bv = bv.toLowerCase();
-        if (av < bv) return sortDir === 'asc' ? -1 :  1;
-        if (av > bv) return sortDir === 'asc' ?  1 : -1;
+        if (typeof av === 'string') av = av.toLowerCase();
+        if (typeof bv === 'string') bv = bv.toLowerCase();
+        if (av < bv) return sortDir === 'asc' ? -1 : 1;
+        if (av > bv) return sortDir === 'asc' ? 1 : -1;
         return 0;
     });
 
     const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-    const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
+    const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
 
     const handleSort = (key) => {
         if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -460,16 +461,16 @@ export default function FinancialYearPage() {
         setPage(1);
     };
 
-    const openCount   = records.filter(r =>  r.currentlyOpen).length;
+    const openCount = records.filter(r => r.currentlyOpen).length;
     const closedCount = records.filter(r => !r.currentlyOpen).length;
 
     const COLS = [
-        { key: 'financialYearID',          label: 'ID',           w: '7%'  },
+        { key: 'financialYearID', label: 'ID', w: '7%' },
         { key: 'financialYearAbbrevation', label: 'Abbreviation', w: '22%' },
-        { key: 'financialYearBeginDate',   label: 'Begin Date',   w: '18%' },
-        { key: 'financialYearEndDate',     label: 'End Date',     w: '18%' },
-        { key: 'currentlyOpen',            label: 'Status',       w: '18%' },
-        { key: '_action',                  label: 'Action',       w: '10%', noSort: true },
+        { key: 'financialYearBeginDate', label: 'Begin Date', w: '18%' },
+        { key: 'financialYearEndDate', label: 'End Date', w: '18%' },
+        { key: 'currentlyOpen', label: 'Status', w: '18%' },
+        { key: '_action', label: 'Action', w: '10%', noSort: true },
     ];
 
     /* smart page-number pills with ellipsis */
@@ -549,8 +550,8 @@ export default function FinancialYearPage() {
                             {/* Status filter pills */}
                             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                                 {[
-                                    { key: 'all',    label: 'All'    },
-                                    { key: 'open',   label: 'Open'   },
+                                    { key: 'all', label: 'All' },
+                                    { key: 'open', label: 'Open' },
                                     { key: 'closed', label: 'Closed' },
                                 ].map(f => (
                                     <button
@@ -698,14 +699,14 @@ export default function FinancialYearPage() {
                     {/* ── Pagination ── */}
                     <div className="pg-pagination">
                         <div className="pg-pagination__left">
-                            <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(1)}>              <ChevronsLeft  size={13} /></button>
-                            <button className="pg-pg-btn" disabled={page === 1}          onClick={() => setPage(p => p - 1)}>     <ChevronLeft   size={13} /></button>
+                            <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(1)}>              <ChevronsLeft size={13} /></button>
+                            <button className="pg-pg-btn" disabled={page === 1} onClick={() => setPage(p => p - 1)}>     <ChevronLeft size={13} /></button>
                             {pageNums.map((p, i) =>
                                 p === '…'
                                     ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
                                     : <button key={p} className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`} onClick={() => setPage(p)}>{p}</button>
                             )}
-                            <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>     <ChevronRight  size={13} /></button>
+                            <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>     <ChevronRight size={13} /></button>
                             <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(totalPages)}>     <ChevronsRight size={13} /></button>
                         </div>
                         <div className="pg-pagination__right">
