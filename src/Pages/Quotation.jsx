@@ -1043,8 +1043,8 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
 
   return ReactDOM.createPortal(
     <div className="pg-overlay">
-      <div className="pg-modal" style={{ maxWidth: 660 }}>
-        <div className="pg-modal__head">
+      <div className="pg-modal" style={{ maxWidth: 660, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+        <div className="pg-modal__head" style={{ flexShrink: 0 }}>
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap"><Building2 size={20} color="#049edf" /></div>
             <div>
@@ -1054,7 +1054,7 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
           </div>
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
-        <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0f0f8' }}>
+        <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0f0f8', flexShrink: 0 }}>
           <div className="pg-search-box">
             <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
             <input placeholder="Search by code, site address…" value={search} onChange={e => setSearch(e.target.value)} />
@@ -1062,14 +1062,14 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
           </div>
         </div>
         {selectable.length > 0 && (
-          <div className="qt-select-all-row" onClick={toggleAll}>
+          <div className="qt-select-all-row" style={{ flexShrink: 0 }} onClick={toggleAll}>
             <div className={`qt-modal-check ${allSelected ? 'qt-modal-check--all' : someSelected ? 'qt-modal-check--on' : ''}`}>
               {allSelected ? <Check size={12} color="#fff" /> : someSelected ? <div style={{ width: 8, height: 2, background: '#049edf', borderRadius: 2 }} /> : null}
             </div>
             <span>{allSelected ? 'Deselect All' : `Select All (${selectable.length})`}</span>
           </div>
         )}
-        <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 360, minHeight: 0 }}>
           {filtered.length === 0
             ? <div className="pg-empty__inner" style={{ padding: '32px 20px' }}><Building2 size={32} color="#d0d0e8" /><span className="pg-empty__label">No available hoardings</span></div>
             : filtered.map(h => {
@@ -1117,7 +1117,7 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
               );
             })}
         </div>
-        <div className="pg-modal__foot">
+        <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#9090a8', fontWeight: 600 }}>{selected.size} selected</span>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
@@ -1157,8 +1157,8 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap 
 
   return ReactDOM.createPortal(
     <div className="pg-overlay">
-      <div className="pg-modal" style={{ maxWidth: 540 }}>
-        <div className="pg-modal__head">
+      <div className="pg-modal" style={{ maxWidth: 540, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+        <div className="pg-modal__head" style={{ flexShrink: 0 }}>
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap"><Building2 size={20} color="#049edf" /></div>
             <div>
@@ -1169,7 +1169,7 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap 
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
 
-        <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0f0f8' }}>
+        <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0f0f8', flexShrink: 0 }}>
           <div className="pg-search-box">
             <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
             <input
@@ -1181,7 +1181,7 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap 
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', maxHeight: 360 }}>
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 360, minHeight: 0 }}>
           {filtered.map(h => {
             const isSelected = selected.has(h.hoardingID);
             const av = isAvailable(h);
@@ -1277,7 +1277,7 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap 
           })}
         </div>
 
-        <div className="pg-modal__foot">
+        <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <span style={{
             fontFamily: 'Nunito,sans-serif', fontSize: 12.5,
             color: '#9090a8', fontWeight: 600,
@@ -1308,8 +1308,8 @@ function TermsModal({ selected, onSelect, termsList, onClose }) {
   const sorted = useMemo(() => [...termsList].sort((a, b) => (a.order || 0) - (b.order || 0)), [termsList]);
   return ReactDOM.createPortal(
     <div className="pg-overlay">
-      <div className="pg-modal" style={{ maxWidth: 560 }}>
-        <div className="pg-modal__head">
+      <div className="pg-modal" style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+        <div className="pg-modal__head" style={{ flexShrink: 0 }}>
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap"><List size={20} color="#049edf" /></div>
             <div>
@@ -1319,7 +1319,7 @@ function TermsModal({ selected, onSelect, termsList, onClose }) {
           </div>
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
-        <div style={{ flex: 1, overflowY: 'auto', maxHeight: 440, padding: '16px 24px' }}>
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 440, minHeight: 0, padding: '16px 24px' }}>
           {sorted.length === 0 && (
             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#9090a8', textAlign: 'center', padding: '28px 0' }}>
               No terms found. Add them in Customer Terms settings.
@@ -1344,7 +1344,7 @@ function TermsModal({ selected, onSelect, termsList, onClose }) {
             );
           })}
         </div>
-        <div className="pg-modal__foot">
+        <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#9090a8', fontWeight: 600 }}>{selected.length}/3 selected</span>
           <button className="pg-btn-save" onClick={onClose}><Check size={14} /> Done</button>
         </div>
@@ -1551,6 +1551,103 @@ function HoardingConflictModal({ conflicts, onClose }) {
     document.body
   );
 }
+function QuotationDeleteConfirmModal({ count, onConfirm, onClose }) {
+  const noBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (noBtnRef.current) {
+      noBtnRef.current.focus();
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 99999,
+        background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 22, width: '100%', maxWidth: 440,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '24px 24px 20px',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: '#fef2f2', border: '2px solid #fee2e2',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Trash2 size={20} color="#ef4444" />
+          </div>
+          <div>
+            <h3 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#1a1a2e', margin: 0 }}>
+              Confirm Deletion
+            </h3>
+            <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#7878a0', margin: '4px 0 0' }}>
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 600,
+          color: '#4a5568', lineHeight: 1.5, marginBottom: 24,
+        }}>
+          Are you sure you want to delete the <strong>{count}</strong> selected quotation{count !== 1 ? 's' : ''}?
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12,
+        }}>
+          {/* Yes button: Red secondary/action style */}
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '10px 20px', borderRadius: 10, border: '1.5px solid #fca5a5',
+              background: '#fff', color: '#dc2626', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.target.style.background = '#fef2f2'; }}
+            onMouseLeave={e => { e.target.style.background = '#fff'; }}
+          >
+            Yes, Delete
+          </button>
+
+          {/* No/Cancel button: Focused by default, with premium gradient */}
+          <button
+            ref={noBtnRef}
+            onClick={onClose}
+            style={{
+              padding: '11px 24px', borderRadius: 10, border: 'none',
+              background: 'linear-gradient(135deg,#049edf,#6c63ff)',
+              color: '#fff', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              outline: '3px solid rgba(4,158,223,0.3)',
+              boxShadow: '0 4px 12px rgba(108,99,255,0.2)',
+            }}
+          >
+            No, Cancel
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 /* ═══════════════════════════════════════════
    MERGE HOARDING MODAL
 ═══════════════════════════════════════════ */
@@ -1626,8 +1723,8 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
 
   return ReactDOM.createPortal(
     <div className="pg-overlay">
-      <div className="pg-modal" style={{ maxWidth: 580 }}>
-        <div className="pg-modal__head">
+      <div className="pg-modal" style={{ maxWidth: 580, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+        <div className="pg-modal__head" style={{ flexShrink: 0 }}>
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap" style={{ background: 'rgba(124,58,237,0.10)' }}>
               <Link2 size={20} color="#7c3aed" />
@@ -1643,7 +1740,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
         </div>
 
         {/* Direction */}
-        <div style={{ padding: '14px 24px', borderBottom: '1px solid #f0f0f8' }}>
+        <div style={{ padding: '14px 24px', borderBottom: '1px solid #f0f0f8', flexShrink: 0 }}>
           <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78', marginBottom: 10 }}>
             Merge Direction
           </div>
@@ -1668,14 +1765,14 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
           </div>
         </div>
 
-        <div style={{ padding: '14px 24px 0', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>
+        <div style={{ padding: '14px 24px 0', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78', flexShrink: 0 }}>
           Select hoardings from the Same Site
           <span style={{ color: '#9090a8', fontWeight: 600, marginLeft: 6 }}>
             ({sel.length} selected — min. 2)
           </span>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', maxHeight: 300, padding: '8px 24px 14px' }}>
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 300, minHeight: 0, padding: '8px 24px 14px' }}>
           {siteGroups.map(group => {
             const groupColor = group.siteID != null ? siteColorMap.get(group.siteID) : null;
             const groupLocked = firstSiteID !== undefined && group.siteID !== firstSiteID;
@@ -1691,7 +1788,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
                   {groupColor && !groupLocked && (
                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: groupColor.dot, flexShrink: 0 }} />
                   )}
-                  <MapPin size={12} color={groupLocked ? '#c0c0c8' : (groupColor?.dot || '#9090a8')} />
+                  <MapPin size={12} color={groupLocked ? '#c0c0d8' : (groupColor?.dot || '#9090a8')} />
                   <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: groupLocked ? '#b0b0c8' : '#1a1a2e' }}>
                     {group.label}
                   </span>
@@ -1758,11 +1855,11 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
 
         {/* Preview */}
         {preview && (
-          <div style={{ margin: '0 24px 14px', padding: '12px 16px', borderRadius: 12, background: 'rgba(124,58,237,0.06)', border: '1.5px solid rgba(124,58,237,0.20)' }}>
+          <div style={{ margin: '0 24px 14px', padding: '12px 16px', borderRadius: 12, background: 'rgba(124,58,237,0.06)', border: '1.5px solid rgba(124,58,237,0.20)', flexShrink: 0 }}>
             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#7c3aed', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Link2 size={13} /> Merge Preview ({preview.count} hoardings)
             </div>
-            <div style={{ display: 'flex', gap: 24 }}>
+            <div style={{ display: 'flex', gap: '16px 24px', flexWrap: 'wrap' }}>
               <div>
                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8' }}>Combined Size</div>
                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 16, fontWeight: 900, color: '#1a1a2e' }}>{preview.size}</div>
@@ -1781,7 +1878,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
           </div>
         )}
 
-        <div className="pg-modal__foot">
+        <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
             {sel.length < 2 ? 'Select at least 2 hoardings' : `${sel.length} hoardings will be merged`}
           </div>
@@ -1990,13 +2087,14 @@ function CreateContractFromQuotModal({
     l.quotationID === quot.quotationID &&
     l.quotationRevisionNumber === quot.quotationRevisionNumber
   );
+  const regularLines = myLines.filter(l => !l.mergeFlag);
   const myMerges = quotMerges.filter(m =>
     Number(m.quotationID) === Number(quot.quotationID) &&
     Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
   );
 
   // Collect all unique hoardingIDs from merges that are NOT already in regular lines
-  const regularHoardingIds = new Set(myLines.map(l => Number(l.hoardingID)));
+  const regularHoardingIds = new Set(regularLines.map(l => Number(l.hoardingID)));
   const mergedHoardingIds = [...new Set(
     myMerges
       .map(m => Number(m.hoardingID))
@@ -2017,7 +2115,7 @@ function CreateContractFromQuotModal({
   /* Build one editable row per quotation line */
   const [contractRows, setContractRows] = useState(() => {
     // Regular lines (non-merged)
-    const regularRows = myLines.map(l => {
+    const regularRows = regularLines.map(l => {
       const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
       const siteID = h?.siteID ?? h?.site?.siteID ?? null;
       const siteObj = siteID != null ? siteMap.get(siteID) : null;
@@ -2079,14 +2177,26 @@ function CreateContractFromQuotModal({
         const combinedCodes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
         const combinedLocation = locations.join(' + ');
         const totalRent = hoardingObjs.reduce((s, h) => s + (h.monthlyRent || 0), 0);
-        const matchingLine = quotLines.find(l =>
+
+        // Find matching line with robust fallbacks
+        let matchingLine = quotLines.find(l =>
           Number(l.quotationID) === Number(quot.quotationID) &&
           Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber) &&
           records.some(m => Number(m.quotationLineNumber) === Number(l.quotationLineNumber))
         );
+        if (!matchingLine) {
+          matchingLine = myLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+            const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
+            return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
+          }));
+        }
+        if (!matchingLine) {
+          matchingLine = myLines.find(l => l.mergeFlag);
+        }
+
         const rentVal = matchingLine?.rentAmount || totalRent || 0;
-        // Dates: from quotation date or today
-        const startDate = quot.quotationDate?.split('T')[0] || '';
+        // Dates: from quotation line's period date or fallback to quotation date
+        const startDate = matchingLine?.periodBeginDate || quot.quotationDate?.split('T')[0] || '';
         const endDate = matchingLine?.periodEndDate || '';
 
         mergedRows.push({
@@ -2312,10 +2422,10 @@ function CreateContractFromQuotModal({
 
   return ReactDOM.createPortal(
     <div className="pg-overlay">
-      <div className="pg-modal" style={{ maxWidth: 940 }}>
+      <div className="pg-modal" style={{ maxWidth: 940, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
 
         {/* ── Head ── */}
-        <div className="pg-modal__head">
+        <div className="pg-modal__head" style={{ flexShrink: 0 }}>
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap" style={{ background: 'rgba(124,58,237,0.10)' }}>
               <FileCheck size={20} color="#7c3aed" />
@@ -2324,7 +2434,7 @@ function CreateContractFromQuotModal({
               <h5 className="pg-modal__title">Create Customer Contracts</h5>
               <p className="pg-modal__subtitle">
                 From Quotation&nbsp;<strong>{quot.quotationNumber || `#${quot.quotationID}`}</strong>
-                &nbsp;·&nbsp;{myLines.length + mergedHoardingIds.length} hoarding{(myLines.length + mergedHoardingIds.length) !== 1 ? 's' : ''}
+                &nbsp;·&nbsp;{(regularLines.length + mergedHoardingIds.length)} hoarding{(regularLines.length + mergedHoardingIds.length) !== 1 ? 's' : ''}
                 {Number(quot.quotationRevisionNumber) > 1 && (
                   <span style={{ marginLeft: 6, padding: '1px 7px', borderRadius: 8, background: 'rgba(217,119,6,0.10)', color: '#7c7c7c', fontSize: 11, fontWeight: 800, border: '1px solid rgba(217,119,6,0.25)' }}>
                     Rev. {quot.quotationRevisionNumber}
@@ -2337,7 +2447,7 @@ function CreateContractFromQuotModal({
         </div>
         {/* ── Occupancy warning ── */}
         {occupancyWarnings.length > 0 && (
-          <div style={{ padding: '14px 24px 0' }}>
+          <div style={{ padding: '14px 24px 0', flexShrink: 0 }}>
             <OccupancyWarningBanner
               messages={occupancyWarnings}
               onDismiss={() => setOccupancyWarnings([])}
@@ -2347,7 +2457,7 @@ function CreateContractFromQuotModal({
         {/* ── Customer bar ── */}
         <div style={{
           padding: '11px 24px', borderBottom: '1px solid #f0f0f8', background: '#fafafe',
-          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+          display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', flexShrink: 0,
         }}>
           <div style={{
             width: 32, height: 32, borderRadius: 9,
@@ -2385,7 +2495,7 @@ function CreateContractFromQuotModal({
         {/* ── Config bar ── */}
         <div style={{
           padding: '10px 24px', borderBottom: '1px solid #f0f0f8', background: '#fff',
-          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap',
+          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', flexShrink: 0,
         }}>
           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#5a5a78', whiteSpace: 'nowrap' }}>
             Payment Frequency:
@@ -2410,7 +2520,7 @@ function CreateContractFromQuotModal({
         </div>
 
         {/* ── Table ── */}
-        <div style={{ overflow: 'auto', maxHeight: 370 }}>
+        <div style={{ flex: '1 1 auto', overflow: 'auto', maxHeight: 370, minHeight: 0 }}>
           {contractRows.length === 0 ? (
             <div style={{ padding: '40px 20px', textAlign: 'center', fontFamily: 'Nunito,sans-serif', color: '#9090a8' }}>
               <Building2 size={36} color="#d0d0e8" style={{ marginBottom: 10 }} />
@@ -2628,7 +2738,7 @@ function CreateContractFromQuotModal({
           <div style={{
             padding: '10px 24px', borderTop: '1px solid #f0f0f8',
             background: 'rgba(124,58,237,0.04)',
-            display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap',
+            display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap', flexShrink: 0,
           }}>
             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#7c3aed' }}>
               Total Contract Value:&nbsp;
@@ -2649,7 +2759,7 @@ function CreateContractFromQuotModal({
         )}
 
         {/* ── Footer ── */}
-        <div className="pg-modal__foot">
+        <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#9090a8', fontWeight: 600 }}>
             {selectedRows.length} of {contractRows.length} hoardings selected
           </span>
@@ -2723,6 +2833,29 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
   /* ── Creator state ── */
   const [isCreating, setIsCreating] = useState(false);
+
+  /* ── Delete Selection Mode ── */
+  const [deleteMode, setDeleteMode] = useState(false);
+  const [selectedQuotIds, setSelectedQuotIds] = useState(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!isCreating && e.ctrlKey && (e.key === 'j' || e.key === 'J')) {
+        e.preventDefault();
+        setDeleteMode(prev => {
+          const next = !prev;
+          if (!next) {
+            setSelectedQuotIds(new Set());
+          }
+          return next;
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCreating]);
+
   const [step, setStep] = useState(1);
   const [step1Error, setStep1Error] = useState('');
   const [step2Error, setStep2Error] = useState('');
@@ -2765,12 +2898,20 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [step2TableReady, setStep2TableReady] = useState(false);
   const histTableRef = useRef(null);
   const [histTableReady, setHistTableReady] = useState(false);
-  const step2ColWidths = withPrinting
-    ? [40, 160, 70, 50, 50, 100, 50, 100, 80, 110, 80, 80, 80, 46]
-    : [40, 200, 80, 60, 60, 120, 60, 120, 80, 80, 46];
+  const step2ColWidths = useMemo(() => {
+    return withPrinting
+      ? [40, 160, 70, 50, 50, 100, 50, 100, 80, 110, 80, 80, 80, 46]
+      : [40, 200, 80, 60, 60, 120, 60, 120, 80, 80, 46];
+  }, [withPrinting]);
+
+  const histColWidths = useMemo(() => {
+    return deleteMode
+      ? [44, 40, 140, 200, 110, 110, 120, 220]
+      : [44, 140, 200, 110, 110, 120, 220];
+  }, [deleteMode]);
 
   useResizableColumns(step2TableRef, step2TableReady, step2ColWidths);
-  useResizableColumns(histTableRef, histTableReady, [44, 140, 200, 110, 110, 120, 220]);
+  useResizableColumns(histTableRef, histTableReady, histColWidths);
 
   useEffect(() => {
     setStep2TableReady(false);
@@ -3050,7 +3191,19 @@ export default function QuotationPage({ onNavigateToContracts }) {
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
-        setHoardings(normalizeList(hRaw));
+        
+        const rawHoardings = normalizeList(hRaw);
+        const seenHoardings = new Set();
+        const uniqueHoardings = [];
+        for (const h of rawHoardings) {
+          const id = Number(h.hoardingID ?? h.HoardingID ?? 0);
+          if (id > 0 && !seenHoardings.has(id)) {
+            seenHoardings.add(id);
+            uniqueHoardings.push(h);
+          }
+        }
+        setHoardings(uniqueHoardings);
+
         setSites(normalizeList(sRaw).map(normalizeSite).filter(Boolean));
         setTermsList(normalizeList(tRaw));
         setQuotations(normalizeList(qRaw).map(normalizeQuotation));
@@ -3132,6 +3285,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
         })));
       } catch { /* silent — merged rows just won't show if this fails */ }
 
+      setDeleteMode(false);
+      setSelectedQuotIds(new Set());
       showToast('List refreshed', 'success');
     } catch (err) {
       showToast('Refresh failed: ' + (err?.message || 'Unknown error'), 'error');
@@ -3193,6 +3348,24 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const grossTotal = useMemo(() => subTotal + cgstAmt + sgstAmt, [subTotal, cgstAmt, sgstAmt]);
   const finalTotal = useMemo(() => Math.round(grossTotal), [grossTotal]);
   const roundOff = useMemo(() => finalTotal - grossTotal, [finalTotal, grossTotal]);
+
+  const tableTotals = useMemo(() => {
+    let nos = 0;
+    let rate = 0;
+    let printCost = 0;
+    let amount = 0;
+    rows.forEach(r => {
+      if (r.rowType !== 'extra') nos += Number(r.nos || 0);
+      if (r.rowType === 'hoarding' || r.rowType === 'merged') rate += Number(r.ratePerMonth || 0);
+      if (r.rowType === 'hoarding' || r.rowType === 'merged') {
+        printCost += Number(r.printingCost || 0);
+      } else if (r.rowType === 'printing') {
+        printCost += Number(r.amount || 0);
+      }
+      amount += Number(r.amount || 0);
+    });
+    return { nos, rate, printCost, amount };
+  }, [rows]);
 
   /* ── Row operations ── */
   const updateRow = useCallback((id, field, val) => {
@@ -4385,6 +4558,23 @@ export default function QuotationPage({ onNavigateToContracts }) {
     } finally { setSaving(false); }
   };
 
+  const handleDeleteConfirm = async () => {
+    setShowDeleteConfirm(false);
+    setSaving(true);
+    try {
+      const ids = Array.from(selectedQuotIds);
+      await Promise.all(ids.map(id => apiService.archiveQuotation(id)));
+      showToast(`${ids.length} quotation(s) deleted successfully.`, 'success');
+      setSelectedQuotIds(new Set());
+      setDeleteMode(false);
+      await refreshQuotations();
+    } catch (err) {
+      console.error('[Delete Confirm] Error archiving quotations:', err);
+      showToast('Deletion failed: ' + (err?.response?.data?.message || err?.message || 'Unknown error'), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   /* ── History grouped table ── */
   const allGrouped = useMemo(() => {
@@ -4786,7 +4976,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                       <span className="pg-empty__label">No hoardings added yet</span>
                     </div>
                   ) : (
-                    <table className="pg-table" ref={step2TableRef}>
+                    <table className="pg-table" ref={step2TableRef} style={{ minWidth: withPrinting ? 1420 : 1070 }}>
                       <thead>
                         <tr>
                           <th className="pg-th">#</th>
@@ -5075,6 +5265,36 @@ export default function QuotationPage({ onNavigateToContracts }) {
                           });
                         })()}
                       </tbody>
+                      <tfoot>
+                        <tr style={{ background: '#f8f8fd', borderTop: '2px solid #ececf8', fontWeight: 'bold' }}>
+                          <td className="pg-td" style={{ textAlign: 'center' }}></td>
+                          <td className="pg-td" style={{ textAlign: 'left', fontWeight: 900, fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#1a1a2e' }}>Total</td>
+                          <td className="pg-td"></td>
+                          <td className="pg-td"></td>
+                          <td className="pg-td" style={{ textAlign: 'center', fontWeight: 900, fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#1a1a2e' }}>
+                            {tableTotals.nos}
+                          </td>
+                          <td className="pg-td"></td>
+                          <td className="pg-td"></td>
+                          <td className="pg-td"></td>
+                          <td className="pg-td" style={{ fontWeight: 900, fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#1a1a2e' }}>
+                            ₹ {fmtCurrency(tableTotals.rate)}
+                          </td>
+                          {withPrinting && (
+                            <>
+                              <td className="pg-td"></td>
+                              <td className="pg-td"></td>
+                              <td className="pg-td" style={{ fontWeight: 900, fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#7c3aed' }}>
+                                ₹ {fmtCurrency(tableTotals.printCost)}
+                              </td>
+                            </>
+                          )}
+                          <td className="pg-td" style={{ fontWeight: 900, fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#049edf' }}>
+                            ₹ {fmtCurrency(tableTotals.amount)}
+                          </td>
+                          <td className="pg-td"></td>
+                        </tr>
+                      </tfoot>
                     </table>
                   )}
                 </div>
@@ -5288,47 +5508,49 @@ export default function QuotationPage({ onNavigateToContracts }) {
                   </div>
                 </div>
               </div>
-              <table className="pg-table">
-                <thead>
-                  <tr>
-                    <th className="pg-th" style={{ width: '14%' }}>Version</th>
-                    <th className="pg-th" style={{ width: '14%' }}>Date</th>
-                    <th className="pg-th" style={{ width: '22%' }}>Customer</th>
-                    <th className="pg-th" style={{ width: '18%' }}>Grand Total</th>
-                    <th className="pg-th" style={{ width: '16%', textAlign: 'center' }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {prevRevisions.map(rev => (
-                    <tr key={`prev-${rev.quotationID}-${rev.quotationRevisionNumber}`} className="pg-tr">
-                      <td className="pg-td">
-                        {Number(rev.quotationRevisionNumber) > 1
-                          ? <span className="qt-rev-badge"><RefreshCw size={9} /> Rev. {rev.quotationRevisionNumber}</span>
-                          : <span className="qt-orig-badge">Original</span>}
-                      </td>
-                      <td className="pg-td">
-                        <span style={{ color: '#4a5568', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600 }}>
-                          {fmtDateDisplay(rev.quotationDate)}
-                        </span>
-                      </td>
-                      <td className="pg-td pg-td--overflow">
-                        <span className="pg-td__ellipsis">{custName(rev.customerID)}</span>
-                      </td>
-                      <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, color: '#049edf' }}>
-                          ₹ {fmtCurrency(rev.totalAmount)}
-                        </span>
-                      </td>
-                      <td className="pg-td" style={{ textAlign: 'center' }}>
-                        <button onClick={() => handleViewPDF(rev)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 13px', borderRadius: 8, border: '1.5px solid #049edf', color: '#049edf', background: 'rgba(4,158,223,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800 }}>
-                          <Printer size={12} /> View PDF
-                        </button>
-                      </td>
+              <div className="pg-desktop-table">
+                <table className="pg-table" style={{ minWidth: 800 }}>
+                  <thead>
+                    <tr>
+                      <th className="pg-th" style={{ width: '14%' }}>Version</th>
+                      <th className="pg-th" style={{ width: '14%' }}>Date</th>
+                      <th className="pg-th" style={{ width: '22%' }}>Customer</th>
+                      <th className="pg-th" style={{ width: '18%' }}>Grand Total</th>
+                      <th className="pg-th" style={{ width: '16%', textAlign: 'center' }}>Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {prevRevisions.map(rev => (
+                      <tr key={`prev-${rev.quotationID}-${rev.quotationRevisionNumber}`} className="pg-tr">
+                        <td className="pg-td">
+                          {Number(rev.quotationRevisionNumber) > 1
+                            ? <span className="qt-rev-badge"><RefreshCw size={9} /> Rev. {rev.quotationRevisionNumber}</span>
+                            : <span className="qt-orig-badge">Original</span>}
+                        </td>
+                        <td className="pg-td">
+                          <span style={{ color: '#4a5568', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600 }}>
+                            {fmtDateDisplay(rev.quotationDate)}
+                          </span>
+                        </td>
+                        <td className="pg-td pg-td--overflow">
+                          <span className="pg-td__ellipsis">{custName(rev.customerID)}</span>
+                        </td>
+                        <td className="pg-td">
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, color: '#049edf' }}>
+                            ₹ {fmtCurrency(rev.totalAmount)}
+                          </span>
+                        </td>
+                        <td className="pg-td" style={{ textAlign: 'center' }}>
+                          <button onClick={() => handleViewPDF(rev)}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '5px 13px', borderRadius: 8, border: '1.5px solid #049edf', color: '#049edf', background: 'rgba(4,158,223,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800 }}>
+                            <Printer size={12} /> View PDF
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           );
         })()}
@@ -5356,180 +5578,297 @@ export default function QuotationPage({ onNavigateToContracts }) {
               />
               {histSearch && <X size={13} style={{ cursor: 'pointer', color: '#9090a8', flexShrink: 0 }} onClick={() => setHistSearch('')} />}
             </div>
+            {deleteMode && (
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '6px 12px', borderRadius: 8,
+                background: '#fef2f2', border: '1px solid #fee2e2',
+                color: '#991b1b', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
+                flexShrink: 0,
+              }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#ef4444', display: 'inline-block' }} />
+                Delete Mode Active
+              </div>
+            )}
+            {deleteMode && (
+              <button
+                onClick={() => {
+                  if (selectedQuotIds.size === 0) {
+                    showToast('Please select at least one quotation to delete', 'warning');
+                    return;
+                  }
+                  setShowDeleteConfirm(true);
+                }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 6,
+                  padding: '8px 14px', borderRadius: 9,
+                  border: 'none',
+                  background: selectedQuotIds.size > 0 ? '#ef4444' : '#fee2e2',
+                  color: selectedQuotIds.size > 0 ? '#fff' : '#f87171',
+                  cursor: selectedQuotIds.size > 0 ? 'pointer' : 'not-allowed',
+                  fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700,
+                  flexShrink: 0,
+                  boxShadow: selectedQuotIds.size > 0 ? '0 2px 6px rgba(239,68,68,0.25)' : 'none',
+                  transition: 'all 0.2s',
+                }}
+                disabled={selectedQuotIds.size === 0}
+              >
+                <Trash2 size={13} /> Delete Selected ({selectedQuotIds.size})
+              </button>
+            )}
             <button onClick={refreshQuotations}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: '1.5px solid #e8e8f4', background: '#fff', color: '#5a5a78', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, flexShrink: 0 }}>
               <RefreshCw size={13} /> Refresh
             </button>
           </div>
 
-          <table className="pg-table" ref={histTableRef}>
-            <thead>
-              <tr>
-                <th style={{ width: 44 }} className="pg-th"></th>
-                {HIST_COLS.map(col => (
-                  <th key={col.key} style={{ width: col.w }}
-                    className={['pg-th', col.noSort ? '' : 'pg-th--sort'].filter(Boolean).join(' ')}
-                    onClick={() => !col.noSort && handleHistSort(col.key)}
-                  >
-                    <div className="pg-th__inner">
-                      {col.label}
-                      {!col.noSort
-                        ? <SortIcon col={col.key} sortKey={histSortKey} sortDir={histSortDir} />
-                        : <Filter size={10} color="#d0d0e4" style={{ marginLeft: 5 }} />}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {histPaginated.length === 0 ? (
+          <div className="pg-desktop-table">
+            <table className="pg-table" ref={histTableRef} style={{ minWidth: 950 }}>
+              <thead>
                 <tr>
-                  <td colSpan={HIST_COLS.length + 1} className="pg-td pg-empty" style={{ maxWidth: 'none' }}>
-                    <div className="pg-empty__inner">
-                      <FileText size={36} color="#d0d0e8" />
-                      <span className="pg-empty__label">No quotations found</span>
-                    </div>
-                  </td>
+                  <th style={{ width: 44 }} className="pg-th"></th>
+                  {deleteMode && (
+                    <th style={{ width: 40, textAlign: 'center' }} className="pg-th">
+                      <input
+                        type="checkbox"
+                        checked={
+                          histPaginated.length > 0 &&
+                          histPaginated.every(group =>
+                            group.every(q => selectedQuotIds.has(q.quotationID))
+                          )
+                        }
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setSelectedQuotIds(prev => {
+                            const next = new Set(prev);
+                            histPaginated.forEach(group => {
+                              group.forEach(q => {
+                                if (checked) {
+                                  next.add(q.quotationID);
+                                } else {
+                                  next.delete(q.quotationID);
+                                }
+                              });
+                            });
+                            return next;
+                          });
+                        }}
+                        style={{ cursor: 'pointer', verticalAlign: 'middle' }}
+                      />
+                    </th>
+                  )}
+                  {HIST_COLS.map(col => (
+                    <th key={col.key} style={{ width: col.w }}
+                      className={['pg-th', col.noSort ? '' : 'pg-th--sort'].filter(Boolean).join(' ')}
+                      onClick={() => !col.noSort && handleHistSort(col.key)}
+                    >
+                      <div className="pg-th__inner">
+                        {col.label}
+                        {!col.noSort
+                          ? <SortIcon col={col.key} sortKey={histSortKey} sortDir={histSortDir} />
+                          : <Filter size={10} color="#d0d0e4" style={{ marginLeft: 5 }} />}
+                      </div>
+                    </th>
+                  ))}
                 </tr>
-              ) : histPaginated.map(group => {
-                const latest = group[0];
-                const groupKey = (latest.quotationNumber || '').trim() || String(latest.quotationID);
-                const isExp = expandedGroups.has(groupKey);
-                const hasRevs = group.length > 1;
+              </thead>
+              <tbody>
+                {histPaginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={HIST_COLS.length + 1 + (deleteMode ? 1 : 0)} className="pg-td pg-empty" style={{ maxWidth: 'none' }}>
+                      <div className="pg-empty__inner">
+                        <FileText size={36} color="#d0d0e8" />
+                        <span className="pg-empty__label">No quotations found</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : histPaginated.map(group => {
+                  const latest = group[0];
+                  const groupKey = (latest.quotationNumber || '').trim() || String(latest.quotationID);
+                  const isExp = expandedGroups.has(groupKey);
+                  const hasRevs = group.length > 1;
 
-                return (
-                  <React.Fragment key={groupKey}>
-                    <tr className="pg-tr qt-group-row">
-                      <td className="pg-td" style={{ textAlign: 'center' }}>
-                        {hasRevs ? (
-                          <button className="qt-expand-btn" onClick={() => toggleGroup(groupKey)}
-                            title={isExp ? 'Hide revisions' : `Show ${group.length - 1} older revision${group.length - 1 !== 1 ? 's' : ''}`}>
-                            {isExp ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                          </button>
-                        ) : <span style={{ width: 28, display: 'inline-block' }} />}
-                      </td>
-                      <td className="pg-td">
-                        <div className="pg-td__primary">{latest.quotationNumber}</div>
-                        {hasRevs && (
-                          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600, marginTop: 2 }}>
-                            {group.length - 1} older revision{group.length - 1 !== 1 ? 's' : ''}
-                          </div>
+                  return (
+                    <React.Fragment key={groupKey}>
+                      <tr className="pg-tr qt-group-row">
+                        <td className="pg-td" style={{ textAlign: 'center' }}>
+                          {hasRevs ? (
+                            <button className="qt-expand-btn" onClick={() => toggleGroup(groupKey)}
+                              title={isExp ? 'Hide revisions' : `Show ${group.length - 1} older revision${group.length - 1 !== 1 ? 's' : ''}`}>
+                              {isExp ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                            </button>
+                          ) : <span style={{ width: 28, display: 'inline-block' }} />}
+                        </td>
+                        {deleteMode && (
+                          <td className="pg-td" style={{ textAlign: 'center' }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedQuotIds.has(latest.quotationID)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setSelectedQuotIds(prev => {
+                                  const next = new Set(prev);
+                                  if (checked) {
+                                    next.add(latest.quotationID);
+                                    // Automatically check all revisions in this group
+                                    group.forEach(q => next.add(q.quotationID));
+                                  } else {
+                                    next.delete(latest.quotationID);
+                                    // Automatically uncheck all revisions in this group
+                                    group.forEach(q => next.delete(q.quotationID));
+                                  }
+                                  return next;
+                                });
+                              }}
+                              style={{ cursor: 'pointer', width: 15, height: 15 }}
+                            />
+                          </td>
                         )}
-                      </td>
-                      <td className="pg-td pg-td--overflow">
-                        <span className="pg-td__ellipsis" title={custName(latest.customerID)}>{custName(latest.customerID)}</span>
-                      </td>
-                      <td className="pg-td">
-                        <span style={{ color: '#4a5568' }}>{fmtDateDisplay(latest.quotationDate)}</span>
-                      </td>
-                      <td className="pg-td" style={{ textAlign: 'center' }}>
-                        {Number(latest.quotationRevisionNumber) > 1
-                          ? <span className="qt-rev-badge"><RefreshCw size={9} />Rev. {latest.quotationRevisionNumber}</span>
-                          : <span className="qt-orig-badge">Original</span>}
-                      </td>
-                      <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, color: '#049edf' }}>₹ {fmtCurrency(latest.totalAmount)}</span>
-                      </td>
-                      {/* ── Actions: PDF · Contract · Revise ── */}
-                      <td className="pg-td">
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                          {/* PDF */}
-                          <button onClick={() => handleViewPDF(latest)} title="View / Print PDF"
-                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #049edf', color: '#049edf', background: 'rgba(4,158,223,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                            <Printer size={13} /> PDF
-                          </button>
-                          {/* Proforma Invoice */}
-                          <button onClick={() => handleViewProforma(latest)} title="Download Proforma Invoice"
-                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #16a34a', color: '#16a34a', background: 'rgba(22,163,74,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                            <FileText size={13} /> Proforma
-                          </button>
-                          {/* ← NEW: Create Contract button */}
-                          {(() => {
-                            const done = contractedQuotIds.has(latest.quotationID);
-                            return (
-                              <button
-                                onClick={() => {
-                                  if (done) return;
-                                  setContractQuot(latest);
-                                  setShowContractModal(true);
-                                }}
-                                disabled={done}
-                                title={done ? 'Contract already created for this quotation' : 'Create customer contract'}
-                                style={{
-                                  display: 'flex', alignItems: 'center', gap: 5,
-                                  padding: '5px 11px', borderRadius: 8, border: 'none',
-                                  color: '#fff',
-                                  background: done
-                                    ? '#16a34a'
-                                    : 'linear-gradient(135deg, #049edf, #6c63ff)',
-                                  cursor: done ? 'not-allowed' : 'pointer',
-                                  fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800,
-                                  whiteSpace: 'nowrap',
-                                  boxShadow: done ? 'none' : '0 2px 6px rgba(124,58,237,0.25)',
-                                  opacity: done ? 0.75 : 1,
-                                  pointerEvents: done ? 'none' : 'auto',
-                                }}
-                              >
-                                {done
-                                  ? <><Check size={13} /> Created</>
-                                  : <><FileCheck size={13} /> Contract</>}
-                              </button>
-                            );
-                          })()}
-                          {/* Edit — edits this exact revision in place */}
-                          <button onClick={() => handleEditQuotation(latest)} title="Edit this quotation (same number & revision)"
-                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #f59e0b', color: '#f59e0b', background: 'rgba(245,158,11,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                            <Edit2 size={13} /> Edit
-                          </button>
-                          {/* Revise */}
-                          <button onClick={() => handleReopenHistory(latest)} title="Create Revision"
-                            style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #e8e8f4', color: '#5a5a78', background: '#fff', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                            <Edit2 size={13} /> Revise
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-
-                    {isExp && group.slice(1).map((rev) => (
-                      <tr key={`${rev.quotationID}-${rev.quotationRevisionNumber}`} className="pg-tr qt-rev-row">
-                        <td className="pg-td"></td>
                         <td className="pg-td">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 12 }}>
-                            <div className="qt-rev-tree-line" />
-                            {Number(rev.quotationRevisionNumber) > 1
-                              ? <span className="qt-rev-badge" style={{ fontSize: 11 }}><RefreshCw size={9} />Rev. {rev.quotationRevisionNumber}</span>
-                              : <span className="qt-orig-badge">Original</span>}
-                          </div>
+                          <div className="pg-td__primary">{latest.quotationNumber}</div>
+                          {hasRevs && (
+                            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600, marginTop: 2 }}>
+                              {group.length - 1} older revision{group.length - 1 !== 1 ? 's' : ''}
+                            </div>
+                          )}
                         </td>
                         <td className="pg-td pg-td--overflow">
-                          <span className="pg-td__ellipsis" style={{ color: '#9090a8' }}>{custName(rev.customerID)}</span>
+                          <span className="pg-td__ellipsis" title={custName(latest.customerID)}>{custName(latest.customerID)}</span>
                         </td>
                         <td className="pg-td">
-                          <span style={{ color: '#b0b0c8', fontSize: 12 }}>{fmtDateDisplay(rev.quotationDate)}</span>
+                          <span style={{ color: '#4a5568' }}>{fmtDateDisplay(latest.quotationDate)}</span>
                         </td>
                         <td className="pg-td" style={{ textAlign: 'center' }}>
-                          {Number(rev.quotationRevisionNumber) > 1
-                            ? <span className="qt-rev-badge"><RefreshCw size={9} />Rev. {rev.quotationRevisionNumber}</span>
+                          {Number(latest.quotationRevisionNumber) > 1
+                            ? <span className="qt-rev-badge"><RefreshCw size={9} />Rev. {latest.quotationRevisionNumber}</span>
                             : <span className="qt-orig-badge">Original</span>}
                         </td>
                         <td className="pg-td">
-                          <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 700, fontSize: 12.5, color: '#9090a8' }}>₹ {fmtCurrency(rev.totalAmount)}</span>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, color: '#049edf' }}>₹ {fmtCurrency(latest.totalAmount)}</span>
                         </td>
+                        {/* ── Actions: PDF · Contract · Revise ── */}
                         <td className="pg-td">
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <button onClick={() => handleViewPDF(rev)} title="View PDF"
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 8, border: '1.5px solid #049edf', color: '#049edf', background: 'rgba(4,158,223,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                              <Printer size={12} /> PDF
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            {/* PDF */}
+                            <button onClick={() => handleViewPDF(latest)} title="View / Print PDF"
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #049edf', color: '#049edf', background: 'rgba(4,158,223,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                              <Printer size={13} /> PDF
+                            </button>
+                            {/* Proforma Invoice */}
+                            <button onClick={() => handleViewProforma(latest)} title="Download Proforma Invoice"
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #16a34a', color: '#16a34a', background: 'rgba(22,163,74,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                              <FileText size={13} /> Proforma
+                            </button>
+                            {/* ← NEW: Create Contract button */}
+                            {(() => {
+                              const done = contractedQuotIds.has(latest.quotationID);
+                              return (
+                                <button
+                                  onClick={() => {
+                                    if (done) return;
+                                    setContractQuot(latest);
+                                    setShowContractModal(true);
+                                  }}
+                                  disabled={done}
+                                  title={done ? 'Contract already created for this quotation' : 'Create customer contract'}
+                                  style={{
+                                    display: 'flex', alignItems: 'center', gap: 5,
+                                    padding: '5px 11px', borderRadius: 8, border: 'none',
+                                    color: '#fff',
+                                    background: done
+                                      ? '#16a34a'
+                                      : 'linear-gradient(135deg, #049edf, #6c63ff)',
+                                    cursor: done ? 'not-allowed' : 'pointer',
+                                    fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800,
+                                    whiteSpace: 'nowrap',
+                                    boxShadow: done ? 'none' : '0 2px 6px rgba(124,58,237,0.25)',
+                                    opacity: done ? 0.75 : 1,
+                                    pointerEvents: done ? 'none' : 'auto',
+                                  }}
+                                >
+                                  {done
+                                    ? <><Check size={13} /> Created</>
+                                    : <><FileCheck size={13} /> Contract</>}
+                                </button>
+                              );
+                            })()}
+                            {/* Edit — edits this exact revision in place */}
+                            <button onClick={() => handleEditQuotation(latest)} title="Edit this quotation (same number & revision)"
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #f59e0b', color: '#f59e0b', background: 'rgba(245,158,11,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                              <Edit2 size={13} /> Edit
+                            </button>
+                            {/* Revise */}
+                            <button onClick={() => handleReopenHistory(latest)} title="Create Revision"
+                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #e8e8f4', color: '#5a5a78', background: '#fff', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                              <Edit2 size={13} /> Revise
                             </button>
                           </div>
                         </td>
                       </tr>
-                    ))}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
+
+                      {isExp && group.slice(1).map((rev) => (
+                        <tr key={`${rev.quotationID}-${rev.quotationRevisionNumber}`} className="pg-tr qt-rev-row">
+                          <td className="pg-td"></td>
+                          {deleteMode && (
+                            <td className="pg-td" style={{ textAlign: 'center' }}>
+                              <input
+                                type="checkbox"
+                                checked={selectedQuotIds.has(rev.quotationID)}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setSelectedQuotIds(prev => {
+                                    const next = new Set(prev);
+                                    if (checked) {
+                                      next.add(rev.quotationID);
+                                    } else {
+                                      next.delete(rev.quotationID);
+                                      next.delete(latest.quotationID);
+                                    }
+                                    return next;
+                                  });
+                                }}
+                                style={{ cursor: 'pointer', width: 14, height: 14 }}
+                              />
+                            </td>
+                          )}
+                          <td className="pg-td">
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 12 }}>
+                              <div className="qt-rev-tree-line" />
+                              {Number(rev.quotationRevisionNumber) > 1
+                                ? <span className="qt-rev-badge" style={{ fontSize: 11 }}><RefreshCw size={9} />Rev. {rev.quotationRevisionNumber}</span>
+                                : <span className="qt-orig-badge">Original</span>}
+                            </div>
+                          </td>
+                          <td className="pg-td pg-td--overflow">
+                            <span className="pg-td__ellipsis" style={{ color: '#9090a8' }}>{custName(rev.customerID)}</span>
+                          </td>
+                          <td className="pg-td">
+                            <span style={{ color: '#b0b0c8', fontSize: 12 }}>{fmtDateDisplay(rev.quotationDate)}</span>
+                          </td>
+                          <td className="pg-td" style={{ textAlign: 'center' }}>
+                            {Number(rev.quotationRevisionNumber) > 1
+                              ? <span className="qt-rev-badge"><RefreshCw size={9} />Rev. {rev.quotationRevisionNumber}</span>
+                              : <span className="qt-orig-badge">Original</span>}
+                          </td>
+                          <td className="pg-td">
+                            <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 700, fontSize: 12.5, color: '#9090a8' }}>₹ {fmtCurrency(rev.totalAmount)}</span>
+                          </td>
+                          <td className="pg-td">
+                            <div style={{ display: 'flex', gap: 6 }}>
+                              <button onClick={() => handleViewPDF(rev)} title="View PDF"
+                                style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 8, border: '1.5px solid #049edf', color: '#049edf', background: 'rgba(4,158,223,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, whiteSpace: 'nowrap' }}>
+                                <Printer size={12} /> PDF
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
 
           {sortedGroups.length > histPageSize && (
             <div className="pg-pagination">
@@ -5623,6 +5962,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
             setContractedQuotIds(prev => new Set([...prev, contractQuot.quotationID]));
           }}
           showToast={showToast}
+        />
+      )}
+
+      {showDeleteConfirm && (
+        <QuotationDeleteConfirmModal
+          count={selectedQuotIds.size}
+          onConfirm={handleDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
         />
       )}
     </>

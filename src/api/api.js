@@ -726,6 +726,8 @@ export const apiService = {
     sGSTAmount: Number(data.sGSTAmount ?? 0),
     totalAmount: Number(data.totalAmount ?? 0),
   }),
+  archiveQuotation: (quotationId) => api.post(`/QuotationArchive/${quotationId}`),
+
 
   // QUOTATION LINES
   getAllQuotationLines: () => api.get('/QuotationLineDTL'),

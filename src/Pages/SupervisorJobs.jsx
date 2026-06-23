@@ -7,10 +7,11 @@ import {
   Calendar, FileText, CheckCircle2, Clock,
   Layers, ClipboardList, ThumbsUp, UserPlus,
   Trash2, Star, Image, ZoomIn, Hash, MapPin,
-  ArrowLeft, User, Users, Building2, LayoutGrid,
+  ArrowLeft, User, Users, Building2, LayoutGrid, IndianRupee
 } from 'lucide-react';
 import './Common1.css';
 import { apiService, API_ROOT_URL } from '../api/api';
+import { useResizableColumns } from '../hooks/useResizableColumns';
 
 
 /* ─────────────────────────────────────────
@@ -202,7 +203,7 @@ function BannerStrip({ customerContractID }) {
 function TaskPhotosSection({ jobTaskID }) {
   const [photos, setPhotos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [lightbox, setLightbox] = useState(null); 
+  const [lightbox, setLightbox] = useState(null);
 
 
   useEffect(() => {
@@ -213,7 +214,7 @@ function TaskPhotosSection({ jobTaskID }) {
           : Array.isArray(res?.data) ? res.data
             : Array.isArray(res?.$values) ? res.$values : [];
 
-  
+
 
         const mine = all.filter(a => {
           const id = Number(
@@ -223,7 +224,7 @@ function TaskPhotosSection({ jobTaskID }) {
           return id === Number(jobTaskID);
         });
 
-    
+
         setPhotos(mine);
       })
       .catch(err => { console.error('[ATTACH] error:', err); setPhotos([]); })
@@ -510,7 +511,7 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, showToast, fl
   };
 
   /* ── Photo helpers ── */
-const buildUrl = (att) => {
+  const buildUrl = (att) => {
     const path = att.photoFilePath ?? att.PhotoFilePath ?? att.photoFileUrl ?? att.PhotoFileUrl ?? att.filePath ?? att.FilePath ?? att.imageUrl ?? att.ImageUrl ?? att.url ?? att.Url ?? '';
     if (!path) return null;
     if (path.startsWith('http')) return path;
@@ -764,8 +765,8 @@ const buildUrl = (att) => {
         );
         if (taskPhotos.length === 0) return null;
 
-        const nearPhotos  = taskPhotos.filter(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('near'));
-        const farPhotos   = taskPhotos.filter(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('far'));
+        const nearPhotos = taskPhotos.filter(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('near'));
+        const farPhotos = taskPhotos.filter(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('far'));
         const otherPhotos = taskPhotos.filter(a => {
           const t = (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase();
           return !t.includes('near') && !t.includes('far');
@@ -804,8 +805,8 @@ const buildUrl = (att) => {
 
             {/* Photo strips */}
             <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap' }}>
-              <PhotoStrip items={nearPhotos}  label="Near"  color="#049edf" />
-              <PhotoStrip items={farPhotos}   label="Far"   color="#7c3aed" />
+              <PhotoStrip items={nearPhotos} label="Near" color="#049edf" />
+              <PhotoStrip items={farPhotos} label="Far" color="#7c3aed" />
               <PhotoStrip items={otherPhotos} label="Other" color="#16a34a" />
             </div>
           </div>
@@ -899,6 +900,13 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                     { label: 'No. Hoardings', value: job.noofHoardings, icon: Layers },
                     { label: 'Rate / SQFT', value: job.rateperSQFT ? `₹${job.rateperSQFT}` : '—', icon: Hash },
                     { label: 'Total Area', value: job.totalAreaSQFT ? `${job.totalAreaSQFT} sq.ft` : '—', icon: MapPin },
+                    {
+                      label: 'Total Amount',
+                      value: (job.rateperSQFT && job.totalAreaSQFT)
+                        ? `₹${(Number(job.rateperSQFT) * Number(job.totalAreaSQFT)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : '—',
+                      icon: IndianRupee,
+                    },
                     { label: 'Target Date', value: fmtDate(job.targetCompletionDate), icon: Calendar },
                     { label: 'Created', value: fmtDate(job.jobCreateDTTM), icon: Clock },
                   ].map(row => (
@@ -1044,6 +1052,13 @@ export default function SupervisorJobsPage() {
   const [hoardings, setHoardings] = useState([]);
   const [hoardingMerges, setHoardingMerges] = useState([]);
   const [allAttachments, setAllAttachments] = useState([]);
+
+  const tableRef = useRef(null);
+  const [tableReady, setTableReady] = useState(false);
+  useEffect(() => {
+    if (!loading) setTableReady(true);
+  }, [loading]);
+  useResizableColumns(tableRef, tableReady, [80, 110, 240, 90, 120, 80, 110, 80]);
 
 
 
@@ -1279,79 +1294,81 @@ export default function SupervisorJobsPage() {
           </div>
 
           {/* ── Table ── */}
-          <table className="pg-table">
-            <thead>
-              <tr>
-                {COLS.map(col => (
-                  <th key={col.key} style={{ width: col.w }}
-                    className={['pg-th', col.noSort ? '' : 'pg-th--sort'].filter(Boolean).join(' ')}
-                    onClick={() => !col.noSort && handleSort(col.key)}>
-                    <div className="pg-th__inner">
-                      {col.label}
-                      {!col.noSort && <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {paginated.length === 0
-                ? <tr><td colSpan={COLS.length} className="pg-td pg-empty" style={{ maxWidth: 'none' }}>
-                  <div className="pg-empty__inner"><Briefcase size={36} color="#d0d0e8" /><span className="pg-empty__label">No jobs found</span></div>
-                </td></tr>
-                : paginated.map(job => {
-                  const done = job.tasks.filter(t => t.status === 'Completed' || t.status === 'Submitted').length;
-                  const canAccept = job.jobStatus !== 'Accepted' && job.jobStatus !== 'Completed';
-                  const isAccepting = acceptingId === job.jobRequestID && accepting;
-                  return (
-                    <tr key={job.jobRequestID} className="pg-tr">
-                      <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf' }}>#{job.jobRequestID}</span>
-                      </td>
-                      <td className="pg-td">
-                        {job.jobType
-                          ? <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', color: '#049edf', border: '1px solid rgba(4,158,223,0.2)' }}>{job.jobType}</span>
-                          : <span style={{ color: '#c0c0d8' }}>—</span>}
-                      </td>
-                      <td className="pg-td pg-td--overflow">
-                        <span className="pg-td__ellipsis" style={{ color: '#4a5568' }} title={job.jobDescription}>{job.jobDescription || '—'}</span>
-                      </td>
-                      <td className="pg-td" style={{ textAlign: 'center' }}>
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, color: '#1a1a2e' }}>{job.noofHoardings || '—'}</span>
-                      </td>
-                      <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#4a5568', display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <Calendar size={11} color="#c0c0d8" /> {fmtDate(job.targetCompletionDate)}
-                        </span>
-                      </td>
-                      <td className="pg-td" style={{ textAlign: 'center' }}>
-                        {job.tasks.length > 0
-                          ? <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700 }}>
-                            <span style={{ color: done === job.tasks.length ? '#16a34a' : '#4a5568' }}>{done}</span>
-                            <span style={{ color: '#b0b0c8' }}>/{job.tasks.length}</span>
-                          </div>
-                          : <span style={{ color: '#c0c0d8' }}>—</span>}
-                      </td>
-                      <td className="pg-td"><JobStatusBadge status={job.jobStatus} /></td>
-                      <td className="pg-td">
-                        <div className="pg-action-wrap">
-                         {canAccept && (
-                            <button className="pg-btn-view" onClick={() => { if (window.confirm(`Accept Job #${job.jobRequestID}?`)) handleAccept(job); }} disabled={isAccepting} title="Accept"
-                              style={{ background: 'rgba(108,63,199,0.08)', color: '#7c3aed', border: '1px solid rgba(108,63,199,0.2)', boxShadow: 'none' }}>
-                              {isAccepting ? <Loader2 size={12} className="pg-spin" /> : <ThumbsUp size={13} />}
+          <div style={{ overflowX: 'auto', border: '1px solid #f0f0f8', borderRadius: 12, marginBottom: 12 }}>
+            <table className="pg-table" ref={tableRef}>
+              <thead>
+                <tr>
+                  {COLS.map(col => (
+                    <th key={col.key} style={{ width: col.w }}
+                      className={['pg-th', col.noSort ? '' : 'pg-th--sort'].filter(Boolean).join(' ')}
+                      onClick={() => !col.noSort && handleSort(col.key)}>
+                      <div className="pg-th__inner">
+                        {col.label}
+                        {!col.noSort && <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />}
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {paginated.length === 0
+                  ? <tr><td colSpan={COLS.length} className="pg-td pg-empty" style={{ maxWidth: 'none' }}>
+                    <div className="pg-empty__inner"><Briefcase size={36} color="#d0d0e8" /><span className="pg-empty__label">No jobs found</span></div>
+                  </td></tr>
+                  : paginated.map(job => {
+                    const done = job.tasks.filter(t => t.status === 'Completed' || t.status === 'Submitted').length;
+                    const canAccept = job.jobStatus !== 'Accepted' && job.jobStatus !== 'Completed';
+                    const isAccepting = acceptingId === job.jobRequestID && accepting;
+                    return (
+                      <tr key={job.jobRequestID} className="pg-tr">
+                        <td className="pg-td">
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf' }}>#{job.jobRequestID}</span>
+                        </td>
+                        <td className="pg-td">
+                          {job.jobType
+                            ? <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', color: '#049edf', border: '1px solid rgba(4,158,223,0.2)' }}>{job.jobType}</span>
+                            : <span style={{ color: '#c0c0d8' }}>—</span>}
+                        </td>
+                        <td className="pg-td pg-td--overflow">
+                          <span className="pg-td__ellipsis" style={{ color: '#4a5568' }} title={job.jobDescription}>{job.jobDescription || '—'}</span>
+                        </td>
+                        <td className="pg-td" style={{ textAlign: 'center' }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, color: '#1a1a2e' }}>{job.noofHoardings || '—'}</span>
+                        </td>
+                        <td className="pg-td">
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#4a5568', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <Calendar size={11} color="#c0c0d8" /> {fmtDate(job.targetCompletionDate)}
+                          </span>
+                        </td>
+                        <td className="pg-td" style={{ textAlign: 'center' }}>
+                          {job.tasks.length > 0
+                            ? <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700 }}>
+                              <span style={{ color: done === job.tasks.length ? '#16a34a' : '#4a5568' }}>{done}</span>
+                              <span style={{ color: '#b0b0c8' }}>/{job.tasks.length}</span>
+                            </div>
+                            : <span style={{ color: '#c0c0d8' }}>—</span>}
+                        </td>
+                        <td className="pg-td"><JobStatusBadge status={job.jobStatus} /></td>
+                        <td className="pg-td">
+                          <div className="pg-action-wrap">
+                            {canAccept && (
+                              <button className="pg-btn-view" onClick={() => { if (window.confirm(`Accept Job #${job.jobRequestID}?`)) handleAccept(job); }} disabled={isAccepting} title="Accept"
+                                style={{ background: 'rgba(108,63,199,0.08)', color: '#7c3aed', border: '1px solid rgba(108,63,199,0.2)', boxShadow: 'none' }}>
+                                {isAccepting ? <Loader2 size={12} className="pg-spin" /> : <ThumbsUp size={13} />}
+                              </button>
+                            )}
+                            <button className="pg-btn-view" onClick={() => openDetail(job)} title="View & Assign">
+                              <LayoutGrid size={13} />
                             </button>
-                          )}
-                          <button className="pg-btn-view" onClick={() => openDetail(job)} title="View & Assign">
-                            <LayoutGrid size={13} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              }
-            </tbody>
-          </table>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                }
+              </tbody>
+            </table>
+          </div>
 
           {/* ── Pagination ── */}
           {sorted.length > 0 && (

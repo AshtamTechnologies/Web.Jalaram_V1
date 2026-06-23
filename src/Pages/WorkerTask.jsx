@@ -395,10 +395,12 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                                 style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block', cursor: 'zoom-in' }}
                                 onClick={() => window.open(imgUrl, '_blank')}
                                 onError={e => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement.innerHTML = '<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:22px;background:#f0f0f8">🖼️</div>'; }} />
-                            <button onClick={e => { e.stopPropagation(); handleDeleteAttach(att); }} disabled={isDel} title="Delete photo"
+
+                            {/* This comment of the Delete button hide for the workers */}
+                            {/* <button onClick={e => { e.stopPropagation(); handleDeleteAttach(att); }} disabled={isDel} title="Delete photo"
                                 style={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: '50%', background: isDel ? 'rgba(156,163,175,0.9)' : 'rgba(220,38,38,0.88)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isDel ? 'wait' : 'pointer', color: '#fff', padding: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.25)' }}>
                                 {isDel ? <Loader2 size={11} className="pg-spin" /> : <Trash2 size={11} />}
-                            </button>
+                            </button> */}
                             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(26,158,110,0.75)', color: '#fff', fontFamily: 'Nunito,sans-serif', fontSize: 9, fontWeight: 700, padding: '2px 5px', textAlign: 'center' }}>
                                 Uploaded ✓
                             </div>
@@ -412,7 +414,8 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
     const contractID = Number(task.contract?.customerContractID ?? task.contract?.CustomerContractID ?? task.job?.customerContractID ?? task.job?.CustomerContractID ?? 0);
 
     return ReactDOM.createPortal(
-        <div onClick={e => e.target === e.currentTarget && onClose()}
+        // <div onClick={e => e.target === e.currentTarget && onClose()}
+        <div
             style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(15,23,42,0.58)', backdropFilter: 'blur(7px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0, overflowY: 'auto' }}
             className="wt-modal-overlay">
 

@@ -2546,159 +2546,161 @@ export default function JobPage() {
               </button> */}
             </div>
 
-            <table className="pg-table" ref={tableRef}>
-              <thead>
-                <tr>
-                  {[
-                    { key: 'jobRequestID', label: 'Job ID', w: '8%' },
-                    { key: 'customerID', label: 'Customer', w: '18%' },
-                    { key: 'jobType', label: 'Type', w: '10%' },
-                    { key: '_supervisor', label: 'Supervisor', w: '14%', noSort: true },
-                    { key: 'targetCompletionDate', label: 'Target Date', w: '11%' },
-                    { key: 'totalAreaSQFT', label: 'Area (sq.ft)', w: '9%' },
-                    { key: '_tasks', label: 'Tasks', w: '9%', noSort: true },
-                    { key: 'jobStatus', label: 'Status', w: '11%' },
-                    { key: '_action', label: 'Actions', w: '10%', noSort: true },
-                  ].map(col => (
-                    <th key={col.key} style={{ width: col.w }}
-                      className={['pg-th', col.noSort ? '' : 'pg-th--sort'].filter(Boolean).join(' ')}
-                      onClick={() => !col.noSort && handleSort(col.key)}>
-                      <div className="pg-th__inner">
-                        {col.label}
-                        {!col.noSort
-                          ? <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />
-                          : <Filter size={10} color="#d0d0e4" style={{ marginLeft: 5 }} />}
-                      </div>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {paginated.length === 0 ? (
+            <div style={{ overflowX: 'auto', border: '1px solid #f0f0f8', borderRadius: 12, marginBottom: 12 }}>
+              <table className="pg-table" ref={tableRef}>
+                <thead>
                   <tr>
-                    <td colSpan={9} className="pg-td pg-empty" style={{ maxWidth: 'none' }}>
-                      <div className="pg-empty__inner">
-                        <Briefcase size={36} color="#d0d0e8" />
-                        <span className="pg-empty__label">No job requests found</span>
-                      </div>
-                    </td>
+                    {[
+                      { key: 'jobRequestID', label: 'Job ID', w: '8%' },
+                      { key: 'customerID', label: 'Customer', w: '18%' },
+                      { key: 'jobType', label: 'Type', w: '10%' },
+                      { key: '_supervisor', label: 'Supervisor', w: '14%', noSort: true },
+                      { key: 'targetCompletionDate', label: 'Target Date', w: '11%' },
+                      { key: 'totalAreaSQFT', label: 'Area (sq.ft)', w: '9%' },
+                      { key: '_tasks', label: 'Tasks', w: '9%', noSort: true },
+                      { key: 'jobStatus', label: 'Status', w: '11%' },
+                      { key: '_action', label: 'Actions', w: '10%', noSort: true },
+                    ].map(col => (
+                      <th key={col.key} style={{ width: col.w }}
+                        className={['pg-th', col.noSort ? '' : 'pg-th--sort'].filter(Boolean).join(' ')}
+                        onClick={() => !col.noSort && handleSort(col.key)}>
+                        <div className="pg-th__inner">
+                          {col.label}
+                          {!col.noSort
+                            ? <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />
+                            : <Filter size={10} color="#d0d0e4" style={{ marginLeft: 5 }} />}
+                        </div>
+                      </th>
+                    ))}
                   </tr>
-                ) : paginated.map(job => {
-                  const myTasks = getMyTasks(job.jobRequestID);
-                  const submittedCnt = myTasks.filter(t => t.status === 'Submitted').length;
-                  const jts = jobTypeBadgeStyle(job.jobType);
-                  return (
-                    <tr key={job.jobRequestID} className="pg-tr">
-                      <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf' }}>
-                          #{job.jobRequestID}
-                        </span>
-                      </td>
-                      <td className="pg-td pg-td--overflow">
-                        <span className="pg-td__ellipsis" title={custName(job.customerID)}>
-                          {custName(job.customerID)}
-                        </span>
-                      </td>
-                      <td className="pg-td">
-                        {job.jobType ? (
-                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 5, background: jts.bg, color: jts.color, border: `1px solid ${jts.border}`, whiteSpace: 'nowrap' }}>
-                            {job.jobType}
-                          </span>
-                        ) : <span style={{ color: '#c0c0d8' }}>—</span>}
-                      </td>
-                      <td className="pg-td pg-td--overflow">
-                        <span className="pg-td__ellipsis" style={{ color: '#4a5568' }}>{supName(job.supervisorID)}</span>
-                      </td>
-                      <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#4a5568' }}>
-                          {fmtDate(job.targetCompletionDate)}
-                        </span>
-                      </td>
-                      <td className="pg-td" style={{ textAlign: 'center' }}>
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, color: '#1a1a2e' }}>
-                          {job.totalAreaSQFT ? Number(job.totalAreaSQFT).toFixed(1) : '—'}
-                        </span>
-                      </td>
-                      <td className="pg-td" style={{ textAlign: 'center' }}>
-                        {myTasks.length > 0 ? (
-                          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700 }}>
-                            <span style={{ color: submittedCnt === myTasks.length ? '#16a34a' : '#4a5568' }}>{submittedCnt}</span>
-                            <span style={{ color: '#b0b0c8' }}>/{myTasks.length}</span>
-                            <div style={{ fontSize: 10, color: '#9090a8', marginTop: 1 }}>submitted</div>
-                          </div>
-                        ) : (
-                          <span style={{ color: '#c0c0d8', fontSize: 12 }}>—</span>
-                        )}
-                      </td>
-                      <td className="pg-td"><JobStatusBadge status={job.jobStatus} /></td>
-                      <td className="pg-td">
-                        <div className="pg-action-wrap">
-                          {/* Edit */}
-                          <button className="pg-btn-view" onClick={() => handleEdit(job)} title="Edit">
-                            <Edit2 size={13} />
-                          </button>
-
-                          {/* Complete — green ✅ for non-completed jobs */}
-                          {job.jobStatus !== 'Completed' && (
-                            <button
-                              onClick={() => {
-                                if (completing) return;
-                                const jobTasks = getMyTasks(job.jobRequestID).map(jt => {
-                                  const h = hoardings.find(hh => hh.hoardingID === jt.hoardingID);
-                                  return {
-                                    jobTaskID: jt.jobTaskID,
-                                    hoardingID: jt.hoardingID,
-                                    hoardingCode: h?.hoardingCode || '',
-                                    siteAddress: getSiteAddress(h),
-                                    status: jt.status,
-                                  };
-                                });
-                                setCompleteTarget({ job, tasks: jobTasks });
-                              }}
-                              disabled={completing}
-                              title="Mark as Completed"
-                              style={{
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                width: 30, height: 30, borderRadius: 8,
-                                border: '1.5px solid rgba(22,163,74,0.30)',
-                                background: completing ? '#f4f4fb' : 'rgba(22,163,74,0.08)',
-                                color: completing ? '#c0c0d8' : '#16a34a',
-                                cursor: completing ? 'not-allowed' : 'pointer',
-                                transition: 'all 0.15s',
-                                pointerEvents: completing ? 'none' : 'auto',
-                              }}
-                              onMouseEnter={e => {
-                                if (completing) return;
-                                e.currentTarget.style.background = 'rgba(22,163,74,0.18)';
-                                e.currentTarget.style.borderColor = '#16a34a';
-                              }}
-                              onMouseLeave={e => {
-                                if (completing) return;
-                                e.currentTarget.style.background = 'rgba(22,163,74,0.08)';
-                                e.currentTarget.style.borderColor = 'rgba(22,163,74,0.30)';
-                              }}
-                            >
-                              {completing ? <Loader2 size={13} className="pg-spin" /> : '✅'}
-                            </button>
-                          )}
-
-                          {/* Static completed indicator */}
-                          {job.jobStatus === 'Completed' && (
-                            <span title="Completed" style={{
-                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                              width: 30, height: 30, borderRadius: 8,
-                              background: 'rgba(22,163,74,0.06)', border: '1px solid rgba(22,163,74,0.20)',
-                              fontSize: 14,
-                            }}>✅</span>
-                          )}
+                </thead>
+                <tbody>
+                  {paginated.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="pg-td pg-empty" style={{ maxWidth: 'none' }}>
+                        <div className="pg-empty__inner">
+                          <Briefcase size={36} color="#d0d0e8" />
+                          <span className="pg-empty__label">No job requests found</span>
                         </div>
                       </td>
-
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  ) : paginated.map(job => {
+                    const myTasks = getMyTasks(job.jobRequestID);
+                    const submittedCnt = myTasks.filter(t => t.status === 'Submitted').length;
+                    const jts = jobTypeBadgeStyle(job.jobType);
+                    return (
+                      <tr key={job.jobRequestID} className="pg-tr">
+                        <td className="pg-td">
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf' }}>
+                            #{job.jobRequestID}
+                          </span>
+                        </td>
+                        <td className="pg-td pg-td--overflow">
+                          <span className="pg-td__ellipsis" title={custName(job.customerID)}>
+                            {custName(job.customerID)}
+                          </span>
+                        </td>
+                        <td className="pg-td">
+                          {job.jobType ? (
+                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 5, background: jts.bg, color: jts.color, border: `1px solid ${jts.border}`, whiteSpace: 'nowrap' }}>
+                              {job.jobType}
+                            </span>
+                          ) : <span style={{ color: '#c0c0d8' }}>—</span>}
+                        </td>
+                        <td className="pg-td pg-td--overflow">
+                          <span className="pg-td__ellipsis" style={{ color: '#4a5568' }}>{supName(job.supervisorID)}</span>
+                        </td>
+                        <td className="pg-td">
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#4a5568' }}>
+                            {fmtDate(job.targetCompletionDate)}
+                          </span>
+                        </td>
+                        <td className="pg-td" style={{ textAlign: 'center' }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, color: '#1a1a2e' }}>
+                            {job.totalAreaSQFT ? Number(job.totalAreaSQFT).toFixed(1) : '—'}
+                          </span>
+                        </td>
+                        <td className="pg-td" style={{ textAlign: 'center' }}>
+                          {myTasks.length > 0 ? (
+                            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700 }}>
+                              <span style={{ color: submittedCnt === myTasks.length ? '#16a34a' : '#4a5568' }}>{submittedCnt}</span>
+                              <span style={{ color: '#b0b0c8' }}>/{myTasks.length}</span>
+                              <div style={{ fontSize: 10, color: '#9090a8', marginTop: 1 }}>submitted</div>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#c0c0d8', fontSize: 12 }}>—</span>
+                          )}
+                        </td>
+                        <td className="pg-td"><JobStatusBadge status={job.jobStatus} /></td>
+                        <td className="pg-td">
+                          <div className="pg-action-wrap">
+                            {/* Edit */}
+                            <button className="pg-btn-view" onClick={() => handleEdit(job)} title="Edit">
+                              <Edit2 size={13} />
+                            </button>
+
+                            {/* Complete — green ✅ for non-completed jobs */}
+                            {job.jobStatus !== 'Completed' && (
+                              <button
+                                onClick={() => {
+                                  if (completing) return;
+                                  const jobTasks = getMyTasks(job.jobRequestID).map(jt => {
+                                    const h = hoardings.find(hh => hh.hoardingID === jt.hoardingID);
+                                    return {
+                                      jobTaskID: jt.jobTaskID,
+                                      hoardingID: jt.hoardingID,
+                                      hoardingCode: h?.hoardingCode || '',
+                                      siteAddress: getSiteAddress(h),
+                                      status: jt.status,
+                                    };
+                                  });
+                                  setCompleteTarget({ job, tasks: jobTasks });
+                                }}
+                                disabled={completing}
+                                title="Mark as Completed"
+                                style={{
+                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                  width: 30, height: 30, borderRadius: 8,
+                                  border: '1.5px solid rgba(22,163,74,0.30)',
+                                  background: completing ? '#f4f4fb' : 'rgba(22,163,74,0.08)',
+                                  color: completing ? '#c0c0d8' : '#16a34a',
+                                  cursor: completing ? 'not-allowed' : 'pointer',
+                                  transition: 'all 0.15s',
+                                  pointerEvents: completing ? 'none' : 'auto',
+                                }}
+                                onMouseEnter={e => {
+                                  if (completing) return;
+                                  e.currentTarget.style.background = 'rgba(22,163,74,0.18)';
+                                  e.currentTarget.style.borderColor = '#16a34a';
+                                }}
+                                onMouseLeave={e => {
+                                  if (completing) return;
+                                  e.currentTarget.style.background = 'rgba(22,163,74,0.08)';
+                                  e.currentTarget.style.borderColor = 'rgba(22,163,74,0.30)';
+                                }}
+                              >
+                                {completing ? <Loader2 size={13} className="pg-spin" /> : '✅'}
+                              </button>
+                            )}
+
+                            {/* Static completed indicator */}
+                            {job.jobStatus === 'Completed' && (
+                              <span title="Completed" style={{
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                width: 30, height: 30, borderRadius: 8,
+                                background: 'rgba(22,163,74,0.06)', border: '1px solid rgba(22,163,74,0.20)',
+                                fontSize: 14,
+                              }}>✅</span>
+                            )}
+                          </div>
+                        </td>
+
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
             {sorted.length > pageSize && (
               <div className="pg-pagination">

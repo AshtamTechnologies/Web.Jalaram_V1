@@ -22,14 +22,24 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
 
     let startX, startW, activeTh, activeLine;
 
-    const onMouseMove = (e) => {
+    const startResize = (clientX, header, line) => {
+      activeTh   = header;
+      activeLine = line;
+      startX     = clientX;
+      startW     = header.offsetWidth;
+      line.style.background         = '#049edf';
+      document.body.style.cursor    = 'col-resize';
+      document.body.style.userSelect = 'none';
+    };
+
+    const resizeMove = (clientX) => {
       if (!activeTh) return;
-      const newW = Math.max(60, startW + (e.clientX - startX));
+      const newW = Math.max(60, startW + (clientX - startX));
       activeTh.style.width    = newW + 'px';
       activeTh.style.minWidth = newW + 'px';
     };
 
-    const onMouseUp = () => {
+    const endResize = () => {
       if (activeLine) {
         activeLine.style.background = 'rgba(4,158,223,0.35)';
       }
@@ -37,8 +47,29 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
       activeLine = null;
       document.body.style.cursor    = '';
       document.body.style.userSelect = '';
+    };
+
+    const onMouseMove = (e) => {
+      resizeMove(e.clientX);
+    };
+
+    const onMouseUp = () => {
+      endResize();
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup',   onMouseUp);
+    };
+
+    const onTouchMove = (e) => {
+      if (e.touches.length > 0) {
+        resizeMove(e.touches[0].clientX);
+      }
+    };
+
+    const onTouchEnd = () => {
+      endResize();
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend',   onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchEnd);
     };
 
     ths.forEach((header) => {
@@ -68,18 +99,28 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
       resizer.addEventListener('mouseleave', () => {
         if (activeTh !== header) line.style.background = 'rgba(4,158,223,0.35)';
       });
+
+      // Mouse Resizing
       resizer.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        activeTh   = header;
-        activeLine = line;
-        startX     = e.clientX;
-        startW     = header.offsetWidth;
-        line.style.background         = '#049edf';
-        document.body.style.cursor    = 'col-resize';
-        document.body.style.userSelect = 'none';
+        startResize(e.clientX, header, line);
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup',   onMouseUp);
+      });
+
+      // Touch Resizing
+      resizer.addEventListener('touchstart', (e) => {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        e.stopPropagation();
+        if (e.touches.length > 0) {
+          startResize(e.touches[0].clientX, header, line);
+        }
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend',   onTouchEnd);
+        document.addEventListener('touchcancel', onTouchEnd);
       });
 
       header.appendChild(resizer);
@@ -89,8 +130,11 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
       ths.forEach(header => header.querySelector('.col-resizer')?.remove());
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup',   onMouseUp);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend',   onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchEnd);
       document.body.style.cursor    = '';
       document.body.style.userSelect = '';
     };
-  }, [tableReady]);
+  }, [tableReady, initialWidths]);
 }
