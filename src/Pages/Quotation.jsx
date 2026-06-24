@@ -1723,7 +1723,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
 
   return ReactDOM.createPortal(
     <div className="pg-overlay">
-      <div className="pg-modal" style={{ maxWidth: 580, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+      <div className="pg-modal qt-merge-modal" style={{ maxWidth: 580, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
         <div className="pg-modal__head" style={{ flexShrink: 0 }}>
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap" style={{ background: 'rgba(124,58,237,0.10)' }}>
@@ -1740,16 +1740,17 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
         </div>
 
         {/* Direction */}
-        <div style={{ padding: '14px 24px', borderBottom: '1px solid #f0f0f8', flexShrink: 0 }}>
+        <div className="qt-merge-pad-custom" style={{ padding: '14px 24px', borderBottom: '1px solid #f0f0f8', flexShrink: 0 }}>
           <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78', marginBottom: 10 }}>
             Merge Direction
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div className="qt-merge-dir-container" style={{ display: 'flex', gap: 10 }}>
             {[
               { val: 'H', label: 'Horizontal', sub: 'Side by side · sum(widths) + gaps', icon: '↔' },
               { val: 'V', label: 'Vertical', sub: 'Top to bottom · sum(heights) + gaps', icon: '↕' },
             ].map(({ val, label, sub, icon }) => (
               <button key={val} onClick={() => setDir(val)}
+                className="qt-merge-dir-btn"
                 style={{
                   flex: 1, padding: '12px', borderRadius: 12, cursor: 'pointer', textAlign: 'left',
                   border: `2px solid ${dir === val ? '#7c3aed' : '#e8e8f4'}`,
@@ -1757,22 +1758,22 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
                   fontFamily: 'Nunito,sans-serif',
                 }}
               >
-                <div style={{ fontSize: 22, marginBottom: 4 }}>{icon}</div>
-                <div style={{ fontSize: 13, fontWeight: 800, color: dir === val ? '#7c3aed' : '#1a1a2e' }}>{label}</div>
-                <div style={{ fontSize: 11, color: '#9090a8', marginTop: 3 }}>{sub}</div>
+                <div className="qt-merge-dir-icon" style={{ fontSize: 22, marginBottom: 4 }}>{icon}</div>
+                <div className="qt-merge-dir-label" style={{ fontSize: 13, fontWeight: 800, color: dir === val ? '#7c3aed' : '#1a1a2e' }}>{label}</div>
+                <div className="qt-merge-dir-sub" style={{ fontSize: 11, color: '#9090a8', marginTop: 3 }}>{sub}</div>
               </button>
             ))}
           </div>
         </div>
 
-        <div style={{ padding: '14px 24px 0', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78', flexShrink: 0 }}>
+        <div className="qt-merge-pad-custom-top" style={{ padding: '14px 24px 0', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78', flexShrink: 0 }}>
           Select hoardings from the Same Site
           <span style={{ color: '#9090a8', fontWeight: 600, marginLeft: 6 }}>
             ({sel.length} selected — min. 2)
           </span>
         </div>
 
-        <div style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 300, minHeight: 0, padding: '8px 24px 14px' }}>
+        <div className="qt-merge-scroll-area" style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 300, minHeight: 0, padding: '8px 24px 14px' }}>
           {siteGroups.map(group => {
             const groupColor = group.siteID != null ? siteColorMap.get(group.siteID) : null;
             const groupLocked = firstSiteID !== undefined && group.siteID !== firstSiteID;
@@ -1784,6 +1785,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
                   background: groupLocked ? '#f8f8f8' : (groupColor ? groupColor.bg : '#f4f4fb'),
                   border: `1px solid ${groupLocked ? '#e8e8f0' : (groupColor ? groupColor.border : '#e8e8f4')}`,
                   opacity: groupLocked ? 0.5 : 1,
+                  flexWrap: 'wrap',
                 }}>
                   {groupColor && !groupLocked && (
                     <div style={{ width: 10, height: 10, borderRadius: '50%', background: groupColor.dot, flexShrink: 0 }} />
@@ -1855,7 +1857,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
 
         {/* Preview */}
         {preview && (
-          <div style={{ margin: '0 24px 14px', padding: '12px 16px', borderRadius: 12, background: 'rgba(124,58,237,0.06)', border: '1.5px solid rgba(124,58,237,0.20)', flexShrink: 0 }}>
+          <div className="qt-merge-preview-block" style={{ margin: '0 24px 14px', padding: '12px 16px', borderRadius: 12, background: 'rgba(124,58,237,0.06)', border: '1.5px solid rgba(124,58,237,0.20)', flexShrink: 0 }}>
             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#7c3aed', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
               <Link2 size={13} /> Merge Preview ({preview.count} hoardings)
             </div>
@@ -1878,11 +1880,11 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
           </div>
         )}
 
-        <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
+        <div className="pg-modal__foot qt-merge-foot-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div className="qt-merge-foot-text" style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
             {sel.length < 2 ? 'Select at least 2 hoardings' : `${sel.length} hoardings will be merged`}
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div className="qt-merge-foot-actions" style={{ display: 'flex', gap: 10 }}>
             <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
             <button
               disabled={sel.length < 2}
@@ -2527,7 +2529,7 @@ function CreateContractFromQuotModal({
               <div>No hoarding lines in this quotation.</div>
             </div>
           ) : (
-            <table ref={contractTableRef} style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+            <table ref={contractTableRef} style={{ width: '100%', minWidth: 800, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
               <thead style={{ position: 'sticky', top: 0, zIndex: 2 }}>
                 <tr style={{ background: '#f8f8fd' }}>
                   {/* Select-all */}
@@ -2759,11 +2761,11 @@ function CreateContractFromQuotModal({
         )}
 
         {/* ── Footer ── */}
-        <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#9090a8', fontWeight: 600 }}>
+        <div className="pg-modal__foot qt-merge-foot-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <span className="qt-merge-foot-text" style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#9090a8', fontWeight: 600 }}>
             {selectedRows.length} of {contractRows.length} hoardings selected
           </span>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div className="qt-merge-foot-actions" style={{ display: 'flex', gap: 10 }}>
             <button className="pg-btn-cancel" onClick={onClose} disabled={saving}>Cancel</button>
             <button
               onClick={handleCreate}
@@ -3191,7 +3193,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
-        
+
         const rawHoardings = normalizeList(hRaw);
         const seenHoardings = new Set();
         const uniqueHoardings = [];
@@ -5508,7 +5510,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                   </div>
                 </div>
               </div>
-              <div className="pg-desktop-table">
+              <div className="pg-desktop-table qt-mobile-table-show">
                 <table className="pg-table" style={{ minWidth: 800 }}>
                   <thead>
                     <tr>
@@ -5622,7 +5624,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
             </button>
           </div>
 
-          <div className="pg-desktop-table">
+          <div className="pg-desktop-table qt-mobile-table-show">
             <table className="pg-table" ref={histTableRef} style={{ minWidth: 950 }}>
               <thead>
                 <tr>
