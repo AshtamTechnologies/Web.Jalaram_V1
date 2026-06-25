@@ -361,30 +361,44 @@ function normalizeCustomer(raw) {
 
 function normalizeQuotation(raw) {
   return {
-    quotationID: raw.quotationID ?? raw.QuotationID ?? 0,
-    quotationRevisionNumber: raw.quotationRevisionNumber ?? raw.QuotationRevisionNumber ?? 0,
-    customerID: raw.customerID ?? raw.CustomerID ?? 0,
+    quotationID: Number(raw.quotationID ?? raw.QuotationID ?? 0),
+    quotationRevisionNumber: Number(raw.quotationRevisionNumber ?? raw.QuotationRevisionNumber ?? 0),
+    customerID: Number(raw.customerID ?? raw.CustomerID ?? 0),
     quotationNumber: raw.quotationNumber ?? raw.QuotationNumber ?? '',
     quotationDate: (raw.quotationDate ?? raw.QuotationDate ?? '').split('T')[0],
-    cGSTPercent: raw.cGSTPercent ?? raw.CGSTPercent ?? 9,
-    cGSTAmount: raw.cGSTAmount ?? raw.CGSTAmount ?? 0,
-    sGSTPercent: raw.sGSTPercent ?? raw.SGSTPercent ?? 9,
-    sGSTAmount: raw.sGSTAmount ?? raw.SGSTAmount ?? 0,
-    totalAmount: raw.totalAmount ?? raw.TotalAmount ?? 0,
+    cGSTPercent: Number(raw.cGSTPercent ?? raw.CGSTPercent ?? 9),
+    cGSTAmount: Number(raw.cGSTAmount ?? raw.CGSTAmount ?? 0),
+    sGSTPercent: Number(raw.sGSTPercent ?? raw.SGSTPercent ?? 9),
+    sGSTAmount: Number(raw.sGSTAmount ?? raw.SGSTAmount ?? 0),
+    totalAmount: Number(raw.totalAmount ?? raw.TotalAmount ?? 0),
   };
 }
 
 function normalizeQuotLine(raw) {
   return {
-    quotationLineNumber: raw.quotationLineNumber ?? raw.QuotationLineNumber ?? 0,
-    quotationID: raw.quotationID ?? raw.QuotationID ?? 0,
-    quotationRevisionNumber: raw.quotationRevisionNumber ?? raw.QuotationRevisionNumber ?? 0,
-    hoardingID: raw.hoardingID ?? raw.HoardingID ?? 0,
+    quotationLineNumber: Number(raw.quotationLineNumber ?? raw.QuotationLineNumber ?? 0),
+    quotationID: Number(raw.quotationID ?? raw.QuotationID ?? 0),
+    quotationRevisionNumber: Number(raw.quotationRevisionNumber ?? raw.QuotationRevisionNumber ?? 0),
+    hoardingID: Number(raw.hoardingID ?? raw.HoardingID ?? 0),
     purpose: raw.purpose ?? raw.Purpose ?? '',
     periodBeginDate: (raw.periodBeginDate ?? raw.PeriodBeginDate ?? '').split('T')[0],
     periodEndDate: (raw.periodEndDate ?? raw.PeriodEndDate ?? '').split('T')[0],
-    rentAmount: raw.rentAmount ?? raw.RentAmount ?? 0,
+    rentAmount: Number(raw.rentAmount ?? raw.RentAmount ?? 0),
     mergeFlag: (raw.mergeFlag ?? raw.MergeFlag ?? false) === true || String(raw.mergeFlag ?? raw.MergeFlag ?? '').toLowerCase() === 'true',
+  };
+}
+
+function normalizeHoarding(raw) {
+  if (!raw) return null;
+  return {
+    hoardingID: Number(raw.hoardingID ?? raw.HoardingID ?? 0),
+    hoardingCode: raw.hoardingCode ?? raw.HoardingCode ?? '',
+    monthlyRent: Number(raw.monthlyRent ?? raw.MonthlyRent ?? 0),
+    width: Number(raw.width ?? raw.Width ?? 0),
+    height: Number(raw.height ?? raw.Height ?? 0),
+    siteID: raw.siteID ?? raw.SiteID ?? null,
+    status: raw.status ?? raw.Status ?? '',
+    site: raw.site ? normalizeSite(raw.site) : null,
   };
 }
 // Normalize siteID to number for consistent Map keys
@@ -2086,8 +2100,8 @@ function CreateContractFromQuotModal({
   quot, quotLines, quotMerges = [], hoardings, customers, siteMap, paymentFreqs, onClose, onCreated, showToast,
 }) {
   const myLines = quotLines.filter(l =>
-    l.quotationID === quot.quotationID &&
-    l.quotationRevisionNumber === quot.quotationRevisionNumber
+    Number(l.quotationID) === Number(quot.quotationID) &&
+    Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
   );
   const regularLines = myLines.filter(l => !l.mergeFlag);
   const myMerges = quotMerges.filter(m =>
@@ -2148,6 +2162,7 @@ function CreateContractFromQuotModal({
         byLine.get(ln).push(m);
       }
 
+      const usedLineNums = new Set();
       for (const [ln, records] of byLine.entries()) {
         if (records.length < 2) continue;
 
@@ -2184,16 +2199,21 @@ function CreateContractFromQuotModal({
         let matchingLine = quotLines.find(l =>
           Number(l.quotationID) === Number(quot.quotationID) &&
           Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber) &&
-          records.some(m => Number(m.quotationLineNumber) === Number(l.quotationLineNumber))
+          records.some(m => Number(m.quotationLineNumber) === Number(l.quotationLineNumber)) &&
+          !usedLineNums.has(Number(l.quotationLineNumber))
         );
         if (!matchingLine) {
-          matchingLine = myLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+          matchingLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && hoardingObjs.some(ho => {
             const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
             return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
           }));
         }
         if (!matchingLine) {
-          matchingLine = myLines.find(l => l.mergeFlag);
+          matchingLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)));
+        }
+
+        if (matchingLine) {
+          usedLineNums.add(Number(matchingLine.quotationLineNumber));
         }
 
         const rentVal = matchingLine?.rentAmount || totalRent || 0;
@@ -3055,6 +3075,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         byLine.get(ln).push(m);
       }
 
+      const usedLineNums = new Set();
       for (const ln of [...byLine.keys()].sort((a, b) => a - b)) {
         const records = byLine.get(ln);
         if (records.length < 2) continue;
@@ -3084,22 +3105,26 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
         const locFallback = [...new Set(locations)].join(' + ');
 
-        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
+        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln) && !usedLineNums.has(Number(l.quotationLineNumber)));
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && (
             l.purpose.includes(locFallback) ||
             locFallback.includes(l.purpose.split('|')[0]) ||
             (codes && l.purpose.includes(codes))
           ));
         }
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && hoardingObjs.some(ho => {
             const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
             return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
           }));
         }
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag);
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)));
+        }
+
+        if (savedLine) {
+          usedLineNums.add(Number(savedLine.quotationLineNumber));
         }
 
         const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
@@ -3198,10 +3223,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const seenHoardings = new Set();
         const uniqueHoardings = [];
         for (const h of rawHoardings) {
-          const id = Number(h.hoardingID ?? h.HoardingID ?? 0);
+          const normalized = normalizeHoarding(h);
+          const id = normalized.hoardingID;
           if (id > 0 && !seenHoardings.has(id)) {
             seenHoardings.add(id);
-            uniqueHoardings.push(h);
+            uniqueHoardings.push(normalized);
           }
         }
         setHoardings(uniqueHoardings);
@@ -3241,11 +3267,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
       try {
         const mRaw = await apiService.getAllQuotationMerges();
         setQuotMerges(normalizeList(mRaw).map(m => ({
-          quotationMergeID: m.quotationMergeID ?? m.QuotationMergeID ?? 0,
-          quotationLineNumber: m.quotationLineNumber ?? m.QuotationLineNumber ?? 0,
-          quotationID: m.quotationID ?? m.QuotationID ?? 0,
-          quotationRevisionNumber: m.quotationRevisionNumber ?? m.QuotationRevisionNumber ?? 0,
-          hoardingID: m.hoardingID ?? m.HoardingID ?? 0,
+          quotationMergeID: Number(m.quotationMergeID ?? m.QuotationMergeID ?? 0),
+          quotationLineNumber: Number(m.quotationLineNumber ?? m.QuotationLineNumber ?? 0),
+          quotationID: Number(m.quotationID ?? m.QuotationID ?? 0),
+          quotationRevisionNumber: Number(m.quotationRevisionNumber ?? m.QuotationRevisionNumber ?? 0),
+          hoardingID: Number(m.hoardingID ?? m.HoardingID ?? 0),
           mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
         })));
       } catch {
@@ -3278,11 +3304,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
       try {
         const mRaw = await apiService.getAllQuotationMerges();
         setQuotMerges(normalizeList(mRaw).map(m => ({
-          quotationMergeID: m.quotationMergeID ?? m.QuotationMergeID ?? 0,
-          quotationLineNumber: m.quotationLineNumber ?? m.QuotationLineNumber ?? 0,
-          quotationID: m.quotationID ?? m.QuotationID ?? 0,
-          quotationRevisionNumber: m.quotationRevisionNumber ?? m.QuotationRevisionNumber ?? 0,
-          hoardingID: m.hoardingID ?? m.HoardingID ?? 0,
+          quotationMergeID: Number(m.quotationMergeID ?? m.QuotationMergeID ?? 0),
+          quotationLineNumber: Number(m.quotationLineNumber ?? m.QuotationLineNumber ?? 0),
+          quotationID: Number(m.quotationID ?? m.QuotationID ?? 0),
+          quotationRevisionNumber: Number(m.quotationRevisionNumber ?? m.QuotationRevisionNumber ?? 0),
+          hoardingID: Number(m.hoardingID ?? m.HoardingID ?? 0),
           mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
         })));
       } catch { /* silent — merged rows just won't show if this fails */ }
@@ -3643,6 +3669,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         if (!byLine.has(ln)) byLine.set(ln, []);
         byLine.get(ln).push(m);
       }
+      const usedLineNums = new Set();
       for (const [ln, records] of byLine.entries()) {
         if (records.length < 2) continue;
 
@@ -3671,22 +3698,26 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
         const locFallback = [...new Set(locations)].join(' + ');
 
-        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
+        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln) && !usedLineNums.has(Number(l.quotationLineNumber)));
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && (
             l.purpose.includes(locFallback) ||
             locFallback.includes(l.purpose.split('|')[0]) ||
             (codes && l.purpose.includes(codes))
           ));
         }
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && hoardingObjs.some(ho => {
             const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
             return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
           }));
         }
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag);
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)));
+        }
+
+        if (savedLine) {
+          usedLineNums.add(Number(savedLine.quotationLineNumber));
         }
 
         const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
@@ -3832,6 +3863,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         if (!byLine.has(ln)) byLine.set(ln, []);
         byLine.get(ln).push(m);
       }
+      const usedLineNums = new Set();
       for (const [ln, records] of byLine.entries()) {
         if (records.length < 2) continue;
 
@@ -3853,22 +3885,26 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
         const locFallback = [...new Set(locations)].join(' + ');
 
-        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
+        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln) && !usedLineNums.has(Number(l.quotationLineNumber)));
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && (
             l.purpose.includes(locFallback) ||
             locFallback.includes(l.purpose.split('|')[0]) ||
             (codes && l.purpose.includes(codes))
           ));
         }
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && hoardingObjs.some(ho => {
             const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
             return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
           }));
         }
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag);
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)));
+        }
+
+        if (savedLine) {
+          usedLineNums.add(Number(savedLine.quotationLineNumber));
         }
 
         const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
@@ -4011,6 +4047,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         byLine.get(ln).push(m);
       }
 
+      const usedLineNums = new Set();
       const sortedKeys = [...byLine.keys()].sort((a, b) => a - b);
       for (const ln of sortedKeys) {
         const records = byLine.get(ln);
@@ -4041,22 +4078,26 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
         const locFallback = [...new Set(locations)].join(' + ');
-        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln));
+        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln) && !usedLineNums.has(Number(l.quotationLineNumber)));
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag && l.purpose && (
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && (
             l.purpose.includes(locFallback) ||
             locFallback.includes(l.purpose.split('|')[0]) ||
             (codes && l.purpose.includes(codes))
           ));
         }
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && hoardingObjs.some(ho => {
             const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
             return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
           }));
         }
         if (!savedLine) {
-          savedLine = myLines.find(l => l.mergeFlag);
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)));
+        }
+
+        if (savedLine) {
+          usedLineNums.add(Number(savedLine.quotationLineNumber));
         }
 
         const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
@@ -4138,6 +4179,23 @@ export default function QuotationPage({ onNavigateToContracts }) {
           setStep2Error('Select the size from the dropdown.');
           return;
         }
+
+        // 3. Validation for Printing Type & Print Cost/Sq.ft on hoarding/merged rows
+        for (const r of rows) {
+          if (r.rowType === 'hoarding' || r.rowType === 'merged') {
+            const hasPrintType = !!r.printType;
+            const hasPrintRate = r.printRate !== '' && r.printRate !== undefined && r.printRate !== null && Number(r.printRate) > 0;
+
+            if (hasPrintType && !hasPrintRate) {
+              setStep2Error('Print Cost/Sq.Ft is mandatory when Printing Type is selected.');
+              return;
+            }
+            if (hasPrintRate && !hasPrintType) {
+              setStep2Error('Printing Type is mandatory when Print Cost/Sq.Ft is entered.');
+              return;
+            }
+          }
+        }
       }
 
       // ── re-check conflicts before proceeding ──
@@ -4188,6 +4246,18 @@ export default function QuotationPage({ onNavigateToContracts }) {
       } else if (r.rowType === 'printing') {
         if (!r.size) {
           showToast('Please select size for all printing rows.', 'error');
+          return;
+        }
+      }
+      if (withPrinting && (r.rowType === 'hoarding' || r.rowType === 'merged')) {
+        const hasPrintType = !!r.printType;
+        const hasPrintRate = r.printRate !== '' && r.printRate !== undefined && r.printRate !== null && Number(r.printRate) > 0;
+        if (hasPrintType && !hasPrintRate) {
+          showToast('Print Cost/Sq.Ft is mandatory when Printing Type is selected.', 'error');
+          return;
+        }
+        if (hasPrintRate && !hasPrintType) {
+          showToast('Printing Type is mandatory when Print Cost/Sq.Ft is entered.', 'error');
           return;
         }
       }
@@ -4418,7 +4488,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           };
         });
 
-      /* ── Merged rows from DB fetched QuotationMergeDTL ── */
+      const usedLineNums = new Set();
       if (dbMerges.length >= 2) {
         const byLine = new Map();
         for (const m of dbMerges) {
@@ -4457,22 +4527,26 @@ export default function QuotationPage({ onNavigateToContracts }) {
           const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
           const locFallback = [...new Set(locations)].join(' + ');
-          let savedLine = dbLines.find(l => Number(l.quotationLineNumber) === Number(ln));
+          let savedLine = dbLines.find(l => Number(l.quotationLineNumber) === Number(ln) && !usedLineNums.has(Number(l.quotationLineNumber)));
           if (!savedLine) {
-            savedLine = dbLines.find(l => l.mergeFlag && l.purpose && (
+            savedLine = dbLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && (
               l.purpose.includes(locFallback) ||
               locFallback.includes(l.purpose.split('|')[0]) ||
               (codes && l.purpose.includes(codes))
             ));
           }
           if (!savedLine) {
-            savedLine = dbLines.find(l => l.mergeFlag && l.purpose && hoardingObjs.some(ho => {
+            savedLine = dbLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && hoardingObjs.some(ho => {
               const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
               return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
             }));
           }
           if (!savedLine) {
-            savedLine = dbLines.find(l => l.mergeFlag);
+            savedLine = dbLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)));
+          }
+
+          if (savedLine) {
+            usedLineNums.add(Number(savedLine.quotationLineNumber));
           }
 
           const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
