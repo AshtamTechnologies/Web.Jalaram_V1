@@ -41,10 +41,17 @@ const fmtCurrency = (n) => {
 };
 
 function normalizeList(res) {
+  if (!res) return [];
   if (Array.isArray(res)) return res;
   if (Array.isArray(res?.$values)) return res.$values;
   if (Array.isArray(res?.data)) return res.data;
   if (Array.isArray(res?.items)) return res.items;
+  if (typeof res === 'object') {
+    const raw = res.data ?? res;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+      return [raw];
+    }
+  }
   return [];
 }
 
@@ -99,7 +106,10 @@ function buildImageUrl(att) {
   const path = att.receiptFilePath ?? att.ReceiptFilePath ?? '';
   if (!path) return null;
   if (path.startsWith('http')) return path;
-  return `${API_ROOT_URL}${path}`;
+  const cleanPath = path.replace(/^\/+/, '');
+  const url = `${API_ROOT_URL}/${cleanPath}`;
+  console.log('[JobPaymentPage] buildImageUrl:', url);
+  return url;
 }
 
 /* ═══════════════════════════════════════════
@@ -338,7 +348,7 @@ function AttachmentModal({ payment, onClose, showToast }) {
       showToast(`${files.length} receipt${files.length !== 1 ? 's' : ''} uploaded!`, 'success');
       setFiles([]);
       setImgErrors({});
-      await loadAttachments();
+      onClose();
     } catch (err) {
       showToast(err?.message || 'Upload failed.', 'error');
     } finally {
@@ -375,7 +385,8 @@ function AttachmentModal({ payment, onClose, showToast }) {
         </div>
       )}
 
-      <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      {/* <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}> */}
+      <div className="pg-overlay">
         <div className="pg-modal" style={{ maxWidth: 680 }}>
 
           {/* Head */}

@@ -1662,6 +1662,128 @@ function QuotationDeleteConfirmModal({ count, onConfirm, onClose }) {
     document.body
   );
 }
+function ProformaConfirmModal({ target, onConfirm, onCancel, onClose }) {
+  const cancelBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (cancelBtnRef.current) {
+      cancelBtnRef.current.focus();
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 99999,
+        background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 22, width: '100%', maxWidth: 480,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '28px 24px 20px',
+        }}
+      >
+        {/* Header with Warning Icon */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 18 }}>
+          <div style={{
+            width: 48, height: 48, borderRadius: 14, flexShrink: 0,
+            background: '#fffbeb', border: '2px solid #fef3c7',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <AlertTriangle size={24} color="#d97706" />
+          </div>
+          <div>
+            <h3 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#1a1a2e', margin: 0 }}>
+              Proforma Invoice Exists
+            </h3>
+            <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#7878a0', margin: '4px 0 0', lineHeight: 1.4 }}>
+              A Proforma Invoice has already been generated for this quotation.
+            </p>
+          </div>
+        </div>
+
+        {/* Message body */}
+        <div style={{
+          fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 600,
+          color: '#4a5568', lineHeight: 1.6, marginBottom: 26, background: '#fcfcfd',
+          padding: '12px 16px', borderRadius: 12, border: '1px dashed #e2e8f0'
+        }}>
+          Quotation: <strong style={{ color: '#1a1a2e' }}>{target.quot.quotationNumber || `#${target.quot.quotationID}`}</strong><br />
+          Revision: <strong style={{ color: '#1a1a2e' }}>Rev.{target.quot.quotationRevisionNumber ?? 0}</strong><br />
+          <span style={{ display: 'block', marginTop: 8 }}>
+            Would you like to save and generate a <strong>new</strong> Proforma Invoice record, or just <strong>view/print the latest existing</strong> invoice?
+          </span>
+        </div>
+
+        {/* Action Buttons */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, flexWrap: 'wrap'
+        }}>
+          {/* Neutral Close button */}
+          <button
+            onClick={onClose}
+            style={{
+              padding: '10px 16px', borderRadius: 10, border: '1.5px solid #e2e8f0',
+              background: '#fff', color: '#64748b', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.target.style.background = '#f8fafc'; }}
+            onMouseLeave={e => { e.target.style.background = '#fff'; }}
+          >
+            Cancel
+          </button>
+
+          {/* View Existing: Warning outline */}
+          <button
+            onClick={onCancel}
+            style={{
+              padding: '10px 18px', borderRadius: 10, border: '1.5px solid #f59e0b',
+              background: '#fff', color: '#d97706', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => { e.target.style.background = '#fffbeb'; }}
+            onMouseLeave={e => { e.target.style.background = '#fff'; }}
+          >
+            View Existing
+          </button>
+
+          {/* Create New: Premium gradient / solid warning style */}
+          <button
+            ref={cancelBtnRef}
+            onClick={onConfirm}
+            style={{
+              padding: '11.5px 22px', borderRadius: 10, border: 'none',
+              background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+              color: '#fff', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
+              boxShadow: '0 4px 12px rgba(245,158,11,0.25)',
+              transition: 'transform 0.15s',
+            }}
+            onMouseEnter={e => { e.target.style.transform = 'scale(1.02)'; }}
+            onMouseLeave={e => { e.target.style.transform = 'scale(1)'; }}
+          >
+            Create New
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
 /* ═══════════════════════════════════════════
    MERGE HOARDING MODAL
 ═══════════════════════════════════════════ */
@@ -2756,29 +2878,74 @@ function CreateContractFromQuotModal({
         </div>
 
         {/* ── Summary strip ── */}
-        {selectedRows.length > 0 && (
-          <div style={{
-            padding: '10px 24px', borderTop: '1px solid #f0f0f8',
-            background: 'rgba(124,58,237,0.04)',
-            display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap', flexShrink: 0,
-          }}>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#7c3aed' }}>
-              Total Contract Value:&nbsp;
-              <span style={{ fontSize: 14, fontWeight: 900 }}>
-                ₹ {totalContractValue.toLocaleString('en-IN')}
-              </span>
+        {selectedRows.length > 0 && (() => {
+          const cgstPct = Number(quot.cGSTPercent ?? 9);
+          const sgstPct = Number(quot.sGSTPercent ?? 9);
+          const cgstAmt = (totalContractValue * cgstPct) / 100;
+          const sgstAmt = (totalContractValue * sgstPct) / 100;
+          const grossTotal = totalContractValue + cgstAmt + sgstAmt;
+          const finalTotal = Math.round(grossTotal);
+          const roundOff = finalTotal - grossTotal;
+
+          return (
+            <div style={{
+              padding: '12px 24px', borderTop: '1px solid #f0f0f8',
+              background: 'rgba(124,58,237,0.04)',
+              display: 'flex', alignItems: 'center', gap: '20px 28px', flexWrap: 'wrap', flexShrink: 0,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
+                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>
+                  Sub Total:&nbsp;
+                  <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                    ₹ {fmtCurrency(totalContractValue)}
+                  </span>
+                </div>
+                {cgstPct > 0 && (
+                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>
+                    CGST ({cgstPct}%):&nbsp;
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                      ₹ {fmtCurrency(cgstAmt)}
+                    </span>
+                  </div>
+                )}
+                {sgstPct > 0 && (
+                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>
+                    SGST ({sgstPct}%):&nbsp;
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                      ₹ {fmtCurrency(sgstAmt)}
+                    </span>
+                  </div>
+                )}
+                {Math.abs(roundOff) > 0.001 && (
+                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>
+                    Round Off:&nbsp;
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                      ₹ {fmtCurrency(roundOff)}
+                    </span>
+                  </div>
+                )}
+                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#7c3aed' }}>
+                  Total Contract Value:&nbsp;
+                  <span style={{ fontSize: 14.5, fontWeight: 900, background: 'rgba(124,58,237,0.1)', padding: '3px 8px', borderRadius: 6 }}>
+                    ₹ {fmtCurrency(finalTotal)}
+                  </span>
+                </div>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', marginLeft: 'auto' }}>
+                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#16a34a' }}>
+                  Total Amt / Freq:&nbsp;
+                  <span style={{ fontSize: 14, fontWeight: 900 }}>
+                    {/* ₹ {fmtCurrency(totalAmtPerFreq)} */}
+                    ₹ {fmtCurrency(finalTotal)}
+                  </span>
+                </div>
+                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600 }}>
+                  Frequency: <strong style={{ color: '#1a1a2e' }}>{freqOptions.find(f => String(f.value) === String(freqID))?.label || '—'}</strong>
+                </div>
+              </div>
             </div>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#16a34a' }}>
-              Total Amt / Freq:&nbsp;
-              <span style={{ fontSize: 14, fontWeight: 900 }}>
-                ₹ {totalAmtPerFreq.toLocaleString('en-IN')}
-              </span>
-            </div>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600, marginLeft: 'auto' }}>
-              Frequency: {freqOptions.find(f => String(f.value) === String(freqID))?.label || '—'}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── Footer ── */}
         <div className="pg-modal__foot qt-merge-foot-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -2913,6 +3080,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [conflictWarnings, setConflictWarnings] = useState([]);   // ← NEW
   const [showConflictModal, setShowConflictModal] = useState(false);// ← NEW
   const [showPrintTypeDD, setShowPrintTypeDD] = useState(false);
+  const [proformaConfirmTarget, setProformaConfirmTarget] = useState(null);
   /* ── Step 2 resizable table ── */
   const step2TableRef = useRef(null);
   const printTypeBtnRef = useRef(null);
@@ -3153,31 +3321,77 @@ export default function QuotationPage({ onNavigateToContracts }) {
       }
     }
 
-    /* ── Save Proforma Invoice record to API (non-blocking) ── */
-    let invoiceID = null;   // ← NEW
+    /* ── Check & Save Proforma Invoice record ── */
     try {
-      const res = await apiService.createPerformaInvoice({
-        invoiceID: 0,
-        quotationID: Number(quot.quotationID),
-        quotationRevisionNumber: Number(quot.quotationRevisionNumber ?? 0),
-        quotationNumber: quot.quotationNumber || '',
-        invoiceDate: new Date().toISOString(),
-      });
-      // ← NEW: extract the generated invoiceID from the response
-      invoiceID = res?.invoiceID ?? res?.InvoiceID ?? res?.data?.invoiceID ?? res?.data?.InvoiceID ?? null;
-      showToast('Proforma invoice saved.', 'success');
+      const invoicesRaw = await apiService.getAllPerformaInvoices().catch(() => []);
+      const normalizeList = (raw) => {
+        if (!raw) return [];
+        if (Array.isArray(raw)) return raw;
+        if (Array.isArray(raw.data)) return raw.data;
+        if (Array.isArray(raw.$values)) return raw.$values;
+        return [];
+      };
+      const invoices = normalizeList(invoicesRaw);
+      const matchingInvoices = invoices.filter(
+        inv => Number(inv.quotationID ?? inv.QuotationID) === Number(quot.quotationID)
+      );
+
+      const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
+      const storedCgst = (storedSub * quot.cGSTPercent) / 100;
+      const storedSgst = (storedSub * quot.sGSTPercent) / 100;
+      const storedGross = storedSub + storedCgst + storedSgst;
+      const storedFinal = Math.round(storedGross);
+
+      const targetParams = {
+        quot,
+        pdfRows,
+        cust,
+        storedSub,
+        storedCgst,
+        storedSgst,
+        storedGross,
+        storedFinal,
+        matchingInvoices
+      };
+
+      if (matchingInvoices.length > 0) {
+        setProformaConfirmTarget(targetParams);
+      } else {
+        await proceedWithProforma(targetParams, true);
+      }
     } catch (err) {
-      console.warn('[PerformaInvoice] Save failed:', err?.message);
-      // Non-blocking — PDF still opens even if save fails
+      console.warn('[PerformaInvoice] Check failed:', err?.message);
+    }
+  };
+
+  const proceedWithProforma = async (target, shouldCreateNew) => {
+    let invoiceID = null;
+    const { quot, pdfRows, cust, storedSub, storedCgst, storedSgst, storedGross, storedFinal, matchingInvoices } = target;
+
+    if (shouldCreateNew) {
+      try {
+        const res = await apiService.createPerformaInvoice({
+          invoiceID: 0,
+          quotationID: Number(quot.quotationID),
+          quotationRevisionNumber: Number(quot.quotationRevisionNumber ?? 0),
+          quotationNumber: quot.quotationNumber || '',
+          invoiceDate: new Date().toISOString(),
+        });
+        invoiceID = res?.invoiceID ?? res?.InvoiceID ?? res?.data?.invoiceID ?? res?.data?.InvoiceID ?? null;
+        showToast('Proforma invoice saved.', 'success');
+      } catch (err) {
+        console.warn('[PerformaInvoice] Save failed:', err?.message);
+      }
+    } else {
+      const sorted = [...matchingInvoices].sort((a, b) => {
+        const idA = Number(a.invoiceID ?? a.InvoiceID ?? 0);
+        const idB = Number(b.invoiceID ?? b.InvoiceID ?? 0);
+        return idB - idA;
+      });
+      invoiceID = sorted[0]?.invoiceID ?? sorted[0]?.InvoiceID ?? null;
     }
 
     /* ── Open Proforma print window ── */
-    const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
-    const storedCgst = (storedSub * quot.cGSTPercent) / 100;
-    const storedSgst = (storedSub * quot.sGSTPercent) / 100;
-    const storedGross = storedSub + storedCgst + storedSgst;
-    const storedFinal = Math.round(storedGross);
-
     const html = buildProformaHTML({
       rows: pdfRows,
       withPrinting: pdfRows.some(r => r.rowType === 'printing') || pdfRows.some(r => Number(r.printingCost || 0) > 0),
@@ -3194,7 +3408,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
       finalTotal: storedFinal,
       selectedTerms: [],
       termsTexts: [],
-      invoiceID,   // ← NEW: pass through to buildProformaHTML
+      invoiceID,
     });
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); }
@@ -4639,13 +4853,22 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setSaving(true);
     try {
       const ids = Array.from(selectedQuotIds);
-      await Promise.all(ids.map(id => apiService.archiveQuotation(id)));
+      await Promise.all(
+        ids.map(async (id) => {
+          const qObj = quotations.find(q => Number(q.quotationID) === Number(id));
+          if (qObj) {
+            const revNo = qObj.quotationRevisionNumber ?? 0;
+            const custId = qObj.customerID ?? 0;
+            await apiService.deleteQuotation(id, revNo, custId);
+          }
+        })
+      );
       showToast(`${ids.length} quotation(s) deleted successfully.`, 'success');
       setSelectedQuotIds(new Set());
       setDeleteMode(false);
       await refreshQuotations();
     } catch (err) {
-      console.error('[Delete Confirm] Error archiving quotations:', err);
+      console.error('[Delete Confirm] Error deleting quotations:', err);
       showToast('Deletion failed: ' + (err?.response?.data?.message || err?.message || 'Unknown error'), 'error');
     } finally {
       setSaving(false);
@@ -6046,6 +6269,23 @@ export default function QuotationPage({ onNavigateToContracts }) {
           count={selectedQuotIds.size}
           onConfirm={handleDeleteConfirm}
           onClose={() => setShowDeleteConfirm(false)}
+        />
+      )}
+
+      {proformaConfirmTarget && (
+        <ProformaConfirmModal
+          target={proformaConfirmTarget}
+          onConfirm={async () => {
+            const target = proformaConfirmTarget;
+            setProformaConfirmTarget(null);
+            await proceedWithProforma(target, true);
+          }}
+          onCancel={async () => {
+            const target = proformaConfirmTarget;
+            setProformaConfirmTarget(null);
+            await proceedWithProforma(target, false);
+          }}
+          onClose={() => setProformaConfirmTarget(null)}
         />
       )}
     </>

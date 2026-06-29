@@ -1038,6 +1038,7 @@ export default function SupervisorJobsPage() {
   const [selectedJob, setSelectedJob] = useState(null);
   const [jobs, setJobs] = useState([]);
   const [workers, setWorkers] = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [toast, setToast] = useState(null);
@@ -1058,7 +1059,7 @@ export default function SupervisorJobsPage() {
   useEffect(() => {
     if (!loading) setTableReady(true);
   }, [loading]);
-  useResizableColumns(tableRef, tableReady, [80, 110, 240, 90, 120, 80, 110, 80]);
+  useResizableColumns(tableRef, tableReady, [80, 140, 180, 110, 200, 90, 120, 80, 110, 80]);
 
 
 
@@ -1078,12 +1079,13 @@ export default function SupervisorJobsPage() {
     try {
       const userId = parseInt(localStorage.getItem('userId') || '0', 10);
 
-      const [res, hRaw, mergeRaw, sRaw, attRaw] = await Promise.all([
+      const [res, hRaw, mergeRaw, sRaw, attRaw, cRaw] = await Promise.all([
         apiService.getJobRequestsByUserId(userId),
         apiService.getAllHoardings(),
         apiService.getAllHoardingMerges(),
         apiService.getAllSites().catch(() => []),
         apiService.getAllJobTaskAttachments().catch(() => []),
+        apiService.getAllCustomers().catch(() => []),
       ]);
 
       // Build site lookup map
@@ -1119,6 +1121,9 @@ export default function SupervisorJobsPage() {
       setHoardingMerges(extractArray(mergeRaw));
       setAllAttachments(extractArray(attRaw));
 
+      const customerList = extractArray(cRaw);
+      setCustomers(customerList);
+
       const list = extractArray(res).map(normalizeJob);
 
       const withTasks = await Promise.all(
@@ -1144,9 +1149,34 @@ export default function SupervisorJobsPage() {
                 isMerged: !!merge,
               };
             });
-            return { ...job, tasks: taskList };
+
+            // Find customer
+            const customerObj = customerList.find(c => Number(c.customerID ?? c.CustomerID) === Number(job.customerID));
+            const customerName = customerObj?.customerName || customerObj?.CustomerName || '—';
+
+            // Find unique address line 1
+            const hoardingIDs = taskList.map(t => Number(t.hoardingID)).filter(Boolean);
+            const hoardingObjects = hoardingIDs.map(id => enrichedHoardings.find(h => Number(h.hoardingID) === id)).filter(Boolean);
+            const addressLines = hoardingObjects.map(h => {
+              const s = h.site || null;
+              if (s) return s.addressLine1 || s.AddressLine1 || '';
+              return h.addressLine1 ?? h.AddressLine1 ?? '';
+            }).filter(Boolean);
+            const addressLine1 = [...new Set(addressLines)].join(', ') || '—';
+
+            return {
+              ...job,
+              tasks: taskList,
+              customerName,
+              addressLine1,
+            };
           } catch {
-            return { ...job, tasks: [] };
+            return {
+              ...job,
+              tasks: [],
+              customerName: '—',
+              addressLine1: '—',
+            };
           }
         })
       );
@@ -1191,7 +1221,12 @@ export default function SupervisorJobsPage() {
   /* ── Filter + Sort ── */
   const filtered = jobs.filter(j => {
     const q = search.toLowerCase();
-    const m = String(j.jobRequestID).includes(q) || (j.jobType || '').toLowerCase().includes(q) || (j.jobDescription || '').toLowerCase().includes(q) || (j.jobStatus || '').toLowerCase().includes(q);
+    const m = String(j.jobRequestID).includes(q)
+      || (j.jobType || '').toLowerCase().includes(q)
+      || (j.jobDescription || '').toLowerCase().includes(q)
+      || (j.jobStatus || '').toLowerCase().includes(q)
+      || (j.customerName || '').toLowerCase().includes(q)
+      || (j.addressLine1 || '').toLowerCase().includes(q);
     return m && (statusFilter === 'all' || j.jobStatus === statusFilter);
   });
   const sorted = [...filtered].sort((a, b) => {
@@ -1208,14 +1243,16 @@ export default function SupervisorJobsPage() {
   jobs.forEach(j => { counts[j.jobStatus] = (counts[j.jobStatus] || 0) + 1; });
 
   const COLS = [
-    { key: 'jobRequestID', label: 'Job ID', w: '9%' },
-    { key: 'jobType', label: 'Type', w: '11%' },
-    { key: 'jobDescription', label: 'Description', w: '22%' },
-    { key: 'noofHoardings', label: 'Hoardings', w: '9%' },
-    { key: 'targetCompletionDate', label: 'Target Date', w: '12%' },
-    { key: '_tasks', label: 'Tasks', w: '9%', noSort: true },
-    { key: 'jobStatus', label: 'Status', w: '12%' },
-    { key: '_action', label: '', w: '8%', noSort: true },
+    { key: 'jobRequestID', label: 'Job ID', w: '7%' },
+    { key: 'customerName', label: 'Customer', w: '12%' },
+    { key: 'addressLine1', label: 'Site Address Line 1', w: '16%', noSort: true },
+    { key: 'jobType', label: 'Type', w: '9%' },
+    { key: 'jobDescription', label: 'Description', w: '18%' },
+    { key: 'noofHoardings', label: 'Hoardings', w: '8%' },
+    { key: 'targetCompletionDate', label: 'Target Date', w: '11%' },
+    { key: '_tasks', label: 'Tasks', w: '8%', noSort: true },
+    { key: 'jobStatus', label: 'Status', w: '10%' },
+    { key: '_action', label: '', w: '7%', noSort: true },
   ];
 
   /* ── Render detail view ── */
@@ -1323,6 +1360,12 @@ export default function SupervisorJobsPage() {
                       <tr key={job.jobRequestID} className="pg-tr">
                         <td className="pg-td">
                           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf' }}>#{job.jobRequestID}</span>
+                        </td>
+                        <td className="pg-td">
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>{job.customerName}</span>
+                        </td>
+                        <td className="pg-td pg-td--overflow">
+                          <span className="pg-td__ellipsis" style={{ color: '#4a5568' }} title={job.addressLine1}>{job.addressLine1}</span>
                         </td>
                         <td className="pg-td">
                           {job.jobType

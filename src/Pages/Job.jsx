@@ -135,7 +135,7 @@ function normalizeJobRequest(raw) {
     totalAreaSQFT: Number(raw.totalAreaSQFT ?? raw.TotalAreaSQFT ?? 0),
     targetCompletionDate: (raw.targetCompletionDate ?? raw.TargetCompletionDate ?? '').split('T')[0],
     actualCompletionDate: (raw.actualCompletionDate ?? raw.ActualCompletionDate ?? '').split('T')[0],
-    jobStatus: raw.jobStatus ?? raw.JobStatus ?? 'Open',
+    jobStatus: raw.jobStatus ?? raw.JobStatus ?? 'Pending',
   };
 }
 
@@ -145,7 +145,7 @@ function normalizeJobTask(raw) {
     jobRequestID: raw.jobRequestID ?? raw.JobRequestID ?? 0,
     hoardingID: raw.hoardingID ?? raw.HoardingID ?? 0,
     actualCompletionDate: (raw.actualCompletionDate ?? raw.ActualCompletionDate ?? '').split('T')[0],
-    status: raw.status ?? raw.Status ?? 'Open',
+    status: raw.status ?? raw.Status ?? 'Pending',
     submitDTTM: raw.submitDTTM ?? raw.SubmitDTTM ?? '',
     lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
     lastUpdatedBy: raw.lastUpdatedBy ?? raw.LastUpdatedBy ?? 0,
@@ -479,7 +479,8 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
   };
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 640 }}>
         <div className="pg-modal__head">
           <div className="pg-modal__head-left">
@@ -1126,6 +1127,7 @@ export default function JobPage() {
   const [targetDate, setTargetDate] = useState('');
   const [supervisorAcceptDttm, setSupervisorAcceptDttm] = useState('');
   const [actualCompletionDate, setActualCompletionDate] = useState('');
+  const [jobStatus, setJobStatus] = useState('Open');
   const [contractHoardingMaps, setContractHoardingMaps] = useState([]);
   const [hoardingMerges, setHoardingMerges] = useState([]);
 
@@ -1145,7 +1147,20 @@ export default function JobPage() {
   const [tableReady, setTableReady] = useState(false);
 
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
-  useResizableColumns(tableRef, tableReady, [40, 200, 120, 100, 70, 148, 140, 170, 60]); useResizableColumns(tableRef, tableReady, [40, 200, 120, 100, 70, 148, 140, 170, 60]);
+  useResizableColumns(tableRef, tableReady, [40, 200, 120, 100, 70, 148, 140, 170, 60]);
+
+  const taskTableRef = useRef(null);
+  const [taskTableReady, setTaskTableReady] = useState(false);
+
+  useEffect(() => {
+    if (step === 2 && tasks.length > 0) {
+      setTaskTableReady(false);
+      const t = setTimeout(() => setTaskTableReady(true), 120);
+      return () => clearTimeout(t);
+    }
+  }, [step, tasks.length]);
+
+  useResizableColumns(taskTableRef, taskTableReady, [40, 240, 90, 90, 70, 148, 140, 170, 80, 60]);
   // Group tasks: merged ones collapse into a single display row
   const displayTaskRows = useMemo(() => {
     const mergedIds = new Set(
@@ -1217,10 +1232,8 @@ export default function JobPage() {
 
   const derivedJobStatus = useMemo(() => {
     if (tasks.length > 0 && tasks.every(t => t.status === 'Submitted')) return 'Submitted';
-    if (supervisorAcceptDttm) return 'In Progress';
-    if (editingJobID && selectedSupervisor) return 'Accepted';
-    return 'Open';
-  }, [tasks, supervisorAcceptDttm, editingJobID, selectedSupervisor]);
+    return jobStatus;
+  }, [tasks, jobStatus]);
 
   const customerContracts = useMemo(() => {
     if (!selectedCustomer) return [];
@@ -1520,6 +1533,7 @@ export default function JobPage() {
     setTasks([]);
     setStep1Error(''); setStep2Error('');
     setEditingJobID(null);
+    setJobStatus('Open');
   };
 
   /* ── Start new ── */
@@ -1545,6 +1559,7 @@ export default function JobPage() {
     setSupervisorAcceptDttm(job.supervisorAcceptDttm || '');
     setActualCompletionDate(job.actualCompletionDate || '');
     setEditingJobID(job.jobRequestID);
+    setJobStatus(job.jobStatus || 'Open');
 
     const myTasks = allJobTasks.filter(t => t.jobRequestID === job.jobRequestID);
     setTasks(myTasks.map(jt => {
@@ -1632,10 +1647,12 @@ export default function JobPage() {
       let savedJobID = editingJobID;
       if (editingJobID) {
         await apiService.updateJobRequest({ ...jobPayload, jobRequestID: editingJobID });
+        setJobStatus(jobPayload.jobStatus);
       } else {
         const saved = await apiService.createJobRequest(jobPayload);
         savedJobID = saved?.jobRequestID ?? saved?.JobRequestID ?? 0;
         setEditingJobID(savedJobID); // ← mark as saved so photo buttons activate
+        setJobStatus(saved?.jobStatus ?? saved?.JobStatus ?? jobPayload.jobStatus);
       }
 
       // Save tasks and capture their returned IDs
@@ -2117,7 +2134,7 @@ export default function JobPage() {
                       </span>
                     </div>
                   ) : (
-                    <table className="pg-table" style={{ tableLayout: 'auto' }}>
+                    <table className="pg-table" ref={taskTableRef} style={{ tableLayout: 'fixed', width: '100%', minWidth: 1100 }}>
                       <thead>
                         <tr>
                           <th className="pg-th" style={{ width: 40 }}>#</th>

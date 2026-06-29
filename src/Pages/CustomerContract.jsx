@@ -267,9 +267,50 @@ function SortIcon({ col, sortKey, sortDir }) {
     </span>
   );
 }
+function normalizeQuotation(raw) {
+  return {
+    quotationID: Number(raw.quotationID ?? raw.QuotationID ?? 0),
+    quotationRevisionNumber: Number(raw.quotationRevisionNumber ?? raw.QuotationRevisionNumber ?? 0),
+    customerID: Number(raw.customerID ?? raw.CustomerID ?? 0),
+    quotationNumber: raw.quotationNumber ?? raw.QuotationNumber ?? '',
+    cGSTPercent: Number(raw.cGSTPercent ?? raw.CGSTPercent ?? 9),
+    sGSTPercent: Number(raw.sGSTPercent ?? raw.SGSTPercent ?? 9),
+  };
+}
+
+function getContractGst(contract, quotations = []) {
+  if (!contract || !contract.comments) return { cgstPct: 9, sgstPct: 9 };
+  const match = contract.comments.match(/From Quotation\s+([^\s]+)(?:\s+Rev\.(\d+))?/i);
+  if (!match) return { cgstPct: 9, sgstPct: 9 };
+
+  const quotNoOrID = match[1].trim().toLowerCase();
+  const revNo = match[2] ? Number(match[2]) : null;
+
+  const found = quotations.find(q => {
+    const qNo = String(q.quotationNumber).trim().toLowerCase();
+    const qID = String(q.quotationID);
+    const isNoMatch = qNo === quotNoOrID || qNo.replace(/[^a-z0-9]/g, '') === quotNoOrID.replace(/[^a-z0-9]/g, '');
+    const isIdMatch = qID === quotNoOrID;
+    
+    if (!(isNoMatch || isIdMatch)) return false;
+    if (revNo !== null) {
+      return Number(q.quotationRevisionNumber) === revNo;
+    }
+    return true;
+  });
+
+  if (found) {
+    return {
+      cgstPct: Number(found.cGSTPercent ?? 9),
+      sgstPct: Number(found.sGSTPercent ?? 9)
+    };
+  }
+  return { cgstPct: 9, sgstPct: 9 };
+}
+
 // Change the function signature — add `terms` parameter:
 function buildContractPDFHTML({ company, customer, contract,
-  hoardingItems, photoUrlMap, photoSelections, terms = [] }) {
+  hoardingItems, photoUrlMap, photoSelections, terms = [], cgstPct = 9, sgstPct = 9 }) {
 
   const today = new Date().toLocaleDateString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric',
@@ -487,15 +528,42 @@ function buildContractPDFHTML({ company, customer, contract,
       ? `<div class="cov-phone" style="font-size:12px;color:#555;margin-top:4px;">
                ${[customer.addressLine1, customer.city, customer.district].filter(Boolean).join(', ')}
              </div>` : ''}
-        ${contract ? `
+        ${contract ? (() => {
+          const finalValNum = Number(contract.contractFinalValue || contract.contractOrigValue || 0);
+          const cgstAmt = Math.round((finalValNum * cgstPct) / 100);
+          const sgstAmt = Math.round((finalValNum * sgstPct) / 100);
+          const totalContractVal = finalValNum + cgstAmt + sgstAmt;
+
+          return `
           <div class="cov-info">
-            <strong>Contract Period :</strong>
-              ${fmtD(contract.startDate)} &rarr; ${fmtD(contract.endDate)}<br>
-            <strong>Contract Value &nbsp;:</strong>
-              &#8377;${Number(contract.contractFinalValue || contract.contractOrigValue || 0)
-        .toLocaleString('en-IN')}<br>
-            <strong>Total Hoardings :</strong> ${hoardingItems.length}
-          </div>` : ''}
+            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+              <tr>
+                <td style="width:180px; font-weight:bold; padding:2px 0;">Contract Period</td>
+                <td style="padding:2px 0;">: ${fmtD(contract.startDate)} &rarr; ${fmtD(contract.endDate)}</td>
+              </tr>
+              <tr>
+                <td style="font-weight:bold; padding:2px 0;">Contract Value (Base)</td>
+                <td style="padding:2px 0;">: &#8377;${finalValNum.toLocaleString('en-IN')}</td>
+              </tr>
+              <tr>
+                <td style="font-weight:bold; padding:2px 0;">CGST (${cgstPct}%)</td>
+                <td style="padding:2px 0;">: &#8377;${cgstAmt.toLocaleString('en-IN')}</td>
+              </tr>
+              <tr>
+                <td style="font-weight:bold; padding:2px 0;">SGST (${sgstPct}%)</td>
+                <td style="padding:2px 0;">: &#8377;${sgstAmt.toLocaleString('en-IN')}</td>
+              </tr>
+              <tr>
+                <td style="font-weight:bold; padding:2px 0;">Total Value (incl. GST)</td>
+                <td style="padding:2px 0; font-weight:bold;">: &#8377;${totalContractVal.toLocaleString('en-IN')}</td>
+              </tr>
+              <tr>
+                <td style="font-weight:bold; padding:2px 0;">Total Hoardings</td>
+                <td style="padding:2px 0;">: ${hoardingItems.length}</td>
+              </tr>
+            </table>
+          </div>`;
+        })() : ''}
       </div>
       <div class="cov-foot">
         <span>${company.phone}</span>
@@ -2698,7 +2766,7 @@ function HoardingMergeSection({ customerContractID, hoardings, sites }) {
     </div>
   );
 }
-function ContractPDFModal({ contract, customer, hoardings, sites, onClose }) {
+function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [], onClose }) {
   const [maps, setMaps] = useState([]);
   const [attachments, setAttachments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2877,6 +2945,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, onClose }) {
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
         .map(t => t.description);
 
+      const { cgstPct, sgstPct } = getContractGst(contract, quotations);
       const html = buildContractPDFHTML({
         company: CONTRACT_COMPANY,
         customer,
@@ -2885,6 +2954,8 @@ function ContractPDFModal({ contract, customer, hoardings, sites, onClose }) {
         photoUrlMap,
         photoSelections,
         terms: selectedTerms,       // ← pass selected terms
+        cgstPct,
+        sgstPct,
       });
       const win = window.open('', '_blank');
       if (win) { win.document.write(html); win.document.close(); }
@@ -3325,7 +3396,7 @@ async function addHoardingEffdtRows(hoardingIDs, allHoardings, effdt, status) {
 /* ═══════════════════════════════════════════
    CONTRACT FORM
 ═══════════════════════════════════════════ */
-function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreqs, contracts, landContracts = [], hoardingMaps = [], onBack, onSave }) {
+function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreqs, contracts, landContracts = [], hoardingMaps = [], quotations = [], onBack, onSave }) {
   const isAdd = mode === 'add';
   const currentContractID = isAdd ? null : (contract?.customerContractID ?? null);
 
@@ -3440,6 +3511,15 @@ function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreq
     setForm(p => ({ ...p, contractFinalValue: final >= 0 ? final : 0 }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.contractOrigValue, form.discountAmount, form.adjustmentAmount]);
+
+  const { cgstPct, sgstPct } = useMemo(() => {
+    return getContractGst(form, quotations);
+  }, [form.comments, quotations]);
+
+  const finalValNum = Number(String(form.contractFinalValue).replace(/,/g, '')) || 0;
+  const cgstAmt = Math.round((finalValNum * cgstPct) / 100);
+  const sgstAmt = Math.round((finalValNum * sgstPct) / 100);
+  const totalContractVal = finalValNum + cgstAmt + sgstAmt;
 
   /* ── Save contract ── */
 const handleSave = async () => {
@@ -4043,13 +4123,36 @@ const handleSave = async () => {
                       </InputWrap>
                     </div>
                     <div className="col-12 col-md-4">
-                      <FieldLabel label="Final Contract Value (Rs.)" />
+                      <FieldLabel label="Final Contract Value (Base) (Rs.)" />
                       <div style={{ position: 'relative' }}>
                         <InputWrap icon={IndianRupee}>
                           <CurrencyInput value={form.contractFinalValue} onChange={() => { }} placeholder="Auto-calculated" readOnly />
                         </InputWrap>
                         <div style={{ marginTop: 4, fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>
                           = Original − Discount + Adjustment
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-12 col-md-4">
+                      <FieldLabel label={`CGST (${cgstPct}%) (Rs.)`} />
+                      <InputWrap icon={IndianRupee}>
+                        <CurrencyInput value={cgstAmt} onChange={() => { }} placeholder="Auto-calculated" readOnly />
+                      </InputWrap>
+                    </div>
+                    <div className="col-12 col-md-4">
+                      <FieldLabel label={`SGST (${sgstPct}%) (Rs.)`} />
+                      <InputWrap icon={IndianRupee}>
+                        <CurrencyInput value={sgstAmt} onChange={() => { }} placeholder="Auto-calculated" readOnly />
+                      </InputWrap>
+                    </div>
+                    <div className="col-12 col-md-4">
+                      <FieldLabel label="Total Contract Value (Incl. GST) (Rs.)" />
+                      <div style={{ position: 'relative' }}>
+                        <InputWrap icon={IndianRupee}>
+                          <CurrencyInput value={totalContractVal} onChange={() => { }} placeholder="Auto-calculated" readOnly />
+                        </InputWrap>
+                        <div style={{ marginTop: 4, fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>
+                          = Final Value + CGST + SGST
                         </div>
                       </div>
                     </div>
@@ -4181,6 +4284,7 @@ const handleSave = async () => {
           customer={selectedCustomerObj || { customerName: 'Customer' }}
           hoardings={hoardings}
           sites={sites}
+          quotations={quotations}
           onClose={() => setShowContractPDF(false)}
         />
       )}
@@ -4241,6 +4345,7 @@ export default function CustomerContractPage() {
   const [contracts, setContracts] = useState([]);
   const [landContracts, setLandContracts] = useState([]);      // ← add
   const [hoardingMaps, setHoardingMaps] = useState([]);         // ← add
+  const [quotations, setQuotations] = useState([]);             // ← add
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -4265,7 +4370,7 @@ export default function CustomerContractPage() {
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
     try {
-      const [rawCustomers, rawHoardings, rawSites, rawContracts, rawFreqs, rawLandContracts, rawMaps] = await Promise.all([
+      const [rawCustomers, rawHoardings, rawSites, rawContracts, rawFreqs, rawLandContracts, rawMaps, rawQuotations] = await Promise.all([
         apiService.getAllCustomers(),
         apiService.getAllHoardings(),
         apiService.getAllSites(),
@@ -4273,6 +4378,7 @@ export default function CustomerContractPage() {
         apiService.getAllPaymentFreqs(),
         apiService.getAllLandContracts(),
         apiService.getAllLandContractHoardingMaps(),
+        apiService.getAllQuotations().catch(() => []),
       ]);
       setCustomers(Array.isArray(rawCustomers) ? rawCustomers : rawCustomers?.data ?? []);
       setHoardings(
@@ -4297,6 +4403,8 @@ export default function CustomerContractPage() {
 
       const mapList = Array.isArray(rawMaps) ? rawMaps : rawMaps?.data ?? [];
       setHoardingMaps(mapList);
+      const quots = Array.isArray(rawQuotations) ? rawQuotations : rawQuotations?.data ?? [];
+      setQuotations(quots.map(normalizeQuotation));
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally { setLoadingMeta(false); }
@@ -4321,12 +4429,18 @@ export default function CustomerContractPage() {
 
   const tableRows = contracts.map(c => {
     const customer = customers.find(cu => cu.customerID === c.customerID);
+    const { cgstPct, sgstPct } = getContractGst(c, quotations);
+    const baseValue = Number(c.contractFinalValue ?? c.contractOrigValue ?? 0);
+    const cgstAmt = Math.round((baseValue * cgstPct) / 100);
+    const sgstAmt = Math.round((baseValue * sgstPct) / 100);
+    const valueWithGst = baseValue + cgstAmt + sgstAmt;
+
     return {
       customerContractID: c.customerContractID,
       customerName: customer?.customerName || `Customer ID ${c.customerID}`,
       startDate: c.startDate || '',
       endDate: c.endDate || '',
-      contractFinalValue: c.contractFinalValue ?? c.contractOrigValue ?? 0,
+      contractFinalValue: valueWithGst,
       status: c.status || '',
       _raw: c,
     };
@@ -4358,7 +4472,7 @@ export default function CustomerContractPage() {
     setPage(1);
   };
 
-  const totalValue = contracts.reduce((s, c) => s + (Number(c.contractFinalValue) || 0), 0);
+  const totalValue = tableRows.reduce((s, r) => s + Number(r.contractFinalValue || 0), 0);
   const activeCount = contracts.filter(c => c.status === 'Active').length;
   const endedCount = contracts.filter(c => c.status === 'Expired' || c.status === 'Terminated').length;
 
@@ -4370,7 +4484,7 @@ export default function CustomerContractPage() {
     { key: 'customerName', label: 'Customer' },
     { key: 'startDate', label: 'Start Date' },
     { key: 'endDate', label: 'End Date', tabletHide: true },
-    { key: 'contractFinalValue', label: 'Final Value' },
+    { key: 'contractFinalValue', label: 'Final Value (Incl. GST)' },
     { key: 'status', label: 'Status' },
     { key: '_action', label: 'Actions', noSort: true },
   ];
@@ -4387,6 +4501,7 @@ export default function CustomerContractPage() {
         contracts={contracts}
         landContracts={landContracts}
         hoardingMaps={hoardingMaps}
+        quotations={quotations}
         onBack={() => { setView('grid'); setEditTarget(null); }}
         onSave={handleSave}
       />

@@ -727,6 +727,8 @@ export const apiService = {
     totalAmount: Number(data.totalAmount ?? 0),
   }),
   archiveQuotation: (quotationId) => api.post(`/QuotationArchive/${quotationId}`),
+  deleteQuotation: (quotationId, revisionNo, customerId) =>
+    api.delete(`/Quotation/${Number(quotationId)}/${Number(revisionNo)}/${Number(customerId)}`),
 
 
   // QUOTATION LINES
@@ -1085,7 +1087,11 @@ export const apiService = {
   // JOB PAYMENT ATTACHMENTS
   getJobPaymentAttachments: async (jobPaymentID) => {
     try {
-      return await api.get(`/JobPaymentAttach/${jobPaymentID}`);
+      const res = await api.get('/JobPaymentAttach');
+      const list = Array.isArray(res) ? res
+        : Array.isArray(res?.$values) ? res.$values
+          : Array.isArray(res?.data) ? res.data : [];
+      return list.filter(item => Number(item.jobPaymentID ?? item.JobPaymentID) === Number(jobPaymentID));
     } catch (err) {
       if (err?.response?.status === 404) return [];
       throw err;
@@ -1153,6 +1159,7 @@ export const apiService = {
   getAllHoardingPhotos: () => api.get('/HoardingPhoto'),
 
   createPerformaInvoice: (data) => api.post('/PerformaInvoice', data),
+  getAllPerformaInvoices: () => api.get('/PerformaInvoice'),
 
 };
 
