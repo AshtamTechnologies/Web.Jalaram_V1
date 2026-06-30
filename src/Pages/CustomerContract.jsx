@@ -1093,6 +1093,54 @@ function AttachDeleteModal({ attach, onConfirm, onCancel }) {
 }
 
 /* ═══════════════════════════════════════════
+   HOARDING DELETE CONFIRM MODAL
+═══════════════════════════════════════════ */
+function HoardingDeleteConfirmModal({ hoardingCode, onConfirm, onCancel }) {
+  return ReactDOM.createPortal(
+    <div onClick={onCancel} style={{ position: 'fixed', inset: 0, zIndex: 99998, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, padding: '28px 28px 22px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+        <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#fef2f2', border: '2px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+          <Trash2 size={22} color="#dc2626" />
+        </div>
+        <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: 17, color: '#1a1a2e', marginBottom: 6 }}>Remove Hoarding?</div>
+        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, color: '#6b7280', fontWeight: 600, marginBottom: 22, lineHeight: 1.5 }}>
+          Are you sure you want to remove hoarding <strong style={{ color: '#374151' }}>{hoardingCode}</strong> from this contract?
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button className="pg-btn-cancel" onClick={onCancel}>Cancel</button>
+          <button className="exp-btn-delete-confirm" onClick={onConfirm} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Trash2 size={13} /> Remove</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ═══════════════════════════════════════════
+   MERGE DELETE CONFIRM MODAL
+═══════════════════════════════════════════ */
+function MergeDeleteConfirmModal({ hoardingCode, onConfirm, onCancel }) {
+  return ReactDOM.createPortal(
+    <div onClick={onCancel} style={{ position: 'fixed', inset: 0, zIndex: 99998, background: 'rgba(15,23,42,0.5)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 380, padding: '28px 28px 22px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', textAlign: 'center' }}>
+        <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#fef2f2', border: '2px solid #fecaca', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+          <Trash2 size={22} color="#dc2626" />
+        </div>
+        <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: 17, color: '#1a1a2e', marginBottom: 6 }}>Remove from Merge?</div>
+        <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, color: '#6b7280', fontWeight: 600, marginBottom: 22, lineHeight: 1.5 }}>
+          Are you sure you want to remove hoarding <strong style={{ color: '#374151' }}>{hoardingCode}</strong> from the merge?
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+          <button className="pg-btn-cancel" onClick={onCancel}>Cancel</button>
+          <button className="exp-btn-delete-confirm" onClick={onConfirm} style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Trash2 size={13} /> Remove</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ═══════════════════════════════════════════
    ATTACHMENT SECTION
 ═══════════════════════════════════════════ */
 async function fetchImageAsBase64(url) {
@@ -1690,7 +1738,7 @@ function MultiHoardingLookupModal({ hoardings, sites, onSelectMultiple, onClose 
     document.body
   );
 }
-function CustomerContractHoardingMapSection({ customerContractID, customerID, hoardings, sites }) {
+function CustomerContractHoardingMapSection({ customerContractID, customerID, hoardings, allHoardingsRaw = hoardings, sites }) {
   const [maps, setMaps] = useState([]);      // enriched: includes h data
   const [merges, setMerges] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1702,6 +1750,8 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
   const [pickOpen, setPickOpen] = useState(false);
   const [mergePickOpen, setMergePickOpen] = useState(false);
   const [occupancyWarnings, setOccupancyWarnings] = useState([]);
+  const [deleteConfirmMap, setDeleteConfirmMap] = useState(null);
+  const [deleteConfirmMerge, setDeleteConfirmMerge] = useState(null);
 
   const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
   const mappedHoardingIds = new Set(maps.map(m => Number(m.hoardingID)));
@@ -1731,7 +1781,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
       const enriched = filteredMaps.map(m => {
         const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
         // First try exact hoardingID match
-        let h = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? hh.id) === hid);
+        let h = allHoardingsRaw.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? hh.id) === hid);
 
         // If not found (deduplication may have kept a different effdt record),
         // fall back: look up the hoarding code from the map record itself,
@@ -1740,7 +1790,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
           const mapRecord = maps.find(mp => Number(mp.hoardingID ?? mp.HoardingID ?? 0) === hid);
           const codeFromMap = mapRecord?.hoardingCode ?? mapRecord?.HoardingCode;
           if (codeFromMap) {
-            h = hoardings.find(hh => hh.hoardingCode === codeFromMap);
+            h = allHoardingsRaw.find(hh => hh.hoardingCode === codeFromMap);
           }
         }
         return {
@@ -1780,7 +1830,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
     } catch (err) {
       setApiError(err?.message || 'Failed to load data.');
     } finally { setLoading(false); }
-  }, [customerContractID, hoardings]);
+  }, [customerContractID, allHoardingsRaw]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -2030,7 +2080,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
                   </div>
                 )}
               </div>
-              <button disabled={isDeleting} onClick={() => handleDeleteMerge(m.hoardingMergeID)}
+              <button disabled={isDeleting} onClick={() => setDeleteConfirmMerge({ mergeID: m.hoardingMergeID, hoardingCode: mapEntry?.hoardingCode || `Hoarding ${m.hoardingID}` })}
                 style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', flexShrink: 0 }}>
                 {isDeleting ? <Loader2 size={11} className="pg-spin" /> : <Trash2 size={12} />}
               </button>
@@ -2139,7 +2189,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
                             </span>
                           </td>
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8', textAlign: 'right' }}>
-                            <button disabled={isDeleting} onClick={() => handleDeleteMap(m.customerContractLineID)}
+                            <button disabled={isDeleting} onClick={() => setDeleteConfirmMap(m)}
                               style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', opacity: isDeleting ? 0.5 : 1 }}>
                               {isDeleting ? <Loader2 size={12} className="pg-spin" /> : <Trash2 size={13} />}
                             </button>
@@ -2238,6 +2288,30 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
           existingMergeHoardingIds={mergedHoardingIds}
           onConfirm={handleMerge}
           onClose={() => setMergePickOpen(false)}
+        />
+      )}
+
+      {deleteConfirmMap && (
+        <HoardingDeleteConfirmModal
+          hoardingCode={deleteConfirmMap.hoardingCode}
+          onConfirm={async () => {
+            const mapId = deleteConfirmMap.customerContractLineID;
+            setDeleteConfirmMap(null);
+            await handleDeleteMap(mapId);
+          }}
+          onCancel={() => setDeleteConfirmMap(null)}
+        />
+      )}
+
+      {deleteConfirmMerge && (
+        <MergeDeleteConfirmModal
+          hoardingCode={deleteConfirmMerge.hoardingCode}
+          onConfirm={async () => {
+            const mergeID = deleteConfirmMerge.mergeID;
+            setDeleteConfirmMerge(null);
+            await handleDeleteMerge(mergeID);
+          }}
+          onCancel={() => setDeleteConfirmMerge(null)}
         />
       )}
     </div>
@@ -2531,7 +2605,7 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
 /* ═══════════════════════════════════════════
    HOARDING MERGE SECTION
 ═══════════════════════════════════════════ */
-function HoardingMergeSection({ customerContractID, hoardings, sites }) {
+function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw = hoardings, sites }) {
   const [merges, setMerges] = useState([]);
   const [contractHoardingIds, setContractHoardingIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -2613,7 +2687,7 @@ function HoardingMergeSection({ customerContractID, hoardings, sites }) {
   const vMerges = merges.filter(m => m.mergeAlongFlag === 'V');
 
   const renderMergeRow = (m, idx, total) => {
-    const h = hoardings.find(hh => hh.hoardingID === m.hoardingID);
+    const h = allHoardingsRaw.find(hh => hh.hoardingID === m.hoardingID);
     const site = h ? siteMap[h.siteID] : null;
     const addr = site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '';
     const isDeleting = deletingId === m.hoardingMergeID;
@@ -3396,7 +3470,7 @@ async function addHoardingEffdtRows(hoardingIDs, allHoardings, effdt, status) {
 /* ═══════════════════════════════════════════
    CONTRACT FORM
 ═══════════════════════════════════════════ */
-function ContractForm({ mode, contract, customers, hoardings, sites, paymentFreqs, contracts, landContracts = [], hoardingMaps = [], quotations = [], onBack, onSave }) {
+function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = [], sites, paymentFreqs, contracts, landContracts = [], hoardingMaps = [], quotations = [], onBack, onSave }) {
   const isAdd = mode === 'add';
   const currentContractID = isAdd ? null : (contract?.customerContractID ?? null);
 
@@ -4027,7 +4101,7 @@ const handleSave = async () => {
                         </>
                       ) : (
                         /* Edit mode: show the original single picker (locked) */
-                        <HoardingPickerField hoardings={hoardings} sites={sites} value={form.hoardingID} onChange={val => set('hoardingID', val)} error={errors.hoardingID} disabled={true} />
+                        <HoardingPickerField hoardings={allHoardingsRaw} sites={sites} value={form.hoardingID} onChange={val => set('hoardingID', val)} error={errors.hoardingID} disabled={true} />
                       )}
 
                       <FieldError msg={errors.hoardingID} />
@@ -4189,6 +4263,7 @@ const handleSave = async () => {
                   customerContractID={savedContractID}
                   customerID={form.customerID}
                   hoardings={hoardings}
+                  allHoardingsRaw={allHoardingsRaw}
                   sites={sites}
                 />
               </div>
@@ -4214,6 +4289,7 @@ const handleSave = async () => {
                     customerContractID={savedContractID}
                     customerID={form.customerID}
                     hoardings={hoardings}
+                    allHoardingsRaw={allHoardingsRaw}
                     sites={sites}
                   />
                 </div>
@@ -4340,6 +4416,7 @@ const handleSave = async () => {
 export default function CustomerContractPage() {
   const [customers, setCustomers] = useState([]);
   const [hoardings, setHoardings] = useState([]);
+  const [allHoardingsRaw, setAllHoardingsRaw] = useState([]);
   const [sites, setSites] = useState([]);
   const [paymentFreqs, setPaymentFreqs] = useState([]);
   const [contracts, setContracts] = useState([]);
@@ -4381,10 +4458,9 @@ export default function CustomerContractPage() {
         apiService.getAllQuotations().catch(() => []),
       ]);
       setCustomers(Array.isArray(rawCustomers) ? rawCustomers : rawCustomers?.data ?? []);
-      setHoardings(
-        Array.isArray(rawHoardings) ? deduplicateHoardings(rawHoardings)
-          : Array.isArray(rawHoardings?.data) ? deduplicateHoardings(rawHoardings.data) : []
-      );
+      const rawHList = Array.isArray(rawHoardings) ? rawHoardings : rawHoardings?.data ?? [];
+      setAllHoardingsRaw(rawHList);
+      setHoardings(deduplicateHoardings(rawHList));
       setSites(Array.isArray(rawSites) ? rawSites : rawSites?.data ?? []);
       const freqList = Array.isArray(rawFreqs) ? rawFreqs : rawFreqs?.data ?? [];
       setPaymentFreqs(freqList.map(f => ({
@@ -4496,6 +4572,7 @@ export default function CustomerContractPage() {
         contract={editTarget}
         customers={customers}
         hoardings={hoardings}
+        allHoardingsRaw={allHoardingsRaw}
         sites={sites}
         paymentFreqs={freqOptions}
         contracts={contracts}

@@ -920,7 +920,7 @@ export default function RegistrationPage() {
   const COLS = [
     { key: '_name', label: 'Name', w: '16%' },
     { key: 'phone1', label: 'Phone 1', w: '12%' },
-    { key: 'phone2', label: 'Phone 2', w: '12%', tabletHide: true },
+    // { key: 'phone2', label: 'Phone 2', w: '12%', tabletHide: true },
     { key: 'email', label: 'Email', w: '18%', tabletHide: true },
     { key: 'city', label: 'City', w: '10%' },
     { key: 'district', label: 'District', w: '10%', tabletHide: true },
@@ -1046,9 +1046,9 @@ export default function RegistrationPage() {
                     </td>
 
                     {/* Phone 2 */}
-                    <td className="pg-td pg-tablet-hide">
+                    {/* <td className="pg-td pg-tablet-hide">
                       <span className="pg-td__muted">{u.phone2 || '—'}</span>
-                    </td>
+                    </td> */}
 
                     {/* Email */}
                     <td className="pg-td pg-td--overflow pg-tablet-hide">

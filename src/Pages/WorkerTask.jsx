@@ -860,7 +860,7 @@ export default function WorkerTasksPage() {
     const [modalTask, setModalTask] = useState(null);
     const [modalTab, setModalTab] = useState('view');
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState('Open');
     const [sortKey, setSortKey] = useState('jobTaskID');
     const [sortDir, setSortDir] = useState('desc');
     const [page, setPage] = useState(1);

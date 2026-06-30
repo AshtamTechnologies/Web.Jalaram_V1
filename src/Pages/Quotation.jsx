@@ -12,7 +12,7 @@ import {
   Filter, List, User, ArrowRight, ArrowLeft,
   FileCheck, Settings, Users, Hash, Calendar,
   Eye, Download, LayoutGrid, CheckSquare, Square,
-  CheckCircle2, Link2, MapPin,
+  CheckCircle2, Link2, MapPin, Info,
 } from 'lucide-react';
 import { apiService } from '../api/api';
 import { useResizableColumns } from '../hooks/useResizableColumns';
@@ -2046,6 +2046,94 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
   );
 }
 
+/* ═══════════════════════════════════════════
+   MERGED HOARDINGS VIEW MODAL
+   Show details of individual hoardings that are merged together in a row.
+═══════════════════════════════════════════ */
+function MergedHoardingsViewModal({ row, hoardings, siteMap, onClose }) {
+  const mergedItems = useMemo(() => {
+    return (row.mergedHoardingIDs || [])
+      .map(hid => hoardings.find(h => h.hoardingID === hid))
+      .filter(Boolean);
+  }, [row, hoardings]);
+
+  return ReactDOM.createPortal(
+    <div className="pg-overlay" onClick={onClose}>
+      <div className="pg-modal" style={{ maxWidth: 660, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
+        <div className="pg-modal__head" style={{ flexShrink: 0 }}>
+          <div className="pg-modal__head-left">
+            <div className="pg-modal__icon-wrap" style={{ background: 'rgba(124,58,237,0.10)' }}>
+              <Link2 size={20} color="#7c3aed" />
+            </div>
+            <div>
+              <h5 className="pg-modal__title">Merged Hoardings Details</h5>
+              <p className="pg-modal__subtitle">
+                {row.mergeDirection === 'H' ? 'Horizontal' : 'Vertical'} Merge · Size: {row.size} · {row.sqFt} sq.ft
+              </p>
+            </div>
+          </div>
+          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+        </div>
+
+        <div style={{ padding: '20px 24px', flex: '1 1 auto', overflowY: 'auto', minHeight: 0 }}>
+          <div style={{
+            fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 700,
+            color: '#1a1a2e', marginBottom: 12
+          }}>
+            This merged row is composed of the following {mergedItems.length} hoarding(s):
+          </div>
+
+          <div style={{ overflowX: 'auto', border: '1px solid #e8e8f4', borderRadius: 12 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ background: '#f8f8fd', borderBottom: '1px solid #e8e8f4' }}>
+                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#7878a0', fontSize: 11, textTransform: 'uppercase', width: 40 }}>#</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 800, color: '#7878a0', fontSize: 11, textTransform: 'uppercase', width: 90 }}>Code</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 800, color: '#7878a0', fontSize: 11, textTransform: 'uppercase' }}>Site Address</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#7878a0', fontSize: 11, textTransform: 'uppercase', width: 90 }}>Size</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#7878a0', fontSize: 11, textTransform: 'uppercase', width: 110 }}>Rent/Mo</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mergedItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '20px', textAlign: 'center', color: '#9090a8', fontFamily: 'Nunito,sans-serif' }}>
+                      No hoarding details found.
+                    </td>
+                  </tr>
+                ) : (
+                  mergedItems.map((h, idx) => {
+                    const rawSid = h.siteID ?? h.site?.siteID ?? h.site?.SiteID;
+                    const sid = toSID(rawSid);
+                    const embeddedSite = h.site ? normalizeSite(h.site) : null;
+                    const resolvedSite = embeddedSite ?? (sid != null ? (siteMap?.get(sid) ?? null) : null);
+                    const siteAddress = buildSiteAddress(resolvedSite, h.hoardingCode);
+
+                    return (
+                      <tr key={h.hoardingID} style={{ borderBottom: idx < mergedItems.length - 1 ? '1px solid #f0f0f8' : 'none' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#9090a8' }}>{idx + 1}</td>
+                        <td style={{ padding: '10px 12px', fontWeight: 800, color: '#049edf' }}>{h.hoardingCode}</td>
+                        <td style={{ padding: '10px 12px', color: '#1a1a2e', fontWeight: 600 }}>{siteAddress}</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, color: '#4a5568' }}>{h.width} × {h.height} ft</td>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#1a1a2e' }}>₹{fmtCurrency(h.monthlyRent)}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'flex-end', flexShrink: 0 }}>
+          <button className="pg-btn-cancel" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 
 
 
@@ -3081,6 +3169,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [showConflictModal, setShowConflictModal] = useState(false);// ← NEW
   const [showPrintTypeDD, setShowPrintTypeDD] = useState(false);
   const [proformaConfirmTarget, setProformaConfirmTarget] = useState(null);
+  const [viewMergedRow, setViewMergedRow] = useState(null);
   /* ── Step 2 resizable table ── */
   const step2TableRef = useRef(null);
   const printTypeBtnRef = useRef(null);
@@ -5366,6 +5455,22 @@ export default function QuotationPage({ onNavigateToContracts }) {
                                         <RefreshCw size={9} />
                                         {row.mergeDirection === 'H' ? '↕ Switch V' : '↔ Switch H'}
                                       </button>
+
+                                      {/* Info button to see merged hoardings */}
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setViewMergedRow(row); }}
+                                        title="View Merged Hoardings List"
+                                        style={{
+                                          display: 'flex', alignItems: 'center', gap: 4,
+                                          padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(124,58,237,0.30)',
+                                          background: 'rgba(124,58,237,0.06)', color: '#7c3aed',
+                                          cursor: 'pointer', fontFamily: 'Nunito,sans-serif',
+                                          fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
+                                        }}
+                                      >
+                                        <Info size={10} />
+                                        Info ({row.mergedHoardingIDs?.length ?? 0})
+                                      </button>
                                     </div>
                                   )}
                                   {!isMerged && siteColor && (
@@ -6235,6 +6340,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
           onMerge={handleMerge}
           onClose={() => setShowMergeModal(false)}
           siteColorMap={siteColorMap}
+        />
+      )}
+      {viewMergedRow && (
+        <MergedHoardingsViewModal
+          row={viewMergedRow}
+          hoardings={hoardings}
+          siteMap={siteMap}
+          onClose={() => setViewMergedRow(null)}
         />
       )}
 

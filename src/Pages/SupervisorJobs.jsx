@@ -1245,7 +1245,8 @@ export default function SupervisorJobsPage() {
   const COLS = [
     { key: 'jobRequestID', label: 'Job ID', w: '7%' },
     { key: 'customerName', label: 'Customer', w: '12%' },
-    { key: 'addressLine1', label: 'Site Address Line 1', w: '16%', noSort: true },
+    // { key: 'addressLine1', label: 'Site Address Line 1', w: '16%', noSort: true },
+    { key: 'addressLine1', label: 'Site Address', w: '16%', noSort: true },
     { key: 'jobType', label: 'Type', w: '9%' },
     { key: 'jobDescription', label: 'Description', w: '18%' },
     { key: 'noofHoardings', label: 'Hoardings', w: '8%' },

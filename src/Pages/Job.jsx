@@ -9,7 +9,7 @@ import {
   ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, ChevronUp,
   Edit2, Filter, User, ArrowRight, ArrowLeft,
   Calendar, MapPin, LayoutGrid, CheckCircle2,
-  Briefcase, Building2, Clock, UserCheck, Tag, Hash,
+  Briefcase, Building2, Clock, UserCheck, Tag, Hash, Camera,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import { useResizableColumns } from '../hooks/useResizableColumns';
@@ -932,10 +932,220 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
     document.body
   );
 }
-function CompleteJobModal({ job, tasks, allHoardings, onConfirm, onCancel, completing }) {
+
+/* ═══════════════════════════════════════════
+   JOB PHOTOS VIEW MODAL
+═══════════════════════════════════════════ */
+function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
+  const [selectedTaskID, setSelectedTaskID] = useState(
+    tasks.length > 0 ? String(tasks[0].jobTaskID) : ''
+  );
+  const [lightbox, setLightbox] = useState(null);
+
+  const selectedTask = tasks.find(t => String(t.jobTaskID) === selectedTaskID);
+
+  const taskAttachments = useMemo(() => {
+    if (!selectedTaskID) return [];
+    return attachments.filter(
+      a => Number(a.jobTaskID ?? a.JobTaskID) === Number(selectedTaskID)
+    );
+  }, [selectedTaskID, attachments]);
+
+  const customerName = job.customerName || `Customer ID ${job.customerID}`;
+
+  return ReactDOM.createPortal(
+    <>
+      {lightbox && (
+        <div
+          onClick={() => setLightbox(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 999999,
+            background: 'rgba(0,0,0,0.90)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <button
+            onClick={() => setLightbox(null)}
+            style={{
+              position: 'absolute', top: 18, right: 22,
+              background: 'rgba(255,255,255,0.18)', border: 'none',
+              borderRadius: 8, cursor: 'pointer', padding: '6px 14px',
+              color: '#fff', fontSize: 20, lineHeight: 1, fontWeight: 700,
+            }}
+          >✕</button>
+          <img
+            src={lightbox}
+            alt="Full size preview"
+            style={{
+              maxWidth: '92vw', maxHeight: '88vh',
+              borderRadius: 14, boxShadow: '0 12px 60px rgba(0,0,0,0.7)',
+              objectFit: 'contain',
+            }}
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
+
+      <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+        <div className="pg-modal" style={{ maxWidth: 600 }}>
+          {/* Head */}
+          <div className="pg-modal__head">
+            <div className="pg-modal__head-left">
+              <div className="pg-modal__icon-wrap" style={{
+                background: 'rgba(4,158,223,0.10)', fontSize: 20,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>🖼️</div>
+              <div>
+                <h5 className="pg-modal__title">View Job Photos</h5>
+                <p className="pg-modal__subtitle">
+                  Job #{job.jobRequestID} · {customerName}
+                </p>
+              </div>
+            </div>
+            <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          </div>
+
+          {/* Selector / Dropdown */}
+          <div style={{ padding: '20px 24px', borderBottom: '1px solid #f0f0f8', background: '#fcfcfd' }}>
+            <label style={{
+              display: 'block', marginBottom: 8,
+              fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#5a5a78',
+            }}>
+              Select Hoarding from this Job:
+            </label>
+            <div style={{ position: 'relative' }}>
+              <select
+                value={selectedTaskID}
+                onChange={e => setSelectedTaskID(e.target.value)}
+                style={{
+                  width: '100%', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700,
+                  padding: '11px 36px 11px 16px', borderRadius: 10,
+                  border: '1.5px solid #e2e8f0', background: '#fff', color: '#1f2937',
+                  outline: 'none', cursor: 'pointer',
+                  appearance: 'none', WebkitAppearance: 'none',
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234b5563' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 14px center',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
+                }}
+                onFocus={e => {
+                  e.target.style.borderColor = '#049edf';
+                  e.target.style.boxShadow = '0 0 0 3px rgba(4,158,223,0.12)';
+                }}
+                onBlur={e => {
+                  e.target.style.borderColor = '#e2e8f0';
+                  e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)';
+                }}
+              >
+                {tasks.map(t => {
+                  const h = hoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
+                  const label = [
+                    t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`,
+                    getSiteAddress(h)
+                  ].filter(Boolean).join(' - ');
+                  return (
+                    <option key={t.jobTaskID} value={t.jobTaskID}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          </div>
+
+          {/* Photo Display Grid */}
+          <div style={{ padding: '20px 24px', overflowY: 'auto', maxHeight: 360, minHeight: 120 }}>
+            {taskAttachments.length === 0 ? (
+              <div style={{
+                textAlign: 'center', padding: '40px 0',
+                fontFamily: 'Nunito,sans-serif', fontSize: 13.5,
+                color: '#b0b0c8',
+              }}>
+                <div style={{ fontSize: 36, marginBottom: 8 }}>🖼️</div>
+                No photos uploaded for this hoarding
+              </div>
+            ) : (
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
+                gap: 14,
+              }}>
+                {taskAttachments.map((att, i) => {
+                  const url = buildImageUrl(att);
+                  const name = att.photoFilename ?? att.PhotoFilename ?? `Photo ${i + 1}`;
+                  return (
+                    <div
+                      key={i}
+                      onClick={() => url && setLightbox(url)}
+                      style={{
+                        borderRadius: 12, overflow: 'hidden',
+                        border: '1.5px solid #e8e8f4', background: '#fff',
+                        position: 'relative', height: 120, cursor: 'zoom-in',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.05)',
+                        transition: 'transform 0.15s, box-shadow 0.15s',
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.transform = 'scale(1.03)';
+                        e.currentTarget.style.boxShadow = '0 6px 18px rgba(4,158,223,0.15)';
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.05)';
+                      }}
+                    >
+                      {url ? (
+                        <img
+                          src={url}
+                          alt={name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        />
+                      ) : (
+                        <div style={{
+                          width: '100%', height: '100%',
+                          display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', fontSize: 32, color: '#c0c0d8',
+                        }}>
+                          🖼️
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="pg-modal__foot">
+            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
+              {taskAttachments.length > 0 ? 'Click any photo to enlarge' : ''}
+            </span>
+            <button className="pg-btn-cancel" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    </>,
+    document.body
+  );
+}
+function CompleteJobModal({ job, tasks, allHoardings, attachments, onConfirm, onCancel, completing }) {
   const [completionDate, setCompletionDate] = useState(
     job.actualCompletionDate || todayISO()
   );
+  const [showWarning, setShowWarning] = useState(false);
+
+  // Find tasks without photos
+  const tasksWithNoPhotos = useMemo(() => {
+    return tasks.filter(t => {
+      // Find all task IDs for this row (including merges)
+      const taskIDs = new Set([t.jobTaskID, ...(t.mergedTaskIDs ?? [])].map(Number));
+      const hasPhoto = (attachments || []).some(a => taskIDs.has(Number(a.jobTaskID ?? a.JobTaskID)));
+      return !hasPhoto;
+    });
+  }, [tasks, attachments]);
+
+  const hasMissingPhotos = tasksWithNoPhotos.length > 0;
 
   /* Build preview: for each task find the hoarding's current (latest) status */
   const hoardingPreviews = tasks.map(t => {
@@ -946,6 +1156,95 @@ function CompleteJobModal({ job, tasks, allHoardings, onConfirm, onCancel, compl
       siteAddress: t.siteAddress || '',
     };
   });
+
+  const handleFinalSubmit = () => {
+    if (hasMissingPhotos && !showWarning) {
+      setShowWarning(true);
+    } else {
+      onConfirm(completionDate);
+    }
+  };
+
+  if (showWarning) {
+    return ReactDOM.createPortal(
+      <div className="pg-overlay" onClick={() => setShowWarning(false)}>
+        <div className="pg-modal" style={{ maxWidth: 440 }}>
+          <div style={{
+            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+            padding: '24px 26px 18px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+            textAlign: 'center'
+          }}>
+            <div style={{
+              width: 56, height: 56, borderRadius: '50%',
+              background: 'rgba(255,255,255,0.20)', border: '2px solid rgba(255,255,255,0.35)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26,
+            }}>⚠️</div>
+            <div style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#fff' }}>
+              Missing Photos Warning
+            </div>
+            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>
+              Job #{job.jobRequestID}
+            </div>
+          </div>
+
+          <div style={{ padding: '24px' }}>
+            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 14, color: '#1f2937', fontWeight: 700, marginBottom: 12 }}>
+              The following hoarding(s) do not have photos uploaded:
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20, maxHeight: 150, overflowY: 'auto' }}>
+              {tasksWithNoPhotos.map((t, idx) => {
+                const h = allHoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
+                return (
+                  <div key={idx} style={{
+                    padding: '8px 12px', background: '#fef3c7', border: '1px solid #fde68a',
+                    borderRadius: 8, fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#92400e'
+                  }}>
+                    {t.hoardingCode || h?.hoardingCode || `Hoarding #${t.hoardingID}`}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#4b5563', fontWeight: 600, marginBottom: 24, lineHeight: 1.5 }}>
+              Are you sure you want to proceed and mark the job as completed without these photos?
+            </div>
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                className="pg-btn-cancel"
+                onClick={() => setShowWarning(false)}
+                autoFocus
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: '#f3f4f6', color: '#1f2937', border: '1.5px solid #d1d5db',
+                  fontFamily: 'Nunito,sans-serif', fontWeight: 800, padding: '11px 0', borderRadius: 10,
+                  cursor: 'pointer'
+                }}
+              >
+                No (Go Back)
+              </button>
+              <button
+                onClick={() => {
+                  setShowWarning(false);
+                  onConfirm(completionDate);
+                }}
+                style={{
+                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: '#d97706', color: '#fff', border: 'none',
+                  fontFamily: 'Nunito,sans-serif', fontWeight: 800, padding: '11px 0', borderRadius: 10,
+                  boxShadow: '0 4px 12px rgba(217,119,6,0.25)',
+                  cursor: 'pointer'
+                }}
+              >
+                Yes, Proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  }
 
   return ReactDOM.createPortal(
     <div className="pg-overlay" onClick={e => e.target === e.currentTarget && !completing && onCancel()}>
@@ -1064,7 +1363,7 @@ function CompleteJobModal({ job, tasks, allHoardings, onConfirm, onCancel, compl
               Cancel
             </button>
             <button
-              onClick={() => onConfirm(completionDate)}
+              onClick={handleFinalSubmit}
               disabled={completing || !completionDate}
               style={{
                 flex: 1.6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -1101,6 +1400,7 @@ export default function JobPage() {
   const [allJobTasks, setAllJobTasks] = useState([]);
   const [allAttachments, setAllAttachments] = useState([]);
   const [photoModalTask, setPhotoModalTask] = useState(null); // task row for photo modal
+  const [photosViewTarget, setPhotosViewTarget] = useState(null); // job request to view photos for
   const [completeTarget, setCompleteTarget] = useState(null); // { job, tasks }
   const [completing, setCompleting] = useState(false);
 
@@ -1147,7 +1447,7 @@ export default function JobPage() {
   const [tableReady, setTableReady] = useState(false);
 
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
-  useResizableColumns(tableRef, tableReady, [40, 200, 120, 100, 70, 148, 140, 170, 60]);
+  useResizableColumns(tableRef, tableReady, [80, 180, 110, 150, 130, 120, 100, 120, 130]);
 
   const taskTableRef = useRef(null);
   const [taskTableReady, setTaskTableReady] = useState(false);
@@ -1381,6 +1681,7 @@ export default function JobPage() {
 
       if (editingJobID === job.jobRequestID) {
         setActualCompletionDate(completionDate);
+        setJobStatus('Completed');
       }
 
     } catch (err) {
@@ -2651,6 +2952,11 @@ export default function JobPage() {
                         <td className="pg-td"><JobStatusBadge status={job.jobStatus} /></td>
                         <td className="pg-td">
                           <div className="pg-action-wrap">
+                            {/* View Photos */}
+                            <button className="pg-btn-view" onClick={() => setPhotosViewTarget(job)} title="View Photos" style={{ background: 'rgba(4,158,223,0.08)', color: '#049edf' }}>
+                              <Camera size={13} />
+                            </button>
+
                             {/* Edit */}
                             <button className="pg-btn-view" onClick={() => handleEdit(job)} title="Edit">
                               <Edit2 size={13} />
@@ -2769,11 +3075,22 @@ export default function JobPage() {
           onUploaded={refreshAttachments}
         />
       )}
+      {/* ── Job Photos View Modal ── */}
+      {photosViewTarget && (
+        <JobPhotosViewModal
+          job={photosViewTarget}
+          tasks={getMyTasks(photosViewTarget.jobRequestID)}
+          hoardings={hoardings}
+          attachments={allAttachments}
+          onClose={() => setPhotosViewTarget(null)}
+        />
+      )}
       {completeTarget && (
         <CompleteJobModal
           job={completeTarget.job}
           tasks={completeTarget.tasks}
           allHoardings={hoardings}
+          attachments={allAttachments}
           onConfirm={handleComplete}
           onCancel={() => !completing && setCompleteTarget(null)}
           completing={completing}
