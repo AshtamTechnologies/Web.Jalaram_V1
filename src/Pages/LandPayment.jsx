@@ -106,12 +106,15 @@ function normalizePayment(raw) {
   };
 }
 
-function validateRow(row) {
+function validateRow(row, maxVal) {
   const e = {};
   if (!row.paymentDate) e.paymentDate = 'Required';
   if (!row.paymentPurpose) e.paymentPurpose = 'Required';
   if (row.amountPaid === '' || row.amountPaid == null) e.amountPaid = 'Required';
   else if (isNaN(Number(row.amountPaid)) || Number(row.amountPaid) <= 0) e.amountPaid = 'Must be positive';
+  else if (maxVal != null && maxVal > 0 && Number(row.amountPaid) > Number(maxVal)) {
+    e.amountPaid = `Cannot exceed Contract Value (${maxVal.toLocaleString('en-IN')})`;
+  }
   if (!row.paymentMode) e.paymentMode = 'Required';
   if (!row.paidBy) e.paidBy = 'Required';
   if (row.nextDueDate && row.paymentDate && row.nextDueDate < row.paymentDate)
@@ -1364,7 +1367,9 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   };
 
   const handleAddRow = () => {
-    const errs = validateRow(currentRow);
+    const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
+    const maxVal = contract ? Number(contract.totalContractValue) : null;
+    const errs = validateRow(currentRow, maxVal);
     if (Object.keys(errs).length) { setCurrentErrors(errs); return; }
     setRows(prev => [...prev, { ...currentRow }]);
     setCurrentRow(emptyCurrentRow());
@@ -1411,25 +1416,35 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
     else setContractError('');
     if (hasHeaderErr) return;
 
+    const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
+    const maxVal = contract ? Number(contract.totalContractValue) : 0;
+
     const newRowErrors = {};
     let hasErr = false;
-    rows.forEach(r => { const e = validateRow(r); if (Object.keys(e).length) { newRowErrors[r._rowId] = e; hasErr = true; } });
+    rows.forEach(r => { const e = validateRow(r, maxVal); if (Object.keys(e).length) { newRowErrors[r._rowId] = e; hasErr = true; } });
 
     const entryHasData = Object.entries(currentRow)
       .filter(([k]) => k !== '_rowId')
       .some(([, v]) => v !== '');
 
+    let allRowsToSave = [...rows];
     if (showEntryForm && entryHasData) {
-      const errs = validateRow(currentRow);
+      const errs = validateRow(currentRow, maxVal);
       if (Object.keys(errs).length) { setCurrentErrors(errs); return; }
       if (hasErr) { setRowErrors(newRowErrors); return; }
-      _doSave([...rows, { ...currentRow }]);
+      allRowsToSave.push({ ...currentRow });
+    }
+
+    if (allRowsToSave.length === 0) { setApiErr('Please add at least one payment row.'); return; }
+    if (hasErr) { setRowErrors(newRowErrors); return; }
+
+    const sumPaid = allRowsToSave.reduce((s, r) => s + (Number(r.amountPaid) || 0), 0);
+    if (maxVal > 0 && sumPaid > maxVal) {
+      setApiErr(`Total payments (${fmtCurrency(sumPaid)}) cannot exceed the Land Contract amount (${fmtCurrency(maxVal)}).`);
       return;
     }
 
-    if (rows.length === 0) { setApiErr('Please add at least one payment row.'); return; }
-    if (hasErr) { setRowErrors(newRowErrors); return; }
-    _doSave(rows);
+    _doSave(allRowsToSave);
   };
 
   const _doSave = async (allRows) => {
@@ -1602,6 +1617,29 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                       />
                       <FieldError msg={contractError} />
                     </div>
+                    {contract && (
+                      <div className="col-12 mt-2">
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 14px',
+                          borderRadius: 10,
+                          background: 'rgba(4, 158, 223, 0.05)',
+                          border: '1.5px solid rgba(4, 158, 223, 0.15)',
+                          fontFamily: 'Nunito, sans-serif',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: '#1a1a2e',
+                        }}>
+                          <IndianRupee size={15} color="#049edf" />
+                          <span>Land Contract Amount: </span>
+                          <strong style={{ color: '#049edf', fontSize: 14 }}>
+                            {fmtCurrency(contract.totalContractValue)}
+                          </strong>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1751,6 +1789,7 @@ const [rawOwners, rawHoardings, rawContracts, rawPayments, rawMaps] = await Prom
         startDate: (c.startDate ?? c.StartDate ?? '').split('T')[0],
         endDate: (c.endDate ?? c.EndDate ?? '').split('T')[0],
         status: c.status ?? c.Status ?? '',
+        totalContractValue: c.totalContractValue ?? c.TotalContractValue ?? 0,
       })));
 
       const list = Array.isArray(rawPayments)

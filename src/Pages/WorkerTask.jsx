@@ -488,7 +488,15 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                             <InfoRow icon={Hash} label="Task ID" value={`#${task.jobTaskID}`} />
                             <InfoRow icon={Briefcase} label="Job Request" value={`#${task.jobRequestID}`} accent="#6c63ff" />
                             <InfoRow icon={Layers} label="Hoarding" value={task.hoardingCode || `#${task.hoardingID}`} accent="#6c63ff" />
-                            {task.siteAddress && <InfoRow icon={MapPin} label="Site Address" value={task.siteAddress} accent="#16a34a" />}
+                            {task.groupTasks ? (
+                                <>
+                                    {task.groupTasks.map((t, idx) => t.siteAddress ? (
+                                        <InfoRow key={idx} icon={MapPin} label={`Site Address (${t.hoardingCode || `Hoarding #${t.hoardingID}`})`} value={t.siteAddress} accent="#16a34a" />
+                                    ) : null)}
+                                </>
+                            ) : (
+                                task.siteAddress && <InfoRow icon={MapPin} label="Site Address" value={task.siteAddress} accent="#16a34a" />
+                            )}
                             {task.isMerged && <InfoRow icon={Layers} label="Merge Type" value={task.mergeAlongFlag === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'} accent="#7c3aed" />}
                             <InfoRow icon={CheckCircle} label="Status" value={task.status} />
                             <InfoRow icon={Calendar} label="Completion Date" value={fmtDate(task.actualCompletionDate)} />
@@ -657,13 +665,13 @@ function MergedGroupRow({ groupTasks, onView, onEdit }) {
 
     return (
         <tr className="pg-tr" style={{ background: 'linear-gradient(90deg, rgba(124,58,237,0.03), transparent)' }}>
-            <td className="pg-td">
+            {/* <td className="pg-td">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                     {groupTasks.map(t => (
                         <span key={t.jobTaskID} style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, color: '#049edf', fontSize: 11 }}>#{t.jobTaskID}</span>
                     ))}
                 </div>
-            </td>
+            </td> */}
             <td className="pg-td">
                 <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, color: '#6c63ff', fontSize: 12 }}>#{firstTask.jobRequestID}</span>
             </td>
@@ -689,12 +697,15 @@ function MergedGroupRow({ groupTasks, onView, onEdit }) {
                             <Layers size={9} /> {t.hoardingCode || `#${t.hoardingID}`}
                         </span>
                     ))}
-                    {addresses.length > 0 && (
-                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: 2 }}>
+                    {groupTasks.map((t, idx) => t.siteAddress ? (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: 2 }}>
                             <MapPin size={10} color="#9090a8" style={{ flexShrink: 0, marginTop: 2 }} />
-                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4 }}>{addresses.join(' / ')}</span>
+                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4 }}>
+                                <strong style={{ color: '#7c3aed', marginRight: 3 }}>{t.hoardingCode || `Hoarding #${t.hoardingID}`}:</strong>
+                                {t.siteAddress}
+                            </span>
                         </div>
-                    )}
+                    ) : null)}
                 </div>
             </td>
             <td className="pg-td pg-tablet-hide">
@@ -710,11 +721,11 @@ function MergedGroupRow({ groupTasks, onView, onEdit }) {
             <td className="pg-td">
                 <div className="pg-action-wrap">
                     <button className="pg-btn-edit" title="Update Merged Group"
-                        onClick={() => onEdit({ ...firstTask, mergedTaskIDs: groupTasks.map(x => x.jobTaskID) })}>
+                        onClick={() => onEdit({ ...firstTask, mergedTaskIDs: groupTasks.map(x => x.jobTaskID), groupTasks })}>
                         <Edit3 size={12} />
                     </button>
                     <button className="pg-btn-view" title="View Merged Group"
-                        onClick={() => onView({ ...firstTask, mergedTaskIDs: groupTasks.map(x => x.jobTaskID) })}>
+                        onClick={() => onView({ ...firstTask, mergedTaskIDs: groupTasks.map(x => x.jobTaskID), groupTasks })}>
                         <Eye size={12} />
                     </button>
                 </div>
@@ -753,8 +764,10 @@ function TaskCard({ task, onView, onEdit }) {
                 </div>
                 {task.siteAddress && (
                     <div className="pg-card__row">
-                        <MapPin size={12} color="#c0c0d8" className="pg-card__row-icon" />
-                        <span className="pg-card__row-text" style={{ fontSize: 11, color: '#6b7280' }}>{task.siteAddress}</span>
+                        <MapPin size={12} color="#c0c0d8" className="pg-card__row-icon" style={{ marginTop: 2 }} />
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4, flex: 1 }}>
+                            {task.siteAddress}
+                        </span>
                     </div>
                 )}
                 <div className="pg-card__row">
@@ -794,9 +807,9 @@ function MergedGroupCard({ groupTasks, onView, onEdit }) {
                     · {groupTasks.length} hoardings
                 </span>
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {groupTasks.map(t => t.hoardingCode).filter(Boolean).map(code => (
-                        <span key={code} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 6, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)' }}>{code}</span>
-                    ))}
+                    {groupTasks.map((t, idx) => t.hoardingCode ? (
+                        <span key={`${t.jobTaskID || idx}-${idx}`} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 6, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)' }}>{t.hoardingCode}</span>
+                    ) : null)}
                 </div>
             </div>
 
@@ -812,17 +825,24 @@ function MergedGroupCard({ groupTasks, onView, onEdit }) {
                         <span className="pg-card__row-text" style={{ fontSize: 11, color: '#9090a8' }}>{job.jobDescription}</span>
                     </div>
                 )}
-                {addresses.length > 0 && (
-                    <div className="pg-card__row">
-                        <MapPin size={12} color="#c0c0d8" className="pg-card__row-icon" />
-                        <span className="pg-card__row-text" style={{ fontSize: 11, color: '#6b7280' }}>{addresses.join(' / ')}</span>
+                {groupTasks.some(t => t.siteAddress) && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
+                        {groupTasks.map((t, idx) => t.siteAddress ? (
+                            <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, width: '100%' }}>
+                                <MapPin size={12} color="#c0c0d8" style={{ flexShrink: 0, marginTop: 2 }} />
+                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4, flex: 1 }}>
+                                    <strong style={{ color: '#7c3aed', marginRight: 4 }}>{t.hoardingCode || `Hoarding #${t.hoardingID}`}:</strong>
+                                    {t.siteAddress}
+                                </span>
+                            </div>
+                        ) : null)}
                     </div>
                 )}
 
                 {/* ── Per-task rows with individual Edit + View buttons ── */}
                 <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
                     <button
-                        onClick={() => onEdit({ ...firstTask, mergedTaskIDs: groupTasks.map(x => x.jobTaskID) })}
+                        onClick={() => onEdit({ ...firstTask, mergedTaskIDs: groupTasks.map(x => x.jobTaskID), groupTasks })}
                         style={{
                             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                             padding: '9px 14px', borderRadius: 10,
@@ -833,7 +853,7 @@ function MergedGroupCard({ groupTasks, onView, onEdit }) {
                         <Edit3 size={13} /> Edit Group
                     </button>
                     <button
-                        onClick={() => onView({ ...firstTask, mergedTaskIDs: groupTasks.map(x => x.jobTaskID) })}
+                        onClick={() => onView({ ...firstTask, mergedTaskIDs: groupTasks.map(x => x.jobTaskID), groupTasks })}
                         style={{
                             flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                             padding: '9px 14px', borderRadius: 10,
@@ -999,7 +1019,7 @@ export default function WorkerTasksPage() {
     const subCount = tasks.filter(t => t.status === 'Submitted').length;
 
     const COLS = [
-        { key: 'jobTaskID', label: 'Task ID', w: '7%' },
+        // { key: 'jobTaskID', label: 'Task ID', w: '7%' },
         { key: 'jobRequestID', label: 'Job ID', w: '7%' },
         { key: '_jobType', label: 'Job Type', w: '16%', noSort: true },
         { key: 'hoardingID', label: 'Hoarding', w: '14%' },
@@ -1173,7 +1193,7 @@ export default function WorkerTasksPage() {
                                     const task = row.task;
                                     return (
                                         <tr key={task.jobTaskID} className="pg-tr">
-                                            <td className="pg-td"><span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, color: '#049edf', fontSize: 12 }}>#{task.jobTaskID}</span></td>
+                                            {/* <td className="pg-td"><span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, color: '#049edf', fontSize: 12 }}>#{task.jobTaskID}</span></td> */}
                                             <td className="pg-td"><span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, color: '#6c63ff', fontSize: 12 }}>#{task.jobRequestID}</span></td>
                                             <td className="pg-td">
                                                 <div className="pg-td__primary">{task.job?.jobType || '—'}</div>

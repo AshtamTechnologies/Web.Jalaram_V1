@@ -1395,6 +1395,7 @@ export default function JobPage() {
   const [customers, setCustomers] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [hoardings, setHoardings] = useState([]);
+  const [availableHoardings, setAvailableHoardings] = useState([]);
   const [supervisors, setSupervisors] = useState([]);
   const [jobRequests, setJobRequests] = useState([]);
   const [allJobTasks, setAllJobTasks] = useState([]);
@@ -1708,10 +1709,11 @@ export default function JobPage() {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, conRaw, hRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw] = await Promise.all([
+        const [cRaw, conRaw, hRaw, avhRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw] = await Promise.all([
           apiService.getAllCustomers().catch(() => []),
           apiService.getAllCustomerContracts().catch(() => []),
-          apiService.getAllHoardings().catch(() => []),
+          apiService.getAllHoardings().catch(() => []), // All Hoardings for info/other
+          apiService.getAllavailableforJob().catch(() => []), // Available Hoardings for select modal
           apiService.getAllUsers().catch(() => []),
           apiService.getAllJobRequests().catch(() => []),
           apiService.getAllJobTasks().catch(() => []),
@@ -1772,10 +1774,29 @@ export default function JobPage() {
           };
         });
 
-
-
         setHoardings(enrichedHoardings);
         setAnyIdToLatestId(anyIdToLatestId); // ← new state, see below
+
+        // Deduplicate and enrich available hoardings:
+        const rawAvailable = normalizeList(avhRaw);
+        const latestAvailableByCode = new Map();
+        rawAvailable.forEach(h => {
+          const code = h.hoardingCode ?? h.HoardingCode ?? '';
+          const existing = latestAvailableByCode.get(code);
+          const thisDate = new Date(h.effdt ?? h.Effdt ?? 0).getTime();
+          const existDate = existing ? new Date(existing.effdt ?? existing.Effdt ?? 0).getTime() : -1;
+          if (!existing || thisDate > existDate) latestAvailableByCode.set(code, h);
+        });
+        const enrichedAvailable = Array.from(latestAvailableByCode.values()).map(h => {
+          const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
+          const foundSite = siteMap.get(siteID) || null;
+          const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+          return {
+            ...h,
+            site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+          };
+        });
+        setAvailableHoardings(enrichedAvailable);
 
         setContractHoardingMaps(normalizeList(chmRaw));
         setHoardingMerges(normalizeList(mergeRaw));
@@ -1804,12 +1825,55 @@ export default function JobPage() {
       }
     })();
   }, []);
+  const refreshAvailableHoardings = useCallback(async () => {
+    try {
+      const [hRaw, sRaw] = await Promise.all([
+        apiService.getAllavailableforJob().catch(() => []),
+        apiService.getAllSites().catch(() => []),
+      ]);
+      const siteList = normalizeList(sRaw);
+      const siteMap = new Map(
+        siteList.map(s => [
+          Number(s.siteID ?? s.SiteID ?? 0),
+          normalizeSite(s)
+        ])
+      );
+      const rawHoardings = normalizeList(hRaw);
+
+      // ── 1. Build code → latest hoarding
+      const latestByCode = new Map();
+      rawHoardings.forEach(h => {
+        const code = h.hoardingCode ?? h.HoardingCode ?? '';
+        const existing = latestByCode.get(code);
+        const thisDate = new Date(h.effdt ?? h.Effdt ?? 0).getTime();
+        const existDate = existing ? new Date(existing.effdt ?? existing.Effdt ?? 0).getTime() : -1;
+        if (!existing || thisDate > existDate) latestByCode.set(code, h);
+      });
+
+      // ── 3. Enrich with site data
+      const enrichedHoardings = Array.from(latestByCode.values()).map(h => {
+        const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
+        const foundSite = siteMap.get(siteID) || null;
+        const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+        return {
+          ...h,
+          site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+        };
+      });
+
+      setAvailableHoardings(enrichedHoardings);
+    } catch (err) {
+      console.error('Failed to refresh available hoardings:', err);
+    }
+  }, []);
+
   const refreshAttachments = useCallback(async () => {
     try {
       const attRaw = await apiService.getAllJobTaskAttachments().catch(() => []);
       setAllAttachments(normalizeList(attRaw));
     } catch { }
   }, []);
+
   /* ── Refresh ── */
   const refreshJobs = useCallback(async () => {
     try {
@@ -1821,9 +1885,13 @@ export default function JobPage() {
       setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
       setAllJobTasks(normalizeList(jtRaw).map(normalizeJobTask));
       setAllAttachments(normalizeList(attRaw));
+
+      // Also refresh available hoardings
+      await refreshAvailableHoardings();
+
       showToast('Refreshed', 'success');
     } catch { showToast('Refresh failed', 'error'); }
-  }, [showToast]);
+  }, [showToast, refreshAvailableHoardings]);
 
   /* ── Reset form ── */
   const resetForm = () => {
@@ -3055,7 +3123,7 @@ export default function JobPage() {
       {/* ── Hoarding selector modal ── */}
       {showHoardModal && (
         <HoardingSelectModal
-          hoardings={hoardings}
+          hoardings={availableHoardings}
           filteredHoardingIds={filteredHoardingIds}
           existingIds={existingTaskHoardingIds}
           onAdd={handleAddHoardings}

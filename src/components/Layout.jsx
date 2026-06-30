@@ -31,7 +31,7 @@ const MENU = [
       { id: 'customer-details', icon: UserCircle, label: 'Customer Details' },
       { id: 'customer-contract', icon: FileText, label: 'Customer Contract' },
       { id: 'quotation', icon: BarChart3, label: 'Quotation' },
-      { id: 'DissloveContract', icon: FileX, label: 'Disslove Contract' },
+      { id: 'DissloveContract', icon: FileX, label: 'Dissolve Contract' },
 
     ],
   },

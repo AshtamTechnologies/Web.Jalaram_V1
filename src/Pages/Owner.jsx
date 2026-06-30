@@ -473,7 +473,7 @@ function DistrictCombo({ value, onChange, onBlur, hasError, stateValue }) {
     <div className="pg-combo-wrap" ref={wrapRef}>
       <div
         className={`pg-field-wrap pg-combo-trigger ${disabled ? 'pg-field-wrap--readonly' :
-            hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'
+          hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'
           }`}
         onClick={openDropdown}
         tabIndex={disabled ? -1 : 0}

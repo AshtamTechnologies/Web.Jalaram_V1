@@ -1113,16 +1113,18 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
                   {siteColor && (
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: siteColor.dot, flexShrink: 0 }} />
                   )}
-                  <div style={{ flex: 1 }}>
-                    <div className="pg-td__primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <MapPin size={11} color="#9090a8" />
-                      <span>{line1 || h.hoardingCode}</span>
-                      {alreadyIn && <span style={{ color: '#9090a8', fontSize: 11 }}>· Already added</span>}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="pg-td__primary" style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <MapPin size={11} color="#9090a8" style={{ flexShrink: 0, marginTop: 4 }} />
+                      <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                        {line1 || h.hoardingCode}
+                        {alreadyIn && <span style={{ color: '#9090a8', fontSize: 11, marginLeft: 6, fontWeight: 500, whiteSpace: 'nowrap' }}>· Already added</span>}
+                      </span>
                     </div>
                     {line2 && (
-                      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#7a8499', marginTop: 1 }}>{line2}</div>
+                      <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#7a8499', marginTop: 1, wordBreak: 'break-word', whiteSpace: 'normal' }}>{line2}</div>
                     )}
-                    <div className="pg-td__secondary">
+                    <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
                       Code: {h.hoardingCode} · {h.width}×{h.height} ft · ₹{Number(h.monthlyRent || 0).toLocaleString('en-IN')}/mo
                     </div>
                   </div>
@@ -1257,20 +1259,21 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap 
                 )}
 
                 {/* Address / info */}
-                <div style={{ flex: 1 }}>
-                  <div className="pg-td__primary" style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <MapPin size={11} color="#9090a8" style={{ flexShrink: 0 }} />
-                    <span>{line1}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="pg-td__primary" style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                    <MapPin size={11} color="#9090a8" style={{ flexShrink: 0, marginTop: 4 }} />
+                    <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-word', whiteSpace: 'normal' }}>{line1}</span>
                   </div>
                   {line2 && (
                     <div style={{
                       fontFamily: 'Nunito,sans-serif', fontSize: 11,
                       color: '#7a8499', marginTop: 1,
+                      wordBreak: 'break-word', whiteSpace: 'normal'
                     }}>
                       {line2}
                     </div>
                   )}
-                  <div className="pg-td__secondary">
+                  <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
                     Code: {h.hoardingCode} · {h.width}×{h.height} ft
                     {h.monthlyRent ? ` · ₹${Number(h.monthlyRent).toLocaleString('en-IN')}/mo` : ''}
                   </div>
@@ -2058,7 +2061,8 @@ function MergedHoardingsViewModal({ row, hoardings, siteMap, onClose }) {
   }, [row, hoardings]);
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={onClose}>
+    // <div className="pg-overlay" onClick={onClose}>
+    <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 660, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }} onClick={e => e.stopPropagation()}>
         <div className="pg-modal__head" style={{ flexShrink: 0 }}>
           <div className="pg-modal__head-left">
@@ -4941,7 +4945,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setShowDeleteConfirm(false);
     setSaving(true);
     try {
-      const ids = Array.from(selectedQuotIds);
+      const ids = Array.from(selectedQuotIds).filter(id => !contractedQuotIds.has(Number(id)));
+      if (ids.length === 0) {
+        showToast('No eligible quotations to delete (some were skipped because they have contracts created).', 'warning');
+        return;
+      }
       await Promise.all(
         ids.map(async (id) => {
           const qObj = quotations.find(q => Number(q.quotationID) === Number(id));
@@ -6033,32 +6041,39 @@ export default function QuotationPage({ onNavigateToContracts }) {
                   <th style={{ width: 44 }} className="pg-th"></th>
                   {deleteMode && (
                     <th style={{ width: 40, textAlign: 'center' }} className="pg-th">
-                      <input
-                        type="checkbox"
-                        checked={
-                          histPaginated.length > 0 &&
-                          histPaginated.every(group =>
-                            group.every(q => selectedQuotIds.has(q.quotationID))
-                          )
-                        }
-                        onChange={(e) => {
-                          const checked = e.target.checked;
-                          setSelectedQuotIds(prev => {
-                            const next = new Set(prev);
-                            histPaginated.forEach(group => {
-                              group.forEach(q => {
-                                if (checked) {
-                                  next.add(q.quotationID);
-                                } else {
-                                  next.delete(q.quotationID);
-                                }
-                              });
-                            });
-                            return next;
+                      {(() => {
+                        const deletableQuotations = [];
+                        histPaginated.forEach(group => {
+                          group.forEach(q => {
+                            if (!contractedQuotIds.has(q.quotationID)) {
+                              deletableQuotations.push(q);
+                            }
                           });
-                        }}
-                        style={{ cursor: 'pointer', verticalAlign: 'middle' }}
-                      />
+                        });
+                        const allDeletableSelected = deletableQuotations.length > 0 && deletableQuotations.every(q => selectedQuotIds.has(q.quotationID));
+                        return (
+                          <input
+                            type="checkbox"
+                            checked={allDeletableSelected}
+                            disabled={deletableQuotations.length === 0}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setSelectedQuotIds(prev => {
+                                const next = new Set(prev);
+                                deletableQuotations.forEach(q => {
+                                  if (checked) {
+                                    next.add(q.quotationID);
+                                  } else {
+                                    next.delete(q.quotationID);
+                                  }
+                                });
+                                return next;
+                              });
+                            }}
+                            style={{ cursor: deletableQuotations.length === 0 ? 'not-allowed' : 'pointer', verticalAlign: 'middle' }}
+                          />
+                        );
+                      })()}
                     </th>
                   )}
                   {HIST_COLS.map(col => (
@@ -6108,14 +6123,19 @@ export default function QuotationPage({ onNavigateToContracts }) {
                             <input
                               type="checkbox"
                               checked={selectedQuotIds.has(latest.quotationID)}
+                              disabled={contractedQuotIds.has(latest.quotationID)}
                               onChange={(e) => {
                                 const checked = e.target.checked;
                                 setSelectedQuotIds(prev => {
                                   const next = new Set(prev);
                                   if (checked) {
                                     next.add(latest.quotationID);
-                                    // Automatically check all revisions in this group
-                                    group.forEach(q => next.add(q.quotationID));
+                                    // Automatically check all revisions in this group that are not contracted
+                                    group.forEach(q => {
+                                      if (!contractedQuotIds.has(q.quotationID)) {
+                                        next.add(q.quotationID);
+                                      }
+                                    });
                                   } else {
                                     next.delete(latest.quotationID);
                                     // Automatically uncheck all revisions in this group
@@ -6124,7 +6144,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                                   return next;
                                 });
                               }}
-                              style={{ cursor: 'pointer', width: 15, height: 15 }}
+                              style={{ cursor: contractedQuotIds.has(latest.quotationID) ? 'not-allowed' : 'pointer', width: 15, height: 15 }}
                             />
                           </td>
                         )}
@@ -6218,6 +6238,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                               <input
                                 type="checkbox"
                                 checked={selectedQuotIds.has(rev.quotationID)}
+                                disabled={contractedQuotIds.has(rev.quotationID)}
                                 onChange={(e) => {
                                   const checked = e.target.checked;
                                   setSelectedQuotIds(prev => {
@@ -6231,7 +6252,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                                     return next;
                                   });
                                 }}
-                                style={{ cursor: 'pointer', width: 14, height: 14 }}
+                                style={{ cursor: contractedQuotIds.has(rev.quotationID) ? 'not-allowed' : 'pointer', width: 14, height: 14 }}
                               />
                             </td>
                           )}

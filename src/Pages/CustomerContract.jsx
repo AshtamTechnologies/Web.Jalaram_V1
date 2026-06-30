@@ -291,7 +291,7 @@ function getContractGst(contract, quotations = []) {
     const qID = String(q.quotationID);
     const isNoMatch = qNo === quotNoOrID || qNo.replace(/[^a-z0-9]/g, '') === quotNoOrID.replace(/[^a-z0-9]/g, '');
     const isIdMatch = qID === quotNoOrID;
-    
+
     if (!(isNoMatch || isIdMatch)) return false;
     if (revNo !== null) {
       return Number(q.quotationRevisionNumber) === revNo;
@@ -529,12 +529,12 @@ function buildContractPDFHTML({ company, customer, contract,
                ${[customer.addressLine1, customer.city, customer.district].filter(Boolean).join(', ')}
              </div>` : ''}
         ${contract ? (() => {
-          const finalValNum = Number(contract.contractFinalValue || contract.contractOrigValue || 0);
-          const cgstAmt = Math.round((finalValNum * cgstPct) / 100);
-          const sgstAmt = Math.round((finalValNum * sgstPct) / 100);
-          const totalContractVal = finalValNum + cgstAmt + sgstAmt;
+      const finalValNum = Number(contract.contractFinalValue || contract.contractOrigValue || 0);
+      const cgstAmt = Math.round((finalValNum * cgstPct) / 100);
+      const sgstAmt = Math.round((finalValNum * sgstPct) / 100);
+      const totalContractVal = finalValNum + cgstAmt + sgstAmt;
 
-          return `
+      return `
           <div class="cov-info">
             <table style="width:100%; border-collapse:collapse; font-size:13px;">
               <tr>
@@ -563,7 +563,7 @@ function buildContractPDFHTML({ company, customer, contract,
               </tr>
             </table>
           </div>`;
-        })() : ''}
+    })() : ''}
       </div>
       <div class="cov-foot">
         <span>${company.phone}</span>
@@ -1945,7 +1945,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
     try {
       await Promise.all(
         groupMerges.map(m => {
-     
+
           return apiService.updateHoardingMerge(m.hoardingMergeID, {
             hoardingID: Number(m.hoardingID),
             customerContractID: Number(customerContractID),
@@ -2902,69 +2902,69 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
   const [hoardingPhotos, setHoardingPhotos] = useState({});
 
   useEffect(() => {
-  if (!maps.length || !allHoardingsRaw.length) return;
-  setHoardingPhotos({});
-  (async () => {
-    try {
-      // Fetch ALL hoarding photos at once
-      const allPhotos = await apiService.getAllHoardingPhotos?.() 
-        ?? await fetch(`${API_ROOT_URL}/api/HoardingPhoto`, {
+    if (!maps.length || !allHoardingsRaw.length) return;
+    setHoardingPhotos({});
+    (async () => {
+      try {
+        // Fetch ALL hoarding photos at once
+        const allPhotos = await apiService.getAllHoardingPhotos?.()
+          ?? await fetch(`${API_ROOT_URL}/api/HoardingPhoto`, {
             headers: { Authorization: `Bearer ${localStorage.getItem('authToken')}` }
-           }).then(r => r.json());
+          }).then(r => r.json());
 
-      const photoList = Array.isArray(allPhotos) ? allPhotos : [];
+        const photoList = Array.isArray(allPhotos) ? allPhotos : [];
 
-      const photoMap = {};
+        const photoMap = {};
 
-      for (const m of maps) {
-        const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
-        if (!hid) continue;
+        for (const m of maps) {
+          const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+          if (!hid) continue;
 
-        // Find the hoardingCode for this hoardingID from allHoardingsRaw
-        const hoardingRecord = allHoardingsRaw.find(h => Number(h.hoardingID) === hid);
-        const hoardingCode = hoardingRecord?.hoardingCode;
+          // Find the hoardingCode for this hoardingID from allHoardingsRaw
+          const hoardingRecord = allHoardingsRaw.find(h => Number(h.hoardingID) === hid);
+          const hoardingCode = hoardingRecord?.hoardingCode;
 
-        // Get ALL hoardingIDs that share this hoardingCode
-        const allIDsForCode = hoardingCode
-          ? allHoardingsRaw
+          // Get ALL hoardingIDs that share this hoardingCode
+          const allIDsForCode = hoardingCode
+            ? allHoardingsRaw
               .filter(h => h.hoardingCode === hoardingCode)
               .map(h => Number(h.hoardingID))
-          : [hid];
+            : [hid];
 
-        // Get all photos for any of those hoardingIDs
-        const relevantPhotos = photoList.filter(p =>
-          allIDsForCode.includes(Number(p.hoardingID ?? p.HoardingID ?? 0))
-        );
+          // Get all photos for any of those hoardingIDs
+          const relevantPhotos = photoList.filter(p =>
+            allIDsForCode.includes(Number(p.hoardingID ?? p.HoardingID ?? 0))
+          );
 
-        if (!relevantPhotos.length) continue;
+          if (!relevantPhotos.length) continue;
 
-        // Sort by effdt desc, tiebreak by highest hoardingPhotoID → latest photo
-        const sorted = [...relevantPhotos].sort((a, b) => {
-          const rawA = a.effdt ?? a.Effdt ?? null;
-          const rawB = b.effdt ?? b.Effdt ?? null;
-          const da = rawA ? new Date(rawA).getTime() : 0;
-          const db = rawB ? new Date(rawB).getTime() : 0;
-          if (db !== da) return db - da;
-          return (b.hoardingPhotoID ?? 0) - (a.hoardingPhotoID ?? 0);
-        });
+          // Sort by effdt desc, tiebreak by highest hoardingPhotoID → latest photo
+          const sorted = [...relevantPhotos].sort((a, b) => {
+            const rawA = a.effdt ?? a.Effdt ?? null;
+            const rawB = b.effdt ?? b.Effdt ?? null;
+            const da = rawA ? new Date(rawA).getTime() : 0;
+            const db = rawB ? new Date(rawB).getTime() : 0;
+            if (db !== da) return db - da;
+            return (b.hoardingPhotoID ?? 0) - (a.hoardingPhotoID ?? 0);
+          });
 
-        const best = sorted[0];
-        const path = best.photoPath ?? best.PhotoPath ?? '';
-        if (!path) continue;
+          const best = sorted[0];
+          const path = best.photoPath ?? best.PhotoPath ?? '';
+          if (!path) continue;
 
-        const url = path.startsWith('http')
-          ? path
-          : `${API_ROOT_URL}${path.startsWith('/') ? path : '/' + path}`;
+          const url = path.startsWith('http')
+            ? path
+            : `${API_ROOT_URL}${path.startsWith('/') ? path : '/' + path}`;
 
-        photoMap[hid] = url;
+          photoMap[hid] = url;
+        }
+
+        setHoardingPhotos(photoMap);
+      } catch (err) {
+        console.error('[AllPhotos] error:', err?.message);
       }
-
-      setHoardingPhotos(photoMap);
-    } catch (err) {
-      console.error('[AllPhotos] error:', err?.message);
-    }
-  })();
-}, [maps, allHoardingsRaw]);
+    })();
+  }, [maps, allHoardingsRaw]);
 
   const photoUrlMap = useMemo(() => {
     return hoardingPhotos;
@@ -3165,7 +3165,8 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
   };
 
   return ReactDOM.createPortal(
-    <div onClick={onClose} style={S.overlay}>
+    // <div onClick={onClose} style={S.overlay}>
+    <div style={S.overlay}>
       <div onClick={e => e.stopPropagation()} style={S.modal}>
 
         {/* ── Header ── */}
@@ -3440,7 +3441,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
 }
 async function addHoardingEffdtRows(hoardingIDs, allHoardings, effdt, status) {
   if (!hoardingIDs.length || !effdt) return;
- 
+
   await Promise.allSettled(
     hoardingIDs.map(async (hid) => {
       const h = allHoardings.find(hh =>
@@ -3450,18 +3451,18 @@ async function addHoardingEffdtRows(hoardingIDs, allHoardings, effdt, status) {
         console.warn('[ContractEffdt] hoarding not found:', hid);
         return;
       }
- 
+
       const payload = {
         effdt,                              // "YYYY-MM-DD"
-        material:     h.material     ?? '',
+        material: h.material ?? '',
         hoardingType: Number(h.hoardingType ?? 0),
         status,                             // 'Occupied' or 'Available'
-        monthlyRent:  Number(h.monthlyRent  ?? 0),
-        width:        Number(h.width        ?? 0),
-        height:       Number(h.height       ?? 0),
-        siteID:       Number(h.siteID       ?? 0),
+        monthlyRent: Number(h.monthlyRent ?? 0),
+        width: Number(h.width ?? 0),
+        height: Number(h.height ?? 0),
+        siteID: Number(h.siteID ?? 0),
       };
- 
+
       console.log('[ContractEffdt]', h.hoardingCode, '→', effdt, status, payload);
       return apiService.addHoardingEffdt(h.hoardingCode, payload);
     })
@@ -3596,7 +3597,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
   const totalContractVal = finalValNum + cgstAmt + sgstAmt;
 
   /* ── Save contract ── */
-const handleSave = async () => {
+  const handleSave = async () => {
     const errs = validateForm(form, contracts, currentContractID, true);
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true); setApiErr('');
@@ -3616,18 +3617,18 @@ const handleSave = async () => {
         contractFinalValue: Number(String(form.contractFinalValue).replace(/,/g, '')) || 0,
         comments: form.comments || '',
       };
- 
+
       let saved;
- 
+
       /* ════ ADD MODE ════ */
       if (isAdd) {
         const res = await apiService.createCustomerContract(payload);
         saved = normalizeContract(res?.data ?? res ?? payload);
- 
+
         const hoardingsToMap = selectedHoardings.length > 0
           ? selectedHoardings
           : form.hoardingID ? [{ hoardingID: form.hoardingID }] : [];
- 
+
         if (saved.customerContractID && hoardingsToMap.length > 0) {
           /* Map hoardings to contract */
           await Promise.allSettled(
@@ -3640,7 +3641,7 @@ const handleSave = async () => {
               })
             )
           );
- 
+
           /* ← NEW: add Occupied effdt row for each hoarding (startDate) */
           await addHoardingEffdtRows(
             hoardingsToMap.map(h => Number(h.hoardingID)),
@@ -3649,33 +3650,33 @@ const handleSave = async () => {
             'Occupied'          // hoarding is now occupied
           );
         }
- 
-      /* ════ EDIT MODE ════ */
+
+        /* ════ EDIT MODE ════ */
       } else {
         const prevStatus = contract?.status ?? '';
-        const newStatus  = form.status;
- 
+        const newStatus = form.status;
+
         await apiService.updateCustomerContract(payload);
         saved = { ...payload, customerContractID: contract.customerContractID };
- 
+
         /* ← NEW: if status changed to Terminated or Expired, mark hoardings Available */
         const isEnding = (newStatus === 'Terminated' || newStatus === 'Expired')
-                      && prevStatus !== 'Terminated' && prevStatus !== 'Expired';
- 
+          && prevStatus !== 'Terminated' && prevStatus !== 'Expired';
+
         if (isEnding && form.endDate) {
           /* Fetch hoardings mapped to this contract */
           const rawMaps = await apiService
             .getCustomerContractHoardingMaps(contract.customerContractID)
             .catch(() => []);
- 
+
           const maps = (Array.isArray(rawMaps) ? rawMaps : rawMaps?.data ?? [])
             .filter(m =>
               Number(m.customerContractID ?? m.CustomerContractID) ===
               Number(contract.customerContractID)
             );
- 
+
           const hoardingIDs = maps.map(m => Number(m.hoardingID ?? m.HoardingID ?? 0)).filter(Boolean);
- 
+
           /* Add Available effdt row from endDate */
           await addHoardingEffdtRows(
             hoardingIDs,
@@ -3685,11 +3686,11 @@ const handleSave = async () => {
           );
         }
       }
- 
+
       if (saved.customerContractID) setSavedContractID(saved.customerContractID);
       setSaveOk(true);
       onSave(saved, isAdd);
- 
+
       if (isAdd) {
         setContractSaved(true);
         setTimeout(() => setSaveOk(false), 2500);
@@ -3758,7 +3759,8 @@ const handleSave = async () => {
     ];
 
     return ReactDOM.createPortal(
-      <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="pg-overlay" >
         <div className="pg-modal" style={{ maxWidth: 560 }}>
           <div className="pg-modal__head">
             <div className="pg-modal__head-left">

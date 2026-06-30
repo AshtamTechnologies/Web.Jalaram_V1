@@ -571,8 +571,12 @@ function PaymentFormModal({ payment, jobOptions, onSave, onClose, showToast }) {
   /* auto-fill calculated amount when a job is picked on Create */
   const selectedJob = jobOptions.find(j => j.jobRequestID === jobRequestID);
   useEffect(() => {
-    if (selectedJob && !isEdit && !calculatedAmount) {
-      setCalculatedAmount((selectedJob.totalAreaSQFT * selectedJob.rateperSQFT).toFixed(2));
+    if (!isEdit) {
+      if (selectedJob) {
+        setCalculatedAmount((selectedJob.totalAreaSQFT * selectedJob.rateperSQFT).toFixed(2));
+      } else {
+        setCalculatedAmount('');
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedJob]);
@@ -582,6 +586,7 @@ function PaymentFormModal({ payment, jobOptions, onSave, onClose, showToast }) {
     if (!paymentDate) return 'Payment date is required.';
     if (!calculatedAmount || Number(calculatedAmount) <= 0) return 'Calculated amount must be greater than 0.';
     if (paidAmount === '' || Number(paidAmount) < 0) return 'Paid amount cannot be negative.';
+    if (Number(paidAmount) > Number(calculatedAmount)) return 'Paid amount cannot be greater than remaining amount.';
     return '';
   };
 
@@ -764,6 +769,7 @@ export default function JobPaymentPage() {
   /* ── Data ── */
   const [payments, setPayments] = useState([]);
   const [jobRequests, setJobRequests] = useState([]);
+  const [completedJobRequests, setCompletedJobRequests] = useState([]);
   const [customers, setCustomers] = useState([]);
 
   /* ── UI ── */
@@ -784,27 +790,41 @@ export default function JobPaymentPage() {
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type }), []);
 
   /* ── Job options enriched with customer name ── */
-  const jobOptions = useMemo(() =>
-    jobRequests.map(j => ({
+  const jobOptions = useMemo(() => {
+    const list = completedJobRequests.map(j => ({
       ...j,
       customerName: customers.find(c => c.customerID === j.customerID)?.customerName || '',
-    })),
-    [jobRequests, customers]
-  );
+    }));
+    if (editingPayment?.jobRequestID) {
+      const exists = list.some(o => o.jobRequestID === editingPayment.jobRequestID);
+      if (!exists) {
+        const fullJob = jobRequests.find(j => j.jobRequestID === editingPayment.jobRequestID);
+        if (fullJob) {
+          list.push({
+            ...fullJob,
+            customerName: customers.find(c => c.customerID === fullJob.customerID)?.customerName || '',
+          });
+        }
+      }
+    }
+    return list;
+  }, [completedJobRequests, jobRequests, customers, editingPayment]);
 
   /* ── Initial load using apiService ── */
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const [pRaw, jRaw, cRaw] = await Promise.all([
+        const [pRaw, jRaw, cRaw, compRaw] = await Promise.all([
           apiService.getAllJobPayments().catch(() => []),
           apiService.getAllJobRequests().catch(() => []),
           apiService.getAllCustomers().catch(() => []),
+          apiService.getCompletedJobsWithPendingPayment().catch(() => []),
         ]);
         setPayments(normalizeList(pRaw).map(normalizePayment));
         setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
+        setCompletedJobRequests(normalizeList(compRaw).map(normalizeJobRequest));
       } catch (err) {
         setApiError(err?.message || 'Failed to load data.');
       } finally {
@@ -816,8 +836,12 @@ export default function JobPaymentPage() {
   /* ── Refresh ── */
   const refresh = useCallback(async () => {
     try {
-      const pRaw = await apiService.getAllJobPayments();
+      const [pRaw, compRaw] = await Promise.all([
+        apiService.getAllJobPayments(),
+        apiService.getCompletedJobsWithPendingPayment().catch(() => []),
+      ]);
       setPayments(normalizeList(pRaw).map(normalizePayment));
+      setCompletedJobRequests(normalizeList(compRaw).map(normalizeJobRequest));
       showToast('Refreshed', 'success');
     } catch {
       showToast('Refresh failed', 'error');

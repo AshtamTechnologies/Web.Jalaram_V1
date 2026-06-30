@@ -199,6 +199,7 @@ export const apiService = {
 
   // HOARDINGS
   getAllHoardings: () => api.get('/Hoarding'),
+  getAllavailableforJob: () => api.get('/Hoarding/availableforJob'), //Show the hoarding available
   getHoardingById: (hoardingID) => api.get(`/Hoarding/${hoardingID}`),
   createHoarding: (data) => api.post('/Hoarding', {
     hoardingID: 0,
@@ -1056,6 +1057,7 @@ export const apiService = {
 
   // JOB PAYMENTS
   getAllJobPayments: () => api.get('/JobPayment'),
+  getCompletedJobsWithPendingPayment: () => api.get('/JobPayment/GetCompletedJobsWithPendingPayment'),
   getJobPaymentById: (id) => api.get(`/JobPayment/${id}`),
   createJobPayment: (data) => api.post('/JobPayment', {
     jobPaymentID: 0,
