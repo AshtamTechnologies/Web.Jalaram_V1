@@ -123,10 +123,10 @@ const PAYMENT_STATUS_COLORS = {
 };
 
 function getPaymentStatus(payment) {
-  const calc = Number(payment.calculatedAmount ?? 0);
   const paid = Number(payment.paidAmount ?? 0);
+  const remaining = Number(payment.remainingAmount ?? 0);
   if (paid === 0) return 'Unpaid';
-  if (paid >= calc) return paid > calc ? 'Overpaid' : 'Paid';
+  if (remaining <= 0) return remaining < 0 ? 'Overpaid' : 'Paid';
   return 'Partial';
 }
 
@@ -550,7 +550,7 @@ function AttachmentModal({ payment, onClose, showToast }) {
 /* ═══════════════════════════════════════════
    PAYMENT FORM MODAL  (create / edit)
 ═══════════════════════════════════════════ */
-function PaymentFormModal({ payment, jobOptions, onSave, onClose, showToast }) {
+function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, showToast }) {
   const isEdit = !!payment?.jobPaymentID;
 
   const [jobRequestID, setJobRequestID] = useState(payment?.jobRequestID || 0);
@@ -562,11 +562,18 @@ function PaymentFormModal({ payment, jobOptions, onSave, onClose, showToast }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const totalPaidSoFar = useMemo(() => {
+    if (!jobRequestID) return 0;
+    return (allPayments || [])
+      .filter(p => p.jobRequestID === jobRequestID && (!isEdit || p.jobPaymentID !== payment.jobPaymentID))
+      .reduce((sum, p) => sum + Number(p.paidAmount ?? 0), 0);
+  }, [jobRequestID, allPayments, isEdit, payment]);
+
   const remainingAmount = useMemo(() => {
     const calc = Number(calculatedAmount) || 0;
     const paid = Number(paidAmount) || 0;
-    return calc - paid;
-  }, [calculatedAmount, paidAmount]);
+    return calc - totalPaidSoFar - paid;
+  }, [calculatedAmount, totalPaidSoFar, paidAmount]);
 
   /* auto-fill calculated amount when a job is picked on Create */
   const selectedJob = jobOptions.find(j => j.jobRequestID === jobRequestID);
@@ -586,7 +593,8 @@ function PaymentFormModal({ payment, jobOptions, onSave, onClose, showToast }) {
     if (!paymentDate) return 'Payment date is required.';
     if (!calculatedAmount || Number(calculatedAmount) <= 0) return 'Calculated amount must be greater than 0.';
     if (paidAmount === '' || Number(paidAmount) < 0) return 'Paid amount cannot be negative.';
-    if (Number(paidAmount) > Number(calculatedAmount)) return 'Paid amount cannot be greater than remaining amount.';
+    const maxPaid = Math.max(0, Number(calculatedAmount) - totalPaidSoFar);
+    if (Number(paidAmount) > maxPaid) return `Paid amount cannot be greater than remaining amount (${fmtCurrency(maxPaid)}).`;
     return '';
   };
 
@@ -929,6 +937,7 @@ export default function JobPaymentPage() {
         <PaymentFormModal
           payment={editingPayment}
           jobOptions={jobOptions}
+          allPayments={payments}
           showToast={showToast}
           onSave={async () => {
             setShowForm(false);

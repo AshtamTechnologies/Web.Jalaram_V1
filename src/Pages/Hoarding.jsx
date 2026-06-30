@@ -15,13 +15,19 @@ import './Common1.css';
 /* ─────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────── */
-const MATERIAL_OPTIONS = ['Terrace Structure','Pillar Structure', 'Channel Set', 'Wooden Set'];
-const STATUS_OPTIONS = ['Active', 'Inactive', 'Available', 'Occupied', 'Under Maintenance'];
+const MATERIAL_OPTIONS = ['Terrace Structure', 'Pillar Structure', 'Channel Set', 'Wooden Set'];
+// Hide the Active status
+// const STATUS_OPTIONS = ['Active', 'Inactive', 'Available', 'Occupied', 'Under Maintenance'];
+const STATUS_OPTIONS = ['Available', 'Inactive', 'Occupied', 'Under Maintenance'];
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
 const HISTORY_PER_PAGE = 3;
 
+// const EMPTY_VERSION = {
+//   effdt: '', material: '', hoardingType: '', status: 'Active',
+//   monthlyRent: '', width: '', height: '', siteID: '',
+// };
 const EMPTY_VERSION = {
-  effdt: '', material: '', hoardingType: '', status: 'Active',
+  effdt: '', material: '', hoardingType: '', status: 'Available',
   monthlyRent: '', width: '', height: '', siteID: '',
 };
 
@@ -642,17 +648,17 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
     } finally { setUploading(false); }
   };
 
-const resolvePhotoSrc = (p) => {
-  const raw =
-    p.photoUrl   ?? p.photoPath  ?? p.photo    ??
-    p.PhotoUrl   ?? p.PhotoPath  ?? p.Photo    ??
-    p.filePath   ?? p.FilePath   ?? '';
-  if (!raw) return '';
-  if (raw.startsWith('data:') || raw.startsWith('http')) return raw;
-  const base = (API_ROOT_URL || '').replace(/\/+$/, '');
-  const rel  = '/' + raw.replace(/^\/+/, '');
-  return `${base}${rel}`;
-};
+  const resolvePhotoSrc = (p) => {
+    const raw =
+      p.photoUrl ?? p.photoPath ?? p.photo ??
+      p.PhotoUrl ?? p.PhotoPath ?? p.Photo ??
+      p.filePath ?? p.FilePath ?? '';
+    if (!raw) return '';
+    if (raw.startsWith('data:') || raw.startsWith('http')) return raw;
+    const base = (API_ROOT_URL || '').replace(/\/+$/, '');
+    const rel = '/' + raw.replace(/^\/+/, '');
+    return `${base}${rel}`;
+  };
 
   return (
     <div className="hd-photo-wrap">
@@ -707,29 +713,29 @@ const resolvePhotoSrc = (p) => {
             <div key={p.hoardingPhotoID} className="hd-photo-item">
               <img src={resolvePhotoSrc(p)} alt={p.filename} />
               <div className="hd-photo-name">{p.filename}</div>
-             <div className="hd-photo-overlay">
-  <button className="hd-photo-action" onClick={() => setLightbox(p)} title="View" disabled={uploading}>
-    <ZoomIn size={12} />
-  </button>
-  {!readOnly && !p._isJobPhoto && (
-    <button className="hd-photo-action replace" onClick={() => triggerReplace(p)} title="Replace" disabled={uploading}>
-      <Replace size={12} />
-    </button>
-  )}
-  {!readOnly && !p._isJobPhoto && (
-    <button className="hd-photo-action danger" onClick={() => handleDelete(p)} title="Delete" disabled={uploading}>
-      <Trash2 size={12} />
-    </button>
-  )}
-  {p._isJobPhoto && (
-    <span style={{
-      fontSize: 9, fontWeight: 800, color: '#049edf',
-      background: 'rgba(4,158,223,0.12)',
-      padding: '2px 6px', borderRadius: 4,
-      fontFamily: 'Nunito,sans-serif',
-    }}>JOB</span>
-  )}
-</div>
+              <div className="hd-photo-overlay">
+                <button className="hd-photo-action" onClick={() => setLightbox(p)} title="View" disabled={uploading}>
+                  <ZoomIn size={12} />
+                </button>
+                {!readOnly && !p._isJobPhoto && (
+                  <button className="hd-photo-action replace" onClick={() => triggerReplace(p)} title="Replace" disabled={uploading}>
+                    <Replace size={12} />
+                  </button>
+                )}
+                {!readOnly && !p._isJobPhoto && (
+                  <button className="hd-photo-action danger" onClick={() => handleDelete(p)} title="Delete" disabled={uploading}>
+                    <Trash2 size={12} />
+                  </button>
+                )}
+                {p._isJobPhoto && (
+                  <span style={{
+                    fontSize: 9, fontWeight: 800, color: '#049edf',
+                    background: 'rgba(4,158,223,0.12)',
+                    padding: '2px 6px', borderRadius: 4,
+                    fontFamily: 'Nunito,sans-serif',
+                  }}>JOB</span>
+                )}
+              </div>
             </div>
           ))}
           {!readOnly && (
@@ -887,84 +893,84 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
       : ''
     );
   };
-const loadPhotos = useCallback(async (hoardingID) => {
-  if (!hoardingID) return;
-  setPhotosLoading(true);
-  try {
-    // Get ALL hoardingIDs for this hoarding code (all effdt versions)
-    const allVersionIDs = hoarding
-      ? hoarding.versions.map(v => Number(v.hoardingID))
-      : [Number(hoardingID)];
+  const loadPhotos = useCallback(async (hoardingID) => {
+    if (!hoardingID) return;
+    setPhotosLoading(true);
+    try {
+      // Get ALL hoardingIDs for this hoarding code (all effdt versions)
+      const allVersionIDs = hoarding
+        ? hoarding.versions.map(v => Number(v.hoardingID))
+        : [Number(hoardingID)];
 
-    console.log('[loadPhotos] allVersionIDs for code:', allVersionIDs);
+      console.log('[loadPhotos] allVersionIDs for code:', allVersionIDs);
 
-    const [hoardingPhotos, allJobAttachments] = await Promise.all([
-      apiService.getPhotosByHoardingID(hoardingID)
-        .then(d =>
-          Array.isArray(d) ? d :
-          Array.isArray(d?.$values) ? d.$values :
-          Array.isArray(d?.data) ? d.data : []
-        )
-        .catch(() => []),
-
-      apiService.getAllJobTaskAttachments()
-        .then(d => {
-          const all =
+      const [hoardingPhotos, allJobAttachments] = await Promise.all([
+        apiService.getPhotosByHoardingID(hoardingID)
+          .then(d =>
             Array.isArray(d) ? d :
-            Array.isArray(d?.$values) ? d.$values :
-            Array.isArray(d?.data) ? d.data : [];
+              Array.isArray(d?.$values) ? d.$values :
+                Array.isArray(d?.data) ? d.data : []
+          )
+          .catch(() => []),
 
-          console.log('[loadPhotos] total job attachments:', all.length);
-          console.log('[loadPhotos] sample attachment:', all[0]);
+        apiService.getAllJobTaskAttachments()
+          .then(d => {
+            const all =
+              Array.isArray(d) ? d :
+                Array.isArray(d?.$values) ? d.$values :
+                  Array.isArray(d?.data) ? d.data : [];
 
-          // Match by ANY of the version IDs for this hoarding code
-          return all.filter(a => {
-            const aHID = Number(
-              a.hoardingID ?? a.HoardingID ??
-              a.hoarding_id ?? a.Hoarding_ID ?? 0
-            );
-            return allVersionIDs.includes(aHID);
-          });
-        })
-        .catch(() => []),
-    ]);
+            console.log('[loadPhotos] total job attachments:', all.length);
+            console.log('[loadPhotos] sample attachment:', all[0]);
 
-    console.log('[loadPhotos] hoardingID:', hoardingID,
-      '→ hoardingPhotos:', hoardingPhotos.length,
-      '→ jobAttachments:', allJobAttachments.length);
+            // Match by ANY of the version IDs for this hoarding code
+            return all.filter(a => {
+              const aHID = Number(
+                a.hoardingID ?? a.HoardingID ??
+                a.hoarding_id ?? a.Hoarding_ID ?? 0
+              );
+              return allVersionIDs.includes(aHID);
+            });
+          })
+          .catch(() => []),
+      ]);
 
-    const normalizedJobPhotos = allJobAttachments.map(a => {
-      // Build full URL from the stored path
-      const rawPath =
-        a.photoFilePath ?? a.PhotoFilePath ??
-        a.filePath      ?? a.FilePath      ??
-        a.photoUrl      ?? a.PhotoUrl      ?? '';
+      console.log('[loadPhotos] hoardingID:', hoardingID,
+        '→ hoardingPhotos:', hoardingPhotos.length,
+        '→ jobAttachments:', allJobAttachments.length);
 
-      const fullUrl = rawPath.startsWith('http')
-        ? rawPath
-        : `${(API_ROOT_URL || '').replace(/\/+$/, '')}/${rawPath.replace(/^\/+/, '')}`;
+      const normalizedJobPhotos = allJobAttachments.map(a => {
+        // Build full URL from the stored path
+        const rawPath =
+          a.photoFilePath ?? a.PhotoFilePath ??
+          a.filePath ?? a.FilePath ??
+          a.photoUrl ?? a.PhotoUrl ?? '';
 
-      return {
-        hoardingPhotoID: `job_${a.jobTaskAttachID ?? a.JobTaskAttachID ?? Math.random()}`,
-        hoardingID,
-        photoUrl:    fullUrl,
-        photoPath:   fullUrl,
-        photo:       fullUrl,
-        filename:    a.photoFilename ?? a.PhotoFilename ?? 'Job Photo',
-        _isJobPhoto: true,
-      };
-    });
+        const fullUrl = rawPath.startsWith('http')
+          ? rawPath
+          : `${(API_ROOT_URL || '').replace(/\/+$/, '')}/${rawPath.replace(/^\/+/, '')}`;
 
-    setPhotosMap(prev => ({
-      ...prev,
-      [hoardingID]: [...hoardingPhotos, ...normalizedJobPhotos],
-    }));
+        return {
+          hoardingPhotoID: `job_${a.jobTaskAttachID ?? a.JobTaskAttachID ?? Math.random()}`,
+          hoardingID,
+          photoUrl: fullUrl,
+          photoPath: fullUrl,
+          photo: fullUrl,
+          filename: a.photoFilename ?? a.PhotoFilename ?? 'Job Photo',
+          _isJobPhoto: true,
+        };
+      });
 
-  } catch (err) {
-    console.error('[loadPhotos] failed:', err);
-    setPhotosMap(prev => ({ ...prev, [hoardingID]: [] }));
-  } finally { setPhotosLoading(false); }
-}, [hoarding]);
+      setPhotosMap(prev => ({
+        ...prev,
+        [hoardingID]: [...hoardingPhotos, ...normalizedJobPhotos],
+      }));
+
+    } catch (err) {
+      console.error('[loadPhotos] failed:', err);
+      setPhotosMap(prev => ({ ...prev, [hoardingID]: [] }));
+    } finally { setPhotosLoading(false); }
+  }, [hoarding]);
 
   const photosFor = (hID) => (hID ? (photosMap[hID] || []) : []);
   const scrollToPanel = () =>
@@ -993,7 +999,8 @@ const loadPhotos = useCallback(async (hoardingID) => {
       siteID: latest.siteID || '',
       material: latest.material || '',
       hoardingType: latest.hoardingType || '',
-      status: 'Active',
+      status: 'Available',
+      // status: 'Active',
       width: latest.width || '',
       height: latest.height || '',
     });
@@ -1464,9 +1471,9 @@ export default function HoardingPage() {
 
   useResizableColumns(tableRef, tableReady);
 
-const [view, setView] = useState('grid');
-const [formMode, setFormMode] = useState(null);
-const [editTarget, setEditTarget] = useState(null);
+  const [view, setView] = useState('grid');
+  const [formMode, setFormMode] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
 
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('hoardingCode');
@@ -1481,7 +1488,7 @@ const [editTarget, setEditTarget] = useState(null);
   //   try { sessionStorage.setItem('hd_editTarget', editTarget ? JSON.stringify(editTarget) : ''); }
   //   catch { /* ignore */ }
   // }, [view, formMode, editTarget]);
-  
+
 
   const fetchAll = useCallback(async () => {
     setLoading(true); setLoadError('');
