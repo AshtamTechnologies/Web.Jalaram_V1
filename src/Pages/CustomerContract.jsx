@@ -1477,11 +1477,11 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
 /* ═══════════════════════════════════════════
    MULTI-SELECT HOARDING LOOKUP MODAL
 ═══════════════════════════════════════════ */
-function MultiHoardingLookupModal({ hoardings, sites, onSelectMultiple, onClose }) {
+function MultiHoardingLookupModal({ hoardings, sites, selectedIds = [], onSelectMultiple, onClose }) {
   const [query, setQuery] = useState('');
   const [sortK, setSortK] = useState('hoardingCode');
   const [sortD, setSortD] = useState('asc');
-  const [selected, setSelected] = useState(new Set());
+  const [selected, setSelected] = useState(() => new Set((selectedIds || []).map(Number)));
   const inputRef = useRef(null);
 
   const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
@@ -1514,33 +1514,34 @@ function MultiHoardingLookupModal({ hoardings, sites, onSelectMultiple, onClose 
   const toggleOne = (hoardingID) => {
     setSelected(prev => {
       const next = new Set(prev);
-      if (next.has(hoardingID)) next.delete(hoardingID);
-      else next.add(hoardingID);
+      const id = Number(hoardingID);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
 
-  const allChecked = sorted.length > 0 && sorted.every(h => selected.has(h.hoardingID));
-  const someChecked = sorted.some(h => selected.has(h.hoardingID)) && !allChecked;
+  const allChecked = sorted.length > 0 && sorted.every(h => selected.has(Number(h.hoardingID)));
+  const someChecked = sorted.some(h => selected.has(Number(h.hoardingID))) && !allChecked;
 
   const toggleAll = () => {
     if (allChecked) {
       setSelected(prev => {
         const next = new Set(prev);
-        sorted.forEach(h => next.delete(h.hoardingID));
+        sorted.forEach(h => next.delete(Number(h.hoardingID)));
         return next;
       });
     } else {
       setSelected(prev => {
         const next = new Set(prev);
-        sorted.forEach(h => next.add(h.hoardingID));
+        sorted.forEach(h => next.add(Number(h.hoardingID)));
         return next;
       });
     }
   };
 
   const handleConfirm = () => {
-    const picked = hoardings.filter(h => selected.has(h.hoardingID));
+    const picked = hoardings.filter(h => selected.has(Number(h.hoardingID)));
     onSelectMultiple(picked);
     onClose();
   };
@@ -1660,7 +1661,7 @@ function MultiHoardingLookupModal({ hoardings, sites, onSelectMultiple, onClose 
               </thead>
               <tbody>
                 {sorted.map((h, idx) => {
-                  const isChecked = selected.has(h.hoardingID);
+                  const isChecked = selected.has(Number(h.hoardingID));
                   const site = siteMap[h.siteID];
                   const addr = site ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ') : `Site ${h.siteID}`;
                   const st = hSt(h.status);
@@ -3746,16 +3747,16 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
     };
 
     const FIELDS = [
-      { key: 'customerName', label: 'Customer Name', req: true, full: true },
-      { key: 'authorizedName', label: 'Authorized Person', req: false, full: false },
-      { key: 'phone1', label: 'Phone 1', req: false, full: false },
-      { key: 'phone2', label: 'Phone 2', req: false, full: false },
-      { key: 'addressLine1', label: 'Address Line 1', req: false, full: true },
-      { key: 'addressLine2', label: 'Address Line 2', req: false, full: false },
-      { key: 'addressLine3', label: 'Address Line 3 / Landmark', req: false, full: false },
-      { key: 'city', label: 'City', req: false, full: false },
-      { key: 'district', label: 'District', req: false, full: false },
-      { key: 'gstNumber', label: 'GST Number', req: false, full: false },
+      { key: 'customerName', label: 'Customer Name', req: true, full: true, placeholder: 'e.g. Acme Corp' },
+      { key: 'authorizedName', label: 'Authorized Person', req: false, full: false, placeholder: 'e.g. John Doe' },
+      { key: 'phone1', label: 'Phone 1', req: false, full: false, placeholder: 'e.g. +91 98765 43210' },
+      { key: 'phone2', label: 'Phone 2', req: false, full: false, placeholder: 'e.g. +91 98765 43211' },
+      { key: 'addressLine1', label: 'Address Line 1', req: false, full: true, placeholder: 'e.g. 101, Business Park' },
+      { key: 'addressLine2', label: 'Address Line 2', req: false, full: false, placeholder: 'e.g. Near Station, MG Road' },
+      { key: 'addressLine3', label: 'Address Line 3 / Landmark', req: false, full: false, placeholder: 'e.g. landmark details' },
+      { key: 'city', label: 'City', req: false, full: false, placeholder: 'e.g. Ahmedabad' },
+      { key: 'district', label: 'District', req: false, full: false, placeholder: 'e.g. Ahmedabad' },
+      { key: 'gstNumber', label: 'GST Number', req: false, full: false, placeholder: 'e.g. 24AAAAA0000A1Z5' },
     ];
 
     return ReactDOM.createPortal(
@@ -3789,6 +3790,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                     <input
                       className="pg-field-input"
                       value={form[f.key]}
+                      placeholder={f.placeholder}
                       onChange={e => set(f.key, f.key === 'gstNumber' ? e.target.value.toUpperCase() : e.target.value)}
                       maxLength={f.key === 'gstNumber' ? 15 : undefined}
                       style={f.key === 'gstNumber' ? { letterSpacing: '0.05em', textTransform: 'uppercase' } : {}}
@@ -4347,11 +4349,9 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         <MultiHoardingLookupModal
           hoardings={hoardings}
           sites={sites}
+          selectedIds={selectedHoardings.map(h => h.hoardingID)}
           onSelectMultiple={(picked) => {
-            setSelectedHoardings(prev => {
-              const existingIds = new Set(prev.map(h => h.hoardingID));
-              return [...prev, ...picked.filter(h => !existingIds.has(h.hoardingID))];
-            });
+            setSelectedHoardings(picked);
           }}
           onClose={() => setHoardingModalOpen(false)}
         />

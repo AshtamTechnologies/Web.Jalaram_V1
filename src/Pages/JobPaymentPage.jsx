@@ -1088,17 +1088,17 @@ export default function JobPaymentPage() {
                           {fmtDate(p.paymentDate)}
                         </span>
                       </td>
-                      <td className="pg-td" style={{ textAlign: 'right' }}>
+                      <td className="pg-td">
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#1a1a2e' }}>
                           {fmtCurrency(p.calculatedAmount)}
                         </span>
                       </td>
-                      <td className="pg-td" style={{ textAlign: 'right' }}>
+                      <td className="pg-td">
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#16a34a' }}>
                           {fmtCurrency(p.paidAmount)}
                         </span>
                       </td>
-                      <td className="pg-td" style={{ textAlign: 'right' }}>
+                      <td className="pg-td">
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: rem > 0 ? '#dc2626' : rem < 0 ? '#7c3aed' : '#9090a8' }}>
                           {fmtCurrency(rem)}
                         </span>

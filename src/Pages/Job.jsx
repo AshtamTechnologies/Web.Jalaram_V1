@@ -225,28 +225,27 @@ function JobStatusBadge({ status }) {
   );
 }
 
-function TaskStatusSelect({ value, onChange }) {
+function TaskStatusSelect({ value, onChange, disabled }) {
   const s = TASK_STATUS_COLORS[value] || TASK_STATUS_COLORS['Open'];
-  const isSubmitted = value === 'Submitted';
 
   return (
     <select
       value={value}
       onChange={e => onChange(e.target.value)}
-      disabled={isSubmitted}
+      disabled={disabled}
       style={{
         fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
         padding: '4px 10px', borderRadius: 7,
         border: `1.5px solid ${s.border}`,
         background: s.bg, color: s.color,
-        cursor: isSubmitted ? 'not-allowed' : 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
         outline: 'none',
         appearance: 'none', WebkitAppearance: 'none',
-        paddingRight: isSubmitted ? 10 : 22,
-        backgroundImage: isSubmitted ? 'none' : `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239090a8' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
+        paddingRight: disabled ? 10 : 22,
+        backgroundImage: disabled ? 'none' : `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%239090a8' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E")`,
         backgroundRepeat: 'no-repeat',
         backgroundPosition: 'right 6px center',
-        opacity: isSubmitted ? 0.8 : 1,
+        opacity: disabled ? 0.8 : 1,
       }}
     >
       {TASK_STATUS_LIST.map(st => <option key={st} value={st}>{st}</option>)}
@@ -627,6 +626,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
   const [deleting, setDeleting] = useState(null); // attachID being deleted
   const [lightbox, setLightbox] = useState(null);
   const [imgErrors, setImgErrors] = useState({}); // track broken images by index
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
   const inputRef = useRef(null);
 
   const taskIDs = new Set(
@@ -665,9 +665,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
   const handleDelete = async (att, i) => {
     const attachID = att.jobTaskAttachID ?? att.JobTaskAttachID ?? att.id ?? att.ID;
     if (!attachID) { showToast('Cannot delete: no attachment ID found.', 'error'); return; }
-    if (!window.confirm('Delete this photo?')) return;
     setDeleting(attachID);
-    // Replace the try block in handleDelete with:
     try {
       await apiService.deleteJobTaskAttachment(attachID);
       showToast('Photo deleted.', 'success');
@@ -878,7 +876,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
 
                         {/* ── Delete button ── */}
                         <button
-                          onClick={e => { e.stopPropagation(); handleDelete(att, i); }}
+                          onClick={e => { e.stopPropagation(); setDeleteConfirmTarget({ att, index: i }); }}
                           disabled={isDeleting}
                           title="Delete photo"
                           style={{
@@ -928,6 +926,110 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
 
         </div>
       </div>
+
+      {deleteConfirmTarget && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999999,
+          background: 'rgba(0,0,0,0.55)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backdropFilter: 'blur(3px)',
+        }}>
+          <div style={{
+            maxWidth: 380,
+            width: '90%',
+            background: '#fff',
+            borderRadius: 16,
+            overflow: 'hidden',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.25)',
+            fontFamily: 'Nunito,sans-serif',
+            animation: 'fadeIn 0.2s',
+          }}>
+            {/* Header */}
+            <div style={{
+              background: 'linear-gradient(135deg,#dc2626,#f87171)',
+              padding: '24px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 10,
+            }}>
+              <div style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.2)',
+                border: '2px solid rgba(255,255,255,0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 24,
+                color: '#fff',
+              }}>
+                🗑️
+              </div>
+              <div style={{ fontWeight: 900, fontSize: 17, color: '#fff' }}>
+                Delete Photo
+              </div>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '24px 20px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: 14, color: '#4b5563', lineHeight: 1.5, fontWeight: 600 }}>
+                Are you sure you want to delete this photo?
+              </p>
+              <p style={{ margin: '6px 0 0 0', fontSize: 12, color: '#9ca3af', lineHeight: 1.5, fontWeight: 500 }}>
+                This action cannot be undone.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: 'flex', gap: 12, padding: '0 20px 20px 20px' }}>
+              <button
+                onClick={() => setDeleteConfirmTarget(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px 0',
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: 10,
+                  background: '#fff',
+                  color: '#64748b',
+                  fontWeight: 700,
+                  fontSize: 13.5,
+                  cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleDelete(deleteConfirmTarget.att, deleteConfirmTarget.index);
+                  setDeleteConfirmTarget(null);
+                }}
+                style={{
+                  flex: 1.5,
+                  padding: '10px 0',
+                  border: 'none',
+                  borderRadius: 10,
+                  background: '#dc2626',
+                  color: '#fff',
+                  fontWeight: 800,
+                  fontSize: 13.5,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(220,38,38,0.3)',
+                  outline: 'none',
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>,
     document.body
   );
@@ -1129,21 +1231,43 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
     document.body
   );
 }
-function CompleteJobModal({ job, tasks, allHoardings, attachments, onConfirm, onCancel, completing }) {
+function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachments, onConfirm, onCancel, completing }) {
   const [completionDate, setCompletionDate] = useState(
     job.actualCompletionDate || todayISO()
   );
-  const [showWarning, setShowWarning] = useState(false);
+  const [error, setError] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // Find tasks without photos
   const tasksWithNoPhotos = useMemo(() => {
+    // Group task IDs by mergeFlag
+    const mergeFlagToTaskIDs = {};
+    tasks.forEach(t => {
+      const m = (hoardingMerges || []).find(x => Number(x.hoardingID ?? x.HoardingID ?? 0) === Number(t.hoardingID));
+      const flag = m ? (m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H') : null;
+      if (flag) {
+        if (!mergeFlagToTaskIDs[flag]) mergeFlagToTaskIDs[flag] = [];
+        mergeFlagToTaskIDs[flag].push(Number(t.jobTaskID));
+      }
+    });
+
     return tasks.filter(t => {
-      // Find all task IDs for this row (including merges)
-      const taskIDs = new Set([t.jobTaskID, ...(t.mergedTaskIDs ?? [])].map(Number));
-      const hasPhoto = (attachments || []).some(a => taskIDs.has(Number(a.jobTaskID ?? a.JobTaskID)));
+      const m = (hoardingMerges || []).find(x => Number(x.hoardingID ?? x.HoardingID ?? 0) === Number(t.hoardingID));
+      const flag = m ? (m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H') : null;
+
+      let targetTaskIDs = [Number(t.jobTaskID)];
+      if (flag && mergeFlagToTaskIDs[flag]) {
+        targetTaskIDs = mergeFlagToTaskIDs[flag];
+      }
+
+      const hasPhoto = (attachments || []).some(a => {
+        const aTaskID = Number(a.jobTaskID ?? a.JobTaskID ?? 0);
+        return targetTaskIDs.includes(aTaskID);
+      });
+
       return !hasPhoto;
     });
-  }, [tasks, attachments]);
+  }, [tasks, attachments, hoardingMerges]);
 
   const hasMissingPhotos = tasksWithNoPhotos.length > 0;
 
@@ -1158,97 +1282,91 @@ function CompleteJobModal({ job, tasks, allHoardings, attachments, onConfirm, on
   });
 
   const handleFinalSubmit = () => {
-    if (hasMissingPhotos && !showWarning) {
-      setShowWarning(true);
+    if (hasMissingPhotos) {
+      setError('Upload the images first then make mark as complete the job');
     } else {
-      onConfirm(completionDate);
+      setError('');
+      setShowConfirm(true);
     }
   };
 
-  if (showWarning) {
-    return ReactDOM.createPortal(
-      <div className="pg-overlay" onClick={() => setShowWarning(false)}>
-        <div className="pg-modal" style={{ maxWidth: 440 }}>
-          <div style={{
-            background: 'linear-gradient(135deg, #f59e0b, #d97706)',
-            padding: '24px 26px 18px',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-            textAlign: 'center'
-          }}>
-            <div style={{
-              width: 56, height: 56, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.20)', border: '2px solid rgba(255,255,255,0.35)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26,
-            }}>⚠️</div>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#fff' }}>
-              Missing Photos Warning
-            </div>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>
-              Job #{job.jobRequestID}
-            </div>
-          </div>
-
-          <div style={{ padding: '24px' }}>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 14, color: '#1f2937', fontWeight: 700, marginBottom: 12 }}>
-              The following hoarding(s) do not have photos uploaded:
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20, maxHeight: 150, overflowY: 'auto' }}>
-              {tasksWithNoPhotos.map((t, idx) => {
-                const h = allHoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
-                return (
-                  <div key={idx} style={{
-                    padding: '8px 12px', background: '#fef3c7', border: '1px solid #fde68a',
-                    borderRadius: 8, fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#92400e'
-                  }}>
-                    {t.hoardingCode || h?.hoardingCode || `Hoarding #${t.hoardingID}`}
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#4b5563', fontWeight: 600, marginBottom: 24, lineHeight: 1.5 }}>
-              Are you sure you want to proceed and mark the job as completed without these photos?
-            </div>
-
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button
-                className="pg-btn-cancel"
-                onClick={() => setShowWarning(false)}
-                autoFocus
-                style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: '#f3f4f6', color: '#1f2937', border: '1.5px solid #d1d5db',
-                  fontFamily: 'Nunito,sans-serif', fontWeight: 800, padding: '11px 0', borderRadius: 10,
-                  cursor: 'pointer'
-                }}
-              >
-                No (Go Back)
-              </button>
-              <button
-                onClick={() => {
-                  setShowWarning(false);
-                  onConfirm(completionDate);
-                }}
-                style={{
-                  flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: '#d97706', color: '#fff', border: 'none',
-                  fontFamily: 'Nunito,sans-serif', fontWeight: 800, padding: '11px 0', borderRadius: 10,
-                  boxShadow: '0 4px 12px rgba(217,119,6,0.25)',
-                  cursor: 'pointer'
-                }}
-              >
-                Yes, Proceed
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>,
-      document.body
-    );
-  }
-
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && !completing && onCancel()}>
-      <div className="pg-modal" style={{ maxWidth: 480 }}>
+    // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && !completing && onCancel()}>
+    <div className="pg-overlay">
+      <div className="pg-modal" style={{ maxWidth: 480, position: 'relative', overflow: 'hidden' }}>
+
+        {/* Confirmation Screen */}
+        {showConfirm && (
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 100,
+            background: '#fff',
+            display: 'flex',
+            flexDirection: 'column',
+            fontFamily: 'Nunito,sans-serif',
+            animation: 'fadeIn 0.2s',
+          }}>
+            {/* Header */}
+            <div style={{
+              background: 'linear-gradient(135deg,#16a34a,#15803d)',
+              padding: '24px 26px 18px',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+            }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: '50%',
+                background: 'rgba(255,255,255,0.20)', border: '2px solid rgba(255,255,255,0.35)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26,
+              }}>❓</div>
+              <div style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#fff' }}>
+                Are you sure?
+              </div>
+              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: 'rgba(255,255,255,0.82)', fontWeight: 600 }}>
+                Verification Successful
+              </div>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '30px 24px', flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
+              <p style={{ margin: 0, fontSize: 14.5, color: '#4b5563', lineHeight: 1.6, fontWeight: 700, textAlign: 'center' }}>
+                All task photos have been successfully verified for Job #{job.jobRequestID}.
+              </p>
+              <p style={{ margin: '8px 0 0 0', fontSize: 13, color: '#7878a0', lineHeight: 1.5, fontWeight: 600, textAlign: 'center' }}>
+                Do you want to finalize and mark this job as Completed?
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div style={{ padding: '20px 24px', borderTop: '1px solid #f0f0f8' }}>
+              <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+                <button
+                  className="pg-btn-cancel"
+                  onClick={() => setShowConfirm(false)}
+                  style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  No, Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setShowConfirm(false);
+                    onConfirm(completionDate);
+                  }}
+                  style={{
+                    flex: 1.6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                    padding: '11px 0', borderRadius: 11, border: 'none',
+                    background: 'linear-gradient(135deg,#16a34a,#15803d)',
+                    color: '#fff',
+                    fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 16px rgba(22,163,74,0.35)',
+                  }}
+                >
+                  Yes, Complete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Header */}
         <div style={{
@@ -1352,6 +1470,19 @@ function CompleteJobModal({ job, tasks, allHoardings, attachments, onConfirm, on
             </div>
           )}
 
+          {error && (
+            <div style={{
+              display: 'flex', gap: 8, alignItems: 'center',
+              padding: '10px 14px', background: '#fef2f2',
+              border: '1.5px solid #fecaca', borderRadius: 10,
+              marginBottom: 16, color: '#dc2626',
+              fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700
+            }}>
+              <AlertCircle size={14} style={{ flexShrink: 0 }} />
+              <span>{error}</span>
+            </div>
+          )}
+
           {/* Buttons */}
           <div style={{ display: 'flex', gap: 10 }}>
             <button
@@ -1448,7 +1579,7 @@ export default function JobPage() {
   const [tableReady, setTableReady] = useState(false);
 
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
-  useResizableColumns(tableRef, tableReady, [80, 180, 110, 150, 130, 120, 100, 120, 130]);
+  useResizableColumns(tableRef, tableReady, [80, 180, 110, 150, 130, 120, 120, 100, 120, 130]);
 
   const taskTableRef = useRef(null);
   const [taskTableReady, setTaskTableReady] = useState(false);
@@ -1532,7 +1663,13 @@ export default function JobPage() {
   }, [displayTaskRows]);
 
   const derivedJobStatus = useMemo(() => {
-    if (tasks.length > 0 && tasks.every(t => t.status === 'Submitted')) return 'Submitted';
+    if (jobStatus === 'Completed') return 'Completed';
+    if (tasks.length > 0) {
+      const submittedCnt = tasks.filter(t => t.status === 'Submitted').length;
+      if (submittedCnt === tasks.length) return 'Submitted';
+      if (submittedCnt > 0) return 'In Progress';
+      if (jobStatus === 'In Progress') return 'Accepted';
+    }
     return jobStatus;
   }, [tasks, jobStatus]);
 
@@ -2064,12 +2201,20 @@ export default function JobPage() {
     if (!q) return jobRequests;
     return jobRequests.filter(j => {
       const cust = customers.find(c => c.customerID === j.customerID);
+      const myTasks = getMyTasks(j.jobRequestID);
+      const submittedCnt = myTasks.filter(t => t.status === 'Submitted').length;
+      const derived = j.jobStatus === 'Completed'
+        ? 'Completed'
+        : myTasks.length > 0
+          ? (submittedCnt === myTasks.length ? 'Submitted' : (submittedCnt > 0 ? 'In Progress' : (j.jobStatus === 'In Progress' ? 'Accepted' : j.jobStatus)))
+          : (j.jobStatus || 'Open');
+
       return (cust?.customerName || '').toLowerCase().includes(q) ||
         (j.jobType || '').toLowerCase().includes(q) ||
         String(j.jobRequestID).includes(q) ||
-        (j.jobStatus || '').toLowerCase().includes(q);
+        derived.toLowerCase().includes(q);
     });
-  }, [jobRequests, search, customers]);
+  }, [jobRequests, search, customers, allJobTasks]);
 
   const sorted = useMemo(() => [...filtered].sort((a, b) => {
     const av = String(a[sortKey] || '').toLowerCase();
@@ -2463,6 +2608,13 @@ export default function JobPage() {
                   </div>
                   <div className="jb-summary-divider" />
                   <div className="jb-summary-item">
+                    <span className="jb-summary-label">Total Amount</span>
+                    <span className="jb-summary-value" style={{ color: '#16a34a', fontWeight: 900 }}>
+                      ₹ {(Number(ratePerSQFT || 0) * totalAreaSQFT).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div className="jb-summary-divider" />
+                  <div className="jb-summary-item">
                     <span className="jb-summary-label">Target Date</span>
                     <span className="jb-summary-value">{fmtDate(targetDate)}</span>
                   </div>
@@ -2585,9 +2737,21 @@ export default function JobPage() {
                                 </td>
 
                                 <td className="pg-td">
-                                  <TaskStatusSelect value={row.status} onChange={val => {
-                                    row.tasks.forEach(t => updateTask(t._id, 'status', val));
-                                  }} />
+                                  <TaskStatusSelect
+                                    value={row.status}
+                                    disabled={jobStatus === 'Completed'}
+                                    onChange={val => {
+                                      if (row.status === 'Submitted' && (val === 'Open' || val === 'In Progress')) {
+                                        const taskIDs = new Set(row.tasks.map(t => Number(t.jobTaskID)));
+                                        const hasPhotos = allAttachments.some(a => taskIDs.has(Number(a.jobTaskID ?? a.JobTaskID)));
+                                        if (hasPhotos) {
+                                          showToast('Please delete all uploaded photos for this hoarding task before changing the status from Submitted.', 'error');
+                                          return;
+                                        }
+                                      }
+                                      row.tasks.forEach(t => updateTask(t._id, 'status', val));
+                                    }}
+                                  />
                                 </td>
 
                                 <td className="pg-td">
@@ -2689,7 +2853,20 @@ export default function JobPage() {
                                   onChange={e => updateTask(row._id, 'actualCompletionDate', e.target.value)} />
                               </td>
                               <td className="pg-td">
-                                <TaskStatusSelect value={row.status} onChange={val => updateTask(row._id, 'status', val)} />
+                                <TaskStatusSelect
+                                  value={row.status}
+                                  disabled={jobStatus === 'Completed'}
+                                  onChange={val => {
+                                    if (row.status === 'Submitted' && (val === 'Open' || val === 'In Progress')) {
+                                      const hasPhotos = allAttachments.some(a => Number(a.jobTaskID ?? a.JobTaskID) === Number(row.jobTaskID));
+                                      if (hasPhotos) {
+                                        showToast('Please delete all uploaded photos for this hoarding task before changing the status from Submitted.', 'error');
+                                        return;
+                                      }
+                                    }
+                                    updateTask(row._id, 'status', val);
+                                  }}
+                                />
                               </td>
                               <td className="pg-td">
                                 {row.status === 'Submitted' ? (
@@ -2943,6 +3120,7 @@ export default function JobPage() {
                       { key: '_supervisor', label: 'Supervisor', w: '14%', noSort: true },
                       { key: 'targetCompletionDate', label: 'Target Date', w: '11%' },
                       { key: 'totalAreaSQFT', label: 'Area (sq.ft)', w: '9%' },
+                      { key: 'totalAmount', label: 'Total Amount', w: '10%', noSort: true },
                       { key: '_tasks', label: 'Tasks', w: '9%', noSort: true },
                       { key: 'jobStatus', label: 'Status', w: '11%' },
                       { key: '_action', label: 'Actions', w: '10%', noSort: true },
@@ -2963,7 +3141,7 @@ export default function JobPage() {
                 <tbody>
                   {paginated.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="pg-td pg-empty" style={{ maxWidth: 'none' }}>
+                      <td colSpan={10} className="pg-td pg-empty" style={{ maxWidth: 'none' }}>
                         <div className="pg-empty__inner">
                           <Briefcase size={36} color="#d0d0e8" />
                           <span className="pg-empty__label">No job requests found</span>
@@ -3006,6 +3184,11 @@ export default function JobPage() {
                             {job.totalAreaSQFT ? Number(job.totalAreaSQFT).toFixed(1) : '—'}
                           </span>
                         </td>
+                        <td className="pg-td" style={{ textAlign: 'right' }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, color: '#16a34a' }}>
+                            ₹ {((job.rateperSQFT || 0) * (job.totalAreaSQFT || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </td>
                         <td className="pg-td" style={{ textAlign: 'center' }}>
                           {myTasks.length > 0 ? (
                             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700 }}>
@@ -3017,7 +3200,17 @@ export default function JobPage() {
                             <span style={{ color: '#c0c0d8', fontSize: 12 }}>—</span>
                           )}
                         </td>
-                        <td className="pg-td"><JobStatusBadge status={job.jobStatus} /></td>
+                        <td className="pg-td">
+                          <JobStatusBadge
+                            status={
+                              job.jobStatus === 'Completed'
+                                ? 'Completed'
+                                : myTasks.length > 0
+                                  ? (submittedCnt === myTasks.length ? 'Submitted' : (submittedCnt > 0 ? 'In Progress' : (job.jobStatus === 'In Progress' ? 'Accepted' : job.jobStatus)))
+                                  : (job.jobStatus || 'Open')
+                            }
+                          />
+                        </td>
                         <td className="pg-td">
                           <div className="pg-action-wrap">
                             {/* View Photos */}
@@ -3158,6 +3351,7 @@ export default function JobPage() {
           job={completeTarget.job}
           tasks={completeTarget.tasks}
           allHoardings={hoardings}
+          hoardingMerges={hoardingMerges}
           attachments={allAttachments}
           onConfirm={handleComplete}
           onCancel={() => !completing && setCompleteTarget(null)}

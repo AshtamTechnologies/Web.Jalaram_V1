@@ -1355,6 +1355,18 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingRowId, setDeletingRowId] = useState(null);
 
+  const errorRef = useRef(null);
+
+  useEffect(() => {
+    if (apiErr) {
+      // Small delay to ensure the DOM element is rendered and laid out
+      const timer = setTimeout(() => {
+        errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [apiErr]);
+
   // auto-fill hoardingID from contract
   const getHoardingIDForContract = (cid) => {
     const c = contracts.find(c => String(c.landContractID) === String(cid));
@@ -1554,7 +1566,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
       <div className="hd-form-body">
         <div className="container-fluid px-0">
           {apiErr && (
-            <div className="pg-field-error hd-api-error mb-3">
+            <div ref={errorRef} className="pg-field-error hd-api-error mb-3">
               <AlertCircle size={14} /><span>{apiErr}</span>
               <button
                 style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}

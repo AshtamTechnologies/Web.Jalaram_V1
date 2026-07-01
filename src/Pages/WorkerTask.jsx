@@ -73,8 +73,13 @@ function fmtDateTime(d) {
 function getCurrentPosition(options = {}) {
     return new Promise((resolve, reject) => {
         if (!navigator.geolocation) { reject(new Error('Geolocation not supported')); return; }
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true, timeout: 10000, maximumAge: 0, ...options,
+        navigator.geolocation.getCurrentPosition(resolve, (err) => {
+            // High accuracy failed or timed out. Try low accuracy (IP/Wi-Fi based fallback)
+            navigator.geolocation.getCurrentPosition(resolve, reject, {
+                enableHighAccuracy: false, timeout: 5000, maximumAge: 30000, ...options,
+            });
+        }, {
+            enableHighAccuracy: true, timeout: 5000, maximumAge: 0, ...options,
         });
     });
 }
@@ -91,7 +96,11 @@ async function getGeoPayload() {
         const { latitude, longitude, accuracy } = pos.coords;
         const address = await reverseGeocode(latitude, longitude);
         return { latitude, longitude, accuracy, address };
-    } catch { return { latitude: 0, longitude: 0, accuracy: 0, address: '' }; }
+    } catch (err) {
+        console.error("Geolocation failed:", err);
+        alert(`Geolocation Error:\n- Message: ${err.message || 'Unknown'}\n- Code: ${err.code || 'None'}\n\nPlease check that your device's location services are enabled.`);
+        return { latitude: 0, longitude: 0, accuracy: 0, address: '' };
+    }
 }
 
 function extractArray(res) {
@@ -945,12 +954,7 @@ export default function WorkerTasksPage() {
         const userId = parseInt(localStorage.getItem('userId') || '0', 10);
         const nowISO = new Date().toISOString();
         const geo = data.geo ?? await getGeoPayload();
-        await apiService.updateJobTask({
-            jobTaskID: data.jobTaskID, jobRequestID: data.jobRequestID,
-            hoardingID: data.hoardingID, status: 'Submitted',
-            actualCompletionDate: data.actualCompletionDate,
-            submitDTTM: nowISO, lastUpdateDttm: nowISO, lastUpdatedBy: userId,
-        });
+
         const uploadWithGeo = async (file, photoFileType) => {
             const fd = new FormData();
             fd.append('JobTaskAttachID', '0'); fd.append('JobTaskID', String(data.jobTaskID));
@@ -965,8 +969,31 @@ export default function WorkerTasksPage() {
             geoFd.append('Address', geo.address); geoFd.append('CapturedAt', nowISO);
             await apiService.uploadGeoLocation(geoFd);
         };
+
+        // 1. Upload files first
         for (const file of data.closeImgs ?? []) await uploadWithGeo(file, 'Near Photo');
         for (const file of data.farImgs ?? []) await uploadWithGeo(file, 'Far Photo');
+
+        // 2. Only update task status if all uploads succeeded
+        if (data.groupTasks && data.groupTasks.length > 0) {
+            for (const t of data.groupTasks) {
+                await apiService.updateJobTask({
+                    jobTaskID: t.jobTaskID, jobRequestID: t.jobRequestID,
+                    hoardingID: t.hoardingID, status: 'Submitted',
+                    actualCompletionDate: data.actualCompletionDate,
+                    submitDTTM: nowISO, lastUpdateDttm: nowISO, lastUpdatedBy: userId,
+                });
+            }
+        } else {
+            await apiService.updateJobTask({
+                jobTaskID: data.jobTaskID, jobRequestID: data.jobRequestID,
+                hoardingID: data.hoardingID, status: 'Submitted',
+                actualCompletionDate: data.actualCompletionDate,
+                submitDTTM: nowISO, lastUpdateDttm: nowISO, lastUpdatedBy: userId,
+            });
+        }
+
+        // 3. Refresh list
         await fetchData();
     };
 

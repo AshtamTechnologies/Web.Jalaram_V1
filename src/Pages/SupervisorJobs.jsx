@@ -20,6 +20,7 @@ import { useResizableColumns } from '../hooks/useResizableColumns';
 const PAGE_SIZE_OPTIONS = [10, 12, 15, 20];
 
 const JOB_STATUS_COLORS = {
+  'Pending': { bg: '#f1f5f9', color: '#64748b', border: '#cbd5e1' },
   'Open': { bg: '#f1f5f9', color: '#64748b', border: '#cbd5e1' },
   'Accepted': { bg: '#fefce8', color: '#ca8a04', border: '#fde68a' },
   'In Progress': { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' },
@@ -98,13 +99,29 @@ function avatarColor(name) {
 }
 
 /* ─────────────────────────────────────────
+   STATUS DERIVATION
+───────────────────────────────────────── */
+function getDerivedJobStatus(job) {
+  if (!job) return 'Open';
+  if (job.jobStatus === 'Completed') return 'Completed';
+  if (job.jobStatus === 'Pending') return 'Pending';
+  if (job.tasks && job.tasks.length > 0) {
+    const submittedCnt = job.tasks.filter(t => t.status === 'Submitted' || t.status === 'Completed').length;
+    if (submittedCnt === job.tasks.length) return 'Submitted';
+    if (submittedCnt > 0) return 'In Progress';
+    return 'Accepted';
+  }
+  return job.jobStatus || 'Open';
+}
+
+/* ─────────────────────────────────────────
    BADGES
 ───────────────────────────────────────── */
 function JobStatusBadge({ status }) {
-  const s = JOB_STATUS_COLORS[status] || JOB_STATUS_COLORS['Open'];
+  const s = JOB_STATUS_COLORS[status] || JOB_STATUS_COLORS['Pending'] || JOB_STATUS_COLORS['Open'];
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: 20, fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, background: s.bg, color: s.color, border: `1px solid ${s.border}`, whiteSpace: 'nowrap' }}>
-      {status || 'Open'}
+      {status || 'Pending'}
     </span>
   );
 }
@@ -406,7 +423,7 @@ function getSiteAddress(h) {
    MERGED TASK WORKER CARD
    One shared worker picker for all merged tasks
 ═══════════════════════════════════════════ */
-function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, showToast, flag, allAttachments = [] }) {
+function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, showToast, flag, allAttachments = [] }) {
   const [assignmentsByTask, setAssignmentsByTask] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -415,6 +432,10 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, showToast, fl
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
   const [primaryId, setPrimaryId] = useState(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
+  const isTaskCompleted = groupTasks.some(t => t.status === 'Completed');
+  const isTaskSubmitted = groupTasks.some(t => t.status === 'Submitted');
+  const isLocked = isTaskCompleted || isTaskSubmitted;
 
   const fetchAllAssignments = useCallback(async () => {
     setLoading(true);
@@ -494,7 +515,6 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, showToast, fl
   };
 
   const handleDelete = async (workerID) => {
-    if (!window.confirm('Remove this worker from all merged tasks?')) return;
     setDeleting(workerID);
     try {
       const allForWorker = Object.values(assignmentsByTask)
@@ -614,14 +634,17 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, showToast, fl
                     {asgn.isPrimary && (
                       <span style={{ background: `${txtC}18`, color: txtC, borderRadius: 20, padding: '1px 7px', fontSize: 9.5, fontWeight: 900, fontFamily: 'Nunito,sans-serif', whiteSpace: 'nowrap' }}>PRIMARY</span>
                     )}
-                    <button onClick={() => handleTogglePrimary(asgn)} title={asgn.isPrimary ? 'Remove primary' : 'Set as primary'}
-                      style={{ background: 'none', border: 'none', padding: 2, cursor: 'pointer', lineHeight: 1, flexShrink: 0 }}>
+                    <button onClick={() => !isLocked && handleTogglePrimary(asgn)} title={asgn.isPrimary ? 'Remove primary' : 'Set as primary'}
+                      disabled={isLocked}
+                      style={{ background: 'none', border: 'none', padding: 2, cursor: isLocked ? 'not-allowed' : 'pointer', lineHeight: 1, flexShrink: 0, opacity: isLocked ? 0.6 : 1 }}>
                       <Star size={13} color={asgn.isPrimary ? '#f59e0b' : `${txtC}50`} fill={asgn.isPrimary ? '#f59e0b' : 'none'} />
                     </button>
-                    <button onClick={() => handleDelete(asgn.id)} disabled={isDel}
-                      style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(220,38,38,0.09)', border: '1px solid rgba(220,38,38,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isDel ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
-                      {isDel ? <Loader2 size={10} className="pg-spin" color="#dc2626" /> : <X size={11} color="#dc2626" />}
-                    </button>
+                    {!isLocked && (
+                      <button onClick={() => setDeleteConfirmTarget({ id: asgn.id, name })} disabled={isDel}
+                        style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(220,38,38,0.09)', border: '1px solid rgba(220,38,38,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isDel ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
+                        {isDel ? <Loader2 size={10} className="pg-spin" color="#dc2626" /> : <X size={11} color="#dc2626" />}
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -637,14 +660,60 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, showToast, fl
 
           {/* ── Add worker button ── */}
           {!pickerOpen && (
-            <button
-              onClick={() => { setPickerOpen(true); setQuery(''); setSelectedIds([]); }}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 16px', borderRadius: 10, border: '1.5px dashed rgba(4,158,223,0.4)', background: 'rgba(4,158,223,0.04)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf', transition: 'all 0.15s' }}
-              onMouseEnter={e => { e.currentTarget.style.background = 'rgba(4,158,223,0.09)'; e.currentTarget.style.borderColor = '#049edf'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'rgba(4,158,223,0.04)'; e.currentTarget.style.borderColor = 'rgba(4,158,223,0.4)'; }}
-            >
-              <UserPlus size={14} /> {allAssignments.length > 0 ? 'Add More Workers' : 'Assign Workers'}
-            </button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+              {isLocked ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, background: '#f0fdf4', border: '1.5px solid #bbf7d0', color: '#16a34a', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800 }}>
+                  🔒 Worker assignments locked ({isTaskCompleted ? 'Task Completed' : 'Task Submitted'})
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    if (jobStatus === 'Pending' || jobStatus === 'Open') {
+                      showToast('Please accept the job request first before assigning workers.', 'error');
+                      return;
+                    }
+                    setPickerOpen(true);
+                    setQuery('');
+                    setSelectedIds([]);
+                  }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 7,
+                    padding: '8px 16px',
+                    borderRadius: 10,
+                    border: (jobStatus === 'Pending' || jobStatus === 'Open') ? '1.5px dashed #cbd5e1' : '1.5px dashed rgba(4,158,223,0.4)',
+                    background: (jobStatus === 'Pending' || jobStatus === 'Open') ? '#f1f5f9' : 'rgba(4,158,223,0.04)',
+                    cursor: (jobStatus === 'Pending' || jobStatus === 'Open') ? 'not-allowed' : 'pointer',
+                    fontFamily: 'Nunito,sans-serif',
+                    fontSize: 12.5,
+                    fontWeight: 800,
+                    color: (jobStatus === 'Pending' || jobStatus === 'Open') ? '#94a3b8' : '#049edf',
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    if (jobStatus !== 'Pending' && jobStatus !== 'Open') {
+                      e.currentTarget.style.background = 'rgba(4,158,223,0.09)';
+                      e.currentTarget.style.borderColor = '#049edf';
+                    }
+                  }}
+                  onMouseLeave={e => {
+                    if (jobStatus !== 'Pending' && jobStatus !== 'Open') {
+                      e.currentTarget.style.background = 'rgba(4,158,223,0.04)';
+                      e.currentTarget.style.borderColor = 'rgba(4,158,223,0.4)';
+                    }
+                  }}
+                >
+                  <UserPlus size={14} /> {allAssignments.length > 0 ? 'Add More Workers' : 'Assign Workers'}
+                </button>
+              )}
+              {(jobStatus === 'Pending' || jobStatus === 'Open') && !isTaskCompleted && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, color: '#dc2626', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700 }}>
+                  <AlertCircle size={13} />
+                  <span>Accept the job request first to enable worker assignments.</span>
+                </div>
+              )}
+            </div>
           )}
 
           {/* ── Worker Picker ── */}
@@ -813,6 +882,111 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, showToast, fl
         );
       })}
 
+      {deleteConfirmTarget && ReactDOM.createPortal(
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 99999,
+          background: 'rgba(0,0,0,0.55)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backdropFilter: 'blur(3px)',
+        }}>
+          <div style={{
+            maxWidth: 400,
+            width: '90%',
+            background: '#fff',
+            borderRadius: 16,
+            overflow: 'hidden',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.25)',
+            fontFamily: 'Nunito,sans-serif',
+            animation: 'fadeIn 0.2s',
+          }}>
+            {/* Header */}
+            <div style={{
+              background: 'linear-gradient(135deg,#dc2626,#f87171)',
+              padding: '24px 20px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 10,
+            }}>
+              <div style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.2)',
+                border: '2px solid rgba(255,255,255,0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 24,
+                color: '#fff',
+              }}>
+                🗑️
+              </div>
+              <div style={{ fontWeight: 900, fontSize: 17, color: '#fff' }}>
+                Remove Worker
+              </div>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '24px 20px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: 14.5, color: '#4b5563', lineHeight: 1.5, fontWeight: 600 }}>
+                Are you sure you want to remove <strong>{deleteConfirmTarget.name}</strong>?
+              </p>
+              <p style={{ margin: '8px 0 0 0', fontSize: 12.5, color: '#9ca3af', lineHeight: 1.5, fontWeight: 500 }}>
+                This worker will be unassigned from {groupTasks.length > 1 ? `all ${groupTasks.length} merged tasks` : 'this task'}.
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: 'flex', gap: 12, padding: '0 20px 20px 20px' }}>
+              <button
+                onClick={() => setDeleteConfirmTarget(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px 0',
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: 10,
+                  background: '#fff',
+                  color: '#64748b',
+                  fontWeight: 700,
+                  fontSize: 13.5,
+                  cursor: 'pointer',
+                  outline: 'none',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleDelete(deleteConfirmTarget.id);
+                  setDeleteConfirmTarget(null);
+                }}
+                style={{
+                  flex: 1.5,
+                  padding: '10px 0',
+                  border: 'none',
+                  borderRadius: 10,
+                  background: '#dc2626',
+                  color: '#fff',
+                  fontWeight: 800,
+                  fontSize: 13.5,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(220,38,38,0.3)',
+                  outline: 'none',
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }
@@ -856,9 +1030,9 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <JobStatusBadge status={job.jobStatus} />
+          <JobStatusBadge status={getDerivedJobStatus(job)} />
           {canAccept && (
-            <button onClick={() => { if (window.confirm(`Accept Job #${job.jobRequestID}?`)) onAccept(job); }} disabled={accepting}
+            <button onClick={() => onAccept(job)} disabled={accepting}
               style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 20px', borderRadius: 20, background: accepting ? '#e8e8f4' : 'linear-gradient(135deg,#7c3aed,#049edf)', border: 'none', cursor: accepting ? 'not-allowed' : 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: accepting ? '#b0b0c8' : '#fff', boxShadow: accepting ? 'none' : '0 3px 14px rgba(108,63,199,0.35)' }}>
               {accepting ? <><Loader2 size={13} className="pg-spin" />Accepting…</> : <><ThumbsUp size={14} />Accept Job</>}
             </button>
@@ -969,11 +1143,15 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                                 <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#9090a8' }}>
                                   · {groupTasks.length} hoardings combined
                                 </span>
-                                {groupTasks.map(t => t.hoardingCode).filter(Boolean).map(code => (
-                                  <span key={code} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)' }}>
-                                    {code}
-                                  </span>
-                                ))}
+                                {groupTasks.map(t => {
+                                  const specs = [t.material, t.width && t.height ? `${t.width}×${t.height} ft` : ''].filter(Boolean).join(' · ');
+                                  const label = specs ? `${t.hoardingCode} (${specs})` : t.hoardingCode;
+                                  return (
+                                    <span key={t.jobTaskID} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)' }}>
+                                      {label}
+                                    </span>
+                                  );
+                                })}
                               </div>
                               {[...new Set(groupTasks.map(t => t.siteAddress).filter(Boolean))].map((addr, i) => (
                                 <div key={i} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: i > 0 ? 3 : 0 }}>
@@ -997,6 +1175,7 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                             groupTasks={groupTasks}
                             workers={workers}
                             jobRequestID={job.jobRequestID}
+                            jobStatus={job.jobStatus}
                             showToast={showToast}
                             flag={flag}
                             allAttachments={allAttachments}
@@ -1007,15 +1186,44 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
 
                       {/* ── Single (unmerged) task cards ── */}
                       {singleTasks.map(task => (
-                        <MergedTaskWorkerCard
-                          key={task.jobTaskID}
-                          groupTasks={[task]}
-                          workers={workers}
-                          jobRequestID={job.jobRequestID}
-                          showToast={showToast}
-                          flag=""
-                          allAttachments={allAttachments}
-                        />
+                        <div key={task.jobTaskID} style={{ marginBottom: 16, border: '1.5px solid rgba(4,158,223,0.22)', borderRadius: 14, overflow: 'hidden' }}>
+                          
+                          {/* Task/Hoarding Header */}
+                          <div style={{ padding: '12px 18px', background: 'linear-gradient(135deg, rgba(4,158,223,0.06), rgba(4,158,223,0.02))', borderBottom: '1px solid rgba(4,158,223,0.12)', display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#049edf' }}>
+                                  Hoarding {task.hoardingCode || `ID #${task.hoardingID}`}
+                                </span>
+                                {task.material && (
+                                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#7878a0' }}>
+                                    · {task.material} {task.width && task.height ? `(${task.width}×${task.height} ft)` : ''}
+                                  </span>
+                                )}
+                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.07)', color: '#049edf', border: '1px solid rgba(4,158,223,0.18)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                  Task #{task.jobTaskID} <TaskStatusBadge status={task.status} />
+                                </span>
+                              </div>
+                              {task.siteAddress && (
+                                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                                  <MapPin size={11} color="#9090a8" style={{ flexShrink: 0, marginTop: 2 }} />
+                                  <span>{task.siteAddress}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <MergedTaskWorkerCard
+                            groupTasks={[task]}
+                            workers={workers}
+                            jobRequestID={job.jobRequestID}
+                            jobStatus={job.jobStatus}
+                            showToast={showToast}
+                            flag=""
+                            allAttachments={allAttachments}
+                          />
+
+                        </div>
                       ))}
                     </>
                   )}
@@ -1031,12 +1239,137 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
 }
 
 /* ═══════════════════════════════════════════
+   CONFIRMATION MODAL
+   Replaces native window.confirm for accepting job requests.
+═══════════════════════════════════════════ */
+function AcceptConfirmModal({ job, onConfirm, onCancel, processing }) {
+  if (!job) return null;
+  return ReactDOM.createPortal(
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 99999,
+      background: 'rgba(0,0,0,0.55)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backdropFilter: 'blur(3px)',
+    }}>
+      <div style={{
+        maxWidth: 420,
+        width: '90%',
+        background: '#fff',
+        borderRadius: 16,
+        overflow: 'hidden',
+        boxShadow: '0 20px 50px rgba(0,0,0,0.25)',
+        fontFamily: 'Nunito,sans-serif',
+        animation: 'fadeIn 0.2s',
+      }}>
+        {/* Header */}
+        <div style={{
+          background: 'linear-gradient(135deg,#7c3aed,#049edf)',
+          padding: '24px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 10,
+        }}>
+          <div style={{
+            width: 56,
+            height: 56,
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.2)',
+            border: '2px solid rgba(255,255,255,0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 24,
+            color: '#fff',
+          }}>
+            👍
+          </div>
+          <div style={{ fontWeight: 900, fontSize: 18, color: '#fff' }}>
+            Accept Job Request
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '24px 20px', textAlign: 'center' }}>
+          <p style={{ margin: 0, fontSize: 14.5, color: '#4b5563', lineHeight: 1.5, fontWeight: 600 }}>
+            Are you sure you want to accept <strong>Job Request #{job.jobRequestID}</strong>?
+          </p>
+          <p style={{ margin: '8px 0 0 0', fontSize: 12.5, color: '#9ca3af', lineHeight: 1.5, fontWeight: 500 }}>
+            Once accepted, you will be able to assign workers and start tracking hoarding tasks.
+          </p>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: 'flex', gap: 12, padding: '0 20px 20px 20px' }}>
+          <button
+            onClick={onCancel}
+            disabled={processing}
+            style={{
+              flex: 1,
+              padding: '11px 0',
+              border: '1.5px solid #cbd5e1',
+              borderRadius: 10,
+              background: '#fff',
+              color: '#64748b',
+              fontWeight: 700,
+              fontSize: 13.5,
+              cursor: processing ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s',
+              outline: 'none',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={processing}
+            style={{
+              flex: 1.5,
+              padding: '11px 0',
+              border: 'none',
+              borderRadius: 10,
+              background: processing ? '#cbd5e1' : 'linear-gradient(135deg,#7c3aed,#049edf)',
+              color: processing ? '#9ca3af' : '#fff',
+              fontWeight: 800,
+              fontSize: 13.5,
+              cursor: processing ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              boxShadow: processing ? 'none' : '0 4px 14px rgba(108,63,199,0.3)',
+              transition: 'all 0.15s',
+              outline: 'none',
+            }}
+          >
+            {processing ? (
+              <>
+                <Loader2 size={14} className="pg-spin" />
+                Accepting…
+              </>
+            ) : (
+              <>Accept Job</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ═══════════════════════════════════════════
    MAIN PAGE
 ═══════════════════════════════════════════ */
 export default function SupervisorJobsPage() {
   const [view, setView] = useState('list');   // 'list' | 'detail'
   const [selectedJob, setSelectedJob] = useState(null);
   const [jobs, setJobs] = useState([]);
+  const [acceptConfirmTarget, setAcceptConfirmTarget] = useState(null);
   const [workers, setWorkers] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1059,7 +1392,7 @@ export default function SupervisorJobsPage() {
   useEffect(() => {
     if (!loading) setTableReady(true);
   }, [loading]);
-  useResizableColumns(tableRef, tableReady, [80, 140, 180, 110, 200, 90, 120, 80, 110, 80]);
+  useResizableColumns(tableRef, tableReady, [80, 140, 90, 130, 80, 80, 80, 110, 100, 80, 80, 60]);
 
 
 
@@ -1144,6 +1477,9 @@ export default function SupervisorJobsPage() {
               return {
                 ...task,
                 hoardingCode: h?.hoardingCode || h?.HoardingCode || '',
+                material: h?.material || h?.Material || '',
+                width: h?.width || h?.Width || 0,
+                height: h?.height || h?.Height || 0,
                 siteAddress: getSiteAddress(h),         // ← now uses enriched h
                 mergeAlongFlag: merge?.mergeAlongFlag || null,
                 isMerged: !!merge,
@@ -1202,6 +1538,7 @@ export default function SupervisorJobsPage() {
       setJobs(prev => prev.map(j => j.jobRequestID === job.jobRequestID ? updated : j));
       if (selectedJob?.jobRequestID === job.jobRequestID) setSelectedJob(updated);
       showToast('Job accepted!', 'success');
+      setAcceptConfirmTarget(null);
     } catch (err) { showToast(err?.response?.data?.message || err?.message || 'Failed.', 'error'); }
     finally { setAccepting(false); setAcceptingId(null); }
   }, [accepting, selectedJob, showToast]);
@@ -1221,13 +1558,14 @@ export default function SupervisorJobsPage() {
   /* ── Filter + Sort ── */
   const filtered = jobs.filter(j => {
     const q = search.toLowerCase();
+    const derivedStatus = getDerivedJobStatus(j);
     const m = String(j.jobRequestID).includes(q)
       || (j.jobType || '').toLowerCase().includes(q)
       || (j.jobDescription || '').toLowerCase().includes(q)
-      || (j.jobStatus || '').toLowerCase().includes(q)
+      || derivedStatus.toLowerCase().includes(q)
       || (j.customerName || '').toLowerCase().includes(q)
       || (j.addressLine1 || '').toLowerCase().includes(q);
-    return m && (statusFilter === 'all' || j.jobStatus === statusFilter);
+    return m && (statusFilter === 'all' || derivedStatus === statusFilter);
   });
   const sorted = [...filtered].sort((a, b) => {
     const av = String(a[sortKey] || '').toLowerCase(), bv = String(b[sortKey] || '').toLowerCase();
@@ -1240,20 +1578,24 @@ export default function SupervisorJobsPage() {
     .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
     .reduce((acc, p, i, arr) => { if (i > 0 && arr[i] - arr[i - 1] > 1) acc.push('…'); acc.push(p); return acc; }, []);
   const counts = { all: jobs.length };
-  jobs.forEach(j => { counts[j.jobStatus] = (counts[j.jobStatus] || 0) + 1; });
+  jobs.forEach(j => {
+    const ds = getDerivedJobStatus(j);
+    counts[ds] = (counts[ds] || 0) + 1;
+  });
 
   const COLS = [
-    { key: 'jobRequestID', label: 'Job ID', w: '7%' },
-    { key: 'customerName', label: 'Customer', w: '12%' },
-    // { key: 'addressLine1', label: 'Site Address Line 1', w: '16%', noSort: true },
-    { key: 'addressLine1', label: 'Site Address', w: '16%', noSort: true },
-    { key: 'jobType', label: 'Type', w: '9%' },
-    { key: 'jobDescription', label: 'Description', w: '18%' },
-    { key: 'noofHoardings', label: 'Hoardings', w: '8%' },
-    { key: 'targetCompletionDate', label: 'Target Date', w: '11%' },
-    { key: '_tasks', label: 'Tasks', w: '8%', noSort: true },
-    { key: 'jobStatus', label: 'Status', w: '10%' },
-    { key: '_action', label: '', w: '7%', noSort: true },
+    { key: 'jobRequestID', label: 'Job ID', w: '8%' },
+    { key: 'customerName', label: 'Customer', w: '14%' },
+    { key: 'jobType', label: 'Type', w: '8%' },
+    { key: 'jobDescription', label: 'Description', w: '12%' },
+    { key: 'noofHoardings', label: 'Hoardings', w: '7%' },
+    { key: 'rateperSQFT', label: 'Rate/SQFT', w: '8%' },
+    { key: 'totalAreaSQFT', label: 'Total Area', w: '8%' },
+    { key: 'totalAmount', label: 'Total Amount', w: '11%', noSort: true },
+    { key: 'targetCompletionDate', label: 'Target Date', w: '10%' },
+    { key: '_tasks', label: 'Tasks', w: '7%', noSort: true },
+    { key: 'jobStatus', label: 'Status', w: '7%' },
+    { key: '_action', label: '', w: '5%', noSort: true },
   ];
 
   /* ── Render detail view ── */
@@ -1265,7 +1607,7 @@ export default function SupervisorJobsPage() {
           job={selectedJob}
           workers={workers}
           onBack={backToList}
-          onAccept={handleAccept}
+          onAccept={j => setAcceptConfirmTarget(j)}
           accepting={acceptingId === selectedJob.jobRequestID && accepting}
           showToast={showToast}
           allAttachments={allAttachments}
@@ -1315,7 +1657,7 @@ export default function SupervisorJobsPage() {
               {search && <X size={13} style={{ cursor: 'pointer', color: '#9090a8' }} onClick={() => setSearch('')} />}
             </div>
             <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-              {['all', 'Open', 'Accepted', 'In Progress', 'Submitted', 'Completed'].map(f => {
+              {['all', 'Pending', 'Accepted', 'In Progress', 'Submitted', 'Completed'].map(f => {
                 const sc = JOB_STATUS_COLORS[f];
                 const active = statusFilter === f;
                 return (
@@ -1365,9 +1707,6 @@ export default function SupervisorJobsPage() {
                         <td className="pg-td">
                           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>{job.customerName}</span>
                         </td>
-                        <td className="pg-td pg-td--overflow">
-                          <span className="pg-td__ellipsis" style={{ color: '#4a5568' }} title={job.addressLine1}>{job.addressLine1}</span>
-                        </td>
                         <td className="pg-td">
                           {job.jobType
                             ? <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', color: '#049edf', border: '1px solid rgba(4,158,223,0.2)' }}>{job.jobType}</span>
@@ -1378,6 +1717,23 @@ export default function SupervisorJobsPage() {
                         </td>
                         <td className="pg-td" style={{ textAlign: 'center' }}>
                           <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, color: '#1a1a2e' }}>{job.noofHoardings || '—'}</span>
+                        </td>
+                        <td className="pg-td" style={{ textAlign: 'center' }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 700, fontSize: 12.5, color: '#1a1a2e' }}>
+                            {job.rateperSQFT ? `₹${job.rateperSQFT}` : '—'}
+                          </span>
+                        </td>
+                        <td className="pg-td" style={{ textAlign: 'center' }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 700, fontSize: 12.5, color: '#1a1a2e' }}>
+                            {job.totalAreaSQFT ? `${job.totalAreaSQFT} sq.ft` : '—'}
+                          </span>
+                        </td>
+                        <td className="pg-td" style={{ textAlign: 'center' }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 12.5, color: '#049edf' }}>
+                            {(job.rateperSQFT && job.totalAreaSQFT)
+                              ? `₹${(Number(job.rateperSQFT) * Number(job.totalAreaSQFT)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              : '—'}
+                          </span>
                         </td>
                         <td className="pg-td">
                           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#4a5568', display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1392,11 +1748,11 @@ export default function SupervisorJobsPage() {
                             </div>
                             : <span style={{ color: '#c0c0d8' }}>—</span>}
                         </td>
-                        <td className="pg-td"><JobStatusBadge status={job.jobStatus} /></td>
+                        <td className="pg-td"><JobStatusBadge status={getDerivedJobStatus(job)} /></td>
                         <td className="pg-td">
                           <div className="pg-action-wrap">
                             {canAccept && (
-                              <button className="pg-btn-view" onClick={() => { if (window.confirm(`Accept Job #${job.jobRequestID}?`)) handleAccept(job); }} disabled={isAccepting} title="Accept"
+                              <button className="pg-btn-view" onClick={() => setAcceptConfirmTarget(job)} disabled={isAccepting} title="Accept"
                                 style={{ background: 'rgba(108,63,199,0.08)', color: '#7c3aed', border: '1px solid rgba(108,63,199,0.2)', boxShadow: 'none' }}>
                                 {isAccepting ? <Loader2 size={12} className="pg-spin" /> : <ThumbsUp size={13} />}
                               </button>
@@ -1435,6 +1791,15 @@ export default function SupervisorJobsPage() {
           )}
         </div>
       </div>
+
+      {acceptConfirmTarget && (
+        <AcceptConfirmModal
+          job={acceptConfirmTarget}
+          onConfirm={() => handleAccept(acceptConfirmTarget)}
+          onCancel={() => !accepting && setAcceptConfirmTarget(null)}
+          processing={accepting}
+        />
+      )}
     </>
   );
 }

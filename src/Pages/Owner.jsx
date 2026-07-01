@@ -252,9 +252,9 @@ const FIELDS = [
   { key: 'ownerAddress', label: 'Owner Address', icon: Home, placeholder: 'Street / Area', col: 12, required: false, type: 'text' },
   { key: 'phone1', label: 'Phone 1', icon: Phone, placeholder: '+91 98765 43210 or 079-27650000', col: 6, required: true, type: 'phone' },
   { key: 'phone2', label: 'Phone 2', icon: Phone, placeholder: '+91 79001 12233 or 0265-2xxxxxx', col: 6, required: false, type: 'phone' },
-  { key: 'city', label: 'City', icon: Building2, placeholder: 'e.g. Ahmedabad', col: 6, required: true, type: 'text' },
   { key: 'state', label: 'State', icon: MapPin, placeholder: '', col: 6, required: true, type: 'combo-state' },
   { key: 'district', label: 'District', icon: MapPin, placeholder: '', col: 6, required: true, type: 'combo-district' },
+  { key: 'city', label: 'City', icon: Building2, placeholder: 'e.g. Ahmedabad', col: 6, required: true, type: 'text' },
   { key: 'country', label: 'Country', icon: Globe, placeholder: 'India', col: 6, required: true, type: 'readonly' },
   { key: 'emailAddress', label: 'Email Address', icon: Mail, placeholder: 'example@email.com', col: 12, required: false, type: 'email' },
 ];

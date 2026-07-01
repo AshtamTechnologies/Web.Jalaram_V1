@@ -16,18 +16,12 @@ import './Common1.css';
    CONSTANTS
 ───────────────────────────────────────── */
 const MATERIAL_OPTIONS = ['Terrace Structure', 'Pillar Structure', 'Channel Set', 'Wooden Set'];
-// Hide the Active status
-// const STATUS_OPTIONS = ['Active', 'Inactive', 'Available', 'Occupied', 'Under Maintenance'];
-const STATUS_OPTIONS = ['Available', 'Inactive', 'Occupied', 'Under Maintenance'];
+const STATUS_OPTIONS = ['Active', 'Inactive', 'Available', 'Occupied', 'Under Maintenance'];
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
 const HISTORY_PER_PAGE = 3;
 
-// const EMPTY_VERSION = {
-//   effdt: '', material: '', hoardingType: '', status: 'Active',
-//   monthlyRent: '', width: '', height: '', siteID: '',
-// };
 const EMPTY_VERSION = {
-  effdt: '', material: '', hoardingType: '', status: 'Available',
+  effdt: '', material: '', hoardingType: '', status: 'Active',
   monthlyRent: '', width: '', height: '', siteID: '',
 };
 
@@ -114,6 +108,7 @@ function validateVersion(form, needEffdt) {
 function StatusBadge({ status }) {
   const map = {
     'Active': { cls: 'hd-status-active', Icon: CheckCircle },
+    'Available': { cls: 'hd-status-active', Icon: CheckCircle },
     'Inactive': { cls: 'hd-status-inactive', Icon: AlertCircle },
     'Under Maintenance': { cls: 'hd-status-maint', Icon: Wrench },
   };
@@ -875,6 +870,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
   const [apiErr, setApiErr] = useState('');
+  const [availabilityConflict, setAvailabilityConflict] = useState(null);
 
   const activeVersion = activePanel !== null && activePanel.idx >= 0
     ? sortedVersions[activePanel.idx]
@@ -1062,6 +1058,25 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
 
     setSaving(true); setApiErr('');
     try {
+      const checkID = effdtForm.hoardingID || (sortedVersions.length > 0 ? sortedVersions[0].hoardingID : null);
+      if (checkID) {
+        const originalStatus = isPanelNew 
+          ? (sortedVersions.length > 0 ? sortedVersions[0].status : null) 
+          : activeVersion?.status;
+        const currentStatus = effdtForm.status;
+
+        // Only check availability details if the status is being changed
+        if (originalStatus && currentStatus !== originalStatus) {
+          const details = await apiService.getHoardingAvailabilityDetails(checkID);
+          const timeline = details?.timeline ?? details?.Timeline ?? [];
+          if (timeline.length > 0) {
+            setAvailabilityConflict(details);
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
       if (isPanelNew) {
         await apiService.addHoardingEffdt(hoarding.hoardingCode, {
           effdt: effdtForm.effdt,
@@ -1366,6 +1381,12 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
             {saveOk ? <><Check size={13} /> Saved!</> : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Save Hoarding</>}
           </button>
         </div>
+      )}
+      {availabilityConflict && (
+        <HoardingConflictModal
+          conflict={availabilityConflict}
+          onClose={() => setAvailabilityConflict(null)}
+        />
       )}
     </div>
   );
@@ -1740,5 +1761,126 @@ export default function HoardingPage() {
         )}
       </div>
     </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   HOARDING AVAILABILITY CONFLICT MODAL
+   Shows the timeline/details of where a hoarding is used 
+   and prevents saving edits.
+═══════════════════════════════════════════ */
+function HoardingConflictModal({ conflict, onClose }) {
+  if (!conflict) return null;
+  const timeline = conflict.timeline ?? [];
+
+  return ReactDOM.createPortal(
+    <div className="pg-overlay" style={{ zIndex: 1070 }} onClick={onClose}>
+      <div className="pg-modal" style={{ maxWidth: 620, width: '90%' }} onClick={e => e.stopPropagation()}>
+        
+        {/* Head */}
+        <div className="pg-modal__head" style={{ borderBottom: '1.5px solid #fee2e2', background: '#fef2f2' }}>
+          <div className="pg-modal__head-left">
+            <div className="pg-modal__icon-wrap" style={{ background: '#fecaca', color: '#dc2626' }}>
+              <AlertCircle size={20} />
+            </div>
+            <div>
+              <h5 className="pg-modal__title" style={{ color: '#991b1b', fontSize: 16 }}>Cannot Save Changes</h5>
+              <p className="pg-modal__subtitle" style={{ color: '#b91c1c', fontSize: 12 }}>
+                Hoarding <strong>{conflict.hoardingCode}</strong> is currently in use.
+              </p>
+            </div>
+          </div>
+          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '20px 24px', overflowY: 'auto', maxHeight: '50vh' }}>
+          <p style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, color: '#4b5563', lineHeight: 1.5, marginBottom: 16 }}>
+            This hoarding is linked to active contracts or jobs. Changes to its specifications cannot be saved while it is in use. See the active usage details below:
+          </p>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {timeline.map((item, idx) => {
+              const isContract = (item.sourceType || '').toLowerCase() === 'contract';
+              return (
+                <div key={idx} style={{
+                  border: '1.5px solid #e5e7eb',
+                  borderRadius: 12,
+                  padding: 14,
+                  background: '#f9fafb',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 6
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                    <span style={{
+                      fontFamily: 'Nunito, sans-serif',
+                      fontSize: 10.5,
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      padding: '2px 8px',
+                      borderRadius: 20,
+                      background: isContract ? 'rgba(4,158,223,0.1)' : 'rgba(108,99,255,0.1)',
+                      color: isContract ? '#049edf' : '#6c63ff'
+                    }}>
+                      {item.sourceType} #{item.referenceId}
+                    </span>
+                    <span style={{
+                      fontFamily: 'Nunito, sans-serif',
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: item.status === 'Active' || item.status === 'Completed' ? '#16a34a' : '#d97706',
+                      background: item.status === 'Active' || item.status === 'Completed' ? '#f0fdf4' : '#fffbeb',
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      border: item.status === 'Active' || item.status === 'Completed' ? '1px solid #bbf7d0' : '1px solid #fde68a'
+                    }}>
+                      {item.periodStatus || item.status}
+                    </span>
+                  </div>
+
+                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13.5, fontWeight: 800, color: '#1f2937' }}>
+                    {item.customerName || '—'}
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#4b5563', fontFamily: 'Nunito, sans-serif', fontWeight: 600 }}>
+                    <Calendar size={12} color="#9090a8" />
+                    <span>{fmtDate(item.startDate)} &rarr; {fmtDate(item.endDate)}</span>
+                  </div>
+
+                  {item.amount != null && (
+                    <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <IndianRupee size={12} color="#9090a8" />
+                      <span>{item.amount.toLocaleString('en-IN')}</span>
+                    </div>
+                  )}
+
+                  {item.comments && (
+                    <div style={{
+                      fontStyle: 'italic',
+                      fontSize: 11.5,
+                      color: '#6b7280',
+                      borderTop: '1px solid #e5e7eb',
+                      paddingTop: 6,
+                      marginTop: 4,
+                      fontFamily: 'Nunito, sans-serif'
+                    }}>
+                      "{item.comments}"
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Foot */}
+        <div className="pg-modal__foot" style={{ justifyContent: 'flex-end', background: '#f9fafb', borderTop: '1px solid #f0f0f8' }}>
+          <button className="pg-btn-cancel" style={{ background: '#374151', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: 8, fontSize: 12.5, fontWeight: 700 }} onClick={onClose}>Close</button>
+        </div>
+
+      </div>
+    </div>,
+    document.body
   );
 }

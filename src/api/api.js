@@ -201,6 +201,7 @@ export const apiService = {
   getAllHoardings: () => api.get('/Hoarding'),
   getAllavailableforJob: () => api.get('/Hoarding/availableforJob'), //Show the hoarding available
   getHoardingById: (hoardingID) => api.get(`/Hoarding/${hoardingID}`),
+  getHoardingAvailabilityDetails: (hoardingID) => api.get(`/Hoarding/${hoardingID}/HoardingAvailabilityDetails`),
   createHoarding: (data) => api.post('/Hoarding', {
     hoardingID: 0,
     effdt: data.effdt ? data.effdt : new Date().toISOString().split('T')[0],
@@ -670,7 +671,27 @@ export const apiService = {
       `${API_ROOT_URL}/api/Report/ExportReport?reportType=${reportType}`,
       { method: 'GET', headers: { 'Accept': '*/*', ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
     );
-    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+    if (!response.ok) {
+      let errMsg = `Server error: ${response.status}`;
+      try {
+        const text = await response.text();
+        try {
+          const errorData = JSON.parse(text);
+          if (errorData && errorData.message) {
+            errMsg = errorData.message;
+          } else if (errorData && errorData.error) {
+            errMsg = errorData.error;
+          }
+        } catch (jsonErr) {
+          if (text && text.trim().length < 200) {
+            errMsg = text.trim();
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+      throw new Error(errMsg);
+    }
     const blob = await response.blob();
     if (blob.size === 0) throw new Error('Server returned an empty file.');
     const disposition = response.headers.get('content-disposition') ?? '';
@@ -1162,6 +1183,7 @@ export const apiService = {
 
   createPerformaInvoice: (data) => api.post('/PerformaInvoice', data),
   getAllPerformaInvoices: () => api.get('/PerformaInvoice'),
+  getDashboardOverview: () => api.get('/Dashboard/overview'),
 
 };
 

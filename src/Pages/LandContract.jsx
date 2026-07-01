@@ -1892,9 +1892,9 @@ export default function LandContractPage() {
   const [loadError, setLoadError] = useState('');
   const [contracts, setContracts] = useState([]);
 
-  const [view, setView] = useState(() => sessionStorage.getItem('lc_view') || 'grid');
-  const [formMode, setFormMode] = useState(() => sessionStorage.getItem('lc_formMode') || null);
-  const [editTarget, setEditTarget] = useState(() => { try { return JSON.parse(sessionStorage.getItem('lc_editTarget')) || null; } catch { return null; } });
+  const [view, setView] = useState('grid');
+  const [formMode, setFormMode] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
   const [viewTarget, setViewTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 
@@ -1943,11 +1943,11 @@ export default function LandContractPage() {
 
   useEffect(() => { fetchMeta(); }, [fetchMeta]);
 
-  useEffect(() => {
-    sessionStorage.setItem('lc_view', view);
-    sessionStorage.setItem('lc_formMode', formMode || '');
-    try { sessionStorage.setItem('lc_editTarget', editTarget ? JSON.stringify(editTarget) : ''); } catch { /**/ }
-  }, [view, formMode, editTarget]);
+  // useEffect(() => {
+  //   sessionStorage.setItem('lc_view', view);
+  //   sessionStorage.setItem('lc_formMode', formMode || '');
+  //   try { sessionStorage.setItem('lc_editTarget', editTarget ? JSON.stringify(editTarget) : ''); } catch { /**/ }
+  // }, [view, formMode, editTarget]);
 
   const handleSave = (record, isNew) => {
     if (isNew) setContracts(prev => [record, ...prev]);
@@ -2029,9 +2029,6 @@ export default function LandContractPage() {
         mode={formMode} contract={editTarget}
         owners={owners} hoardings={hoardings} sites={sites} paymentFreqs={freqOptions}
         onBack={() => {
-          sessionStorage.removeItem('lc_view');
-          sessionStorage.removeItem('lc_formMode');
-          sessionStorage.removeItem('lc_editTarget');
           setView('grid'); setEditTarget(null);
         }}
         onSave={handleSave}
