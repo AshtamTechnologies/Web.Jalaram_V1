@@ -398,6 +398,8 @@ function normalizeHoarding(raw) {
     height: Number(raw.height ?? raw.Height ?? 0),
     siteID: raw.siteID ?? raw.SiteID ?? null,
     status: raw.status ?? raw.Status ?? '',
+    material: raw.material ?? raw.Material ?? '',
+    hoardingType: raw.hoardingType ?? raw.HoardingType ?? '',
     site: raw.site ? normalizeSite(raw.site) : null,
   };
 }
@@ -1028,19 +1030,71 @@ function buildProformaHTML(params) {
 /* ═══════════════════════════════════════════
    HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
-function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColorMap, siteMap }) {
+function HoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteColorMap, siteMap, startDate, endDate }) {
+  const [hoardingsList, setHoardingsList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
 
-  const active = useMemo(() => hoardings.filter(isAvailable), [hoardings]);
+  useEffect(() => {
+    let active = true;
+    const fetchAvailable = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await apiService.getAvailableHoardings(startDate, endDate);
+        const list = normalizeList(res);
+        if (active) {
+          const mapped = list.map(item => {
+            const full = allHoardings.find(h => h.hoardingID === (item.hoardingId ?? item.hoardingID));
+            return {
+              hoardingID: item.hoardingId ?? item.hoardingID,
+              hoardingCode: item.hoardingCode ?? full?.hoardingCode ?? '',
+              monthlyRent: item.monthlyRent ?? full?.monthlyRent ?? 0,
+              width: item.width ?? full?.width ?? 0,
+              height: item.height ?? full?.height ?? 0,
+              status: 'Available',
+              siteID: full?.siteID ?? null,
+              site: full?.site || {
+                addressLine1: item.addressLine1 || '',
+                city: item.city || '',
+                district: item.district || '',
+                siteType: item.material || '',
+              }
+            };
+          });
+          setHoardingsList(mapped);
+        }
+      } catch (err) {
+        if (active) {
+          setError(err?.response?.data?.message || err?.message || 'Failed to load available hoardings.');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    if (startDate && endDate) {
+      fetchAvailable();
+    } else {
+      setLoading(false);
+      setError('Global period dates are not set.');
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [startDate, endDate, allHoardings]);
+
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
-    return s ? active.filter(h =>
+    return s ? hoardingsList.filter(h =>
       (h.hoardingCode || '').toLowerCase().includes(s) ||
       (h.site?.addressLine1 || '').toLowerCase().includes(s) ||
       (h.site?.city || '').toLowerCase().includes(s)
-    ) : active;
-  }, [active, search]);
+    ) : hoardingsList;
+  }, [hoardingsList, search]);
 
   const selectable = filtered.filter(h => !existingIds.has(h.hoardingID));
   const allSelected = selectable.length > 0 && selectable.every(h => selected.has(h.hoardingID));
@@ -1063,7 +1117,7 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
             <div className="pg-modal__icon-wrap"><Building2 size={20} color="#049edf" /></div>
             <div>
               <h5 className="pg-modal__title">Select Available Hoardings</h5>
-              <p className="pg-modal__subtitle">{active.length} available · Colour-coded by site</p>
+              <p className="pg-modal__subtitle">{loading ? 'Loading...' : `${hoardingsList.length} available`} · Colour-coded by site</p>
             </div>
           </div>
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
@@ -1071,11 +1125,11 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
         <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0f0f8', flexShrink: 0 }}>
           <div className="pg-search-box">
             <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
-            <input placeholder="Search by code, site address…" value={search} onChange={e => setSearch(e.target.value)} />
+            <input placeholder="Search by code, site address…" value={search} onChange={e => setSearch(e.target.value)} disabled={loading || !!error} />
             {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
           </div>
         </div>
-        {selectable.length > 0 && (
+        {!loading && !error && selectable.length > 0 && (
           <div className="qt-select-all-row" style={{ flexShrink: 0 }} onClick={toggleAll}>
             <div className={`qt-modal-check ${allSelected ? 'qt-modal-check--all' : someSelected ? 'qt-modal-check--on' : ''}`}>
               {allSelected ? <Check size={12} color="#fff" /> : someSelected ? <div style={{ width: 8, height: 2, background: '#049edf', borderRadius: 2 }} /> : null}
@@ -1084,9 +1138,22 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
           </div>
         )}
         <div style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 360, minHeight: 0 }}>
-          {filtered.length === 0
-            ? <div className="pg-empty__inner" style={{ padding: '32px 20px' }}><Building2 size={32} color="#d0d0e8" /><span className="pg-empty__label">No available hoardings</span></div>
-            : filtered.map(h => {
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', gap: 8 }}>
+              <Loader2 size={24} className="pg-spin" color="#049edf" />
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#9090a8' }}>Loading available hoardings…</span>
+            </div>
+          ) : error ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: '#dc2626', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600 }}>
+              {error}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="pg-empty__inner" style={{ padding: '32px 20px' }}>
+              <Building2 size={32} color="#d0d0e8" />
+              <span className="pg-empty__label">No available hoardings found</span>
+            </div>
+          ) : (
+            filtered.map(h => {
               const checked = selected.has(h.hoardingID);
               const alreadyIn = existingIds.has(h.hoardingID);
               const sid = h.siteID ?? h.site?.siteID;
@@ -1131,13 +1198,14 @@ function HoardingSelectModal({ hoardings, existingIds, onAdd, onClose, siteColor
                   <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 5, background: 'rgba(22,163,74,0.10)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.2)', flexShrink: 0 }}>Available</span>
                 </div>
               );
-            })}
+            })
+          )}
         </div>
         <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#9090a8', fontWeight: 600 }}>{selected.size} selected</span>
           <div style={{ display: 'flex', gap: 10 }}>
             <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
-            <button className="pg-btn-save" onClick={() => onAdd(selected)} disabled={selected.size === 0}>
+            <button className="pg-btn-save" onClick={() => onAdd(selected)} disabled={selected.size === 0 || loading || !!error}>
               <Plus size={14} /> Add {selected.size > 0 ? `(${selected.size})` : ''}
             </button>
           </div>
@@ -1654,6 +1722,105 @@ function QuotationDeleteConfirmModal({ count, onConfirm, onClose }) {
               color: '#fff', cursor: 'pointer',
               fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
               outline: '3px solid rgba(4,158,223,0.3)',
+              boxShadow: '0 4px 12px rgba(108,99,255,0.2)',
+            }}
+          >
+            No, Cancel
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+function RowDeleteConfirmModal({ row, onConfirm, onClose }) {
+  const cancelBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (cancelBtnRef.current) {
+      cancelBtnRef.current.focus();
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  if (!row) return null;
+
+  const itemDisplay = row.rowType === 'hoarding'
+    ? `hoarding ${row.hoardingCode}`
+    : row.location;
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100000,
+        background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 22, width: '100%', maxWidth: 440,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '24px 24px 20px',
+          animation: 'modalIn 0.24s cubic-bezier(0.22,1,0.36,1) both',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: '#fffbeb', border: '2px solid #fde68a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <AlertTriangle size={20} color="#d97706" />
+          </div>
+          <div>
+            <h3 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#1a1a2e', margin: 0 }}>
+              Remove Item?
+            </h3>
+            <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#7878a0', margin: '4px 0 0' }}>
+              Confirm removing this item from the quotation.
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 600,
+          color: '#4a5568', lineHeight: 1.5, marginBottom: 24,
+        }}>
+          Are you sure you want to remove <strong>{itemDisplay}</strong>? Any custom rates or adjustments for this item will be lost.
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12,
+        }}>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '10px 20px', borderRadius: 10, border: '1.5px solid #fca5a5',
+              background: '#fff', color: '#dc2626', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.target.style.background = '#fef2f2'; }}
+            onMouseLeave={e => { e.target.style.background = '#fff'; }}
+          >
+            Yes, Remove
+          </button>
+
+          <button
+            ref={cancelBtnRef}
+            onClick={onClose}
+            style={{
+              padding: '11px 24px', borderRadius: 10, border: 'none',
+              background: 'linear-gradient(135deg,#049edf,#6c63ff)',
+              color: '#fff', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
               boxShadow: '0 4px 12px rgba(108,99,255,0.2)',
             }}
           >
@@ -2309,8 +2476,39 @@ function CustomerEditModal({ customer, onSave, onClose }) {
 /* ═══════════════════════════════════════════
    CREATE CONTRACT FROM QUOTATION MODAL  ← NEW
 ═══════════════════════════════════════════ */
-function CreateContractFromQuotModal({
+async function addHoardingEffdtRows(hoardingIDs, allHoardings, effdt, status) {
+  if (!hoardingIDs.length || !effdt) return;
 
+  await Promise.allSettled(
+    hoardingIDs.map(async (hid) => {
+      const h = allHoardings.find(hh =>
+        Number(hh.hoardingID ?? hh.HoardingID) === Number(hid)
+      );
+      if (!h || (!h.hoardingCode && !h.HoardingCode)) {
+        console.warn('[ContractEffdt] hoarding not found:', hid);
+        return;
+      }
+
+      const hCode = h.hoardingCode ?? h.HoardingCode;
+
+      const payload = {
+        effdt,                              // "YYYY-MM-DD"
+        material: h.material ?? h.Material ?? '',
+        hoardingType: Number(h.hoardingType ?? h.HoardingType ?? 0),
+        status,                             // 'Occupied' or 'Available'
+        monthlyRent: Number(h.monthlyRent ?? h.MonthlyRent ?? 0),
+        width: Number(h.width ?? h.Width ?? 0),
+        height: Number(h.height ?? h.Height ?? 0),
+        siteID: Number(h.siteID ?? h.SiteID ?? h.site?.siteID ?? 0),
+      };
+
+      console.log('[ContractEffdt]', hCode, '→', effdt, status, payload);
+      return apiService.addHoardingEffdt(hCode, payload);
+    })
+  );
+}
+
+function CreateContractFromQuotModal({
   quot, quotLines, quotMerges = [], hoardings, customers, siteMap, paymentFreqs, onClose, onCreated, showToast,
 }) {
   const myLines = quotLines.filter(l =>
@@ -2624,6 +2822,18 @@ function CreateContractFromQuotModal({
         setOccupancyWarnings(occupiedMsgs);
         setSaving(false);
         return;  // keep modal open — user sees banner + toasts
+      }
+
+      /* ← NEW: add Occupied effdt row for each hoarding (startDate) */
+      try {
+        await addHoardingEffdtRows(
+          Array.from(allHoardingIDsToMap),
+          hoardings,
+          startDate,
+          'Occupied'
+        );
+      } catch (effdtErr) {
+        console.error('[ContractEffdt] Failed to add effdt rows:', effdtErr);
       }
 
       // Step 4: Merge records — only for hoardings that were actually mapped
@@ -3119,6 +3329,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [deleteMode, setDeleteMode] = useState(false);
   const [selectedQuotIds, setSelectedQuotIds] = useState(new Set());
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [rowToDelete, setRowToDelete] = useState(null);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -3764,7 +3975,9 @@ export default function QuotationPage({ onNavigateToContracts }) {
     }));
   }, []);
 
-  const deleteRow = useCallback((id) => setRows(p => p.filter(r => r._id !== id)), []);
+  const deleteRow = useCallback((id) => {
+    setRows(p => p.filter(r => r._id !== id));
+  }, []);
   const existingHoardingIds = useMemo(() => new Set(rows.map(r => r.hoardingID).filter(Boolean)), [rows]);
 
   const applyGlobalDates = useCallback(() => {
@@ -5667,7 +5880,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                                 </td>
                                 <td className="pg-td">
                                   <div className="pg-action-wrap">
-                                    <button className="pg-btn-view" onClick={() => deleteRow(row._id)} title="Remove">
+                                    <button className="pg-btn-view" onClick={() => setRowToDelete(row)} title="Remove">
                                       <Trash2 size={13} />
                                     </button>
                                   </div>
@@ -6323,12 +6536,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
       {/* ════════════ MODALS ════════════ */}
       {showHoardModal && (
         <HoardingSelectModal
-          hoardings={hoardings}
+          allHoardings={hoardings}
           existingIds={existingHoardingIds}
           onAdd={handleAddSelected}
           onClose={() => setShowHoardModal(false)}
           siteColorMap={siteColorMap}
           siteMap={siteMap}
+          startDate={globalStart}
+          endDate={globalEnd}
         />
       )}
       {showManualModal && (
@@ -6403,6 +6618,17 @@ export default function QuotationPage({ onNavigateToContracts }) {
           count={selectedQuotIds.size}
           onConfirm={handleDeleteConfirm}
           onClose={() => setShowDeleteConfirm(false)}
+        />
+      )}
+
+      {rowToDelete && (
+        <RowDeleteConfirmModal
+          row={rowToDelete}
+          onConfirm={() => {
+            deleteRow(rowToDelete._id);
+            setRowToDelete(null);
+          }}
+          onClose={() => setRowToDelete(null)}
         />
       )}
 

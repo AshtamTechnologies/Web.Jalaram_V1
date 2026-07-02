@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom';
+import axios from 'axios';
 import {
   Plus, Search, X, AlertCircle, Check, Edit2,
   RefreshCw, Calendar,
@@ -14,6 +15,27 @@ import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
 // import './expense-attach.css';
 import { useResizableColumns } from '../hooks/useResizableColumns';
+
+const forceDownload = async (url, filename) => {
+  try {
+    const cleanUrl = url.split('?')[0];
+    const downloadUrl = `${cleanUrl}?t=${Date.now()}`;
+    const response = await axios.get(downloadUrl, {
+      responseType: 'blob',
+    });
+    const localUrl = URL.createObjectURL(response.data);
+    const a = document.createElement('a');
+    a.href = localUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(localUrl);
+  } catch (err) {
+    console.error('Download failed, fallback to direct link', err);
+    window.open(url, '_blank');
+  }
+};
 
 /* ─────────────────────────────────────────
    CONSTANTS
@@ -496,14 +518,7 @@ function AttachCell({ rowId, expenseID, selectedFile, existingAttach, isUploadin
     };
     const handleDownload = () => {
       if (!fileUrl) return;
-      const a = document.createElement('a');
-      a.href     = fileUrl;
-      a.download = name;
-      a.target   = '_blank';
-      a.rel      = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      forceDownload(fileUrl, name);
     };
 
     return (

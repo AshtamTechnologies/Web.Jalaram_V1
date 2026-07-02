@@ -199,6 +199,7 @@ export const apiService = {
 
   // HOARDINGS
   getAllHoardings: () => api.get('/Hoarding'),
+  getAvailableHoardings: (startDate, endDate) => api.get(`/Hoarding/available?startDate=${startDate}&endDate=${endDate}`),
   getAllavailableforJob: () => api.get('/Hoarding/availableforJob'), //Show the hoarding available
   getHoardingById: (hoardingID) => api.get(`/Hoarding/${hoardingID}`),
   getHoardingAvailabilityDetails: (hoardingID) => api.get(`/Hoarding/${hoardingID}/HoardingAvailabilityDetails`),
@@ -1090,6 +1091,7 @@ export const apiService = {
     paidBY: String(data.paidBY ?? ''),
     receiptPhoto: String(data.receiptPhoto ?? ''),
     comments: String(data.comments ?? ''),
+    isParicialPayment: Boolean(data.isParicialPayment ?? false),
     lastUpdateDttm: new Date().toISOString(),
     lastUpdatedBy: getLoggedInUserID(),
   }),
@@ -1103,6 +1105,7 @@ export const apiService = {
     paidBY: String(data.paidBY ?? ''),
     receiptPhoto: String(data.receiptPhoto ?? ''),
     comments: String(data.comments ?? ''),
+    isParicialPayment: Boolean(data.isParicialPayment ?? false),
     lastUpdateDttm: new Date().toISOString(),
     lastUpdatedBy: getLoggedInUserID(),
   }),

@@ -10,10 +10,45 @@ import {
   Edit2, Filter, User, ArrowRight, ArrowLeft,
   Calendar, MapPin, LayoutGrid, CheckCircle2,
   Briefcase, Building2, Clock, UserCheck, Tag, Hash, Camera,
+  ZoomIn, ZoomOut, SendHorizonal, Circle, AlertTriangle,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import { useResizableColumns } from '../hooks/useResizableColumns';
 import "./Common1.css";
+/* Geolocation helpers */
+function getCurrentPosition(options = {}) {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error('Geolocation not supported')); return; }
+    navigator.geolocation.getCurrentPosition(resolve, (err) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false, timeout: 5000, maximumAge: 30000, ...options,
+      });
+    }, {
+      enableHighAccuracy: true, timeout: 5000, maximumAge: 0, ...options,
+    });
+  });
+}
+
+async function reverseGeocode(lat, lng) {
+  try {
+    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`, { headers: { 'Accept-Language': 'en' } });
+    const json = await res.json();
+    return json?.display_name || '';
+  } catch { return ''; }
+}
+
+async function getGeoPayload() {
+  try {
+    const pos = await getCurrentPosition();
+    const { latitude, longitude, accuracy } = pos.coords;
+    const address = await reverseGeocode(latitude, longitude);
+    return { latitude, longitude, accuracy, address };
+  } catch (err) {
+    console.error("Geolocation failed:", err);
+    return { latitude: 0, longitude: 0, accuracy: 0, address: '' };
+  }
+}
+
 /* ═══════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════ */
@@ -615,19 +650,264 @@ function SortIcon({ col, sortKey, sortDir }) {
 }
 
 /* ═══════════════════════════════════════════
+   IMAGE UPLOAD ZONE
+   (used for short/long vision uploads)
+═══════════════════════════════════════════ */
+function ImageUploadZone({ label, sublabel, IconComp, values = [], onChange, error }) {
+  const inputRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const addFiles = (files) => {
+    const images = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (!images.length) return;
+    onChange(images.slice(0, 1));
+  };
+  const removeOne = (idx) => onChange(values.filter((_, i) => i !== idx));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.6px' }}>{label}</span>
+        <span style={{ color: '#ef4444', fontSize: 12, lineHeight: 1 }}>*</span>
+        <span style={{ fontSize: 10, color: '#9090a8', fontFamily: 'Nunito,sans-serif', fontWeight: 600 }}>{sublabel}</span>
+        {values.length > 0 && (
+          <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: '#1a9e6e', background: '#e8faf3', padding: '2px 8px', borderRadius: 20, border: '1px solid #7dd5b0' }}>
+            {values.length} photo
+          </span>
+        )}
+      </div>
+      {values.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: 8 }}>
+          {values.map((file, idx) => {
+            const url = URL.createObjectURL(file);
+            return (
+              <div key={idx} style={{ position: 'relative', aspectRatio: '4/3', borderRadius: 10, overflow: 'hidden', border: '2px solid #d0f0e0' }}>
+                <img src={url} alt={`${label} ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onLoad={() => URL.revokeObjectURL(url)} />
+                <button type="button" onClick={() => removeOne(idx)} style={{ position: 'absolute', top: 4, right: 4, width: 20, height: 20, borderRadius: '50%', background: 'rgba(239,68,68,0.9)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+                  <X size={10} />
+                </button>
+                <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(26,26,46,0.55)', color: '#fff', fontFamily: 'Nunito,sans-serif', fontSize: 9, fontWeight: 700, padding: '2px 5px', textAlign: 'center' }}>#{idx + 1}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div
+        onClick={() => inputRef.current?.click()}
+        onDragOver={e => { e.preventDefault(); setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={e => { e.preventDefault(); setDragging(false); addFiles(e.dataTransfer.files); }}
+        style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
+          borderRadius: 12, cursor: 'pointer', padding: '16px 10px',
+          border: error ? '2px dashed #ef4444' : dragging ? '2px dashed #049edf' : '2px dashed #d0d0e8',
+          background: error ? 'rgba(239,68,68,0.03)' : dragging ? 'rgba(4,158,223,0.05)' : '#f8f8fd',
+          transition: 'all 0.15s',
+        }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: error ? 'rgba(239,68,68,0.1)' : 'rgba(4,158,223,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <IconComp size={20} color={error ? '#ef4444' : '#049edf'} />
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: error ? '#ef4444' : '#1a1a2e', marginBottom: 2 }}>
+            {values.length > 0 ? 'Change photo' : `Upload ${label}`}
+          </div>
+          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 600, color: '#9090a8' }}>Click or drag & drop</div>
+        </div>
+        {error && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#ef4444' }}>
+            <AlertTriangle size={11} /> {error}
+          </div>
+        )}
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }}
+        onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   SUBMIT TASK PHOTO MODAL (Compulsory upload)
+═══════════════════════════════════════════ */
+function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showToast }) {
+  const [closeImg, setCloseImg] = useState([]);
+  const [farImg, setFarImg] = useState([]);
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [geoStatus, setGeoStatus] = useState('idle');
+  const [geoData, setGeoData] = useState(null);
+
+  const validate = () => {
+    const errs = {};
+    if (closeImg.length === 0) errs.closeImg = 'Short Vision photo is required';
+    if (farImg.length === 0) errs.farImg = 'Long Vision photo is required';
+    return errs;
+  };
+
+  const handleSave = async () => {
+    const errs = validate();
+    setErrors(errs);
+    if (Object.keys(errs).length) return;
+    setSubmitting(true);
+    setGeoStatus('locating');
+    try {
+      const geo = await getGeoPayload();
+      setGeoStatus(geo.latitude !== 0 ? 'ready' : 'failed');
+      setGeoData(geo);
+      const userId = parseInt(localStorage.getItem('userId') || '0', 10);
+      const nowISO = new Date().toISOString();
+
+      const uploadWithGeo = async (file, photoFileType) => {
+        const fd = new FormData();
+        fd.append('JobTaskAttachID', '0');
+        fd.append('JobTaskID', String(task.jobTaskID || 0));
+        fd.append('JobRequestID', String(jobRequestID || 0));
+        fd.append('HoardingID', String(task.hoardingID || 0));
+        fd.append('PhotoFileType', photoFileType);
+        fd.append('Files', file);
+        fd.append('PhotoFilePath', '');
+        fd.append('PhotoFilename', file.name);
+        fd.append('LastUpdateDttm', nowISO);
+        fd.append('LastUpdatedBy', String(userId));
+        await apiService.uploadJobTaskAttachment(fd);
+
+        if (geo.latitude !== 0) {
+          const geoFd = new FormData();
+          geoFd.append('Image', file);
+          geoFd.append('Latitude', String(geo.latitude));
+          geoFd.append('Longitude', String(geo.longitude));
+          geoFd.append('Accuracy', String(geo.accuracy));
+          geoFd.append('Address', geo.address);
+          geoFd.append('CapturedAt', nowISO);
+          await apiService.uploadGeoLocation(geoFd).catch(e => console.error("Geo upload failed:", e));
+        }
+      };
+
+      for (const file of closeImg) await uploadWithGeo(file, 'Near Photo');
+      for (const file of farImg) await uploadWithGeo(file, 'Far Photo');
+
+      const todayISO = nowISO.split('T')[0];
+      const taskIDs = task.tasks ? task.tasks.map(t => Number(t.jobTaskID)) : [Number(task.jobTaskID)];
+      
+      for (const tid of taskIDs) {
+        const individualTask = task.tasks ? task.tasks.find(t => Number(t.jobTaskID) === tid) : task;
+        await apiService.updateJobTask({
+          jobTaskID: tid,
+          jobRequestID: jobRequestID,
+          hoardingID: individualTask?.hoardingID || task.hoardingID,
+          status: 'Submitted',
+          actualCompletionDate: todayISO,
+          submitDTTM: nowISO,
+          lastUpdateDttm: nowISO,
+          lastUpdatedBy: userId,
+        });
+      }
+
+      showToast('Task submitted successfully!', 'success');
+      onSubmitted?.();
+      onClose();
+    } catch (err) {
+      showToast(err?.message || 'Submission failed.', 'error');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return ReactDOM.createPortal(
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(15,23,42,0.58)', backdropFilter: 'blur(7px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 720, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
+        
+        {/* Head */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 24px', borderBottom: '1.5px solid #f0f0f8' }}>
+          <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(4,158,223,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Camera size={20} color="#049edf" />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h4 style={{ fontFamily: 'Nunito,sans-serif', fontSize: 16, fontWeight: 900, color: '#1a1a2e', margin: 0 }}>Site Photos</h4>
+            <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', margin: '2px 0 0 0', fontWeight: 600 }}>Both photos are mandatory to submit</p>
+          </div>
+          <div style={{ display: 'flex', gap: 5 }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, fontSize: 11, fontFamily: 'Nunito,sans-serif', fontWeight: 700, background: closeImg.length > 0 ? '#e8faf3' : '#f0f0f8', color: closeImg.length > 0 ? '#1a9e6e' : '#9090a8', border: `1px solid ${closeImg.length > 0 ? '#7dd5b0' : '#e0e0f0'}` }}>
+              {closeImg.length > 0 ? <Check size={10} /> : <span style={{ fontSize: 12 }}>📷</span>} Short
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 20, fontSize: 11, fontFamily: 'Nunito,sans-serif', fontWeight: 700, background: farImg.length > 0 ? '#e8faf3' : '#f0f0f8', color: farImg.length > 0 ? '#1a9e6e' : '#9090a8', border: `1px solid ${farImg.length > 0 ? '#7dd5b0' : '#e0e0f0'}` }}>
+              {farImg.length > 0 ? <Check size={10} /> : <span style={{ fontSize: 12 }}>📷</span>} Long
+            </span>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+            <div>
+              <ImageUploadZone
+                label="Short Vision"
+                sublabel="(Close-up)"
+                IconComp={ZoomIn}
+                values={closeImg}
+                onChange={v => { setCloseImg(v.slice(0, 1)); setErrors(e => ({ ...e, closeImg: '' })); }}
+                error={errors.closeImg}
+              />
+            </div>
+            <div>
+              <ImageUploadZone
+                label="Long Vision"
+                sublabel="(Wide shot)"
+                IconComp={ZoomOut}
+                values={farImg}
+                onChange={v => { setFarImg(v.slice(0, 1)); setErrors(e => ({ ...e, farImg: '' })); }}
+                error={errors.farImg}
+              />
+            </div>
+          </div>
+
+          {/* Geo status */}
+          {geoStatus !== 'idle' && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 10,
+              background: geoStatus === 'locating' ? 'rgba(4,158,223,0.06)' : geoStatus === 'ready' ? 'rgba(26,158,110,0.07)' : 'rgba(239,68,68,0.06)',
+              border: `1px solid ${geoStatus === 'locating' ? '#b3d9f5' : geoStatus === 'ready' ? '#7dd5b0' : '#fecaca'}`,
+              fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
+              color: geoStatus === 'locating' ? '#049edf' : geoStatus === 'ready' ? '#1a9e6e' : '#dc2626',
+            }}>
+              {geoStatus === 'locating' && <><Loader2 size={13} className="pg-spin" /> Capturing location…</>}
+              {geoStatus === 'ready' && <><MapPin size={13} /> Location captured · {geoData?.address}</>}
+              {geoStatus === 'failed' && <><AlertTriangle size={13} /> Location unavailable — photos will be submitted without GPS</>}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderTop: '1.5px solid #f0f0f8', background: '#fcfcfd' }}>
+          <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Close</button>
+          <button
+            className="pg-btn-save"
+            onClick={handleSave}
+            disabled={submitting}
+            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            {submitting ? (
+              <><Loader2 size={13} className="pg-spin" /> Submitting…</>
+            ) : (
+              <><SendHorizonal size={13} /> Submit Task</>
+            )}
+          </button>
+        </div>
+
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ═══════════════════════════════════════════
    TASK PHOTO MODAL
 ═══════════════════════════════════════════ */
 /* ═══════════════════════════════════════════
    TASK PHOTO MODAL  (replace entire function)
 ═══════════════════════════════════════════ */
-function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, onUploaded }) {
-  const [files, setFiles] = useState([]);
-  const [uploading, setUploading] = useState(false);
+function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, onUploaded, isCompleted, onStatusChange }) {
   const [deleting, setDeleting] = useState(null); // attachID being deleted
   const [lightbox, setLightbox] = useState(null);
   const [imgErrors, setImgErrors] = useState({}); // track broken images by index
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
-  const inputRef = useRef(null);
 
   const taskIDs = new Set(
     [task.jobTaskID, ...(task.mergedTaskIDs ?? [])].map(Number)
@@ -635,32 +915,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
   const myAttachments = attachments.filter(
     a => taskIDs.has(Number(a.jobTaskID ?? a.JobTaskID))
   );
-  const handleUpload = async () => {
-    if (files.length === 0) return;
-    setUploading(true);
-    try {
-      const userId = parseInt(localStorage.getItem('userId') || '0', 10);
-      for (const file of files) {
-        const fd = new FormData();
-        fd.append('JobTaskAttachID', '0');
-        fd.append('JobTaskID', String(task.jobTaskID || 0));
-        fd.append('JobRequestID', String(jobRequestID || 0));
-        fd.append('HoardingID', String(task.hoardingID || 0));
-        fd.append('PhotoFileType', file.type || 'image/jpeg');
-        fd.append('Files', file);
-        fd.append('PhotoFilePath', '');
-        fd.append('PhotoFilename', file.name);
-        fd.append('LastUpdateDttm', new Date().toISOString());
-        fd.append('LastUpdatedBy', String(userId));
-        await apiService.uploadJobTaskAttachment(fd);
-      }
-      showToast(`${files.length} photo${files.length !== 1 ? 's' : ''} uploaded!`, 'success');
-      setFiles([]);
-      onUploaded?.();
-    } catch (err) {
-      showToast(err?.message || 'Upload failed.', 'error');
-    } finally { setUploading(false); }
-  };
+
 
   const handleDelete = async (att, i) => {
     const attachID = att.jobTaskAttachID ?? att.JobTaskAttachID ?? att.id ?? att.ID;
@@ -669,6 +924,28 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
     try {
       await apiService.deleteJobTaskAttachment(attachID);
       showToast('Photo deleted.', 'success');
+
+      if (task.status === 'Submitted') {
+        const userId = parseInt(localStorage.getItem('userId') || '0', 10);
+        const nowISO = new Date().toISOString();
+        const tIDs = task.tasks ? task.tasks.map(t => Number(t.jobTaskID)) : [Number(task.jobTaskID)];
+
+        for (const tid of tIDs) {
+          const individualTask = task.tasks ? task.tasks.find(t => Number(t.jobTaskID) === tid) : task;
+          await apiService.updateJobTask({
+            jobTaskID: tid,
+            jobRequestID: jobRequestID,
+            hoardingID: individualTask?.hoardingID || task.hoardingID,
+            status: 'Open',
+            actualCompletionDate: individualTask?.actualCompletionDate || '',
+            submitDTTM: null,
+            lastUpdateDttm: nowISO,
+            lastUpdatedBy: userId,
+          });
+        }
+        onStatusChange?.(tIDs, 'Open');
+        showToast('Task status reverted to Open because a photo was deleted.', 'info');
+      }
       onUploaded?.();
     } catch (err) {
       showToast(err?.message || 'Delete failed.', 'error');
@@ -736,54 +1013,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
             <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
           </div>
 
-          {/* Upload zone */}
-          <div style={{ padding: '16px 24px', borderBottom: '1px solid #f0f0f8' }}>
-            <div
-              onClick={() => inputRef.current?.click()}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => {
-                e.preventDefault();
-                const dropped = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-                setFiles(p => [...p, ...dropped]);
-              }}
-              style={{
-                border: `2px dashed ${files.length > 0 ? '#049edf' : '#d0d0e8'}`,
-                borderRadius: 12, padding: '20px',
-                textAlign: 'center', cursor: 'pointer',
-                background: files.length > 0 ? 'rgba(4,158,223,0.04)' : '#fafafe',
-                transition: 'border-color 0.2s, background 0.2s',
-              }}
-            >
-              <div style={{ fontSize: 28, marginBottom: 6 }}>📁</div>
-              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#5a5a78' }}>
-                Click to select or drag &amp; drop photos
-              </div>
-              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', marginTop: 3 }}>
-                JPG, PNG, WEBP · Multiple files supported
-              </div>
-              <input
-                ref={inputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
-                onChange={e => setFiles(p => [...p, ...Array.from(e.target.files)])}
-              />
-            </div>
 
-            {files.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-                {files.map((f, i) => (
-                  <div key={i} style={{
-                    display: 'flex', alignItems: 'center', gap: 5,
-                    padding: '3px 10px', borderRadius: 20,
-                    background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.20)',
-                    fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700, color: '#049edf',
-                  }}>
-                    📄 {f.name.length > 22 ? f.name.slice(0, 20) + '…' : f.name}
-                    <X size={11} style={{ cursor: 'pointer', flexShrink: 0 }}
-                      onClick={() => setFiles(p => p.filter((_, j) => j !== i))} />
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* Photo grid */}
           <div style={{ padding: '16px 24px', overflowY: 'auto', maxHeight: 340, minHeight: 80 }}>
@@ -875,24 +1105,26 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
                         </span>
 
                         {/* ── Delete button ── */}
-                        <button
-                          onClick={e => { e.stopPropagation(); setDeleteConfirmTarget({ att, index: i }); }}
-                          disabled={isDeleting}
-                          title="Delete photo"
-                          style={{
-                            flexShrink: 0,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            width: 22, height: 22, borderRadius: 6,
-                            border: '1px solid rgba(220,38,38,0.25)',
-                            background: 'rgba(220,38,38,0.07)',
-                            color: '#dc2626', cursor: isDeleting ? 'wait' : 'pointer',
-                            padding: 0, opacity: isDeleting ? 0.5 : 1,
-                          }}
-                        >
-                          {isDeleting
-                            ? <Loader2 size={11} className="pg-spin" />
-                            : <Trash2 size={11} />}
-                        </button>
+                        {!isCompleted && (
+                          <button
+                            onClick={e => { e.stopPropagation(); setDeleteConfirmTarget({ att, index: i }); }}
+                            disabled={isDeleting}
+                            title="Delete photo"
+                            style={{
+                              flexShrink: 0,
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              width: 22, height: 22, borderRadius: 6,
+                              border: '1px solid rgba(220,38,38,0.25)',
+                              background: 'rgba(220,38,38,0.07)',
+                              color: '#dc2626', cursor: isDeleting ? 'wait' : 'pointer',
+                              padding: 0, opacity: isDeleting ? 0.5 : 1,
+                            }}
+                          >
+                            {isDeleting
+                              ? <Loader2 size={11} className="pg-spin" />
+                              : <Trash2 size={11} />}
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
@@ -904,23 +1136,12 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
           {/* Footer */}
           <div className="pg-modal__foot">
             <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
-              {files.length > 0
-                ? `${files.length} file${files.length !== 1 ? 's' : ''} ready to upload`
-                : myAttachments.length > 0
-                  ? 'Click any photo to enlarge · Trash icon to delete'
-                  : 'No photos yet'}
+              {myAttachments.length > 0
+                ? 'Click any photo to enlarge' + (!isCompleted ? ' · Trash icon to delete' : '')
+                : 'No photos yet'}
             </span>
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="pg-btn-cancel" onClick={onClose}>Close</button>
-              <button
-                className="pg-btn-save"
-                onClick={handleUpload}
-                disabled={files.length === 0 || uploading}
-              >
-                {uploading
-                  ? <><Loader2 size={13} className="pg-spin" /> Uploading…</>
-                  : <>📤 Upload {files.length > 0 ? `(${files.length})` : ''}</>}
-              </button>
             </div>
           </div>
 
@@ -1532,9 +1753,11 @@ export default function JobPage() {
   const [allJobTasks, setAllJobTasks] = useState([]);
   const [allAttachments, setAllAttachments] = useState([]);
   const [photoModalTask, setPhotoModalTask] = useState(null); // task row for photo modal
+  const [submitTaskTarget, setSubmitTaskTarget] = useState(null); // task row for compulsory upload to submit
   const [photosViewTarget, setPhotosViewTarget] = useState(null); // job request to view photos for
   const [completeTarget, setCompleteTarget] = useState(null); // { job, tasks }
   const [completing, setCompleting] = useState(false);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
 
   /* ── UI ── */
   const [loading, setLoading] = useState(true);
@@ -2085,6 +2308,7 @@ export default function JobPage() {
       };
     }));
 
+    setStep1Error(''); setStep2Error('');
     setStep(1); setIsCreating(true);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   };
@@ -2093,6 +2317,7 @@ export default function JobPage() {
   const goNext = () => {
     if (step === 1) {
       if (!jobType) { setStep1Error('Please select a job type.'); return; }
+      if (!selectedSupervisor || !selectedSupervisor.userID) { setStep1Error('Please select a supervisor.'); return; }
       if (!targetDate) { setStep1Error('Target completion date is required.'); return; }
       if (!ratePerSQFT || Number(ratePerSQFT) <= 0) { setStep1Error('Rate per SQFT must be greater than 0.'); return; }
       setStep1Error(''); setStep(2);
@@ -2101,6 +2326,7 @@ export default function JobPage() {
   const goBack = () => setStep(s => Math.max(1, s - 1));
   const handleBackToList = () => {
     setIsCreating(false);
+    setStep1Error(''); setStep2Error('');
     setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
   };
 
@@ -2194,6 +2420,9 @@ export default function JobPage() {
       showToast(err?.response?.data?.message || err?.message || 'Failed to save job.', 'error');
     } finally { setSaving(false); }
   };
+  const getMyTasks = useCallback((jobID) => allJobTasks.filter(t => t.jobRequestID === jobID), [allJobTasks]);
+  const custName = (id) => customers.find(c => c.customerID === id)?.customerName || '—';
+  const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.userName || '—';
 
   /* ── History table ── */
   const filtered = useMemo(() => {
@@ -2235,9 +2464,6 @@ export default function JobPage() {
     .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
     .reduce((acc, p, i, arr) => { if (i > 0 && arr[i] - arr[i - 1] > 1) acc.push('…'); acc.push(p); return acc; }, []);
 
-  const custName = (id) => customers.find(c => c.customerID === id)?.customerName || '—';
-  const supName = (id) => supervisors.find(u => String(u.userID) === String(id))?.userName || '—';
-  const getMyTasks = (jobID) => allJobTasks.filter(t => t.jobRequestID === jobID);
 
   const jobTypeBadgeStyle = (type) => {
     const styles = {
@@ -2478,10 +2704,10 @@ export default function JobPage() {
                   </div>
 
                   <div>
-                    <label className="qt-label">Select Supervisor</label>
+                    <label className="qt-label">Select Supervisor <span className="qt-label--req">*</span></label>
                     <ComboField
                       value={selectedSupervisor?.userID}
-                      onChange={u => setSelectedSupervisor(u)}
+                      onChange={u => { setSelectedSupervisor(u); setStep1Error(''); }}
                       options={supervisors}
                       placeholder={supervisors.length === 0 ? 'No supervisors found in system' : 'Select supervisor…'}
                       icon={UserCheck}
@@ -2741,6 +2967,28 @@ export default function JobPage() {
                                     value={row.status}
                                     disabled={jobStatus === 'Completed'}
                                     onChange={val => {
+                                      if (val === 'Submitted') {
+                                        const unsaved = row.tasks.some(t => !t.saved || t.jobTaskID === 0);
+                                        if (unsaved) {
+                                          showToast('Please save the job first before submitting tasks.', 'error');
+                                          return;
+                                        }
+                                        const taskIDs = row.tasks.map(t => Number(t.jobTaskID));
+                                        const mine = allAttachments.filter(a => taskIDs.includes(Number(a.jobTaskID ?? a.JobTaskID)));
+                                        const hasNear = mine.some(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('near'));
+                                        const hasFar = mine.some(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('far'));
+                                        if (hasNear && hasFar) {
+                                          row.tasks.forEach(t => updateTask(t._id, 'status', 'Submitted'));
+                                        } else {
+                                          setSubmitTaskTarget({
+                                            ...row.tasks[0],
+                                            tasks: row.tasks,
+                                            hoardingCode: row.tasks.map(t => t.hoardingCode).filter(Boolean).join(' + '),
+                                            siteAddress: [...new Set(row.tasks.map(t => t.siteAddress).filter(Boolean))].join(', '),
+                                          });
+                                        }
+                                        return;
+                                      }
                                       if (row.status === 'Submitted' && (val === 'Open' || val === 'In Progress')) {
                                         const taskIDs = new Set(row.tasks.map(t => Number(t.jobTaskID)));
                                         const hasPhotos = allAttachments.some(a => taskIDs.has(Number(a.jobTaskID ?? a.JobTaskID)));
@@ -2780,6 +3028,7 @@ export default function JobPage() {
                                         onClick={() => setPhotoModalTask({
                                           ...row.tasks[0],
                                           mergedTaskIDs: row.tasks.map(t => t.jobTaskID),
+                                          tasks: row.tasks,
                                           hoardingCode: row.tasks.map(t => t.hoardingCode).filter(Boolean).join(' + '),
                                           siteAddress: [...new Set(row.tasks.map(t => t.siteAddress).filter(Boolean))].join(', '),
                                         })}
@@ -2810,14 +3059,22 @@ export default function JobPage() {
                                   })()}
                                 </td>
                                 <td className="pg-td" style={{ textAlign: 'center' }}>
-                                  <button
-                                    className="pg-btn-view"
-                                    onClick={() => row.tasks.forEach(t => deleteTask(t._id))}
-                                    title="Remove all merged tasks"
-                                    style={{ background: 'rgba(220,38,38,0.08)', color: '#dc2626', boxShadow: 'none' }}
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
+                                  {(!editingJobID || row.tasks.some(t => !t.saved || t.jobTaskID === 0)) && (
+                                    <button
+                                      className="pg-btn-view"
+                                      onClick={() => {
+                                        setDeleteConfirmTarget({
+                                          type: 'merged',
+                                          tasks: row.tasks,
+                                          message: "Are you sure you want to remove these merged hoarding tasks?"
+                                        });
+                                      }}
+                                      title="Remove all merged tasks"
+                                      style={{ background: 'rgba(220,38,38,0.08)', color: '#dc2626', boxShadow: 'none' }}
+                                    >
+                                      <Trash2 size={13} />
+                                    </button>
+                                  )}
                                 </td>
                               </tr>
                             );
@@ -2857,6 +3114,21 @@ export default function JobPage() {
                                   value={row.status}
                                   disabled={jobStatus === 'Completed'}
                                   onChange={val => {
+                                    if (val === 'Submitted') {
+                                      if (!row.saved || row.jobTaskID === 0) {
+                                        showToast('Please save the job first before submitting this task.', 'error');
+                                        return;
+                                      }
+                                      const mine = allAttachments.filter(a => Number(a.jobTaskID ?? a.JobTaskID) === Number(row.jobTaskID));
+                                      const hasNear = mine.some(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('near'));
+                                      const hasFar = mine.some(a => (a.photoFileType ?? a.PhotoFileType ?? '').toLowerCase().includes('far'));
+                                      if (hasNear && hasFar) {
+                                        updateTask(row._id, 'status', 'Submitted');
+                                      } else {
+                                        setSubmitTaskTarget(row);
+                                      }
+                                      return;
+                                    }
                                     if (row.status === 'Submitted' && (val === 'Open' || val === 'In Progress')) {
                                       const hasPhotos = allAttachments.some(a => Number(a.jobTaskID ?? a.JobTaskID) === Number(row.jobTaskID));
                                       if (hasPhotos) {
@@ -2915,15 +3187,23 @@ export default function JobPage() {
                                   }}>📷</span>
                                 )}
                               </td>
-                              <td className="pg-td" style={{ textAlign: 'center' }}>
-                                <button
-                                  className="pg-btn-view"
-                                  onClick={() => deleteTask(row._id)}
-                                  title="Remove task"
-                                  style={{ background: 'rgba(220,38,38,0.08)', color: '#dc2626', boxShadow: 'none' }}
-                                >
-                                  <Trash2 size={13} />
-                                </button>
+                               <td className="pg-td" style={{ textAlign: 'center' }}>
+                                {(!editingJobID || !row.saved || row.jobTaskID === 0) && (
+                                  <button
+                                    className="pg-btn-view"
+                                    onClick={() => {
+                                      setDeleteConfirmTarget({
+                                        type: 'single',
+                                        task: row,
+                                        message: `Are you sure you want to remove the task for hoarding "${row.hoardingCode}"?`
+                                      });
+                                    }}
+                                    title="Remove task"
+                                    style={{ background: 'rgba(220,38,38,0.08)', color: '#dc2626', boxShadow: 'none' }}
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                )}
                               </td>
                             </tr>
                           );
@@ -3333,7 +3613,31 @@ export default function JobPage() {
           attachments={allAttachments}
           onClose={() => setPhotoModalTask(null)}
           showToast={showToast}
-          onUploaded={refreshAttachments}
+          onUploaded={async () => {
+            await refreshAttachments();
+            await refreshJobs();
+          }}
+          isCompleted={jobStatus === 'Completed'}
+          onStatusChange={(taskIDs, newStatus) => {
+            setTasks(prev => prev.map(t => {
+              if (taskIDs.includes(Number(t.jobTaskID))) {
+                return { ...t, status: newStatus, submitDttm: null };
+              }
+              return t;
+            }));
+          }}
+        />
+      )}
+      {/* ── Compulsory Submit Photo Modal ── */}
+      {submitTaskTarget && (
+        <SubmitTaskPhotoModal
+          task={submitTaskTarget}
+          jobRequestID={editingJobID}
+          onClose={() => setSubmitTaskTarget(null)}
+          onSubmitted={async () => {
+            await refreshJobs();
+          }}
+          showToast={showToast}
         />
       )}
       {/* ── Job Photos View Modal ── */}
@@ -3358,6 +3662,65 @@ export default function JobPage() {
           completing={completing}
         />
       )}
+      {deleteConfirmTarget && (
+        <JobTaskDeleteConfirmModal
+          title={deleteConfirmTarget.type === 'merged' ? 'Remove Merged Tasks' : 'Remove Hoarding Task'}
+          message={deleteConfirmTarget.message}
+          onConfirm={() => {
+            if (deleteConfirmTarget.type === 'merged') {
+              deleteConfirmTarget.tasks.forEach(t => deleteTask(t._id));
+            } else {
+              deleteTask(deleteConfirmTarget.task._id);
+            }
+            setDeleteConfirmTarget(null);
+          }}
+          onClose={() => setDeleteConfirmTarget(null)}
+        />
+      )}
     </>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   JOB TASK DELETE CONFIRM MODAL
+ ═══════════════════════════════════════════ */
+function JobTaskDeleteConfirmModal({ title, message, onConfirm, onClose }) {
+  return ReactDOM.createPortal(
+    <div className="pg-overlay" style={{ zIndex: 99999 }}>
+      <div className="pg-modal" style={{ maxWidth: 450, padding: 0 }}>
+        <div className="pg-modal__head">
+          <div className="pg-modal__head-left">
+            <div className="pg-modal__icon-wrap" style={{ background: 'rgba(220,38,38,0.10)' }}>
+              <Trash2 size={20} color="#dc2626" />
+            </div>
+            <div>
+              <h5 className="pg-modal__title" style={{ color: '#1a1a2e' }}>{title || 'Confirm Delete'}</h5>
+              <p className="pg-modal__subtitle">This action cannot be undone</p>
+            </div>
+          </div>
+          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+        </div>
+
+        <div style={{ padding: '24px', fontFamily: 'Nunito,sans-serif', fontSize: 13.5, color: '#4a5568', lineHeight: 1.5 }}>
+          {message}
+        </div>
+
+        <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, background: '#f8f8fd' }}>
+          <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '9px 20px', borderRadius: 9, border: 'none',
+              background: '#dc2626', color: '#fff', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
+              boxShadow: '0 4px 12px rgba(220,38,38,0.2)'
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }

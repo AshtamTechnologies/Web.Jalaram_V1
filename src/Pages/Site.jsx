@@ -6,7 +6,7 @@ import {
   X, AlertCircle, Check, Edit2, Eye, ChevronDown, ShieldCheck,
   ChevronUp, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
   Filter, Layers, Navigation, UserCircle, Loader2, ToggleLeft,
-  AlertTriangle,
+  AlertTriangle, CheckCircle,
 } from 'lucide-react';
 import './Common1.css';
 import { apiService } from '../api/api';
@@ -31,9 +31,22 @@ const TYPE_COLORS = {
   'No Record': { color: '#4a5568' },
 };
 const STATUS_COLORS = {
-  Active: { color: 'rgb(74, 85, 104)' },
-  Inactive: { color: 'rgb(74, 85, 104)' },
+  Active: { color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0' },
+  Inactive: { color: '#dc2626', bg: '#fef2f2', border: '#fecaca' },
 };
+
+function StatusBadge({ status }) {
+  if (!status) return <span className="pg-td__dash">—</span>;
+  const isOk = status.toLowerCase() === 'active';
+  const cls = isOk ? 'hd-status-active' : 'hd-status-inactive';
+  const Icon = isOk ? CheckCircle : AlertCircle;
+  return (
+    <span className={`hd-status-badge ${cls}`}>
+      <Icon size={10} />
+      {status}
+    </span>
+  );
+}
 
 const GUJARAT_DISTRICTS = [
   'Ahmedabad', 'Amreli', 'Anand', 'Aravalli', 'Banaskantha',
@@ -315,7 +328,7 @@ function StatusDropdown({ value, onChange, onBlur, hasError }) {
         <ShieldCheck size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
         {/* ← only render pill if both value AND colors exist */}
         {value && colors
-          ? <span className="pg-sitetype-pill" style={{ color: colors.color }}>{value}</span>
+          ? <span className="pg-sitetype-pill" style={{ color: colors.color, backgroundColor: colors.bg, border: `1px solid ${colors.border}` }}>{value}</span>
           : <span className="pg-combo-display pg-combo-display--placeholder">{value || 'Select status…'}</span>
         }
         {value
@@ -334,7 +347,7 @@ function StatusDropdown({ value, onChange, onBlur, hasError }) {
                 tabIndex={0}
                 onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); } else nav(e); }}
               >
-                <span className="pg-sitetype-pill" style={{ color: STATUS_COLORS[opt].color }}>{opt}</span>
+                <span className="pg-sitetype-pill" style={{ color: STATUS_COLORS[opt].color, backgroundColor: STATUS_COLORS[opt].bg, border: `1px solid ${STATUS_COLORS[opt].border}` }}>{opt}</span>
                 {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
               </div>
             ))}
@@ -694,7 +707,6 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
 /* ─── Mobile Site Card ─── */
 function SiteCard({ s, onEdit, owners }) {
   const typeColors = (s.siteType && TYPE_COLORS[s.siteType]) ? TYPE_COLORS[s.siteType] : null;
-  const statusColors = (s.status && STATUS_COLORS[s.status]) ? STATUS_COLORS[s.status] : null;
   const owner = owners.find(o => o._id === s.ownerID || o._id === Number(s.ownerID));
   return (
     <div className="pg-card">
@@ -711,7 +723,7 @@ function SiteCard({ s, onEdit, owners }) {
         {s.landmark && <div className="pg-card__row"><Navigation size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text--ellipsis">{s.landmark}</span></div>}
         <div className="pg-card__row"><Building2 size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{s.city}{s.district !== s.city ? `, ${s.district}` : ''}</span></div>
         {s.siteType && typeColors && <div className="pg-card__row"><Layers size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-sitetype-pill" style={{ color: typeColors.color }}>{s.siteType}</span></div>}
-        {s.status && statusColors && <div className="pg-card__row"><ToggleLeft size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-sitetype-pill" style={{ color: statusColors.color }}>{s.status}</span></div>}
+        {s.status && <div className="pg-card__row"><ToggleLeft size={12} color="#c0c0d8" className="pg-card__row-icon" /><StatusBadge status={s.status} /></div>}
         {owner && <div className="pg-card__row"><UserCircle size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text--ellipsis">{owner.ownerName}</span></div>}
       </div>
     </div>
@@ -852,7 +864,6 @@ export default function SitePage() {
                   <tr><td colSpan={COLS.length} className="pg-td pg-empty" style={{ maxWidth: 'none' }}><div className="pg-empty__inner"><MapPin size={36} color="#d0d0e8" /><span className="pg-empty__label">No sites found</span></div></td></tr>
                 ) : paginated.map(s => {
                   const typeColors = s.siteType ? TYPE_COLORS[s.siteType] : null;
-                  const statusColors = s.status ? STATUS_COLORS[s.status] : null;
                   const owner = owners.find(o => o._id === s.ownerID || o._id === Number(s.ownerID));
                   return (
                     <tr key={s.siteID} className="pg-tr">
@@ -861,7 +872,7 @@ export default function SitePage() {
                       <td className="pg-td pg-td--overflow pg-tablet-hide"><span className="pg-td__ellipsis" title={s.landmark}>{s.landmark || '—'}</span></td>
                       <td className="pg-td"><span style={{ color: '#4a5568' }}>{s.city}</span>{s.district !== s.city && <span className="pg-td__secondary">, {s.district}</span>}</td>
                       <td className="pg-td">{s.siteType && typeColors ? <span className="pg-sitetype-pill" style={{ color: typeColors.color }}>{s.siteType}</span> : <span className="pg-td__dash">—</span>}</td>
-                      <td className="pg-td">{s.status && statusColors ? <span className="pg-sitetype-pill" style={{ color: statusColors.color }}>{s.status}</span> : <span className="pg-td__dash">—</span>}</td>
+                      <td className="pg-td"><StatusBadge status={s.status} /></td>
                       <td className="pg-td pg-td--overflow pg-tablet-hide">{owner ? <div><div className="pg-td__primary" style={{ fontSize: '12.5px' }}>{owner.ownerName}</div><div className="pg-td__secondary">ID: {owner._id}</div></div> : <span className="pg-td__dash">—</span>}</td>
                       <td className="pg-td pg-tablet-hide"><span style={{ color: '#4a5568' }}>{s.country}</span></td>
                       <td className="pg-td"><div className="pg-action-wrap"><button className="pg-btn-view" onClick={() => { setEditSite(s); setShowModal(true); }} title="Edit"><Edit2 size={13} /></button></div></td>

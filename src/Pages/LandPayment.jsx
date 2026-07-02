@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import axios from 'axios';
 import {
   Plus, Search, X, AlertCircle, Check, Edit2,
   RefreshCw, Calendar, ChevronUp, ChevronDown,
@@ -12,6 +13,27 @@ import {
 import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
 import { useResizableColumns } from '../hooks/useResizableColumns';
+
+const forceDownload = async (url, filename) => {
+  try {
+    const cleanUrl = url.split('?')[0];
+    const downloadUrl = `${cleanUrl}?t=${Date.now()}`;
+    const response = await axios.get(downloadUrl, {
+      responseType: 'blob',
+    });
+    const localUrl = URL.createObjectURL(response.data);
+    const a = document.createElement('a');
+    a.href = localUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(localUrl);
+  } catch (err) {
+    console.error('Download failed, fallback to direct link', err);
+    window.open(url, '_blank');
+  }
+};
 
 /* ─────────────────────────────────────────
    CONSTANTS
@@ -221,10 +243,7 @@ function LPAttachCell({ rowId, selectedFile, existingAttach, isUploading, onFile
             <button className="ea-saved-card__btn ea-saved-card__btn--download"
               onClick={() => {
                 if (!url) return;
-                const a = document.createElement('a');
-                a.href = url; a.download = name;
-                a.target = '_blank'; a.rel = 'noopener noreferrer';
-                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                forceDownload(url, name);
               }}
               disabled={!url}>
               <Download size={10} /> Download

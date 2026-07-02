@@ -7,7 +7,7 @@ import {
   ZoomIn, ArrowLeft, Hash, Clock, Info, ShieldCheck,
   ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight,
   ChevronLeft, ChevronRight, MapPin, Layers,
-  CheckCircle, Wrench, Eye, Replace, Loader2
+  CheckCircle, Wrench, Eye, Replace, Loader2, AlertTriangle
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
@@ -555,6 +555,7 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
   const [uploading, setUploading] = useState(false);
   const [photoError, setPhotoError] = useState('');
   const [replacingPhoto, setReplacingPhoto] = useState(null);
+  const [photoToDelete, setPhotoToDelete] = useState(null);
   const addRef = useRef(null);
   const replaceRef = useRef(null);
 
@@ -632,8 +633,11 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
     setTimeout(() => replaceRef.current?.click(), 50);
   };
 
-  const handleDelete = async (photo) => {
-    if (!window.confirm(`Delete photo "${photo.filename}"?`)) return;
+  const handleDelete = (photo) => {
+    setPhotoToDelete(photo);
+  };
+
+  const executeDelete = async (photo) => {
     setUploading(true); setPhotoError('');
     try {
       await apiService.deleteHoardingPhoto(photo.hoardingPhotoID);
@@ -762,7 +766,114 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
         </div>,
         document.body
       )}
+
+      {photoToDelete && (
+        <PhotoDeleteConfirmModal
+          photo={photoToDelete}
+          onConfirm={() => {
+            executeDelete(photoToDelete);
+            setPhotoToDelete(null);
+          }}
+          onClose={() => setPhotoToDelete(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function PhotoDeleteConfirmModal({ photo, onConfirm, onClose }) {
+  const cancelBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (cancelBtnRef.current) {
+      cancelBtnRef.current.focus();
+    }
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  if (!photo) return null;
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100000,
+        background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 22, width: '100%', maxWidth: 440,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '24px 24px 20px',
+          animation: 'modalIn 0.24s cubic-bezier(0.22,1,0.36,1) both',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: '#fffbeb', border: '2px solid #fde68a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <AlertTriangle size={20} color="#d97706" />
+          </div>
+          <div>
+            <h3 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#1a1a2e', margin: 0 }}>
+              Delete Photo?
+            </h3>
+            <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#7878a0', margin: '4px 0 0' }}>
+              Confirm deleting this photo.
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 600,
+          color: '#4a5568', lineHeight: 1.5, marginBottom: 24,
+        }}>
+          Are you sure you want to delete the photo <strong>{photo.filename}</strong>? This action cannot be undone.
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12,
+        }}>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '10px 20px', borderRadius: 10, border: '1.5px solid #fca5a5',
+              background: '#fff', color: '#dc2626', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.target.style.background = '#fef2f2'; }}
+            onMouseLeave={e => { e.target.style.background = '#fff'; }}
+          >
+            Yes, Delete
+          </button>
+
+          <button
+            ref={cancelBtnRef}
+            onClick={onClose}
+            style={{
+              padding: '11px 24px', borderRadius: 10, border: 'none',
+              background: 'linear-gradient(135deg,#049edf,#6c63ff)',
+              color: '#fff', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              boxShadow: '0 4px 12px rgba(108,99,255,0.2)',
+            }}
+          >
+            No, Cancel
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -795,7 +906,7 @@ function EffdtHistory({ versions, sites, hoardingTypeMap, activePanel, onView, o
         const isSelected = activePanel !== null && activePanel.idx === gi;
         const site = sites.find(s => s.siteID === v.siteID);
         return (
-          <div key={v.hoardingID ?? v.effdt} className={`hd-effdt-row ${isSelected ? 'is-selected' : ''}`}>
+          <div key={`${v.hoardingID ?? ''}-${v.effdt ?? ''}-${gi}`} className={`hd-effdt-row ${isSelected ? 'is-selected' : ''}`}>
             <div className="row align-items-center g-2">
               <div className="col-12 col-md-3">
                 <div className="hd-effdt-date-pill"><Calendar size={12} color="#9090a8" />{fmtDate(v.effdt)}</div>
@@ -893,73 +1004,17 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     if (!hoardingID) return;
     setPhotosLoading(true);
     try {
-      // Get ALL hoardingIDs for this hoarding code (all effdt versions)
-      const allVersionIDs = hoarding
-        ? hoarding.versions.map(v => Number(v.hoardingID))
-        : [Number(hoardingID)];
-
-      console.log('[loadPhotos] allVersionIDs for code:', allVersionIDs);
-
-      const [hoardingPhotos, allJobAttachments] = await Promise.all([
-        apiService.getPhotosByHoardingID(hoardingID)
-          .then(d =>
-            Array.isArray(d) ? d :
-              Array.isArray(d?.$values) ? d.$values :
-                Array.isArray(d?.data) ? d.data : []
-          )
-          .catch(() => []),
-
-        apiService.getAllJobTaskAttachments()
-          .then(d => {
-            const all =
-              Array.isArray(d) ? d :
-                Array.isArray(d?.$values) ? d.$values :
-                  Array.isArray(d?.data) ? d.data : [];
-
-            console.log('[loadPhotos] total job attachments:', all.length);
-            console.log('[loadPhotos] sample attachment:', all[0]);
-
-            // Match by ANY of the version IDs for this hoarding code
-            return all.filter(a => {
-              const aHID = Number(
-                a.hoardingID ?? a.HoardingID ??
-                a.hoarding_id ?? a.Hoarding_ID ?? 0
-              );
-              return allVersionIDs.includes(aHID);
-            });
-          })
-          .catch(() => []),
-      ]);
-
-      console.log('[loadPhotos] hoardingID:', hoardingID,
-        '→ hoardingPhotos:', hoardingPhotos.length,
-        '→ jobAttachments:', allJobAttachments.length);
-
-      const normalizedJobPhotos = allJobAttachments.map(a => {
-        // Build full URL from the stored path
-        const rawPath =
-          a.photoFilePath ?? a.PhotoFilePath ??
-          a.filePath ?? a.FilePath ??
-          a.photoUrl ?? a.PhotoUrl ?? '';
-
-        const fullUrl = rawPath.startsWith('http')
-          ? rawPath
-          : `${(API_ROOT_URL || '').replace(/\/+$/, '')}/${rawPath.replace(/^\/+/, '')}`;
-
-        return {
-          hoardingPhotoID: `job_${a.jobTaskAttachID ?? a.JobTaskAttachID ?? Math.random()}`,
-          hoardingID,
-          photoUrl: fullUrl,
-          photoPath: fullUrl,
-          photo: fullUrl,
-          filename: a.photoFilename ?? a.PhotoFilename ?? 'Job Photo',
-          _isJobPhoto: true,
-        };
-      });
+      const hoardingPhotos = await apiService.getPhotosByHoardingID(hoardingID)
+        .then(d =>
+          Array.isArray(d) ? d :
+            Array.isArray(d?.$values) ? d.$values :
+              Array.isArray(d?.data) ? d.data : []
+        )
+        .catch(() => []);
 
       setPhotosMap(prev => ({
         ...prev,
-        [hoardingID]: [...hoardingPhotos, ...normalizedJobPhotos],
+        [hoardingID]: hoardingPhotos,
       }));
 
     } catch (err) {

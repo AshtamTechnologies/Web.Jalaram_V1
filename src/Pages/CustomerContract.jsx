@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
+import axios from 'axios';
 import {
   Plus, Search, X, AlertCircle, Check, Edit2,
   RefreshCw, Calendar, ChevronUp, ChevronDown,
@@ -12,6 +13,27 @@ import {
 import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
 import { useResizableColumns } from '../hooks/useResizableColumns';
+
+const forceDownload = async (url, filename) => {
+  try {
+    const cleanUrl = url.split('?')[0];
+    const downloadUrl = `${cleanUrl}?t=${Date.now()}`;
+    const response = await axios.get(downloadUrl, {
+      responseType: 'blob',
+    });
+    const localUrl = URL.createObjectURL(response.data);
+    const a = document.createElement('a');
+    a.href = localUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(localUrl);
+  } catch (err) {
+    console.error('Download failed, fallback to direct link', err);
+    window.open(url, '_blank');
+  }
+};
 
 /* ─────────────────────────────────────────
    CONSTANTS
@@ -1394,10 +1416,10 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
                         </button>
                       )}
                       {url && (
-                        <a href={url} target="_blank" rel="noreferrer" title="Download / Open"
-                          style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#049edf', textDecoration: 'none' }}>
+                        <button onClick={() => forceDownload(url, a.contractFilename || 'Attachment')} title="Download / Open"
+                          style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#049edf' }}>
                           <Download size={14} />
-                        </a>
+                        </button>
                       )}
                       <button title="Replace file" onClick={() => { setEditTarget(a); setReplaceType(a.fileUploadType || ''); setReplaceFile(null); setReplaceErr(''); if (replaceInputRef.current) replaceInputRef.current.value = ''; }}
                         style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: isEditing ? '#eff6ff' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#049edf' }}>
@@ -4513,9 +4535,21 @@ export default function CustomerContractPage() {
     const sgstAmt = Math.round((baseValue * sgstPct) / 100);
     const valueWithGst = baseValue + cgstAmt + sgstAmt;
 
+    let quotationNo = '—';
+    let revisionNo = '—';
+    if (c.comments) {
+      const match = c.comments.match(/From Quotation\s+([^\s]+)(?:\s+Rev\.(\d+))?/i);
+      if (match) {
+        quotationNo = match[1];
+        revisionNo = match[2] ? `Rev.${match[2]}` : '—';
+      }
+    }
+
     return {
       customerContractID: c.customerContractID,
       customerName: customer?.customerName || `Customer ID ${c.customerID}`,
+      quotationNumber: quotationNo,
+      revision: revisionNo,
       startDate: c.startDate || '',
       endDate: c.endDate || '',
       contractFinalValue: valueWithGst,
@@ -4529,6 +4563,8 @@ export default function CustomerContractPage() {
     const match =
       r.customerName.toLowerCase().includes(q) ||
       r.status.toLowerCase().includes(q) ||
+      r.quotationNumber.toLowerCase().includes(q) ||
+      r.revision.toLowerCase().includes(q) ||
       String(r.customerContractID).includes(q);
     return match && (!statusFilter || r.status === statusFilter);
   });
@@ -4560,6 +4596,8 @@ export default function CustomerContractPage() {
   const COLS = [
     { key: 'customerContractID', label: '#ID' },
     { key: 'customerName', label: 'Customer' },
+    { key: 'quotationNumber', label: 'Quotation No' },
+    { key: 'revision', label: 'Revision', tabletHide: true },
     { key: 'startDate', label: 'Start Date' },
     { key: 'endDate', label: 'End Date', tabletHide: true },
     { key: 'contractFinalValue', label: 'Final Value (Incl. GST)' },
@@ -4696,6 +4734,16 @@ export default function CustomerContractPage() {
                     <tr key={r.customerContractID} className="pg-tr">
                       <td className="pg-td"><span className="lc-id-badge">#{r.customerContractID}</span></td>
                       <td className="pg-td"><div className="pg-td__primary">{r.customerName}</div></td>
+                      <td className="pg-td">
+                        <span className={r.quotationNumber !== '—' ? 'pg-td__primary' : 'pg-td__secondary'} style={{ fontFamily: r.quotationNumber !== '—' ? 'monospace' : undefined, fontSize: 12.5 }}>
+                          {r.quotationNumber}
+                        </span>
+                      </td>
+                      <td className="pg-td pg-tablet-hide">
+                        <span className="pg-td__primary" style={{ fontSize: 12.5 }}>
+                          {r.revision}
+                        </span>
+                      </td>
                       <td className="pg-td"><span className="pg-td__primary">{fmtDate(r.startDate)}</span></td>
                       <td className="pg-td pg-tablet-hide"><span className="pg-td__primary">{fmtDate(r.endDate)}</span></td>
                       <td className="pg-td"><span className="lc-amount-val">{fmtCurrency(r.contractFinalValue)}</span></td>
@@ -4735,6 +4783,13 @@ export default function CustomerContractPage() {
                     </div>
                   </div>
                   <div className="pg-card__body">
+                    {r.quotationNumber !== '—' && (
+                      <div className="pg-card__row">
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#049edf', background: 'rgba(4,158,223,0.08)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(4,158,223,0.15)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          📄 {r.quotationNumber} {r.revision !== '—' ? `(${r.revision})` : ''}
+                        </span>
+                      </div>
+                    )}
                     <div className="pg-card__row"><Calendar size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{fmtDate(r.startDate)} → {fmtDate(r.endDate)}</span></div>
                     <div className="pg-card__row"><IndianRupee size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text" style={{ fontWeight: 800, color: '#1a1a2e' }}>{fmtCurrency(r.contractFinalValue)}</span></div>
                     <div className="pg-card__row"><ShieldCheck size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="lc-status-badge" style={{ background: st.bg, color: st.color, borderColor: st.border }}>{r.status}</span></div>

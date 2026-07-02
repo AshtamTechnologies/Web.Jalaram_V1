@@ -87,6 +87,7 @@ function normalizePayment(raw) {
     paidBY: raw.paidBY ?? raw.PaidBY ?? raw.paidBy ?? raw.PaidBy ?? '',
     receiptPhoto: raw.receiptPhoto ?? raw.ReceiptPhoto ?? '',
     comments: raw.comments ?? raw.Comments ?? '',
+    isParicialPayment: !!(raw.isParicialPayment ?? raw.IsParicialPayment ?? raw.isPartialPayment ?? raw.IsPartialPayment ?? false),
     lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
     lastUpdatedBy: raw.lastUpdatedBy ?? raw.LastUpdatedBy ?? 0,
   };
@@ -124,7 +125,7 @@ const PAYMENT_STATUS_COLORS = {
 
 function getPaymentStatus(payment) {
   const paid = Number(payment.paidAmount ?? 0);
-  const remaining = Number(payment.remainingAmount ?? 0);
+  const remaining = payment.isParicialPayment ? Number(payment.remainingAmount ?? 0) : 0;
   if (paid === 0) return 'Unpaid';
   if (remaining <= 0) return remaining < 0 ? 'Overpaid' : 'Paid';
   return 'Partial';
@@ -559,6 +560,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
   const [paidAmount, setPaidAmount] = useState(String(payment?.paidAmount ?? ''));
   const [paidBY, setPaidBY] = useState(payment?.paidBY || '');
   const [comments, setComments] = useState(payment?.comments || '');
+  const [isParicialPayment, setIsParicialPayment] = useState(payment?.isParicialPayment || false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -585,8 +587,14 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
         setCalculatedAmount('');
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedJob]);
+
+  /* Uncheck partial payment if remaining amount is zero or negative */
+  useEffect(() => {
+    if (remainingAmount <= 0) {
+      setIsParicialPayment(false);
+    }
+  }, [remainingAmount]);
 
   const validate = () => {
     if (!jobRequestID) return 'Please select a job request.';
@@ -613,6 +621,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
         paidBY: paidBY || '',
         receiptPhoto: payment?.receiptPhoto || '',
         comments: comments || '',
+        isParicialPayment: Boolean(isParicialPayment),
       };
 
       if (isEdit) {
@@ -721,6 +730,45 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
               </span>
               <span style={{ fontSize: 11, color: '#d0d0e0', flexShrink: 0 }}>🔒</span>
             </div>
+          </div>
+
+          {/* Is Partial Payment */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                id="isParicialPayment"
+                type="checkbox"
+                checked={isParicialPayment}
+                disabled={remainingAmount <= 0}
+                onChange={e => setIsParicialPayment(e.target.checked)}
+                style={{
+                  width: 16,
+                  height: 16,
+                  cursor: remainingAmount <= 0 ? 'not-allowed' : 'pointer',
+                  accentColor: '#049edf',
+                }}
+              />
+              <label
+                htmlFor="isParicialPayment"
+                style={{
+                  fontFamily: 'Nunito,sans-serif',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: remainingAmount <= 0 ? '#b0b0c8' : '#1a1a2e',
+                  cursor: remainingAmount <= 0 ? 'not-allowed' : 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                Is Partial Payment?
+              </label>
+            </div>
+            {remainingAmount > 0 && (
+              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: isParicialPayment ? '#049edf' : '#f59e0b', fontWeight: 600, paddingLeft: 24 }}>
+                {isParicialPayment
+                  ? 'Remaining balance will be carried over as outstanding amount to be paid later.'
+                  : `Remaining balance of ${fmtCurrency(remainingAmount)} will be written off as a Penalty and cannot be paid later.`}
+              </div>
+            )}
           </div>
 
           {/* Paid By */}
@@ -1019,17 +1067,18 @@ export default function JobPaymentPage() {
               <thead>
                 <tr>
                   {[
-                    { key: 'jobPaymentID', label: 'Pay ID', w: '7%' },
-                    { key: 'jobRequestID', label: 'Job #', w: '7%' },
-                    { key: '_customer', label: 'Customer', w: '14%', noSort: true },
-                    { key: '_jobType', label: 'Type', w: '9%', noSort: true },
-                    { key: 'paymentDate', label: 'Date', w: '10%' },
-                    { key: 'calculatedAmount', label: 'Calculated', w: '11%' },
-                    { key: 'paidAmount', label: 'Paid', w: '10%' },
-                    { key: 'remainingAmount', label: 'Remaining', w: '10%' },
-                    { key: 'paidBY', label: 'Paid By', w: '9%' },
-                    { key: '_status', label: 'Status', w: '8%', noSort: true },
-                    { key: '_action', label: 'Actions', w: '9%', noSort: true },
+                    { key: 'jobPaymentID', label: 'Pay ID', w: '6%' },
+                    { key: 'jobRequestID', label: 'Job #', w: '6%' },
+                    { key: '_customer', label: 'Customer', w: '12%', noSort: true },
+                    { key: '_jobType', label: 'Type', w: '8%', noSort: true },
+                    { key: 'paymentDate', label: 'Date', w: '9%' },
+                    { key: 'calculatedAmount', label: 'Calculated', w: '10%' },
+                    { key: 'paidAmount', label: 'Paid', w: '9%' },
+                    { key: 'remainingAmount', label: 'Remaining', w: '9%' },
+                    { key: 'penalty', label: 'Penalty', w: '9%', noSort: true },
+                    { key: 'paidBY', label: 'Paid By', w: '8%' },
+                    { key: '_status', label: 'Status', w: '7%', noSort: true },
+                    { key: '_action', label: 'Actions', w: '7%', noSort: true },
                   ].map(col => (
                     <th
                       key={col.key} style={{ width: col.w }}
@@ -1049,7 +1098,7 @@ export default function JobPaymentPage() {
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="pg-td pg-empty">
+                    <td colSpan={12} className="pg-td pg-empty">
                       <div className="pg-empty__inner">
                         <CreditCard size={36} color="#d0d0e8" />
                         <span className="pg-empty__label">No payments found</span>
@@ -1060,7 +1109,10 @@ export default function JobPaymentPage() {
                   const cName = custName(p.jobRequestID);
                   const jType = jobType(p.jobRequestID);
                   const jts = jobTypeBadgeStyle(jType);
-                  const rem = Number(p.remainingAmount ?? 0);
+                  const rawRem = Number(p.remainingAmount ?? 0);
+                  const isPartial = p.isParicialPayment;
+                  const displayRem = isPartial ? rawRem : 0;
+                  const displayPenalty = !isPartial ? rawRem : 0;
                   return (
                     <tr key={p.jobPaymentID} className="pg-tr">
                       <td className="pg-td">
@@ -1099,8 +1151,13 @@ export default function JobPaymentPage() {
                         </span>
                       </td>
                       <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: rem > 0 ? '#dc2626' : rem < 0 ? '#7c3aed' : '#9090a8' }}>
-                          {fmtCurrency(rem)}
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: displayRem > 0 ? '#dc2626' : displayRem < 0 ? '#7c3aed' : '#9090a8' }}>
+                          {displayRem !== 0 ? fmtCurrency(displayRem) : '—'}
+                        </span>
+                      </td>
+                      <td className="pg-td">
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: displayPenalty > 0 ? '#dc2626' : '#9090a8' }}>
+                          {displayPenalty !== 0 ? fmtCurrency(displayPenalty) : '—'}
                         </span>
                       </td>
                       <td className="pg-td pg-td--overflow">

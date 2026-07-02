@@ -1612,6 +1612,14 @@ export default function SupervisorJobsPage() {
           showToast={showToast}
           allAttachments={allAttachments}
         />
+        {acceptConfirmTarget && (
+          <AcceptConfirmModal
+            job={acceptConfirmTarget}
+            onConfirm={() => handleAccept(acceptConfirmTarget)}
+            onCancel={() => !accepting && setAcceptConfirmTarget(null)}
+            processing={accepting}
+          />
+        )}
       </>
     );
   }

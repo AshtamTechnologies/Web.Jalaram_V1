@@ -123,7 +123,7 @@ export default function Dashboard({ changeTab }) {
   const STATS = [
     { title: 'Total Hoardings', value: String(hoardingsData.totalHoardings ?? 0), sub: `+${hoardingsData.addedThisMonth ?? 0} added this month`, icon: Layers, color: '#049edf', bg: 'rgba(4,158,223,0.1)' },
     { title: 'Active Bookings', value: String(activeBookingsData.activeCount ?? 0), sub: `${activeBookingsData.expiringThisWeek ?? 0} expiring this week`, icon: CalendarCheck, color: '#1a9e6e', bg: 'rgba(26,158,110,0.1)' },
-    { title: 'Expired Bookings', value: String(expiredBookingsData.expiredCount ?? 0), sub: `${expiredBookingsData.pendingRenewals ?? 0} pending renewal`, icon: TrendingDown, color: '#e84040', bg: 'rgba(232,64,64,0.1)' },
+    // { title: 'Expired Bookings', value: String(expiredBookingsData.expiredCount ?? 0), sub: `${expiredBookingsData.pendingRenewals ?? 0} pending renewal`, icon: TrendingDown, color: '#e84040', bg: 'rgba(232,64,64,0.1)' },
     { title: 'Total Revenue', value: formatRevenue(revenueData.totalRevenue ?? 0), sub: revenueSub, icon: IndianRupee, color: '#6c63ff', bg: 'rgba(108,99,255,0.1)' },
   ];
 

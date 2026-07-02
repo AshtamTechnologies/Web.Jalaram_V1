@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
+import axios from 'axios';
 import {
   Plus, Search, X, AlertCircle, Check, Edit2,
   RefreshCw, Calendar, ChevronUp, ChevronDown,
@@ -7,7 +8,7 @@ import {
   Loader2, FileText, Eye, ArrowLeft, Building2, User,
   IndianRupee, Clock, Upload, Trash2,
   ShieldCheck, MessageSquare, CreditCard, TrendingUp,
-  Download, ExternalLink, MapPin, Tag, Paperclip,
+  Download, ExternalLink, MapPin, Tag, Paperclip, AlertTriangle
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
@@ -28,6 +29,27 @@ const EMPTY_FORM = {
   ownerID: '', startDate: '', endDate: '',
   totalContractValue: '', paymentFreqID: '', amountPerFreq: '',
   advancePaid: '', status: 'Active', comments: '',
+};
+
+const forceDownload = async (url, filename) => {
+  try {
+    const cleanUrl = url.split('?')[0];
+    const downloadUrl = `${cleanUrl}?t=${Date.now()}`;
+    const response = await axios.get(downloadUrl, {
+      responseType: 'blob',
+    });
+    const localUrl = URL.createObjectURL(response.data);
+    const a = document.createElement('a');
+    a.href = localUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(localUrl);
+  } catch (err) {
+    console.error('Download failed, fallback to direct link', err);
+    window.open(url, '_blank');
+  }
 };
 
 /* Attachment file validation */
@@ -699,6 +721,7 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
   const [apiError, setApiError] = useState('');
   const [replacingId, setReplacingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [attachToDelete, setAttachToDelete] = useState(null);
   const uploadRef = useRef(null);
   const replaceRef = useRef(null);
 
@@ -775,7 +798,11 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
     } finally { setReplacingId(null); }
   };
 
-  const handleDelete = async (attachId) => {
+  const handleDelete = (attachId, fileName) => {
+    setAttachToDelete({ id: attachId, name: fileName });
+  };
+
+  const executeDelete = async (attachId) => {
     setDeletingId(attachId); setApiError('');
     try {
       await apiService.deleteLandContractAttach(attachId);
@@ -851,7 +878,7 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
                         </button>
                       )}
                       {att.fileUrl && (
-                        <button onClick={() => { const a = document.createElement('a'); a.href = att.fileUrl; a.download = name; a.target = '_blank'; a.click(); }} title="Download document"
+                        <button onClick={() => forceDownload(att.fileUrl, name)} title="Download document"
                           style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.2)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#16a34a', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'Nunito, sans-serif' }}>
                           <Download size={11} /> Download
                         </button>
@@ -860,7 +887,7 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
                         style={{ background: 'rgba(109,99,255,0.08)', border: '1px solid rgba(109,99,255,0.2)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#6c63ff', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'Nunito, sans-serif', opacity: isReplacing || isDeleting ? 0.5 : 1 }}>
                         {isReplacing ? <Loader2 size={10} className="pg-spin" /> : <RefreshCw size={11} />} Replace
                       </button>
-                      <button disabled={isDeleting || isReplacing} onClick={() => handleDelete(att.landContractAttachID)} title="Delete attachment"
+                      <button disabled={isDeleting || isReplacing} onClick={() => handleDelete(att.landContractAttachID, name)} title="Delete attachment"
                         style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#dc2626', opacity: isDeleting || isReplacing ? 0.5 : 1 }}>
                         {isDeleting ? <Loader2 size={11} className="pg-spin" /> : <Trash2 size={12} />}
                       </button>
@@ -887,7 +914,108 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
           </>
         )}
       </div>
+
+      {attachToDelete && (
+        <AttachmentDeleteConfirmModal
+          fileName={attachToDelete.name}
+          onConfirm={() => {
+            executeDelete(attachToDelete.id);
+            setAttachToDelete(null);
+          }}
+          onClose={() => setAttachToDelete(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function AttachmentDeleteConfirmModal({ fileName, onConfirm, onClose }) {
+  const cancelBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (cancelBtnRef.current) cancelBtnRef.current.focus();
+    const handleKeyDown = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100000,
+        background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 22, width: '100%', maxWidth: 440,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '24px 24px 20px',
+          animation: 'modalIn 0.24s cubic-bezier(0.22,1,0.36,1) both',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: '#fffbeb', border: '2px solid #fde68a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <AlertTriangle size={20} color="#d97706" />
+          </div>
+          <div>
+            <h3 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#1a1a2e', margin: 0 }}>
+              Delete Document?
+            </h3>
+            <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#7878a0', margin: '4px 0 0' }}>
+              Confirm deleting this attachment.
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 600,
+          color: '#4a5568', lineHeight: 1.5, marginBottom: 24,
+        }}>
+          Are you sure you want to delete the document <strong>{fileName}</strong>? This action cannot be undone.
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12,
+        }}>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '10px 20px', borderRadius: 10, border: '1.5px solid #fca5a5',
+              background: '#fff', color: '#dc2626', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.target.style.background = '#fef2f2'; }}
+            onMouseLeave={e => { e.target.style.background = '#fff'; }}
+          >
+            Yes, Delete
+          </button>
+
+          <button
+            ref={cancelBtnRef}
+            onClick={onClose}
+            style={{
+              padding: '11px 24px', borderRadius: 10, border: 'none',
+              background: 'linear-gradient(135deg,#049edf,#6c63ff)',
+              color: '#fff', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              boxShadow: '0 4px 12px rgba(108,99,255,0.2)',
+            }}
+          >
+            No, Cancel
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -901,6 +1029,7 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
   const [deletingId, setDeletingId] = useState(null);
   const [apiError, setApiError] = useState('');
   const [pickOpen, setPickOpen] = useState(false);
+  const [mapToDelete, setMapToDelete] = useState(null);
 
   const mappedHoardingIds = new Set(maps.map((m) => Number(m.hoardingID ?? m.HoardingID)));
 
@@ -942,7 +1071,11 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
     } finally { setSaving(false); }
   };
 
-  const handleDelete = async (mapId) => {
+  const handleDelete = (mapId, hoardingCode) => {
+    setMapToDelete({ id: mapId, code: hoardingCode });
+  };
+
+  const executeDelete = async (mapId) => {
     setDeletingId(mapId); setApiError('');
     try {
       await apiService.deleteLandContractHoardingMap(mapId);
@@ -1037,7 +1170,7 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
                           </td>
                           {/* Delete */}
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8', textAlign: 'right' }}>
-                            <button disabled={isDeleting} onClick={() => handleDelete(m.landContrHrdngMapID)} title="Remove hoarding from this contract"
+                            <button disabled={isDeleting} onClick={() => handleDelete(m.landContrHrdngMapID, h ? h.hoardingCode : `ID: ${m.hoardingID}`)} title="Remove hoarding from this contract"
                               style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', opacity: isDeleting ? 0.5 : 1 }}>
                               {isDeleting ? <Loader2 size={12} className="pg-spin" /> : <Trash2 size={13} />}
                             </button>
@@ -1088,7 +1221,108 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
           onClose={() => setPickOpen(false)}
         />
       )}
+
+      {mapToDelete && (
+        <HoardingMappingDeleteConfirmModal
+          hoardingCode={mapToDelete.code}
+          onConfirm={() => {
+            executeDelete(mapToDelete.id);
+            setMapToDelete(null);
+          }}
+          onClose={() => setMapToDelete(null)}
+        />
+      )}
     </div>
+  );
+}
+
+function HoardingMappingDeleteConfirmModal({ hoardingCode, onConfirm, onClose }) {
+  const cancelBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (cancelBtnRef.current) cancelBtnRef.current.focus();
+    const handleKeyDown = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100000,
+        background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 22, width: '100%', maxWidth: 440,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '24px 24px 20px',
+          animation: 'modalIn 0.24s cubic-bezier(0.22,1,0.36,1) both',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: '#fffbeb', border: '2px solid #fde68a',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <AlertTriangle size={20} color="#d97706" />
+          </div>
+          <div>
+            <h3 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#1a1a2e', margin: 0 }}>
+              Unlink Hoarding?
+            </h3>
+            <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#7878a0', margin: '4px 0 0' }}>
+              Confirm removing this link.
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 600,
+          color: '#4a5568', lineHeight: 1.5, marginBottom: 24,
+        }}>
+          Are you sure you want to unlink hoarding <strong>{hoardingCode}</strong> from this contract?
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12,
+        }}>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '10px 20px', borderRadius: 10, border: '1.5px solid #fca5a5',
+              background: '#fff', color: '#dc2626', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.target.style.background = '#fef2f2'; }}
+            onMouseLeave={e => { e.target.style.background = '#fff'; }}
+          >
+            Yes, Unlink
+          </button>
+
+          <button
+            ref={cancelBtnRef}
+            onClick={onClose}
+            style={{
+              padding: '11px 24px', borderRadius: 10, border: 'none',
+              background: 'linear-gradient(135deg,#049edf,#6c63ff)',
+              color: '#fff', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              boxShadow: '0 4px 12px rgba(108,99,255,0.2)',
+            }}
+          >
+            No, Cancel
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1096,18 +1330,92 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
    DELETE CONFIRM MODAL
 ───────────────────────────────────────── */
 function DeleteConfirmModal({ contract, onConfirm, onCancel }) {
-  return (
-    <div className="pg-overlay" onClick={onCancel}>
-      <div className="exp-delete-modal" onClick={e => e.stopPropagation()}>
-        <div className="exp-delete-modal__icon"><Trash2 size={22} color="#dc2626" /></div>
-        <div className="exp-delete-modal__title">Delete Contract?</div>
-        <div className="exp-delete-modal__sub">Contract <strong>#{contract.landContractID}</strong> will be permanently removed.</div>
-        <div className="exp-delete-modal__actions">
-          <button className="pg-btn-cancel" onClick={onCancel}>Cancel</button>
-          <button className="exp-btn-delete-confirm" onClick={onConfirm}><Trash2 size={13} /> Delete</button>
+  const cancelBtnRef = useRef(null);
+
+  useEffect(() => {
+    if (cancelBtnRef.current) cancelBtnRef.current.focus();
+    const handleKeyDown = (e) => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onCancel]);
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100000,
+        background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onCancel}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 22, width: '100%', maxWidth: 440,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '24px 24px 20px',
+          animation: 'modalIn 0.24s cubic-bezier(0.22,1,0.36,1) both',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: '#fef2f2', border: '2px solid #fee2e2',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Trash2 size={20} color="#dc2626" />
+          </div>
+          <div>
+            <h3 style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#1a1a2e', margin: 0 }}>
+              Delete Contract?
+            </h3>
+            <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#7878a0', margin: '4px 0 0' }}>
+              This action cannot be undone.
+            </p>
+          </div>
+        </div>
+
+        <div style={{
+          fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 600,
+          color: '#4a5568', lineHeight: 1.5, marginBottom: 24,
+        }}>
+          Are you sure you want to permanently delete contract <strong>#{contract.landContractID}</strong>?
+        </div>
+
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12,
+        }}>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '10px 20px', borderRadius: 10, border: '1.5px solid #fca5a5',
+              background: '#fff', color: '#dc2626', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => { e.target.style.background = '#fef2f2'; }}
+            onMouseLeave={e => { e.target.style.background = '#fff'; }}
+          >
+            Yes, Delete
+          </button>
+
+          <button
+            ref={cancelBtnRef}
+            onClick={onCancel}
+            style={{
+              padding: '11px 24px', borderRadius: 10, border: 'none',
+              background: 'linear-gradient(135deg,#049edf,#6c63ff)',
+              color: '#fff', cursor: 'pointer',
+              fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 800,
+              boxShadow: '0 4px 12px rgba(108,99,255,0.2)',
+            }}
+          >
+            No, Cancel
+          </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 /* ─────────────────────────────────────────

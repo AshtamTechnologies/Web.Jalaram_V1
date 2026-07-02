@@ -162,7 +162,7 @@ function ImageUploadZone({ label, sublabel, IconComp, values = [], onChange, err
     const addFiles = (files) => {
         const images = Array.from(files).filter(f => f.type.startsWith('image/'));
         if (!images.length) return;
-        onChange([...values, ...images]);
+        onChange(images.slice(0, 1));
     };
     const removeOne = (idx) => onChange(values.filter((_, i) => i !== idx));
     return (
@@ -173,7 +173,7 @@ function ImageUploadZone({ label, sublabel, IconComp, values = [], onChange, err
                 <span style={{ fontSize: 10, color: '#9090a8', fontFamily: 'Nunito,sans-serif', fontWeight: 600 }}>{sublabel}</span>
                 {values.length > 0 && (
                     <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: '#1a9e6e', background: '#e8faf3', padding: '2px 8px', borderRadius: 20, border: '1px solid #7dd5b0' }}>
-                        {values.length} photo{values.length > 1 ? 's' : ''}
+                        {values.length} photo
                     </span>
                 )}
             </div>
@@ -210,9 +210,9 @@ function ImageUploadZone({ label, sublabel, IconComp, values = [], onChange, err
                 </div>
                 <div style={{ textAlign: 'center' }}>
                     <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: error ? '#ef4444' : '#1a1a2e', marginBottom: 2 }}>
-                        {values.length > 0 ? 'Add more photos' : `Upload ${label}`}
+                        {values.length > 0 ? 'Change photo' : `Upload ${label}`}
                     </div>
-                    <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 600, color: '#9090a8' }}>Click or drag & drop • multiple allowed</div>
+                    <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 600, color: '#9090a8' }}>Click or drag & drop</div>
                 </div>
                 {error && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#ef4444' }}>
@@ -220,7 +220,7 @@ function ImageUploadZone({ label, sublabel, IconComp, values = [], onChange, err
                     </div>
                 )}
             </div>
-            <input ref={inputRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+            <input ref={inputRef} type="file" accept="image/*" style={{ display: 'none' }}
                 onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = ''; }} />
         </div>
     );
@@ -293,6 +293,7 @@ function BannerStrip({ contractID }) {
    TASK MODAL  (View + Update tabs)
 ══════════════════════════════════════════ */
 function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
+    const tabs = [{ id: 'view', label: '📋 Details' }, { id: 'update', label: '✏️ Update Task' }];
     const [tab, setTab] = useState(initialTab);
     const [closeImg, setCloseImg] = useState([]);
     const [farImg, setFarImg] = useState([]);
@@ -477,7 +478,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
 
                 {/* ── Tabs ── */}
                 <div className="wt-modal-tab-bar" style={{ display: 'flex', borderBottom: '1.5px solid #f0f0f8', padding: '0 18px', overflowX: 'auto' }}>
-                    {[{ id: 'view', label: '📋 Details' }, { id: 'update', label: '✏️ Update Task' }].map(t => (
+                    {tabs.map(t => (
                         <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: '11px 16px', border: 'none', background: 'none', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: tab === t.id ? '#049edf' : '#9090a8', borderBottom: tab === t.id ? '2.5px solid #049edf' : '2.5px solid transparent', cursor: 'pointer', transition: 'all 0.15s', marginBottom: '-1.5px', whiteSpace: 'nowrap' }}>{t.label}</button>
                     ))}
                 </div>
@@ -518,8 +519,8 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                                     <InfoRow icon={Briefcase} label="Job Type" value={job.jobType} accent="#6c63ff" />
                                     <InfoRow icon={ClipboardList} label="Description" value={job.jobDescription} accent="#6c63ff" />
-                                    <InfoRow icon={CheckCircle} label="Job Status" value={job.jobStatus} accent="#6c63ff" />
-                                    <InfoRow icon={Layers} label="No. of Hoardings" value={job.noofHoardings} accent="#6c63ff" />
+                                    {/* <InfoRow icon={CheckCircle} label="Job Status" value={job.jobStatus} accent="#6c63ff" />
+                                    <InfoRow icon={Layers} label="No. of Hoardings" value={job.noofHoardings} accent="#6c63ff" /> */}
                                     <InfoRow icon={Calendar} label="Target Date" value={fmtDate(job.targetCompletionDate)} accent="#6c63ff" />
                                 </div>
                             </>
@@ -587,8 +588,10 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                                             {existingClose.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#1a9e6e', background: '#e8faf3', padding: '1px 7px', borderRadius: 20, border: '1px solid #7dd5b0' }}>{existingClose.length} uploaded</span>}
                                         </div>
                                         <ExistingGrid items={existingClose} label="Near" />
-                                        <ImageUploadZone label="Short Vision" sublabel="(Close-up)" IconComp={ZoomIn} values={closeImg}
-                                            onChange={v => { setCloseImg(v); setErrors(e => ({ ...e, closeImg: '' })); }} error={errors.closeImg} />
+                                        {existingClose.length === 0 && (
+                                            <ImageUploadZone label="Short Vision" sublabel="(Close-up)" IconComp={ZoomIn} values={closeImg}
+                                                onChange={v => { setCloseImg(v.slice(0, 1)); setErrors(e => ({ ...e, closeImg: '' })); }} error={errors.closeImg} />
+                                        )}
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                                         <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -596,8 +599,10 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                                             {existingFar.length > 0 && <span style={{ marginLeft: 6, fontSize: 10, fontWeight: 700, color: '#1a9e6e', background: '#e8faf3', padding: '1px 7px', borderRadius: 20, border: '1px solid #7dd5b0' }}>{existingFar.length} uploaded</span>}
                                         </div>
                                         <ExistingGrid items={existingFar} label="Far" />
-                                        <ImageUploadZone label="Long Vision" sublabel="(Wide shot)" IconComp={ZoomOut} values={farImg}
-                                            onChange={v => { setFarImg(v); setErrors(e => ({ ...e, farImg: '' })); }} error={errors.farImg} />
+                                        {existingFar.length === 0 && (
+                                            <ImageUploadZone label="Long Vision" sublabel="(Wide shot)" IconComp={ZoomOut} values={farImg}
+                                                onChange={v => { setFarImg(v.slice(0, 1)); setErrors(e => ({ ...e, farImg: '' })); }} error={errors.farImg} />
+                                        )}
                                     </div>
                                 </div>
                             )}
@@ -644,14 +649,18 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                 <div className="wt-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px 18px', borderTop: '1px solid #f0f0f8', flexWrap: 'wrap', gap: 10 }}>
                     <button onClick={onClose} style={{ padding: '10px 22px', borderRadius: 11, background: '#f5f5fb', border: '1.5px solid #e8e8f0', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontWeight: 700, fontSize: 13, color: '#7878a0' }}>Close</button>
                     {tab === 'view' ? (
-                        <button onClick={() => setTab('update')} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#049edf,#6c63ff)', color: '#fff', fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 16px rgba(4,158,223,0.32)' }}>
-                            <Edit3 size={13} /> Update Task
-                        </button>
+                        !(task.status?.toLowerCase() === 'completed' || task.status?.toLowerCase() === 'submitted') && (
+                            <button onClick={() => setTab('update')} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 11, border: 'none', background: 'linear-gradient(135deg,#049edf,#6c63ff)', color: '#fff', fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 16px rgba(4,158,223,0.32)' }}>
+                                <Edit3 size={13} /> Update Task
+                            </button>
+                        )
                     ) : (
-                        <button onClick={handleSave} disabled={saving || saved} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 24px', borderRadius: 11, border: 'none', background: saved ? '#16a34a' : saving ? '#a0c8e8' : 'linear-gradient(135deg,#049edf,#6c63ff)', color: '#fff', fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, cursor: saving || saved ? 'not-allowed' : 'pointer', boxShadow: '0 4px 16px rgba(4,158,223,0.28)', transition: 'background 0.2s' }}>
-                            {saving ? <Loader2 size={13} className="pg-spin" /> : saved ? <CheckCircle size={13} /> : <SendHorizonal size={13} />}
-                            {saving ? 'Submitting…' : saved ? 'Submitted!' : 'Submit Task'}
-                        </button>
+                        !(task.status?.toLowerCase() === 'completed' || task.status?.toLowerCase() === 'submitted' || saved) && (
+                            <button onClick={handleSave} disabled={saving || saved} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '10px 24px', borderRadius: 11, border: 'none', background: saved ? '#16a34a' : saving ? '#a0c8e8' : 'linear-gradient(135deg,#049edf,#6c63ff)', color: '#fff', fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13, cursor: saving || saved ? 'not-allowed' : 'pointer', boxShadow: '0 4px 16px rgba(4,158,223,0.28)', transition: 'background 0.2s' }}>
+                                {saving ? <Loader2 size={13} className="pg-spin" /> : saved ? <CheckCircle size={13} /> : <SendHorizonal size={13} />}
+                                {saving ? 'Submitting…' : saved ? 'Submitted!' : 'Submit Task'}
+                            </button>
+                        )
                     )}
                 </div>
             </div>
@@ -803,6 +812,10 @@ function MergedGroupCard({ groupTasks, onView, onEdit }) {
     const firstTask = groupTasks[0];
     const job = firstTask?.job;
     const addresses = [...new Set(groupTasks.map(t => t.siteAddress).filter(Boolean))];
+
+    const allSubmitted = groupTasks.every(t => t.status === 'Submitted' || t.status === 'Completed');
+    const anyOpen = groupTasks.some(t => t.status === 'Open');
+    const groupStatus = allSubmitted ? 'Submitted' : anyOpen ? 'Open' : groupTasks[0]?.status || 'Open';
 
     return (
         <div className="pg-card" style={{ border: '1.5px solid rgba(124,58,237,0.3)', background: 'linear-gradient(135deg,rgba(124,58,237,0.03),#fff)' }}>
