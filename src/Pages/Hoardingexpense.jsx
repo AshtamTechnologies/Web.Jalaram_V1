@@ -903,6 +903,7 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
   /* ── Per-row delete state ── */
   const [deleteTarget, setDeleteTarget]   = useState(null);
   const [deletingRowId, setDeletingRowId] = useState(null);
+  const [stagedDeletedExpenseIds, setStagedDeletedExpenseIds] = useState([]);
 
   /* ── Load existing attachments for all saved rows on edit mount ── */
 useEffect(() => {
@@ -929,34 +930,10 @@ useEffect(() => {
 }, []);
 
   /* ── File handlers ── */
-const handleFileSelect = useCallback(async (rowId, file) => {
-  const row = rows.find(r => r._rowId === rowId);
-  const expenseID = row?._expenseID;
-
-  // REPLACE CASE — attachment already exists on server
-  if (expenseID && existingAttaches[expenseID]) {
-    const attach = existingAttaches[expenseID];
-    setUploadingRowIds(prev => new Set(prev).add(rowId));
-    try {
-      await apiService.updateExpenseAttach(
-        attach,           // full attach object (we read the ID from it inside api.js)
-        Number(hoardingID),
-        Number(expenseID),
-        file
-      );
-      // Refresh so the saved card shows the new filename
-      const updated = await apiService.getExpenseAttachByExpenseId(expenseID);
-      setExistingAttaches(prev => ({ ...prev, [expenseID]: updated }));
-    } catch (err) {
-      setApiErr(err?.response?.data?.message || err?.message || 'Failed to replace attachment.');
-    } finally {
-      setUploadingRowIds(prev => { const n = new Set(prev); n.delete(rowId); return n; });
-    }
-  } else {
-    // NEW FILE CASE — queue for upload when Save is clicked
+  /* ── File handlers ── */
+  const handleFileSelect = useCallback((rowId, file) => {
     setAttachFiles(prev => ({ ...prev, [rowId]: file }));
-  }
-}, [rows, existingAttaches, hoardingID]);
+  }, []);
   const handleFileClear = useCallback((rowId) => {
     setAttachFiles(prev => { const n = { ...prev }; delete n[rowId]; return n; });
   }, []);
@@ -986,18 +963,16 @@ const handleFileSelect = useCallback(async (rowId, file) => {
     if (row) setDeleteTarget(row);
   };
 
-  const confirmDeleteRow = async () => {
+  const confirmDeleteRow = () => {
     if (!deleteTarget) return;
     const row = deleteTarget;
-    setDeleteTarget(null); setDeletingRowId(row._rowId); setApiErr('');
-    try {
-      if (row._expenseID) await apiService.deleteExpense(row._expenseID);
-      setRows(prev => prev.filter(r => r._rowId !== row._rowId));
-      setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
-      setAttachFiles(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
-    } catch (err) {
-      setApiErr(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Failed to delete expense.');
-    } finally { setDeletingRowId(null); }
+    setDeleteTarget(null);
+    if (row._expenseID) {
+      setStagedDeletedExpenseIds(prev => [...prev, row._expenseID]);
+    }
+    setRows(prev => prev.filter(r => r._rowId !== row._rowId));
+    setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
+    setAttachFiles(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
   };
 
   /* ── Save ── */
@@ -1023,6 +998,13 @@ const handleFileSelect = useCallback(async (rowId, file) => {
     setSaving(true); setApiErr('');
     const attachErrors = [];
     try {
+      // Delete staged deleted expenses first
+      if (stagedDeletedExpenseIds.length > 0) {
+        for (const id of stagedDeletedExpenseIds) {
+          await apiService.deleteExpense(id);
+        }
+      }
+
       for (const row of allRows) {
         const payload = {
           hoardingID:  Number(hoardingID),
@@ -1046,7 +1028,12 @@ const handleFileSelect = useCallback(async (rowId, file) => {
         if (file && resolvedID) {
           setUploadingRowIds(prev => new Set(prev).add(row._rowId));
           try {
-            await apiService.createExpenseAttach(resolvedID, Number(hoardingID), file);
+            const existing = existingAttaches[resolvedID];
+            if (existing) {
+              await apiService.updateExpenseAttach(existing, Number(hoardingID), resolvedID, file);
+            } else {
+              await apiService.createExpenseAttach(resolvedID, Number(hoardingID), file);
+            }
           } catch (e) {
             attachErrors.push(e?.response?.data?.message || e?.message || 'Upload failed');
           } finally {

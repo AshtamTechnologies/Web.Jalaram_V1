@@ -550,9 +550,17 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
 /* ─────────────────────────────────────────
    PHOTO SECTION
 ───────────────────────────────────────── */
-function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readOnly = false }) {
+function PhotoSection({
+  hoardingID,
+  effdtRaw,
+  photos = [],
+  onAddPhotos,
+  onReplacePhoto,
+  onDeletePhoto,
+  readOnly = false,
+  uploading = false,
+}) {
   const [lightbox, setLightbox] = useState(null);
-  const [uploading, setUploading] = useState(false);
   const [photoError, setPhotoError] = useState('');
   const [replacingPhoto, setReplacingPhoto] = useState(null);
   const [photoToDelete, setPhotoToDelete] = useState(null);
@@ -571,61 +579,24 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
     return true;
   };
 
-  const buildFormData = ({ file, filename, hoardingIDOverride }) => {
-    const fd = new FormData();
-    const userId = getLoggedInUserId();
-    const resolvedName = filename || file.name;
-    const resolvedHID = hoardingIDOverride || hoardingID;
-
-    const todayDate = new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
-    const effdtDateOnly = effdtRaw
-      ? effdtRaw.split('T')[0]
-      : todayDate;
-
-    fd.append('hoardingPhotoID', '0');
-    fd.append('hoardingID', String(resolvedHID));
-    fd.append('effdt', effdtDateOnly);  // ✅ DateOnly
-    fd.append('photo', file, resolvedName);
-    fd.append('photoUrl', resolvedName);
-    fd.append('photoPath', resolvedName);
-    fd.append('filename', resolvedName);
-    fd.append('uploadedOn', todayDate);       // ✅ DateOnly
-    fd.append('lastUpdateDttm', todayDate);       // ✅ DateOnly
-    fd.append('lastUpdatedBy', String(userId));
-    return fd;
-  };
-
-  const handleAddFiles = async (e) => {
+  const handleAddFiles = (e) => {
     const files = Array.from(e.target.files);
     e.target.value = '';
     if (!files.length) return;
     if (!validateFiles(files)) return;
-    if (!hoardingID) { setPhotoError('Save the hoarding version first before uploading photos.'); return; }
-    setUploading(true); setPhotoError('');
-    try {
-      for (const file of files) await apiService.uploadHoardingPhoto(buildFormData({ file, filename: file.name }));
-      await onPhotosChange();
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Failed to upload photo.';
-      setPhotoError(typeof msg === 'string' ? msg : JSON.stringify(msg));
-    } finally { setUploading(false); }
+    if (onAddPhotos) {
+      onAddPhotos(files);
+    }
   };
 
-  const handleReplaceFile = async (e) => {
+  const handleReplaceFile = (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file || !replacingPhoto) return;
     if (!validateFiles([file])) return;
-    setUploading(true); setPhotoError('');
-    try {
-      await apiService.deleteHoardingPhoto(replacingPhoto.hoardingPhotoID);
-      await apiService.uploadHoardingPhoto(buildFormData({ file, filename: file.name }));
-      await onPhotosChange();
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.message || 'Failed to replace photo.';
-      setPhotoError(typeof msg === 'string' ? msg : JSON.stringify(msg));
-      try { await onPhotosChange(); } catch { /* ignore */ }
-    } finally { setUploading(false); setReplacingPhoto(null); }
+    if (onReplacePhoto) {
+      onReplacePhoto(replacingPhoto, file);
+    }
   };
 
   const triggerReplace = (photo) => {
@@ -637,14 +608,11 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
     setPhotoToDelete(photo);
   };
 
-  const executeDelete = async (photo) => {
-    setUploading(true); setPhotoError('');
-    try {
-      await apiService.deleteHoardingPhoto(photo.hoardingPhotoID);
-      await onPhotosChange();
-    } catch (err) {
-      setPhotoError(err?.response?.data?.message || err?.message || 'Failed to delete photo.');
-    } finally { setUploading(false); }
+  const executeDelete = (photo) => {
+    if (onDeletePhoto) {
+      onDeletePhoto(photo);
+    }
+    setPhotoToDelete(null);
   };
 
   const resolvePhotoSrc = (p) => {
@@ -653,7 +621,7 @@ function PhotoSection({ hoardingID, effdtRaw, photos = [], onPhotosChange, readO
       p.PhotoUrl ?? p.PhotoPath ?? p.Photo ??
       p.filePath ?? p.FilePath ?? '';
     if (!raw) return '';
-    if (raw.startsWith('data:') || raw.startsWith('http')) return raw;
+    if (raw.startsWith('data:') || raw.startsWith('blob:') || raw.startsWith('http')) return raw;
     const base = (API_ROOT_URL || '').replace(/\/+$/, '');
     const rel = '/' + raw.replace(/^\/+/, '');
     return `${base}${rel}`;
@@ -983,6 +951,10 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
   const [apiErr, setApiErr] = useState('');
   const [availabilityConflict, setAvailabilityConflict] = useState(null);
 
+  const [versionPhotos, setVersionPhotos] = useState([]);
+  const [stagedNewPhotos, setStagedNewPhotos] = useState([]);
+  const [stagedDeletedPhotos, setStagedDeletedPhotos] = useState([]);
+
   const activeVersion = activePanel !== null && activePanel.idx >= 0
     ? sortedVersions[activePanel.idx]
     : null;
@@ -1000,28 +972,83 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
       : ''
     );
   };
-  const loadPhotos = useCallback(async (hoardingID) => {
+  const loadPhotos = useCallback(async (hoardingID, effdt) => {
     if (!hoardingID) return;
     setPhotosLoading(true);
     try {
-      const hoardingPhotos = await apiService.getPhotosByHoardingID(hoardingID)
-        .then(d =>
-          Array.isArray(d) ? d :
-            Array.isArray(d?.$values) ? d.$values :
-              Array.isArray(d?.data) ? d.data : []
-        )
-        .catch(() => []);
+      const effdtFormatted = effdt ? effdt.split('T')[0] : '';
+      let hoardingPhotos = [];
+      if (effdtFormatted) {
+        hoardingPhotos = await apiService.getPhotosByHoardingIDAndEffdt(hoardingID, effdtFormatted)
+          .then(d =>
+            Array.isArray(d) ? d :
+              Array.isArray(d?.$values) ? d.$values :
+                Array.isArray(d?.data) ? d.data : []
+          )
+          .catch(() => []);
+      } else {
+        hoardingPhotos = await apiService.getPhotosByHoardingID(hoardingID)
+          .then(d =>
+            Array.isArray(d) ? d :
+              Array.isArray(d?.$values) ? d.$values :
+                Array.isArray(d?.data) ? d.data : []
+          )
+          .catch(() => []);
+      }
 
       setPhotosMap(prev => ({
         ...prev,
         [hoardingID]: hoardingPhotos,
       }));
-
+      setVersionPhotos(hoardingPhotos);
+      setStagedNewPhotos([]);
+      setStagedDeletedPhotos([]);
     } catch (err) {
       console.error('[loadPhotos] failed:', err);
       setPhotosMap(prev => ({ ...prev, [hoardingID]: [] }));
+      setVersionPhotos([]);
     } finally { setPhotosLoading(false); }
-  }, [hoarding]);
+  }, []);
+
+  const handleAddPhotos = (files) => {
+    files.forEach(file => {
+      const tempId = 'new_' + Math.random().toString(36).substr(2, 9);
+      const newPhoto = {
+        hoardingPhotoID: tempId,
+        filename: file.name,
+        _file: file,
+        photoUrl: URL.createObjectURL(file),
+      };
+      setVersionPhotos(prev => [...prev, newPhoto]);
+      setStagedNewPhotos(prev => [...prev, newPhoto]);
+    });
+  };
+
+  const handleReplacePhoto = (photoToReplace, file) => {
+    if (!String(photoToReplace.hoardingPhotoID).startsWith('new_')) {
+      setStagedDeletedPhotos(prev => [...prev, photoToReplace]);
+    } else {
+      setStagedNewPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID));
+    }
+    const tempId = 'new_' + Math.random().toString(36).substr(2, 9);
+    const newPhoto = {
+      hoardingPhotoID: tempId,
+      filename: file.name,
+      _file: file,
+      photoUrl: URL.createObjectURL(file),
+    };
+    setVersionPhotos(prev => prev.map(p => p.hoardingPhotoID === photoToReplace.hoardingPhotoID ? newPhoto : p));
+    setStagedNewPhotos(prev => [...prev, newPhoto]);
+  };
+
+  const handleDeletePhoto = (photoToDelete) => {
+    if (!String(photoToDelete.hoardingPhotoID).startsWith('new_')) {
+      setStagedDeletedPhotos(prev => [...prev, photoToDelete]);
+    } else {
+      setStagedNewPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToDelete.hoardingPhotoID));
+    }
+    setVersionPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToDelete.hoardingPhotoID));
+  };
 
   const photosFor = (hID) => (hID ? (photosMap[hID] || []) : []);
   const scrollToPanel = () =>
@@ -1030,7 +1057,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
   const openView = (idx, v) => {
     setActivePanel({ idx, mode: 'view' });
     setEffdtErrors({});
-    loadPhotos(v.hoardingID);
+    loadPhotos(v.hoardingID, v.effdtRaw || v.effdt);
     scrollToPanel();
   };
 
@@ -1038,7 +1065,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     setActivePanel({ idx, mode: 'edit' });
     setEffdtForm({ ...v });
     setEffdtErrors({});
-    loadPhotos(v.hoardingID);
+    loadPhotos(v.hoardingID, v.effdtRaw || v.effdt);
     scrollToPanel();
   };
 
@@ -1155,6 +1182,33 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
           height: effdtForm.height,
           siteID: effdtForm.siteID,
         });
+
+        // Save photo changes
+        const resolvedHID = effdtForm.hoardingID;
+        if (stagedDeletedPhotos.length > 0) {
+          for (const dp of stagedDeletedPhotos) {
+            await apiService.deleteHoardingPhoto(dp.hoardingPhotoID);
+          }
+        }
+        if (stagedNewPhotos.length > 0 && resolvedHID) {
+          const userId = getLoggedInUserId();
+          const todayDate = new Date().toISOString().split('T')[0];
+          const effdtDateOnly = (effdtForm.effdtRaw || effdtForm.effdt || '').split('T')[0] || todayDate;
+          for (const np of stagedNewPhotos) {
+            const fd = new FormData();
+            fd.append('hoardingPhotoID', '0');
+            fd.append('hoardingID', String(resolvedHID));
+            fd.append('effdt', effdtDateOnly);
+            fd.append('photo', np._file, np.filename);
+            fd.append('photoUrl', np.filename);
+            fd.append('photoPath', np.filename);
+            fd.append('filename', np.filename);
+            fd.append('uploadedOn', todayDate);
+            fd.append('lastUpdateDttm', todayDate);
+            fd.append('lastUpdatedBy', String(userId));
+            await apiService.uploadHoardingPhoto(fd);
+          }
+        }
       }
       setSaveOk(true);
       await onRefresh();
@@ -1242,7 +1296,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                       hoardingID={newlySavedHoardingID}
                       effdtRaw={newlySavedEffdtRaw}
                       photos={photosFor(newlySavedHoardingID)}
-                      onPhotosChange={() => loadPhotos(newlySavedHoardingID)}
+                      onPhotosChange={() => loadPhotos(newlySavedHoardingID, newlySavedEffdtRaw)}
                     />
                     {!newlySavedHoardingID && (
                       <div className="hd-info-banner mt-2">
@@ -1349,7 +1403,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                               hoardingID={activeVersion.hoardingID}
                               effdtRaw={activeVersion.effdtRaw || activeVersion.effdt}
                               photos={photosFor(activeVersion.hoardingID)}
-                              onPhotosChange={() => loadPhotos(activeVersion.hoardingID)}
+                              onPhotosChange={() => loadPhotos(activeVersion.hoardingID, activeVersion.effdtRaw || activeVersion.effdt)}
                               readOnly={true}
                             />
                           }
@@ -1378,8 +1432,11 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                             : <PhotoSection
                               hoardingID={effdtForm.hoardingID}
                               effdtRaw={effdtForm.effdtRaw || effdtForm.effdt}
-                              photos={photosFor(effdtForm.hoardingID)}
-                              onPhotosChange={() => loadPhotos(effdtForm.hoardingID)}
+                              photos={versionPhotos}
+                              onAddPhotos={handleAddPhotos}
+                              onReplacePhoto={handleReplacePhoto}
+                              onDeletePhoto={handleDeletePhoto}
+                              uploading={saving}
                             />
                           }
                         </div>

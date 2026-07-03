@@ -1182,8 +1182,11 @@ async function fetchImageAsBase64(url) {
   return null;
 }
 
-function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachmentsChange }) {
-  const [attachments, setAttachments] = useState([]);
+function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachmentsChange, attachments: attachmentsFromProps, setAttachments: setAttachmentsFromProps, setDeletedAttachIDs: setDeletedAttachIDsFromProps }) {
+  const [localAttaches, setLocalAttaches] = useState([]);
+  const attachments = attachmentsFromProps || localAttaches;
+  const setAttachments = setAttachmentsFromProps || setLocalAttaches;
+
   const [loading, setLoading] = useState(false);
   const [uploadErr, setUploadErr] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -1210,6 +1213,10 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
   useEffect(() => { onAttachmentsChangeRef.current = onAttachmentsChange; }, [onAttachmentsChange]);
 
   const fetchAttachments = useCallback(async () => {
+    if (attachmentsFromProps) {
+      onAttachmentsChangeRef.current?.(attachmentsFromProps);
+      return;
+    }
     if (!customerContractID) return;
     setLoading(true);
     try {
@@ -1219,7 +1226,7 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
       onAttachmentsChangeRef.current?.(normalized);
     } catch { /* silent */ }
     finally { setLoading(false); }
-  }, [customerContractID]); // ← onAttachmentsChange intentionally NOT here (using ref instead)
+  }, [customerContractID, attachmentsFromProps]); // ← onAttachmentsChange intentionally NOT here (using ref instead)
 
   useEffect(() => { fetchAttachments(); }, [fetchAttachments]);
 
@@ -1228,23 +1235,47 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
     setTypeErr(''); setUploadErr('');
     if (!newFile) return;
     if (!newType) { setTypeErr('Please select a document type'); return; }
-    setUploading(true);
-    try {
-      await apiService.createCustContractAttach({
+    
+    if (attachmentsFromProps) {
+      const tempId = `_temp_${Date.now()}`;
+      const newAttach = {
+        custContractAttachID: tempId,
         customerContractID,
         ownerID: Number(ownerID) || 0,
         hoardingID: Number(hoardingID) || 0,
         fileUploadType: newType,
-        file: newFile,
+        contractFilename: newFile.name,
+        contractFilePath: '',
+        lastUpdateDttm: new Date().toISOString(),
+        file: newFile, // store raw File object for upload later
+        _isNew: true,
+      };
+      setAttachments(prev => {
+        const updated = [...prev, newAttach];
+        onAttachmentsChangeRef.current?.(updated);
+        return updated;
       });
-      setUploadOk(true);
       setNewFile(null); setNewType('');
       if (fileInputRef.current) fileInputRef.current.value = '';
-      await fetchAttachments();
-      setTimeout(() => setUploadOk(false), 2000);
-    } catch (err) {
-      setUploadErr(err?.response?.data?.message || err?.message || 'Upload failed.');
-    } finally { setUploading(false); }
+    } else {
+      setUploading(true);
+      try {
+        await apiService.createCustContractAttach({
+          customerContractID,
+          ownerID: Number(ownerID) || 0,
+          hoardingID: Number(hoardingID) || 0,
+          fileUploadType: newType,
+          file: newFile,
+        });
+        setUploadOk(true);
+        setNewFile(null); setNewType('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        await fetchAttachments();
+        setTimeout(() => setUploadOk(false), 2000);
+      } catch (err) {
+        setUploadErr(err?.response?.data?.message || err?.message || 'Upload failed.');
+      } finally { setUploading(false); }
+    }
   };
 
   /* ── Replace existing ── */
@@ -1252,36 +1283,77 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
     setReplaceErr('');
     if (!replaceFile) return;
     if (!replaceType) { setReplaceErr('Please select a document type'); return; }
-    setReplacing(true);
-    try {
-      await apiService.updateCustContractAttach({
-        custContractAttachID: editTarget.custContractAttachID,
+    
+    if (attachmentsFromProps) {
+      const tempId = `_temp_${Date.now()}`;
+      const newAttach = {
+        custContractAttachID: tempId,
         customerContractID,
         ownerID: Number(ownerID) || editTarget.ownerID || 0,
         hoardingID: Number(hoardingID) || 0,
         fileUploadType: replaceType,
+        contractFilename: replaceFile.name,
+        contractFilePath: '',
+        lastUpdateDttm: new Date().toISOString(),
         file: replaceFile,
+        _isNew: true,
+      };
+      
+      if (typeof editTarget.custContractAttachID === 'number' || !String(editTarget.custContractAttachID).startsWith('_temp')) {
+        setDeletedAttachIDsFromProps(prev => [...prev, editTarget.custContractAttachID]);
+      }
+      
+      setAttachments(prev => {
+        const updated = prev.filter(a => a.custContractAttachID !== editTarget.custContractAttachID).concat(newAttach);
+        onAttachmentsChangeRef.current?.(updated);
+        return updated;
       });
       setEditTarget(null); setReplaceFile(null); setReplaceType('');
       if (replaceInputRef.current) replaceInputRef.current.value = '';
-      await fetchAttachments();
-    } catch (err) {
-      setReplaceErr(err?.response?.data?.message || err?.message || 'Update failed.');
-    } finally { setReplacing(false); }
+    } else {
+      setReplacing(true);
+      try {
+        await apiService.updateCustContractAttach({
+          custContractAttachID: editTarget.custContractAttachID,
+          customerContractID,
+          ownerID: Number(ownerID) || editTarget.ownerID || 0,
+          hoardingID: Number(hoardingID) || 0,
+          fileUploadType: replaceType,
+          file: replaceFile,
+        });
+        setEditTarget(null); setReplaceFile(null); setReplaceType('');
+        if (replaceInputRef.current) replaceInputRef.current.value = '';
+        await fetchAttachments();
+      } catch (err) {
+        setReplaceErr(err?.response?.data?.message || err?.message || 'Update failed.');
+      } finally { setReplacing(false); }
+    }
   };
 
   /* ── Delete ── */
   const handleDelete = async () => {
     if (!deleteTarget) return;
-    try {
-      await apiService.deleteCustContractAttach(deleteTarget.custContractAttachID);
+    if (attachmentsFromProps) {
       setAttachments(prev => {
         const updated = prev.filter(a => a.custContractAttachID !== deleteTarget.custContractAttachID);
         onAttachmentsChangeRef.current?.(updated);
         return updated;
       });
-    } catch { /* silent */ }
-    finally { setDeleteTarget(null); }
+      if (typeof deleteTarget.custContractAttachID === 'number' || !String(deleteTarget.custContractAttachID).startsWith('_temp')) {
+        setDeletedAttachIDsFromProps(prev => [...prev, deleteTarget.custContractAttachID]);
+      }
+      setDeleteTarget(null);
+    } else {
+      try {
+        await apiService.deleteCustContractAttach(deleteTarget.custContractAttachID);
+        setAttachments(prev => {
+          const updated = prev.filter(a => a.custContractAttachID !== deleteTarget.custContractAttachID);
+          onAttachmentsChangeRef.current?.(updated);
+          return updated;
+        });
+      } catch { /* silent */ }
+      finally { setDeleteTarget(null); }
+    }
   };
 
   const fileUrl = (a) => {
@@ -1512,7 +1584,9 @@ function MultiHoardingLookupModal({ hoardings, sites, selectedIds = [], onSelect
     if (!query.trim()) return true;
     const q = query.toLowerCase();
     const site = siteMap[h.siteID];
-    const addr = [site?.addressLine1, site?.city, site?.district].filter(Boolean).join(' ').toLowerCase();
+    const addr = (h._inlineAddr ||
+      [site?.addressLine1, site?.city, site?.district].filter(Boolean).join(' ')
+    ).toLowerCase();
     return (
       (h.hoardingCode || '').toLowerCase().includes(q) ||
       (h.material || '').toLowerCase().includes(q) ||
@@ -1685,7 +1759,8 @@ function MultiHoardingLookupModal({ hoardings, sites, selectedIds = [], onSelect
                 {sorted.map((h, idx) => {
                   const isChecked = selected.has(Number(h.hoardingID));
                   const site = siteMap[h.siteID];
-                  const addr = site ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ') : `Site ${h.siteID}`;
+                  const addr = h._inlineAddr ||
+                    (site ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ') : `Site ${h.siteID}`);
                   const st = hSt(h.status);
                   return (
                     <tr key={h.hoardingID} onClick={() => toggleOne(h.hoardingID)}
@@ -1761,8 +1836,10 @@ function MultiHoardingLookupModal({ hoardings, sites, selectedIds = [], onSelect
     document.body
   );
 }
-function CustomerContractHoardingMapSection({ customerContractID, customerID, hoardings, allHoardingsRaw = hoardings, sites }) {
-  const [maps, setMaps] = useState([]);      // enriched: includes h data
+function CustomerContractHoardingMapSection({ customerContractID, customerID, hoardings, allHoardingsRaw = hoardings, sites, startDate, endDate, maps: mapsFromProps, setMaps: setMapsFromProps, setDeletedMapIDs: setDeletedMapIDsFromProps }) {
+  const [localMaps, setLocalMaps] = useState([]);
+  const maps = mapsFromProps || localMaps;
+  const setMaps = setMapsFromProps || setLocalMaps;
   const [merges, setMerges] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -1776,6 +1853,10 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
   const [deleteConfirmMap, setDeleteConfirmMap] = useState(null);
   const [deleteConfirmMerge, setDeleteConfirmMerge] = useState(null);
 
+  // ── Available hoardings fetched from API based on contract date range ──
+  const [availableHoardings, setAvailableHoardings] = useState([]);
+  const [loadingAvailable, setLoadingAvailable] = useState(false);
+
   const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
   const mappedHoardingIds = new Set(maps.map(m => Number(m.hoardingID)));
   const mergedHoardingIds = new Set(merges.map(m => Number(m.hoardingID)));
@@ -1787,51 +1868,53 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
     setLoading(true);
     try {
       const [rawMaps, allMerges] = await Promise.all([
-        apiService.getCustomerContractHoardingMaps(customerContractID).catch(() => []),
+        mapsFromProps ? Promise.resolve([]) : apiService.getCustomerContractHoardingMaps(customerContractID).catch(() => []),
         apiService.getAllHoardingMerges().catch(err => {
           console.error('[MERGE API ERROR]', err?.response?.status, err?.response?.data, err?.message);
           return [];
         }),
       ]);
 
-      const mapList = Array.isArray(rawMaps) ? rawMaps : [];
+      if (!mapsFromProps) {
+        const mapList = Array.isArray(rawMaps) ? rawMaps : [];
 
-      // Filter by customerContractID in case API returns all records
-      const filteredMaps = mapList.filter(m =>
-        Number(m.customerContractID ?? m.CustomerContractID) === Number(customerContractID)
-      );
+        // Filter by customerContractID in case API returns all records
+        const filteredMaps = mapList.filter(m =>
+          Number(m.customerContractID ?? m.CustomerContractID) === Number(customerContractID)
+        );
 
-      const enriched = filteredMaps.map(m => {
-        const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
-        // First try exact hoardingID match
-        let h = allHoardingsRaw.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? hh.id) === hid);
+        const enriched = filteredMaps.map(m => {
+          const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+          // First try exact hoardingID match
+          let h = allHoardingsRaw.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? hh.id) === hid);
 
-        // If not found (deduplication may have kept a different effdt record),
-        // fall back: look up the hoarding code from the map record itself,
-        // then find by code in the hoardings array
-        if (!h) {
-          const mapRecord = maps.find(mp => Number(mp.hoardingID ?? mp.HoardingID ?? 0) === hid);
-          const codeFromMap = mapRecord?.hoardingCode ?? mapRecord?.HoardingCode;
-          if (codeFromMap) {
-            h = allHoardingsRaw.find(hh => hh.hoardingCode === codeFromMap);
+          // If not found (deduplication may have kept a different effdt record),
+          // fall back: look up the hoarding code from the map record itself,
+          // then find by code in the hoardings array
+          if (!h) {
+            const mapRecord = maps.find(mp => Number(mp.hoardingID ?? mp.HoardingID ?? 0) === hid);
+            const codeFromMap = mapRecord?.hoardingCode ?? mapRecord?.HoardingCode;
+            if (codeFromMap) {
+              h = allHoardingsRaw.find(hh => hh.hoardingCode === codeFromMap);
+            }
           }
-        }
-        return {
-          customerContractLineID: m.customerContractLineID ?? m.CustomerContractLineID ?? null,
-          customerContractID: Number(m.customerContractID ?? m.CustomerContractID),
-          customerID: Number(m.customerID ?? m.CustomerID),
-          hoardingID: hid,
-          // Hoarding info embedded — never needs a second lookup
-          hoardingCode: h?.hoardingCode ?? `#${hid}`,
-          material: h?.material ?? '',
-          width: h?.width ?? 0,
-          height: h?.height ?? 0,
-          status: h?.status ?? '',
-          siteID: h?.siteID ?? null,
-          monthlyRent: h?.monthlyRent ?? 0,
-        };
-      });
-      setMaps(enriched);
+          return {
+            customerContractLineID: m.customerContractLineID ?? m.CustomerContractLineID ?? null,
+            customerContractID: Number(m.customerContractID ?? m.CustomerContractID),
+            customerID: Number(m.customerID ?? m.CustomerID),
+            hoardingID: hid,
+            // Hoarding info embedded — never needs a second lookup
+            hoardingCode: h?.hoardingCode ?? `#${hid}`,
+            material: h?.material ?? '',
+            width: h?.width ?? 0,
+            height: h?.height ?? 0,
+            status: h?.status === 'Occupied' ? 'Available' : (h?.status ?? 'Available'),
+            siteID: h?.siteID ?? null,
+            monthlyRent: h?.monthlyRent ?? 0,
+          };
+        });
+        setMaps(enriched);
+      }
 
       const mergeList = Array.isArray(allMerges) ? allMerges : [];
       setMerges(
@@ -1853,73 +1936,132 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
     } catch (err) {
       setApiError(err?.message || 'Failed to load data.');
     } finally { setLoading(false); }
-  }, [customerContractID, allHoardingsRaw]);
+  }, [customerContractID, allHoardingsRaw, mapsFromProps]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // ── Fetch available hoardings from API whenever contract dates are known ──
+  useEffect(() => {
+    if (!startDate || !endDate) {
+      setAvailableHoardings([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingAvailable(true);
+    apiService.getAvailableHoardings(startDate, endDate)
+      .then(res => {
+        if (cancelled) return;
+        const raw = Array.isArray(res) ? res : res?.data ?? [];
+        // Normalize: availability API uses 'hoardingId' (camelCase), modal needs 'hoardingID'
+        const list = raw.map(h => ({
+          ...h,
+          hoardingID: h.hoardingId ?? h.hoardingID ?? 0,
+          status: h.status || 'Available',
+          _inlineAddr: [h.addressLine1, h.city, h.district].filter(Boolean).join(', '),
+        }));
+        setAvailableHoardings(list);
+      })
+      .catch(() => { if (!cancelled) setAvailableHoardings([]); })
+      .finally(() => { if (!cancelled) setLoadingAvailable(false); });
+    return () => { cancelled = true; };
+  }, [startDate, endDate]);
 
   /* ── Add hoardings ── */
   const handleAddMultiple = async (selectedHoardings) => {
     if (!selectedHoardings.length) return;
-    setSaving(true); setApiError('');
-    try {
-      await Promise.all(
-        selectedHoardings.map(h =>
-          apiService.createCustomerContractHoardingMap({
+    if (mapsFromProps) {
+      const newMaps = selectedHoardings.map((h, i) => {
+        const tempId = `_temp_${Date.now()}_${i}`;
+        return {
+          customerContractLineID: tempId,
+          customerContractID,
+          customerID: Number(customerID),
+          hoardingID: Number(h.hoardingID),
+          hoardingCode: h.hoardingCode,
+          material: h.material,
+          width: h.width,
+          height: h.height,
+          status: 'Available',
+          siteID: h.siteID,
+          monthlyRent: h.monthlyRent,
+          _inlineAddr: h._inlineAddr || [h.addressLine1, h.city, h.district].filter(Boolean).join(', '),
+          _isNew: true,
+        };
+      });
+      setMaps(prev => [...prev, ...newMaps]);
+    } else {
+      setSaving(true); setApiError('');
+      try {
+        await Promise.all(
+          selectedHoardings.map(h =>
+            apiService.createCustomerContractHoardingMap({
+              customerContractLineID: 0,
+              customerContractID,
+              customerID: Number(customerID),
+              hoardingID: Number(h.hoardingID),
+            })
+          )
+        );
+        await loadAll();
+      } catch (err) {
+        setApiError(err?.response?.data?.message || err?.message || 'Failed to add hoardings.');
+      } finally { setSaving(false); }
+    }
+  };
+  const handleAdd = async (pickedHoardings) => {
+    if (!pickedHoardings.length) return;
+    if (mapsFromProps) {
+      await handleAddMultiple(pickedHoardings);
+    } else {
+      setSaving(true);
+      setApiError('');
+      setOccupancyWarnings([]);
+
+      const occupiedMsgs = [];
+      let successCount = 0;
+
+      for (const h of pickedHoardings) {
+        try {
+          await apiService.createCustomerContractHoardingMap({
             customerContractLineID: 0,
             customerContractID,
             customerID: Number(customerID),
             hoardingID: Number(h.hoardingID),
-          })
-        )
-      );
-      await loadAll();
-    } catch (err) {
-      setApiError(err?.response?.data?.message || err?.message || 'Failed to add hoardings.');
-    } finally { setSaving(false); }
-  };
-  const handleAdd = async (pickedHoardings) => {
-    if (!pickedHoardings.length) return;
-    setSaving(true);
-    setApiError('');
-    setOccupancyWarnings([]);
-
-    const occupiedMsgs = [];
-    let successCount = 0;
-
-    for (const h of pickedHoardings) {
-      try {
-        await apiService.createCustomerContractHoardingMap({
-          customerContractLineID: 0,
-          customerContractID,
-          customerID: Number(customerID),
-          hoardingID: Number(h.hoardingID),
-        });
-        successCount++;
-      } catch (err) {
-        const occ = parseOccupancyError(err);
-        if (occ) {
-          const code = h.hoardingCode ? ` (${h.hoardingCode})` : '';
-          occupiedMsgs.push(occ.replace(/Hoarding\s+\d+/, `Hoarding #${h.hoardingID}${code}`));
-        } else {
-          setApiError(err?.response?.data?.message || err?.message || 'Failed to add one or more hoardings.');
+          });
+          successCount++;
+        } catch (err) {
+          const occ = parseOccupancyError(err);
+          if (occ) {
+            const code = h.hoardingCode ? ` (${h.hoardingCode})` : '';
+            occupiedMsgs.push(occ.replace(/Hoarding\s+\d+/, `Hoarding #${h.hoardingID}${code}`));
+          } else {
+            setApiError(err?.response?.data?.message || err?.message || 'Failed to add one or more hoardings.');
+          }
         }
       }
-    }
 
-    if (occupiedMsgs.length > 0) setOccupancyWarnings(occupiedMsgs);
-    if (successCount > 0) await loadAll();
-    setSaving(false);
+      if (occupiedMsgs.length > 0) setOccupancyWarnings(occupiedMsgs);
+      if (successCount > 0) await loadAll();
+      setSaving(false);
+    }
   };
 
   /* ── Remove hoarding ── */
   const handleDeleteMap = async (mapId) => {
-    setDeletingMapId(mapId); setApiError('');
-    try {
-      await apiService.deleteCustomerContractHoardingMap(mapId);
+    if (mapsFromProps) {
       setMaps(prev => prev.filter(m => m.customerContractLineID !== mapId));
-    } catch (err) {
-      setApiError(err?.response?.data?.message || err?.message || 'Failed to remove hoarding.');
-    } finally { setDeletingMapId(null); }
+      if (typeof mapId === 'number' || !String(mapId).startsWith('_temp')) {
+        setDeletedMapIDsFromProps(prev => [...prev, mapId]);
+      }
+    } else {
+      setDeletingMapId(mapId); setApiError('');
+      try {
+        await apiService.deleteCustomerContractHoardingMap(mapId);
+        setMaps(prev => prev.filter(m => m.customerContractLineID !== mapId));
+      } catch (err) {
+        setApiError(err?.response?.data?.message || err?.message || 'Failed to remove hoarding.');
+      } finally { setDeletingMapId(null); }
+    }
   };
 
   /* ── Create merge ── */
@@ -1984,15 +2126,19 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
     }
   }, [loadAll, customerContractID]);
 
-  // Hoardings not yet in this contract
-  const availableHoardings = hoardings.filter(h => !mappedHoardingIds.has(Number(h.hoardingID)));
+  // Hoardings available for adding: use date-filtered API results if available, else fall back to all hoardings prop
+  // Then exclude ones already mapped to this contract
+  const hoardingsForPicker = (availableHoardings.length > 0 ? availableHoardings : hoardings)
+    .filter(h => !mappedHoardingIds.has(Number(h.hoardingID ?? 0)));
 
   // Hoardings in this contract (enriched objects — passed to merge picker)
   const contractHoardingObjs = maps; // already enriched above
 
   const hSt = (status) => {
     switch (status) {
-      case 'Active': return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+      case 'Active':
+      case 'Available':
+        return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
       case 'Inactive': return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
       case 'Under Maintenance': return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
       default: return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
@@ -2072,7 +2218,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
         {groupMerges.map((m, idx) => {
           const mapEntry = maps.find(mp => Number(mp.hoardingID) === Number(m.hoardingID));
           const site = mapEntry?.siteID != null ? siteMap[mapEntry.siteID] : null;
-          const addr = site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '';
+          const addr = mapEntry?._inlineAddr || (site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '');
           const isDeleting = deletingMergeId === m.hoardingMergeID;
           const sqFt = (mapEntry?.width || 0) * (mapEntry?.height || 0);
 
@@ -2174,7 +2320,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
                   <tbody>
                     {maps.filter(m => !mergedHoardingIds.has(m.hoardingID)).map((m, idx) => {
                       const site = m.siteID != null ? siteMap[m.siteID] : null;
-                      const addr = site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '';
+                      const addr = m._inlineAddr || (site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '');
                       const isDeleting = deletingMapId === m.customerContractLineID;
                       const isMerged = mergedHoardingIds.has(m.hoardingID);
                       const st = hSt(m.status);
@@ -2235,14 +2381,16 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
             {/* ── Add Hoardings ── */}
             <button
               onClick={() => { setApiError(''); setPickOpen(true); }}
-              disabled={saving || availableHoardings.length === 0}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', borderRadius: 10, border: '1.5px dashed #d0d0e8', background: '#f8f8fd', cursor: saving || availableHoardings.length === 0 ? 'not-allowed' : 'pointer', fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: availableHoardings.length === 0 ? '#b0b0c8' : '#6c63ff', transition: 'all 0.15s', marginBottom: 6 }}
-              onMouseEnter={e => { if (availableHoardings.length > 0) e.currentTarget.style.borderColor = '#6c63ff'; }}
+              disabled={saving || loadingAvailable || (!startDate || !endDate)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', borderRadius: 10, border: '1.5px dashed #d0d0e8', background: '#f8f8fd', cursor: (saving || loadingAvailable || !startDate || !endDate) ? 'not-allowed' : 'pointer', fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: (!startDate || !endDate) ? '#b0b0c8' : '#6c63ff', transition: 'all 0.15s', marginBottom: 6 }}
+              onMouseEnter={e => { if (!saving && !loadingAvailable && startDate && endDate) e.currentTarget.style.borderColor = '#6c63ff'; }}
               onMouseLeave={e => { e.currentTarget.style.borderColor = '#d0d0e8'; }}
             >
               {saving ? <><Loader2 size={14} className="pg-spin" /> Adding…</>
-                : availableHoardings.length === 0 ? <><Check size={14} /> All hoardings added</>
-                  : <><Plus size={14} /> Add Hoardings</>}
+                : loadingAvailable ? <><Loader2 size={14} className="pg-spin" /> Loading available…</>
+                : (!startDate || !endDate) ? <><Calendar size={14} /> Set contract dates first</>
+                : hoardingsForPicker.length === 0 ? <><Check size={14} /> No more hoardings available</>
+                : <><Plus size={14} /> Add Hoardings ({hoardingsForPicker.length} available)</>}
             </button>
 
             {/* ── Merge divider ── */}
@@ -2293,10 +2441,10 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
         )}
       </div>
 
-      {/* Add hoarding modal */}
+      {/* Add hoarding modal — uses date-filtered available hoardings */}
       {pickOpen && (
         <MultiHoardingLookupModal
-          hoardings={availableHoardings}
+          hoardings={hoardingsForPicker}
           sites={sites}
           onSelectMultiple={async (picked) => { setPickOpen(false); await handleAddMultiple(picked); }}
           onClose={() => setPickOpen(false)}
@@ -3501,6 +3649,11 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
   // ── Multi-hoarding pre-selection (add mode only) ──
   const [selectedHoardings, setSelectedHoardings] = useState([]);
   const [hoardingModalOpen, setHoardingModalOpen] = useState(false);
+
+  // ── Available hoardings (date-filtered from API) ──
+  const [availableHoardings, setAvailableHoardings] = useState([]);
+  const [loadingAvailable, setLoadingAvailable] = useState(false);
+  const [availableErr, setAvailableErr] = useState('');
   const checkLandContractWarning = (hoardingID, endDate) => {
     if (!hoardingID || !endDate) { setLandContractWarning(null); return; }
 
@@ -3576,7 +3729,105 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
     );
   }, []);
 
+  // ── States for deferred map and attachment management ──
+  const [localMaps, setLocalMaps] = useState([]);
+  const [deletedMapIDs, setDeletedMapIDs] = useState([]);
+  const [localAttachments, setLocalAttachments] = useState([]);
+  const [deletedAttachIDs, setDeletedAttachIDs] = useState([]);
+
+  // Fetch initial maps and attachments once savedContractID is set
+  useEffect(() => {
+    if (!savedContractID) {
+      setLocalMaps([]);
+      setLocalAttachments([]);
+      setDeletedMapIDs([]);
+      setDeletedAttachIDs([]);
+      return;
+    }
+
+    let active = true;
+
+    // Fetch initial mapped hoardings
+    apiService.getCustomerContractHoardingMaps(savedContractID)
+      .then(res => {
+        if (!active) return;
+        const mapList = Array.isArray(res) ? res : res?.data ?? [];
+        const enriched = mapList.map(m => {
+          const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+          let h = allHoardingsRaw.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? hh.id) === hid);
+          return {
+            customerContractLineID: m.customerContractLineID ?? m.CustomerContractLineID ?? null,
+            customerContractID: Number(m.customerContractID ?? m.CustomerContractID),
+            customerID: Number(m.customerID ?? m.CustomerID),
+            hoardingID: hid,
+            hoardingCode: h?.hoardingCode ?? `#${hid}`,
+            material: h?.material ?? '',
+            width: h?.width ?? 0,
+            height: h?.height ?? 0,
+            status: h?.status === 'Occupied' ? 'Available' : (h?.status ?? 'Available'),
+            siteID: h?.siteID ?? null,
+            monthlyRent: h?.monthlyRent ?? 0,
+          };
+        });
+        setLocalMaps(enriched);
+      })
+      .catch(() => {});
+
+    // Fetch initial attachments
+    apiService.getCustContractAttachments(savedContractID)
+      .then(res => {
+        if (!active) return;
+        const list = Array.isArray(res) ? res : [];
+        setLocalAttachments(list.map(normalizeAttach));
+      })
+      .catch(() => {});
+
+    return () => {
+      active = false;
+    };
+  }, [savedContractID, allHoardingsRaw]);
+
   const freqOptions = paymentFreqs.length ? paymentFreqs : PAYMENT_FREQ_FALLBACK;
+
+  // ── Fetch available hoardings whenever start+end dates are both set (add mode) ──
+  useEffect(() => {
+    if (!isAdd) return;
+    if (!form.startDate || !form.endDate) {
+      setAvailableHoardings([]);
+      setAvailableErr('');
+      // Clear selected hoardings that may no longer be available
+      setSelectedHoardings([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingAvailable(true);
+    setAvailableErr('');
+    apiService.getAvailableHoardings(form.startDate, form.endDate)
+      .then(res => {
+        if (cancelled) return;
+        const raw = Array.isArray(res) ? res : res?.data ?? [];
+        // Normalize: availability API uses 'hoardingId' (camelCase), modal needs 'hoardingID'
+        const list = raw.map(h => ({
+          ...h,
+          hoardingID: h.hoardingId ?? h.hoardingID ?? 0,
+          status: h.status || 'Available',
+          // Build inline address string for modal display (no siteID in availability API)
+          _inlineAddr: [h.addressLine1, h.city, h.district].filter(Boolean).join(', '),
+        }));
+        setAvailableHoardings(list);
+        // Remove previously selected hoardings that are no longer available
+        const availableIds = new Set(list.map(h => Number(h.hoardingID)));
+        setSelectedHoardings(prev => prev.filter(h => availableIds.has(Number(h.hoardingID))));
+      })
+      .catch(err => {
+        if (cancelled) return;
+        setAvailableErr(err?.response?.data?.message || err?.message || 'Failed to fetch available hoardings.');
+        setAvailableHoardings([]);
+      })
+      .finally(() => { if (!cancelled) setLoadingAvailable(false); });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.startDate, form.endDate, isAdd]);
 
   const set = (key, val) => {
     setForm(p => {
@@ -3618,6 +3869,41 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
   const cgstAmt = Math.round((finalValNum * cgstPct) / 100);
   const sgstAmt = Math.round((finalValNum * sgstPct) / 100);
   const totalContractVal = finalValNum + cgstAmt + sgstAmt;
+
+  const performSync = async (contractID) => {
+    // 1. Delete maps
+    for (const mapId of deletedMapIDs) {
+      await apiService.deleteCustomerContractHoardingMap(mapId);
+    }
+    
+    // 2. Add maps
+    const mapsToAdd = localMaps.filter(m => String(m.customerContractLineID).startsWith('_temp'));
+    for (const m of mapsToAdd) {
+      await apiService.createCustomerContractHoardingMap({
+        customerContractLineID: 0,
+        customerContractID: contractID,
+        customerID: Number(form.customerID),
+        hoardingID: Number(m.hoardingID),
+      });
+    }
+
+    // 3. Delete attachments
+    for (const attachId of deletedAttachIDs) {
+      await apiService.deleteCustContractAttach(attachId);
+    }
+
+    // 4. Add attachments
+    const attachesToAdd = localAttachments.filter(a => a._isNew);
+    for (const a of attachesToAdd) {
+      await apiService.createCustContractAttach({
+        customerContractID: contractID,
+        ownerID: Number(a.ownerID) || 0,
+        hoardingID: Number(a.hoardingID) || 0,
+        fileUploadType: a.fileUploadType,
+        file: a.file,
+      });
+    }
+  };
 
   /* ── Save contract ── */
   const handleSave = async () => {
@@ -3682,6 +3968,9 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         await apiService.updateCustomerContract(payload);
         saved = { ...payload, customerContractID: contract.customerContractID };
 
+        // Sync mapping and attachment changes to database for Edit mode
+        await performSync(contract.customerContractID);
+
         /* ← NEW: if status changed to Terminated or Expired, mark hoardings Available */
         const isEnding = (newStatus === 'Terminated' || newStatus === 'Expired')
           && prevStatus !== 'Terminated' && prevStatus !== 'Expired';
@@ -3726,8 +4015,8 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
     } finally { setSaving(false); }
   };
 
-  /* ── Finish (add mode only) — validates banner image ── */
-  const handleFinish = () => {
+  /* ── Finish (add mode only) — validates banner image & commits deferred maps/attachments ── */
+  const handleFinish = async () => {
     const hasBanner = attachmentList.some(a => a.fileUploadType === 'Banner Design');
     if (!hasBanner) {
       setBannerErr('Banner Design image is required. Please upload one before finishing.');
@@ -3735,7 +4024,17 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
       document.querySelector('.hd-attach-section')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
-    onBack();
+    setSaving(true);
+    setApiErr('');
+    try {
+      await performSync(savedContractID);
+      onBack();
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to finish contract setup.';
+      setApiErr(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const hasBanner = attachmentList.some(a => a.fileUploadType === 'Banner Design');
@@ -3940,29 +4239,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
               </div>
             </div>
           )}
-          {/* ── Step indicator (add mode only) ── */}
-          {/* {isAdd && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 20, background: '#f8f8fd', border: '1px solid #e8e8f4', borderRadius: 12, overflow: 'hidden' }}>
-              <div style={{ flex: 1, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, background: contractSaved ? 'rgba(22,163,74,0.06)' : 'rgba(4,158,223,0.06)', borderRight: '1px solid #e8e8f4' }}>
-                <div style={{ width: 26, height: 26, borderRadius: '50%', background: contractSaved ? '#16a34a' : '#049edf', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {contractSaved ? <Check size={13} color="#fff" /> : <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#fff' }}>1</span>}
-                </div>
-                <div>
-                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: contractSaved ? '#16a34a' : '#049edf' }}>Contract Details</div>
-                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>{contractSaved ? 'Saved' : 'Fill & save'}</div>
-                </div>
-              </div>
-              <div style={{ flex: 1, padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 10, background: hasBanner ? 'rgba(22,163,74,0.06)' : contractSaved ? 'rgba(4,158,223,0.06)' : 'transparent', opacity: contractSaved ? 1 : 0.45 }}>
-                <div style={{ width: 26, height: 26, borderRadius: '50%', background: hasBanner ? '#16a34a' : contractSaved ? '#049edf' : '#d0d0e8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  {hasBanner ? <Check size={13} color="#fff" /> : <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#fff' }}>2</span>}
-                </div>
-                <div>
-                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: hasBanner ? '#16a34a' : contractSaved ? '#049edf' : '#9090a8' }}>Banner Image</div>
-                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>{hasBanner ? 'Uploaded ✓' : 'Required'}</div>
-                </div>
-              </div>
-            </div>
-          )} */}
+
 
           <div className="row g-4">
 
@@ -4027,37 +4304,49 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
 
                       {isAdd ? (
                         <>
-                          {/* Multi-select trigger button */}
+                          {/* Multi-select trigger button — requires start+end dates */}
+                          {(() => {
+                            const datesReady = !!(form.startDate && form.endDate);
+                            const canOpen = datesReady && !loadingAvailable && !!form.customerID;
+                            return (
                           <button
                             type="button"
-                            disabled={!form.customerID}
-                            onClick={() => form.customerID && setHoardingModalOpen(true)}
+                            disabled={!canOpen}
+                            onClick={() => canOpen && setHoardingModalOpen(true)}
                             style={{
                               width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                               padding: '10px 14px', borderRadius: 10,
-                              border: `1.5px solid ${errors.hoardingID ? '#ef4444' : '#e8e8f4'}`,
-                              background: !form.customerID ? '#f8f8fd' : '#fff',
-                              cursor: !form.customerID ? 'not-allowed' : 'pointer',
+                              border: `1.5px solid ${errors.hoardingID ? '#ef4444' : !datesReady ? '#fde68a' : '#e8e8f4'}`,
+                              background: !canOpen ? '#f8f8fd' : '#fff',
+                              cursor: !canOpen ? 'not-allowed' : 'pointer',
                               fontFamily: 'Nunito, sans-serif', fontSize: 13,
-                              color: !form.customerID ? '#b0b0c8' : '#1a1a2e', fontWeight: 600,
+                              color: !canOpen ? '#b0b0c8' : '#1a1a2e', fontWeight: 600,
                               boxShadow: errors.hoardingID ? '0 0 0 3px rgba(239,68,68,0.1)' : 'none',
                               transition: 'border-color 0.15s',
                             }}
-                            onMouseEnter={e => { if (form.customerID) e.currentTarget.style.borderColor = '#049edf'; }}
-                            onMouseLeave={e => { if (form.customerID) e.currentTarget.style.borderColor = errors.hoardingID ? '#ef4444' : '#e8e8f4'; }}
+                            onMouseEnter={e => { if (canOpen) e.currentTarget.style.borderColor = '#049edf'; }}
+                            onMouseLeave={e => { if (canOpen) e.currentTarget.style.borderColor = errors.hoardingID ? '#ef4444' : '#e8e8f4'; }}
                           >
-                            <Building2 size={14} color={!form.customerID ? '#d0d0e0' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+                            <Building2 size={14} color={!canOpen ? '#d0d0e0' : '#c0c0d8'} style={{ flexShrink: 0 }} />
                             <span style={{ flex: 1, textAlign: 'left' }}>
-                              {!form.customerID
-                                ? 'Select a customer first…'
-                                : selectedHoardings.length > 0
-                                  ? `${selectedHoardings.length} hoarding${selectedHoardings.length !== 1 ? 's' : ''} selected`
-                                  : 'Browse & select hoardings…'}
+                              {loadingAvailable
+                                    ? 'Loading available hoardings…'
+                                    : !form.customerID
+                                      ? 'Select a customer first…'
+                                      : !datesReady
+                                        ? 'Select start & end dates first…'
+                                        : selectedHoardings.length > 0
+                                          ? `${selectedHoardings.length} hoarding${selectedHoardings.length !== 1 ? 's' : ''} selected`
+                                          : `Browse available hoardings (${availableHoardings.length})…`}
                             </span>
-                            {selectedHoardings.length > 0
-                              ? <RefreshCw size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
-                              : <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+                            {loadingAvailable
+                                  ? <Loader2 size={13} className="pg-spin" color="#c0c0d8" style={{ flexShrink: 0 }} />
+                                  : selectedHoardings.length > 0
+                                    ? <RefreshCw size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
+                                    : <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
                           </button>
+                            );
+                          })()}
 
                           {/* Selected hoardings table */}
                           {selectedHoardings.length > 0 && (() => {
@@ -4118,12 +4407,23 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                             );
                           })()}
 
-                          {!form.customerID && (
+                          {/* Hint messages */}
+                          {(!form.startDate || !form.endDate) ? (
+                            <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#92400e' }}>
+                              <Calendar size={12} color="#d97706" style={{ flexShrink: 0 }} />
+                              Please select both Start Date and End Date first to view available hoardings
+                            </div>
+                          ) : availableErr ? (
+                            <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#dc2626' }}>
+                              <AlertCircle size={12} color="#dc2626" style={{ flexShrink: 0 }} />
+                              {availableErr}
+                            </div>
+                          ) : !form.customerID ? (
                             <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: '#f0f8ff', border: '1px solid #bae6fd', borderRadius: 8, fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#0369a1' }}>
                               <Building2 size={12} color="#0369a1" style={{ flexShrink: 0 }} />
                               Select a customer above to browse hoardings
                             </div>
-                          )}
+                          ) : null}
                         </>
                       ) : (
                         /* Edit mode: show the original single picker (locked) */
@@ -4291,6 +4591,11 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                   hoardings={hoardings}
                   allHoardingsRaw={allHoardingsRaw}
                   sites={sites}
+                  startDate={form.startDate}
+                  endDate={form.endDate}
+                  maps={localMaps}
+                  setMaps={setLocalMaps}
+                  setDeletedMapIDs={setDeletedMapIDs}
                 />
               </div>
             )}
@@ -4317,6 +4622,11 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                     hoardings={hoardings}
                     allHoardingsRaw={allHoardingsRaw}
                     sites={sites}
+                    startDate={form.startDate}
+                    endDate={form.endDate}
+                    maps={localMaps}
+                    setMaps={setLocalMaps}
+                    setDeletedMapIDs={setDeletedMapIDs}
                   />
                 </div>
               )}
@@ -4357,6 +4667,9 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                     hoardingID={form.hoardingID}
                     ownerID={resolvedOwnerID}
                     onAttachmentsChange={handleAttachmentsChange}
+                    attachments={localAttachments}
+                    setAttachments={setLocalAttachments}
+                    setDeletedAttachIDs={setDeletedAttachIDs}
                   />
                 );
               })()}
@@ -4366,10 +4679,10 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         </div>
       </div>
 
-      {/* Multi-hoarding selection modal (add mode) */}
+      {/* Multi-hoarding selection modal (add mode) - only available hoardings for the selected date range */}
       {hoardingModalOpen && (
         <MultiHoardingLookupModal
-          hoardings={hoardings}
+          hoardings={availableHoardings.length > 0 ? availableHoardings : []}
           sites={sites}
           selectedIds={selectedHoardings.map(h => h.hoardingID)}
           onSelectMultiple={(picked) => {

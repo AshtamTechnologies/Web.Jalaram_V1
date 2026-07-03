@@ -1833,11 +1833,11 @@ function RowDeleteConfirmModal({ row, onConfirm, onClose }) {
   );
 }
 function ProformaConfirmModal({ target, onConfirm, onCancel, onClose }) {
-  const cancelBtnRef = useRef(null);
+  const viewBtnRef = useRef(null);
 
   useEffect(() => {
-    if (cancelBtnRef.current) {
-      cancelBtnRef.current.focus();
+    if (viewBtnRef.current) {
+      viewBtnRef.current.focus();
     }
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -1893,7 +1893,7 @@ function ProformaConfirmModal({ target, onConfirm, onCancel, onClose }) {
           Quotation: <strong style={{ color: '#1a1a2e' }}>{target.quot.quotationNumber || `#${target.quot.quotationID}`}</strong><br />
           Revision: <strong style={{ color: '#1a1a2e' }}>Rev.{target.quot.quotationRevisionNumber ?? 0}</strong><br />
           <span style={{ display: 'block', marginTop: 8 }}>
-            Would you like to save and generate a <strong>new</strong> Proforma Invoice record, or just <strong>view/print the latest existing</strong> invoice?
+            Would you like to view/print the existing proforma invoice?
           </span>
         </div>
 
@@ -1916,25 +1916,10 @@ function ProformaConfirmModal({ target, onConfirm, onCancel, onClose }) {
             Cancel
           </button>
 
-          {/* View Existing: Warning outline */}
+          {/* View Proforma button */}
           <button
+            ref={viewBtnRef}
             onClick={onCancel}
-            style={{
-              padding: '10px 18px', borderRadius: 10, border: '1.5px solid #f59e0b',
-              background: '#fff', color: '#d97706', cursor: 'pointer',
-              fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
-              transition: 'all 0.15s',
-            }}
-            onMouseEnter={e => { e.target.style.background = '#fffbeb'; }}
-            onMouseLeave={e => { e.target.style.background = '#fff'; }}
-          >
-            View Existing
-          </button>
-
-          {/* Create New: Premium gradient / solid warning style */}
-          <button
-            ref={cancelBtnRef}
-            onClick={onConfirm}
             style={{
               padding: '11.5px 22px', borderRadius: 10, border: 'none',
               background: 'linear-gradient(135deg, #f59e0b, #d97706)',
@@ -1946,7 +1931,7 @@ function ProformaConfirmModal({ target, onConfirm, onCancel, onClose }) {
             onMouseEnter={e => { e.target.style.transform = 'scale(1.02)'; }}
             onMouseLeave={e => { e.target.style.transform = 'scale(1)'; }}
           >
-            Create New
+            View Proforma
           </button>
         </div>
       </div>
@@ -3385,6 +3370,10 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [showPrintTypeDD, setShowPrintTypeDD] = useState(false);
   const [proformaConfirmTarget, setProformaConfirmTarget] = useState(null);
   const [viewMergedRow, setViewMergedRow] = useState(null);
+  const [proformaInvoices, setProformaInvoices] = useState([]);
+  const [proformaGeneratingQuot, setProformaGeneratingQuot] = useState(null);
+  const [showProformaTermsModal, setShowProformaTermsModal] = useState(false);
+  const [selectedProformaTerms, setSelectedProformaTerms] = useState([]);
   /* ── Step 2 resizable table ── */
   const step2TableRef = useRef(null);
   const printTypeBtnRef = useRef(null);
@@ -3474,6 +3463,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
     });
   }, []);
   const handleViewProforma = async (quot) => {
+    const matchingInvoices = proformaInvoices.filter(
+      inv => Number(inv.quotationID ?? inv.QuotationID) === Number(quot.quotationID) &&
+             Number(inv.quotationRevisionNumber ?? inv.QuotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+    );
+
     const myLines = quotLines.filter(l =>
       Number(l.quotationID) === Number(quot.quotationID) &&
       Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
@@ -3484,7 +3478,6 @@ export default function QuotationPage({ onNavigateToContracts }) {
     const pdfRows = myLines
       .filter(l => !l.mergeFlag)
       .map(l => {
-        // ── Printing / Extra rows ──
         if (!l.hoardingID && l.purpose) {
           const isPrinting = PRINTING_TYPES.some(pt =>
             pt.toLowerCase() === (l.purpose || '').toLowerCase()
@@ -3503,7 +3496,6 @@ export default function QuotationPage({ onNavigateToContracts }) {
             printingCost: 0,
           };
         }
-        // ── Regular hoarding row ──
         const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
         const siteID = h?.siteID ?? h?.site?.siteID ?? null;
         const siteObj = siteID != null
@@ -3548,7 +3540,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
       }
 
       const usedLineNums = new Set();
-      for (const ln of [...byLine.keys()].sort((a, b) => a - b)) {
+      const sortedKeys = [...byLine.keys()].sort((a, b) => a - b);
+      for (const ln of sortedKeys) {
         const records = byLine.get(ln);
         if (records.length < 2) continue;
 
@@ -3575,8 +3568,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
             : h.hoardingCode || '';
         });
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
-        const locFallback = [...new Set(locations)].join(' + ');
 
+        const locFallback = [...new Set(locations)].join(' + ');
         let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln) && !usedLineNums.has(Number(l.quotationLineNumber)));
         if (!savedLine) {
           savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && (
@@ -3625,47 +3618,246 @@ export default function QuotationPage({ onNavigateToContracts }) {
       }
     }
 
-    /* ── Check & Save Proforma Invoice record ── */
-    try {
-      const invoicesRaw = await apiService.getAllPerformaInvoices().catch(() => []);
-      const normalizeList = (raw) => {
-        if (!raw) return [];
-        if (Array.isArray(raw)) return raw;
-        if (Array.isArray(raw.data)) return raw.data;
-        if (Array.isArray(raw.$values)) return raw.$values;
-        return [];
-      };
-      const invoices = normalizeList(invoicesRaw);
-      const matchingInvoices = invoices.filter(
-        inv => Number(inv.quotationID ?? inv.QuotationID) === Number(quot.quotationID)
-      );
+    const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
+    const storedCgst = (storedSub * quot.cGSTPercent) / 100;
+    const storedSgst = (storedSub * quot.sGSTPercent) / 100;
+    const storedGross = storedSub + storedCgst + storedSgst;
+    const storedFinal = Math.round(storedGross);
 
-      const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
-      const storedCgst = (storedSub * quot.cGSTPercent) / 100;
-      const storedSgst = (storedSub * quot.sGSTPercent) / 100;
-      const storedGross = storedSub + storedCgst + storedSgst;
-      const storedFinal = Math.round(storedGross);
+    const targetParams = {
+      quot,
+      pdfRows,
+      cust,
+      storedSub,
+      storedCgst,
+      storedSgst,
+      storedGross,
+      storedFinal,
+      matchingInvoices
+    };
 
-      const targetParams = {
-        quot,
-        pdfRows,
-        cust,
-        storedSub,
-        storedCgst,
-        storedSgst,
-        storedGross,
-        storedFinal,
-        matchingInvoices
-      };
-
-      if (matchingInvoices.length > 0) {
-        setProformaConfirmTarget(targetParams);
-      } else {
-        await proceedWithProforma(targetParams, true);
+    if (matchingInvoices.length > 0) {
+      setProformaConfirmTarget(targetParams);
+    } else {
+      let dbTerms = [];
+      try {
+        const res = await apiService.getQuotationTerms(quot.quotationID, quot.quotationRevisionNumber);
+        const list = normalizeList(res);
+        dbTerms = list.map(t => Number(t.termId ?? t.TermId ?? t.termID ?? t.TermID ?? 0)).filter(id => id > 0);
+      } catch (err) {
+        console.warn('Failed to fetch terms:', err);
       }
-    } catch (err) {
-      console.warn('[PerformaInvoice] Check failed:', err?.message);
+      await generateAndStoreProforma(quot, dbTerms);
     }
+  };
+
+  const generateAndStoreProforma = async (quot, terms) => {
+    const myLines = quotLines.filter(l =>
+      Number(l.quotationID) === Number(quot.quotationID) &&
+      Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+    );
+    const cust = customers.find(c => c.customerID === quot.customerID) || null;
+
+    /* ── Build rows from QuotationLineDTL ── */
+    const pdfRows = myLines
+      .filter(l => !l.mergeFlag)
+      .map(l => {
+        if (!l.hoardingID && l.purpose) {
+          const isPrinting = PRINTING_TYPES.some(pt =>
+            pt.toLowerCase() === (l.purpose || '').toLowerCase()
+          );
+          return {
+            rowType: isPrinting ? 'printing' : 'extra',
+            hoardingID: 0,
+            location: l.purpose,
+            size: '',
+            sqFt: 0,
+            nos: 1,
+            startDate: l.periodBeginDate,
+            endDate: l.periodEndDate,
+            ratePerMonth: l.rentAmount,
+            amount: l.rentAmount,
+            printingCost: 0,
+          };
+        }
+        const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
+        const siteID = h?.siteID ?? h?.site?.siteID ?? null;
+        const siteObj = siteID != null
+          ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
+          : null;
+
+        const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
+        const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
+
+        return {
+          rowType: 'hoarding',
+          hoardingID: l.hoardingID,
+          location: siteObj
+            ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
+            : h?.hoardingCode || '',
+          size: h ? `${h.width} X ${h.height}` : '',
+          sqFt: h ? (h.width * h.height) : 0,
+          nos: calcNOSFromDays(days),
+          startDate: l.periodBeginDate,
+          endDate: l.periodEndDate,
+          days: days,
+          ratePerMonth: ratePerMonth,
+          amount: l.rentAmount,
+          printType: printType,
+          printRate: printRate,
+          printingCost: printingCost,
+        };
+      });
+
+    /* ── Merged rows from QuotationMergeDTL ── */
+    const myMerges = quotMerges.filter(m =>
+      Number(m.quotationID) === Number(quot.quotationID) &&
+      Number(m.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+    );
+
+    if (myMerges.length >= 2) {
+      const byLine = new Map();
+      for (const m of myMerges) {
+        const ln = m.quotationLineNumber;
+        if (!byLine.has(ln)) byLine.set(ln, []);
+        byLine.get(ln).push(m);
+      }
+
+      const usedLineNums = new Set();
+      const sortedKeys = [...byLine.keys()].sort((a, b) => a - b);
+      for (const ln of sortedKeys) {
+        const records = byLine.get(ln);
+        if (records.length < 2) continue;
+
+        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const hoardingObjs = records
+          .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
+          .filter(Boolean);
+
+        const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
+        const gaps = hoardingObjs.length - 1;
+        let mw, mh;
+        if (dir === 'H') {
+          mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+          mh = Math.max(...sizes.map(s => s.h));
+        } else {
+          mw = Math.max(...sizes.map(s => s.w));
+          mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+        }
+
+        const locations = hoardingObjs.map(h => {
+          const site = h.siteID ? siteMap.get(h.siteID) : null;
+          return site
+            ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
+            : h.hoardingCode || '';
+        });
+        const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
+
+        const locFallback = [...new Set(locations)].join(' + ');
+        let savedLine = myLines.find(l => Number(l.quotationLineNumber) === Number(ln) && !usedLineNums.has(Number(l.quotationLineNumber)));
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && (
+            l.purpose.includes(locFallback) ||
+            locFallback.includes(l.purpose.split('|')[0]) ||
+            (codes && l.purpose.includes(codes))
+          ));
+        }
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)) && l.purpose && hoardingObjs.some(ho => {
+            const loc = buildSiteAddress(ho.siteID ? siteMap.get(ho.siteID) : null, ho.hoardingCode);
+            return l.purpose.includes(ho.hoardingCode) || l.purpose.includes(loc);
+          }));
+        }
+        if (!savedLine) {
+          savedLine = myLines.find(l => l.mergeFlag && !usedLineNums.has(Number(l.quotationLineNumber)));
+        }
+
+        if (savedLine) {
+          usedLineNums.add(Number(savedLine.quotationLineNumber));
+        }
+
+        const totalRent = hoardingObjs.reduce((s, ho) => s + (ho.monthlyRent || 0), 0);
+        const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(savedLine?.purpose, totalRent);
+        const days = calculateDays(savedLine?.periodBeginDate, savedLine?.periodEndDate) || 30;
+
+        pdfRows.push({
+          rowType: 'merged',
+          isMerged: true,
+          mergeDirection: dir,
+          hoardingID: 0,
+          location: locFallback,
+          hoardingCode: codes,
+          size: `${mw} X ${mh}`,
+          sqFt: mw * mh,
+          nos: calcNOSFromDays(days),
+          startDate: savedLine?.periodBeginDate || '',
+          endDate: savedLine?.periodEndDate || '',
+          days: days,
+          ratePerMonth: ratePerMonth,
+          amount: savedLine ? savedLine.rentAmount : 0,
+          printType: printType,
+          printRate: printRate,
+          printingCost: printingCost,
+        });
+      }
+    }
+
+    const storedSub = quot.totalAmount / (1 + (quot.cGSTPercent + quot.sGSTPercent) / 100);
+    const storedCgst = (storedSub * quot.cGSTPercent) / 100;
+    const storedSgst = (storedSub * quot.sGSTPercent) / 100;
+    const storedGross = storedSub + storedCgst + storedSgst;
+    const storedFinal = Math.round(storedGross);
+
+    let invoiceID = null;
+    try {
+      const res = await apiService.createPerformaInvoice({
+        invoiceID: 0,
+        quotationID: Number(quot.quotationID),
+        quotationRevisionNumber: Number(quot.quotationRevisionNumber ?? 0),
+        quotationNumber: quot.quotationNumber || '',
+        invoiceDate: new Date().toISOString(),
+      });
+      invoiceID = res?.invoiceID ?? res?.InvoiceID ?? res?.data?.invoiceID ?? res?.data?.InvoiceID ?? null;
+      
+      const newInv = {
+        invoiceID: invoiceID || 0,
+        quotationID: Number(quot.quotationID),
+        quotationRevisionNumber: Number(quot.quotationRevisionNumber ?? 0),
+        quotationNumber: quot.quotationNumber || '',
+      };
+      setProformaInvoices(prev => [...prev, newInv]);
+      showToast('Proforma invoice saved.', 'success');
+    } catch (err) {
+      console.warn('[PerformaInvoice] Save failed:', err?.message);
+    }
+
+    // ── Save selected Terms & Conditions to Database ──
+    await saveQuotationTerms(quot.quotationID, quot.quotationRevisionNumber, terms);
+
+    const html = buildProformaHTML({
+      rows: pdfRows,
+      withPrinting: pdfRows.some(r => r.rowType === 'printing') || pdfRows.some(r => Number(r.printingCost || 0) > 0),
+      selectedCustomer: cust,
+      quotNo: quot.quotationNumber,
+      quotDate: quot.quotationDate,
+      revisionNo: quot.quotationRevisionNumber,
+      cgstPct: quot.cGSTPercent,
+      sgstPct: quot.sGSTPercent,
+      subTotal: storedSub,
+      cgstAmt: storedCgst,
+      sgstAmt: storedSgst,
+      roundOff: storedFinal - storedGross,
+      finalTotal: storedFinal,
+      selectedTerms: terms,
+      termsTexts: terms.map(id => {
+        const t = termsList.find(t => t.termID === id);
+        return t?.description || '';
+      }),
+      invoiceID,
+    });
+
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
   };
 
   const proceedWithProforma = async (target, shouldCreateNew) => {
@@ -3682,6 +3874,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
           invoiceDate: new Date().toISOString(),
         });
         invoiceID = res?.invoiceID ?? res?.InvoiceID ?? res?.data?.invoiceID ?? res?.data?.InvoiceID ?? null;
+        
+        const newInv = {
+          invoiceID: invoiceID || 0,
+          quotationID: Number(quot.quotationID),
+          quotationRevisionNumber: Number(quot.quotationRevisionNumber ?? 0),
+          quotationNumber: quot.quotationNumber || '',
+        };
+        setProformaInvoices(prev => [...prev, newInv]);
         showToast('Proforma invoice saved.', 'success');
       } catch (err) {
         console.warn('[PerformaInvoice] Save failed:', err?.message);
@@ -3693,6 +3893,15 @@ export default function QuotationPage({ onNavigateToContracts }) {
         return idB - idA;
       });
       invoiceID = sorted[0]?.invoiceID ?? sorted[0]?.InvoiceID ?? null;
+    }
+
+    let dbTerms = [];
+    try {
+      const res = await apiService.getQuotationTerms(quot.quotationID, quot.quotationRevisionNumber);
+      const list = normalizeList(res);
+      dbTerms = list.map(t => Number(t.termId ?? t.TermId ?? t.termID ?? t.TermID ?? 0)).filter(id => id > 0);
+    } catch (err) {
+      console.warn('Failed to fetch terms:', err);
     }
 
     /* ── Open Proforma print window ── */
@@ -3710,10 +3919,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
       sgstAmt: storedSgst,
       roundOff: storedFinal - storedGross,
       finalTotal: storedFinal,
-      selectedTerms: [],
-      termsTexts: [],
+      selectedTerms: dbTerms,
+      termsTexts: dbTerms.map(id => {
+        const t = termsList.find(t => t.termID === id);
+        return t?.description || '';
+      }),
       invoiceID,
     });
+
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); }
   };
@@ -3722,7 +3935,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw, quotCustRaw] = await Promise.all([
+        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw, quotCustRaw, invoicesRaw] = await Promise.all([
           apiService.getAllCustomers(),
           apiService.getAllHoardings(),
           apiService.getAllSites().catch(() => []),
@@ -3733,6 +3946,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           apiService.getAllCustomerContracts().catch(() => []),                  // ← NEW
           apiService.getAllCustomerContractHoardingMaps().catch(() => []),       // ← NEW
           apiService.getAllQuotationCustomers().catch(() => []),
+          apiService.getAllPerformaInvoices().catch(() => []),
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
@@ -3754,6 +3968,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         setTermsList(normalizeList(tRaw));
         setQuotations(normalizeList(qRaw).map(normalizeQuotation));
         setQuotLines(normalizeList(qlRaw).map(normalizeQuotLine));
+        setProformaInvoices(normalizeList(invoicesRaw));
         const freqList = normalizeList(pRaw);
         setPaymentFreqs(freqList.map(f => ({
           value: f.paymentFreqID ?? f.PaymentFreqID,
@@ -3811,12 +4026,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
   /* ── Refresh quotations ── */
   const refreshQuotations = useCallback(async () => {
     try {
-      const [qRaw, qlRaw] = await Promise.all([
+      const [qRaw, qlRaw, invoicesRaw] = await Promise.all([
         apiService.getAllQuotations(),
         apiService.getAllQuotationLines(),
+        apiService.getAllPerformaInvoices().catch(() => []),
       ]);
       setQuotations(normalizeList(qRaw).map(normalizeQuotation));
       setQuotLines(normalizeList(qlRaw).map(normalizeQuotLine));
+      setProformaInvoices(normalizeList(invoicesRaw));
 
       // ← Also reload merges so handleViewPDF sees newly saved ones
       try {
@@ -4082,6 +4299,65 @@ export default function QuotationPage({ onNavigateToContracts }) {
     });
   };
 
+  const saveQuotationTerms = async (quotationID, revisionNo, termIDs) => {
+    let existingTerms = [];
+    try {
+      const existingTermsRaw = await apiService.getQuotationTerms(quotationID, revisionNo);
+      existingTerms = normalizeList(existingTermsRaw) || [];
+    } catch (err) {
+      console.warn('No existing terms found or error fetching:', err);
+    }
+
+    try {
+      const selectedSet = new Set(termIDs.map(Number));
+      const toDelete = existingTerms.filter(t => {
+        const tid = Number(t.termId ?? t.TermId ?? t.termID ?? t.TermID ?? 0);
+        return !selectedSet.has(tid);
+      });
+
+      await Promise.all(
+        toDelete.map(t => {
+          const termRecordId = t.id ?? t.Id ?? t.ID ?? 0;
+          if (termRecordId > 0) {
+            return apiService.deleteQuotationTerm(termRecordId).catch(err => console.warn('Failed to delete term record:', termRecordId, err));
+          }
+          return Promise.resolve();
+        })
+      );
+
+      const existingMap = new Map();
+      existingTerms.forEach(t => {
+        const tid = Number(t.termId ?? t.TermId ?? t.termID ?? t.TermID ?? 0);
+        if (tid > 0) {
+          existingMap.set(tid, t);
+        }
+      });
+
+      await Promise.all(
+        termIDs.map(termId => {
+          const existing = existingMap.get(Number(termId));
+          if (existing) {
+            return apiService.updateQuotationTerm({
+              id: existing.id ?? existing.Id ?? existing.ID ?? 0,
+              termId: Number(termId),
+              quotationId: Number(quotationID),
+              quotationRevisionNumber: Number(revisionNo)
+            });
+          } else {
+            return apiService.createQuotationTerm({
+              id: 0,
+              termId: Number(termId),
+              quotationId: Number(quotationID),
+              quotationRevisionNumber: Number(revisionNo)
+            });
+          }
+        })
+      );
+    } catch (termErr) {
+      console.warn('Error saving quotation terms:', termErr);
+    }
+  };
+
   const resetForm = () => {
     setSelectedCustomer(null); setWithPrinting(false);
     setQuotNo(''); setQuotDate(todayISO());
@@ -4278,8 +4554,17 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setWithPrinting(hasPrinting);
     setCgstPct(quot.cGSTPercent ?? 9);
     setSgstPct(quot.sGSTPercent ?? 9);
-    setSelectedTerms([]);
     setStep1Error(''); setStep2Error('');
+    apiService.getQuotationTerms(quot.quotationID, quot.quotationRevisionNumber)
+      .then(termRes => {
+        const list = normalizeList(termRes);
+        const termIDs = list.map(t => Number(t.termId ?? t.TermId ?? t.termID ?? t.TermID ?? 0)).filter(id => id > 0);
+        setSelectedTerms(termIDs);
+      })
+      .catch((err) => {
+        console.warn('Failed to load terms:', err);
+        setSelectedTerms([]);
+      });
 
     // ── Derive global period from the loaded rows ──
     const datedRows = allRows.filter(r => (r.rowType === 'hoarding' || r.rowType === 'merged') && r.startDate && r.endDate);
@@ -4467,7 +4752,16 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
     setCgstPct(quot.cGSTPercent ?? 9);
     setSgstPct(quot.sGSTPercent ?? 9);
-    setSelectedTerms([]);
+    apiService.getQuotationTerms(quot.quotationID, quot.quotationRevisionNumber)
+      .then(termRes => {
+        const list = normalizeList(termRes);
+        const termIDs = list.map(t => Number(t.termId ?? t.TermId ?? t.termID ?? t.TermID ?? 0)).filter(id => id > 0);
+        setSelectedTerms(termIDs);
+      })
+      .catch((err) => {
+        console.warn('Failed to load terms:', err);
+        setSelectedTerms([]);
+      });
     setStep1Error(''); setStep2Error('');
     setEditingQuotID(null);
     setOriginalQuotID(quot.quotationID);
@@ -4489,7 +4783,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
   };
 
-  const handleViewPDF = (quot) => {
+  const handleViewPDF = async (quot) => {
     const myLines = quotLines.filter(l =>
       Number(l.quotationID) === Number(quot.quotationID) &&
       Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
@@ -4653,6 +4947,15 @@ export default function QuotationPage({ onNavigateToContracts }) {
     const storedGross = storedSub + storedCgst + storedSgst;
     const storedFinal = Math.round(storedGross);
 
+    let dbTerms = [];
+    try {
+      const res = await apiService.getQuotationTerms(quot.quotationID, quot.quotationRevisionNumber);
+      const list = normalizeList(res);
+      dbTerms = list.map(t => Number(t.termId ?? t.TermId ?? t.termID ?? t.TermID ?? 0)).filter(id => id > 0);
+    } catch (err) {
+      console.warn('Failed to fetch terms:', err);
+    }
+
     const html = buildPrintHTML({
       rows: pdfRows,
       withPrinting: pdfRows.some(r => r.rowType === 'printing') || pdfRows.some(r => Number(r.printingCost || 0) > 0),
@@ -4667,8 +4970,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
       sgstAmt: storedSgst,
       roundOff: storedFinal - storedGross,
       finalTotal: storedFinal,
-      selectedTerms: [],
-      termsTexts: [],
+      selectedTerms: dbTerms,
+      termsTexts: dbTerms.map(id => {
+        const t = termsList.find(t => t.termID === id);
+        return t?.description || '';
+      }),
     });
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); }
@@ -4923,6 +5229,9 @@ export default function QuotationPage({ onNavigateToContracts }) {
           });
         }
       }
+
+      // ── Save selected Terms & Conditions ──
+      await saveQuotationTerms(savedQuotID, savedRevNo, selectedTerms);
 
       // ── Fetch saved data from Database to Print ──
       const [allQuotsRaw, printLinesRaw, printMergesRaw] = await Promise.all([
@@ -6430,15 +6739,77 @@ export default function QuotationPage({ onNavigateToContracts }) {
                               );
                             })()}
                             {/* Edit — edits this exact revision in place */}
-                            <button onClick={() => handleEditQuotation(latest)} title="Edit this quotation (same number & revision)"
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #f59e0b', color: '#f59e0b', background: 'rgba(245,158,11,0.06)', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                              <Edit2 size={13} /> Edit
-                            </button>
+                            {(() => {
+                              const doneProforma = proformaInvoices.some(inv => 
+                                Number(inv.quotationID ?? inv.QuotationID) === Number(latest.quotationID) && 
+                                Number(inv.quotationRevisionNumber ?? inv.QuotationRevisionNumber) === Number(latest.quotationRevisionNumber)
+                              );
+                              const doneContract = contractedQuotIds.has(latest.quotationID);
+                              return (
+                                <button
+                                  onClick={() => handleEditQuotation(latest)}
+                                  disabled={doneContract || doneProforma}
+                                  title={
+                                    doneContract
+                                      ? 'Contract has been created. Cannot edit.'
+                                      : doneProforma
+                                      ? 'Proforma invoice has been created. Cannot edit.'
+                                      : 'Edit this quotation (same number & revision)'
+                                  }
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                    padding: '5px 11px',
+                                    borderRadius: 8,
+                                    border: '1.5px solid #f59e0b',
+                                    color: '#f59e0b',
+                                    background: 'rgba(245,158,11,0.06)',
+                                    cursor: (doneContract || doneProforma) ? 'not-allowed' : 'pointer',
+                                    fontFamily: 'Nunito,sans-serif',
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    whiteSpace: 'nowrap',
+                                    opacity: (doneContract || doneProforma) ? 0.45 : 1,
+                                  }}
+                                >
+                                  <Edit2 size={13} /> Edit
+                                </button>
+                              );
+                            })()}
                             {/* Revise */}
-                            <button onClick={() => handleReopenHistory(latest)} title="Create Revision"
-                              style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 8, border: '1.5px solid #e8e8f4', color: '#5a5a78', background: '#fff', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, whiteSpace: 'nowrap' }}>
-                              <Edit2 size={13} /> Revise
-                            </button>
+                            {(() => {
+                              const doneContract = contractedQuotIds.has(latest.quotationID);
+                              return (
+                                <button
+                                  onClick={() => handleReopenHistory(latest)}
+                                  disabled={doneContract}
+                                  title={
+                                    doneContract
+                                      ? 'Contract has been created. Cannot revise.'
+                                      : 'Create Revision'
+                                  }
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 5,
+                                    padding: '5px 11px',
+                                    borderRadius: 8,
+                                    border: '1.5px solid #e8e8f4',
+                                    color: '#5a5a78',
+                                    background: '#fff',
+                                    cursor: doneContract ? 'not-allowed' : 'pointer',
+                                    fontFamily: 'Nunito,sans-serif',
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    whiteSpace: 'nowrap',
+                                    opacity: doneContract ? 0.45 : 1,
+                                  }}
+                                >
+                                  <Edit2 size={13} /> Revise
+                                </button>
+                              );
+                            })()}
                           </div>
                         </td>
                       </tr>
@@ -6570,6 +6941,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           onClose={() => setShowTermsModal(false)}
         />
       )}
+
       {showMergeModal && (
         <MergeModal
           rows={rows}

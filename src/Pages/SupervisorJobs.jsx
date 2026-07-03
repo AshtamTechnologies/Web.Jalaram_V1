@@ -395,6 +395,7 @@ function TaskPhotosSection({ jobTaskID }) {
           <PhotoGrid items={nearPhotos} label="Near Photo" color="#049edf" />
           <PhotoGrid items={farPhotos} label="Far Photo" color="#7c3aed" />
         </div>
+        <GeoAddressRow taskId={jobTaskID} />
       </div>
     </>
   );
@@ -416,6 +417,52 @@ function getSiteAddress(h) {
   if (landmark) return landmark;
   return h.hoardingCode ?? h.HoardingCode ?? '';
 }
+/* ═══════════════════════════════════════════
+   GEO ADDRESS ROW
+   Fetches & renders the GPS address for a task
+═══════════════════════════════════════════ */
+function GeoAddressRow({ taskId }) {
+  const [address, setAddress] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!taskId) return;
+    setLoading(true);
+    apiService.getGeoLocationByTaskId(taskId)
+      .then(res => {
+        const rows = Array.isArray(res) ? res
+          : Array.isArray(res?.data) ? res.data
+          : Array.isArray(res?.$values) ? res.$values : [];
+        setAddress(rows[0]?.address ?? rows[0]?.Address ?? '');
+      })
+      .catch(() => setAddress(''))
+      .finally(() => setLoading(false));
+  }, [taskId]);
+
+  if (!loading && !address) return null;
+
+  return (
+    <div style={{
+      marginTop: 10,
+      display: 'flex', alignItems: 'flex-start', gap: 6,
+      padding: '7px 10px', borderRadius: 8,
+      background: 'rgba(4,158,223,0.05)',
+      border: '1px solid rgba(4,158,223,0.18)',
+    }}>
+      <MapPin size={12} color="#049edf" style={{ flexShrink: 0, marginTop: 2 }} />
+      {loading ? (
+        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+          <Loader2 size={10} className="pg-spin" color="#049edf" /> Fetching location…
+        </span>
+      ) : (
+        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#3a3a5c', lineHeight: 1.5 }}>
+          {address}
+        </span>
+      )}
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════
    TASK WORKER CARD  (full inline section, no dropdown)
 ═══════════════════════════════════════════ */
@@ -878,6 +925,9 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
               <PhotoStrip items={farPhotos} label="Far" color="#7c3aed" />
               <PhotoStrip items={otherPhotos} label="Other" color="#16a34a" />
             </div>
+
+            {/* Geo address for this task */}
+            <GeoAddressRow taskId={task.jobTaskID} />
           </div>
         );
       })}

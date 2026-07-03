@@ -141,6 +141,8 @@ function validateRow(row, maxVal) {
   if (!row.paidBy) e.paidBy = 'Required';
   if (row.nextDueDate && row.paymentDate && row.nextDueDate < row.paymentDate)
     e.nextDueDate = 'Must be after payment date';
+  if (row.referenceNumber && row.referenceNumber.length > 30)
+    e.referenceNumber = 'Max 30 characters';
   return e;
 }
 /* ─────────────────────────────────────────
@@ -983,12 +985,13 @@ function PaymentRowsTable({
 
                     {/* Reference */}
                     <td className="exp-td">
-                      <input className="exp-cell-input"
+                      <input className={`exp-cell-input${errs.referenceNumber ? ' exp-cell-input--err' : ''}`}
                         placeholder={showBank ? 'Ref / Cheque no…' : 'N/A'}
                         value={row.referenceNumber}
                         onChange={e => onChangeRow(row._rowId, 'referenceNumber', e.target.value)}
                         disabled={!showBank}
                         style={!showBank ? { color: '#b0b0c8', cursor: 'not-allowed' } : {}} />
+                      {errs.referenceNumber && <div className="exp-cell-err">{errs.referenceNumber}</div>}
                     </td>
 
                     {/* Comments */}
@@ -1100,9 +1103,10 @@ function PaymentRowsTable({
                   </div>
                   <div className="col-6">
                     <div className="exp-mob-label">Reference</div>
-                    <input className="exp-cell-input" placeholder="Ref / Cheque no…"
+                    <input className={`exp-cell-input${errs.referenceNumber ? ' exp-cell-input--err' : ''}`} placeholder="Ref / Cheque no…"
                       value={row.referenceNumber}
                       onChange={e => onChangeRow(row._rowId, 'referenceNumber', e.target.value)} />
+                    {errs.referenceNumber && <div className="exp-cell-err">{errs.referenceNumber}</div>}
                   </div>
                 </>)}
                 <div className="col-12">
@@ -1203,10 +1207,11 @@ function QuickAddPanel({ row, errors, onChange, attachFile, onFileSelect, onFile
             </div>
             <div className="col-12 col-md-6">
               <FieldLabel label="Reference / Cheque Number" optional />
-              <InputWrap icon={Hash}>
+              <InputWrap error={errors.referenceNumber} icon={Hash}>
                 <input className="pg-field-input" placeholder="Transaction / Cheque number"
                   value={row.referenceNumber} onChange={e => onChange('referenceNumber', e.target.value)} autoComplete="off" />
               </InputWrap>
+              <FieldError msg={errors.referenceNumber} />
             </div>
           </>
         )}
@@ -1333,31 +1338,9 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   }, []);
 
   /* ── File handlers ── */
-  const handleFileSelect = useCallback(async (rowId, file) => {
-    const row = rows.find(r => r._rowId === rowId);
-    const paymentID = row?._paymentID;
-    const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
-    const hID = Number(contract?.hoardingID || 0);
-
-    if (paymentID && existingAttaches[paymentID]) {
-      const attach = existingAttaches[paymentID];
-      setUploadingRowIds(prev => new Set(prev).add(rowId));
-      try {
-        await apiService.updateLandPaymentAttach(
-          attach, Number(paymentID), Number(ownerID),
-          Number(landContractID), hID, file
-        );
-        const updated = await apiService.getLandPaymentAttachByPaymentId(paymentID);
-        setExistingAttaches(prev => ({ ...prev, [paymentID]: updated }));
-      } catch (err) {
-        setApiErr(err?.response?.data?.message || err?.message || 'Failed to replace attachment.');
-      } finally {
-        setUploadingRowIds(prev => { const n = new Set(prev); n.delete(rowId); return n; });
-      }
-    } else {
-      setAttachFiles(prev => ({ ...prev, [rowId]: file }));
-    }
-  }, [rows, existingAttaches, ownerID, landContractID, contracts]);
+  const handleFileSelect = useCallback((rowId, file) => {
+    setAttachFiles(prev => ({ ...prev, [rowId]: file }));
+  }, []);
 
   const handleFileClear = useCallback((rowId) => {
     setAttachFiles(prev => { const n = { ...prev }; delete n[rowId]; return n; });
@@ -1373,6 +1356,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   const [apiErr, setApiErr] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingRowId, setDeletingRowId] = useState(null);
+  const [stagedDeletedPaymentIds, setStagedDeletedPaymentIds] = useState([]);
 
   const errorRef = useRef(null);
 
@@ -1401,7 +1385,18 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
     const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
     const maxVal = contract ? Number(contract.totalContractValue) : null;
     const errs = validateRow(currentRow, maxVal);
-    if (Object.keys(errs).length) { setCurrentErrors(errs); return; }
+    if (Object.keys(errs).length) {
+      setCurrentErrors(errs);
+      setTimeout(() => {
+        const firstErr = document.querySelector('.exp-entry-panel .pg-field-wrap--error');
+        if (firstErr) {
+          const input = firstErr.querySelector('input, select, textarea');
+          if (input) input.focus();
+          else firstErr.focus();
+        }
+      }, 50);
+      return;
+    }
     setRows(prev => [...prev, { ...currentRow }]);
     setCurrentRow(emptyCurrentRow());
     setCurrentErrors({});
@@ -1419,24 +1414,16 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
     setDeleteTarget(row);
   };
 
-  const confirmDeleteRow = async () => {
+  const confirmDeleteRow = () => {
     if (!deleteTarget) return;
     const row = deleteTarget;
     setDeleteTarget(null);
-    setDeletingRowId(row._rowId);
-    setApiErr('');
-    try {
-      if (row._paymentID) {
-        await apiService.deleteLandPayment(row._paymentID);
-      }
-      setRows(prev => prev.filter(r => r._rowId !== row._rowId));
-      setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Failed to delete payment.';
-      setApiErr(msg);
-    } finally {
-      setDeletingRowId(null);
+    if (row._paymentID) {
+      setStagedDeletedPaymentIds(prev => [...prev, row._paymentID]);
     }
+    setRows(prev => prev.filter(r => r._rowId !== row._rowId));
+    setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
+    setAttachFiles(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
   };
 
   const handleSave = () => {
@@ -1445,7 +1432,17 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
     else setOwnerError('');
     if (!landContractID) { setContractError('Contract is required'); hasHeaderErr = true; }
     else setContractError('');
-    if (hasHeaderErr) return;
+    if (hasHeaderErr) {
+      setTimeout(() => {
+        const firstErr = document.querySelector('.pg-field-wrap--error');
+        if (firstErr) {
+          const input = firstErr.querySelector('input, select, textarea');
+          if (input) input.focus();
+          else firstErr.focus();
+        }
+      }, 50);
+      return;
+    }
 
     const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
     const maxVal = contract ? Number(contract.totalContractValue) : 0;
@@ -1461,13 +1458,42 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
     let allRowsToSave = [...rows];
     if (showEntryForm && entryHasData) {
       const errs = validateRow(currentRow, maxVal);
-      if (Object.keys(errs).length) { setCurrentErrors(errs); return; }
-      if (hasErr) { setRowErrors(newRowErrors); return; }
+      if (Object.keys(errs).length) {
+        setCurrentErrors(errs);
+        setTimeout(() => {
+          const firstErr = document.querySelector('.exp-entry-panel .pg-field-wrap--error');
+          if (firstErr) {
+            const input = firstErr.querySelector('input, select, textarea');
+            if (input) input.focus();
+            else firstErr.focus();
+          }
+        }, 50);
+        return;
+      }
+      if (hasErr) {
+        setRowErrors(newRowErrors);
+        setTimeout(() => {
+          const firstErr = document.querySelector('.exp-rows-wrap .exp-cell-input--err');
+          if (firstErr) {
+            firstErr.focus();
+          }
+        }, 50);
+        return;
+      }
       allRowsToSave.push({ ...currentRow });
     }
 
     if (allRowsToSave.length === 0) { setApiErr('Please add at least one payment row.'); return; }
-    if (hasErr) { setRowErrors(newRowErrors); return; }
+    if (hasErr) {
+      setRowErrors(newRowErrors);
+      setTimeout(() => {
+        const firstErr = document.querySelector('.exp-rows-wrap .exp-cell-input--err');
+        if (firstErr) {
+          firstErr.focus();
+        }
+      }, 50);
+      return;
+    }
 
     const sumPaid = allRowsToSave.reduce((s, r) => s + (Number(r.amountPaid) || 0), 0);
     if (maxVal > 0 && sumPaid > maxVal) {
@@ -1484,6 +1510,13 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
     const hoardingID = Number(contract?.hoardingID || 0);
     const attachErrors = [];
     try {
+      // Delete staged deleted payments first
+      if (stagedDeletedPaymentIds.length > 0) {
+        for (const id of stagedDeletedPaymentIds) {
+          await apiService.deleteLandPayment(id);
+        }
+      }
+
       for (const row of allRows) {
         const payload = {
           ownerID: Number(ownerID),
@@ -1512,10 +1545,18 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
         if (file && resolvedID) {
           setUploadingRowIds(prev => new Set(prev).add(row._rowId));
           try {
-            await apiService.createLandPaymentAttach(
-              resolvedID, Number(ownerID),
-              Number(landContractID), hoardingID, file
-            );
+            const existing = existingAttaches[resolvedID];
+            if (existing) {
+              await apiService.updateLandPaymentAttach(
+                existing, resolvedID, Number(ownerID),
+                Number(landContractID), hoardingID, file
+              );
+            } else {
+              await apiService.createLandPaymentAttach(
+                resolvedID, Number(ownerID),
+                Number(landContractID), hoardingID, file
+              );
+            }
           } catch (e) {
             attachErrors.push(e?.response?.data?.message || e?.message || 'Upload failed');
           } finally {
@@ -1847,8 +1888,26 @@ setHoardingMaps(mapList);  // ← add
       const key = `${p.ownerID}_${p.landContractID}`;
       if (!map[key]) {
         const owner = owners.find(o => o.ownerID === Number(p.ownerID) || o.ownerID === p.ownerID);
-        const hoarding = hoardings.find(h => h.hoardingID === Number(p.hoardingID) || h.hoardingID === p.hoardingID);
         const contract = contracts.find(c => String(c.landContractID) === String(p.landContractID));
+
+        // 1) Try hoardingID directly on the payment
+        let hoarding = hoardings.find(h => h.hoardingID === Number(p.hoardingID) || h.hoardingID === p.hoardingID);
+
+        // 2) Fallback: use contract.hoardingID
+        if (!hoarding && contract?.hoardingID) {
+          hoarding = hoardings.find(h => Number(h.hoardingID) === Number(contract.hoardingID));
+        }
+
+        // 3) Fallback: look up via hoardingMaps table
+        if (!hoarding) {
+          const mapEntry = hoardingMaps.find(m =>
+            Number(m.landContractID ?? m.LandContractID) === Number(p.landContractID)
+          );
+          if (mapEntry) {
+            const mapHID = mapEntry.hoardingID ?? mapEntry.HoardingID;
+            hoarding = hoardings.find(h => Number(h.hoardingID) === Number(mapHID));
+          }
+        }
         map[key] = {
           groupKey: key,
           ownerID: p.ownerID,
@@ -1871,7 +1930,7 @@ setHoardingMaps(mapList);  // ← add
       }
     });
     return Object.values(map);
-  }, [payments, owners, hoardings, contracts]);
+  }, [payments, owners, hoardings, contracts, hoardingMaps]);
 
   const filtered = groupedRows.filter(r => {
     const q = search.toLowerCase();

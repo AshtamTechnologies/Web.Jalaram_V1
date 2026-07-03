@@ -1141,6 +1141,8 @@ export const apiService = {
     api.post('/GeoLocationUpload/Upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  getGeoLocationByTaskId: (taskId) =>
+    api.get(`/GeoLocationUpload/GetByTaskId?id=${taskId}`),
 
   // FINANCIAL YEAR SETUP
   getAllFinancialYears: () => api.get('/FinancialYearSetup'),
@@ -1158,7 +1160,6 @@ export const apiService = {
     financialYearAbbrevation: data.financialYearAbbrevation,
     currentlyOpen: data.currentlyOpen,
   }),
-
   // SERIES ID SETUP
   getAllSeriesIDs: () => api.get('/SeriesID'),
   createSeriesID: (data) => api.post('/SeriesID', {
@@ -1183,11 +1184,19 @@ export const apiService = {
   }),
 
   getAllHoardingPhotos: () => api.get('/HoardingPhoto'),
+  getPhotosByHoardingIDAndEffdt: (hoardingID, effdt) =>
+    api.get(`/Hoarding/by-hoarding/${hoardingID}/effdt/${effdt}`),
+
+  createQuotationTerm: (data) => api.post('/QuotationTerm', data),
+  updateQuotationTerm: (data) => api.put('/QuotationTerm', data),
+  getQuotationTerms: (quotationId, quotationRevisionNumber) =>
+    api.get(`/QuotationTerm/GetQuotationTerms?quotationId=${quotationId}&quotationRevisionNumber=${quotationRevisionNumber}`),
+  deleteQuotationTerm: (id) =>
+    api.delete(`/QuotationTerm/${id}`).catch(() => api.delete(`/QuotationTerm?id=${id}`)),
 
   createPerformaInvoice: (data) => api.post('/PerformaInvoice', data),
   getAllPerformaInvoices: () => api.get('/PerformaInvoice'),
   getDashboardOverview: () => api.get('/Dashboard/overview'),
-
 };
 
 export default api;

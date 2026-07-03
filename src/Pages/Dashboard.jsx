@@ -39,9 +39,64 @@ function useWindowWidth() {
   return w;
 }
 
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const rawData = payload[0].payload;
+    const total = rawData.revenue;
+    const sites = rawData.sites || [];
+
+    return (
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: '12px',
+          padding: '12px 14px',
+          boxShadow: '0 10px 40px rgba(0,0,0,0.12)',
+          fontFamily: 'Nunito,sans-serif',
+          width: '320px',
+          zIndex: 99999,
+        }}
+        onMouseMove={e => e.stopPropagation()}
+        onMouseEnter={e => e.stopPropagation()}
+        onMouseLeave={e => e.stopPropagation()}
+        onMouseOver={e => e.stopPropagation()}
+        onMouseOut={e => e.stopPropagation()}
+      >
+        <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '13.5px', marginBottom: '4px' }}>
+          {label}
+        </div>
+        <div style={{ color: '#049edf', fontWeight: 800, fontSize: '15px', marginBottom: '8px', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
+          Total: ₹{total.toLocaleString('en-IN')}
+        </div>
+        {sites.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '160px', overflowY: 'auto', paddingRight: '4px', overscrollBehavior: 'contain' }}>
+            {sites.map((s, idx) => (
+              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px', fontSize: '11px', borderBottom: '1px dashed #f1f5f9', paddingBottom: '4px' }}>
+                <span style={{ color: '#475569', fontWeight: 600, wordBreak: 'break-word', flex: 1 }}>
+                  {s.siteLocation}
+                </span>
+                <span style={{ color: '#0f172a', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                  ₹{s.revenue.toLocaleString('en-IN')}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontSize: '11.5px', color: '#94a3b8', fontStyle: 'italic' }}>
+            No revenue recorded
+          </div>
+        )}
+      </div>
+    );
+  }
+  return null;
+};
+
 /* ═══════════════════════════════════════════
    DASHBOARD PAGE
    Props: changeTab  — passed from App.js via Layout
+   const [selectedSiteFilter, setSelectedSiteFilter] = useState('all');
 ═══════════════════════════════════════════ */
 export default function Dashboard({ changeTab }) {
   const [refreshing, setRefreshing] = useState(false);
@@ -50,6 +105,8 @@ export default function Dashboard({ changeTab }) {
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
   const width = useWindowWidth();
+  const [selectedSiteFilter, setSelectedSiteFilter] = useState('all');
+  const [hoveredMonthData, setHoveredMonthData] = useState(null);
 
   /* Read admin name from localStorage (same source as Layout) */
   useEffect(() => {
@@ -108,7 +165,7 @@ export default function Dashboard({ changeTab }) {
   const hoardingsData = data?.hoardings || { totalHoardings: 0, addedThisMonth: 0 };
   const activeBookingsData = data?.activeBookings || { activeCount: 0, expiringThisWeek: 0 };
   const expiredBookingsData = data?.expiredBookings || { expiredCount: 0, pendingRenewals: 0 };
-  const revenueData = data?.revenue || { totalRevenue: 0, percentVsLastMonth: 0 };
+  const revenueData = data?.revenue || { totalRevenueActive: 0, percentVsLastMonth: 0 };
 
   const formatRevenue = (val) => {
     if (val == null) return '—';
@@ -124,13 +181,72 @@ export default function Dashboard({ changeTab }) {
     { title: 'Total Hoardings', value: String(hoardingsData.totalHoardings ?? 0), sub: `+${hoardingsData.addedThisMonth ?? 0} added this month`, icon: Layers, color: '#049edf', bg: 'rgba(4,158,223,0.1)' },
     { title: 'Active Bookings', value: String(activeBookingsData.activeCount ?? 0), sub: `${activeBookingsData.expiringThisWeek ?? 0} expiring this week`, icon: CalendarCheck, color: '#1a9e6e', bg: 'rgba(26,158,110,0.1)' },
     // { title: 'Expired Bookings', value: String(expiredBookingsData.expiredCount ?? 0), sub: `${expiredBookingsData.pendingRenewals ?? 0} pending renewal`, icon: TrendingDown, color: '#e84040', bg: 'rgba(232,64,64,0.1)' },
-    { title: 'Total Revenue', value: formatRevenue(revenueData.totalRevenue ?? 0), sub: revenueSub, icon: IndianRupee, color: '#6c63ff', bg: 'rgba(108,99,255,0.1)' },
+    { title: 'Total active contract value', value: formatRevenue(revenueData.totalRevenueActive ?? 0), sub: revenueSub, icon: IndianRupee, color: '#6c63ff', bg: 'rgba(108,99,255,0.1)' },
   ];
 
-  const chartRevenueData = (data?.monthlyRevenue ?? []).map(r => ({
-    month: r.monthName,
-    revenue: r.revenue ?? 0,
-  }));
+  const siteOptions = [
+    { value: 'all', label: 'All Sites' },
+    ...Array.from(new Set((data?.monthlyRevenueBySite ?? []).map(item => item.siteLocation).filter(Boolean))).map(loc => ({
+      value: loc,
+      label: loc,
+    })),
+  ];
+
+  const chartRevenueData = (() => {
+    const list = data?.monthlyRevenueBySite ?? [];
+    const filteredList = selectedSiteFilter === 'all'
+      ? list
+      : list.filter(item => item.siteLocation === selectedSiteFilter);
+
+    const map = {};
+    filteredList.forEach(item => {
+      const key = `${item.monthName} ${item.year}`;
+      if (!map[key]) {
+        map[key] = {
+          month: `${item.monthName} ${item.year}`,
+          monthName: item.monthName,
+          year: item.year,
+          monthNum: item.month,
+          revenue: 0,
+          sites: [],
+        };
+      }
+      map[key].revenue += (item.revenue ?? 0);
+      if (item.revenue > 0) {
+        map[key].sites.push({
+          siteLocation: item.siteLocation,
+          revenue: item.revenue,
+        });
+      }
+    });
+
+    // To prevent empty gaps in the timeline, ensure all months present in the original dataset are populated with 0 if no record exists
+    const allMonthKeys = Array.from(new Set(list.map(item => `${item.monthName} ${item.year}`)));
+    allMonthKeys.forEach(mKey => {
+      if (!map[mKey]) {
+        const [mName, yStr] = mKey.split(' ');
+        const found = list.find(item => item.monthName === mName && String(item.year) === yStr);
+        map[mKey] = {
+          month: mKey,
+          monthName: mName,
+          year: Number(yStr),
+          monthNum: found ? found.month : 7,
+          revenue: 0,
+          sites: [],
+        };
+      }
+    });
+
+    return Object.values(map)
+      .map(item => {
+        item.sites.sort((a, b) => b.revenue - a.revenue);
+        return item;
+      })
+      .sort((a, b) => {
+        if (a.year !== b.year) return a.year - b.year;
+        return a.monthNum - b.monthNum;
+      });
+  })();
 
   const chartBookingsData = (data?.monthlyBookings ?? []).map(b => ({
     month: b.monthName,
@@ -190,44 +306,158 @@ export default function Dashboard({ changeTab }) {
       {/* ── Charts ── */}
       <div className={`charts-grid ${width >= 900 ? 'two-col' : 'one-col'}`}>
 
-        {/* Revenue area chart */}
-        <div className={`chart-card${width >= 900 ? ' full-width' : ''}`}>
-          <div className="chart-header">
-            <h3 className="chart-title">Monthly Revenue</h3>
-            <span className="chart-badge">Last 6 months</span>
+        {/* Monthly Revenue card with Site Sidebar */}
+        <div className={`chart-card${width >= 900 ? ' full-width' : ''}`} style={{ padding: '20px 24px' }}>
+
+          <div className="chart-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, borderBottom: '1px solid #f1f5f9', paddingBottom: '16px', marginBottom: '20px' }}>
+            <div>
+              <h3 className="chart-title" style={{ fontSize: '16px', fontWeight: 700, color: '#1e293b' }}>Monthly Site Revenue</h3>
+              {/* <span className="chart-badge" style={{ fontSize: '12px', color: '#94a3b8' }}>Trend & Site Breakdown</span> */}
+            </div>
+            <select
+              value={selectedSiteFilter}
+              onChange={e => setSelectedSiteFilter(e.target.value)}
+              style={{
+                padding: '6px 12px',
+                borderRadius: '8px',
+                border: '1.5px solid #e0e0f0',
+                outline: 'none',
+                fontFamily: 'Nunito,sans-serif',
+                fontSize: '12.5px',
+                color: '#606078',
+                backgroundColor: '#fff',
+                cursor: 'pointer',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.02)'
+              }}
+            >
+              {siteOptions.map(opt => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={chartRevenueData}>
-              <defs>
-                <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#049edf" stopOpacity={0.22} />
-                  <stop offset="95%" stopColor="#049edf" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-              <XAxis
-                dataKey="month"
-                stroke="#c0c0d8"
-                tick={{ fontFamily: 'Nunito,sans-serif', fontSize: 11 }}
-              />
-              <YAxis
-                stroke="#c0c0d8"
-                tick={{ fontFamily: 'Nunito,sans-serif', fontSize: 10 }}
-                tickFormatter={v => `₹${(v / 1000).toFixed(0)}k`}
-                width={52}
-              />
-              <Tooltip
-                contentStyle={{ borderRadius: 12, border: '1px solid #e0e0f0', fontFamily: 'Nunito,sans-serif', fontSize: 12 }}
-                formatter={v => [`₹${v.toLocaleString('en-IN')}`, 'Revenue']}
-              />
-              <Area
-                type="monotone" dataKey="revenue"
-                stroke="#049edf" strokeWidth={3} fill="url(#revGrad)"
-                dot={{ fill: '#049edf', r: 4, strokeWidth: 2, stroke: '#fff' }}
-                activeDot={{ r: 6 }}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+
+          <div style={{ display: 'grid', gridTemplateColumns: width >= 900 ? '2.2fr 1fr' : '1fr', gap: '24px', alignItems: 'start' }}>
+
+            {/* Area Chart */}
+            <div style={{ minWidth: 0 }}>
+              <ResponsiveContainer width="100%" height={230}>
+                <AreaChart
+                  data={chartRevenueData}
+                  onMouseMove={(state) => {
+                    if (state && state.activePayload && state.activePayload.length) {
+                      setHoveredMonthData(state.activePayload[0].payload);
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    setHoveredMonthData(null);
+                  }}
+                >
+                  <defs>
+                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#049edf" stopOpacity={0.22} />
+                      <stop offset="95%" stopColor="#049edf" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
+                  <XAxis
+                    dataKey="month"
+                    stroke="#c0c0d8"
+                    tick={{ fontFamily: 'Nunito,sans-serif', fontSize: 11 }}
+                  />
+                  <YAxis
+                    stroke="#c0c0d8"
+                    tick={{ fontFamily: 'Nunito,sans-serif', fontSize: 10 }}
+                    tickFormatter={formatRevenue}
+                    width={65}
+                  />
+                  <Tooltip content={<CustomTooltip />} wrapperStyle={{ pointerEvents: 'auto' }} />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#049edf"
+                    strokeWidth={3}
+                    fill="url(#revGrad)"
+                    dot={{ fill: '#049edf', r: 4, strokeWidth: 2, stroke: '#fff' }}
+                    activeDot={{ r: 6 }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Site Breakdown sidebar */}
+            <div style={{
+              background: '#f8fafc',
+              borderRadius: '12px',
+              padding: '16px',
+              border: '1px solid #f1f5f9',
+              minWidth: 0,
+            }}>
+              <h4 style={{ margin: '0 0 6px 0', fontSize: '13px', fontWeight: 700, color: '#334155' }}>
+                Site Breakdown
+              </h4>
+              <p style={{ margin: '0 0 12px 0', fontSize: '11px', color: '#64748b', fontWeight: 600 }}>
+                {hoveredMonthData ? `Active in ${hoveredMonthData.month}` : 'Total revenue per site'}
+              </p>
+
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '8px',
+                maxHeight: '180px',
+                overflowY: 'auto',
+                paddingRight: '4px'
+              }}>
+                {(() => {
+                  let sitesList = [];
+                  if (hoveredMonthData) {
+                    sitesList = hoveredMonthData.sites || [];
+                  } else {
+                    const list = data?.monthlyRevenueBySite ?? [];
+                    const map = {};
+                    list.forEach(item => {
+                      const loc = item.siteLocation || `Site #${item.siteId}`;
+                      if (!map[loc]) map[loc] = 0;
+                      map[loc] += (item.revenue ?? 0);
+                    });
+                    sitesList = Object.entries(map)
+                      .map(([siteLocation, revenue]) => ({ siteLocation, revenue }))
+                      .sort((a, b) => b.revenue - a.revenue);
+                  }
+
+                  if (sitesList.length === 0) {
+                    return (
+                      <span style={{ fontSize: '11.5px', color: '#94a3b8', fontStyle: 'italic' }}>
+                        No revenue recorded
+                      </span>
+                    );
+                  }
+
+                  return sitesList.map((s, idx) => (
+                    <div key={idx} style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      background: '#fff',
+                      padding: '8px 10px',
+                      borderRadius: '8px',
+                      border: '1px solid #f1f5f9',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.01)'
+                    }}>
+                      <span style={{ color: '#475569', fontWeight: 600, fontSize: '11px', lineHeight: 1.3 }}>
+                        {s.siteLocation}
+                      </span>
+                      <span style={{ color: '#049edf', fontWeight: 800, fontSize: '11.5px', textAlign: 'right' }}>
+                        ₹{s.revenue.toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+
+          </div>
         </div>
 
         {/* Monthly bookings bar chart */}

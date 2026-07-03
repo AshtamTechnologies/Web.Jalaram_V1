@@ -771,6 +771,7 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
         if (geo.latitude !== 0) {
           const geoFd = new FormData();
           geoFd.append('Image', file);
+          geoFd.append('TaskId', String(task.jobTaskID || 0));
           geoFd.append('Latitude', String(geo.latitude));
           geoFd.append('Longitude', String(geo.longitude));
           geoFd.append('Accuracy', String(geo.accuracy));
@@ -908,6 +909,25 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
   const [lightbox, setLightbox] = useState(null);
   const [imgErrors, setImgErrors] = useState({}); // track broken images by index
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
+  const [geoAddress, setGeoAddress] = useState('');
+  const [geoLoading, setGeoLoading] = useState(false);
+
+  // Fetch geo address for this task
+  useEffect(() => {
+    const taskId = task?.jobTaskID;
+    if (!taskId) return;
+    setGeoLoading(true);
+    setGeoAddress('');
+    apiService.getGeoLocationByTaskId(taskId)
+      .then(res => {
+        const rows = Array.isArray(res) ? res
+          : Array.isArray(res?.data) ? res.data
+          : Array.isArray(res?.$values) ? res.$values : [];
+        setGeoAddress(rows[0]?.address ?? rows[0]?.Address ?? '');
+      })
+      .catch(() => setGeoAddress(''))
+      .finally(() => setGeoLoading(false));
+  }, [task?.jobTaskID]);
 
   const taskIDs = new Set(
     [task.jobTaskID, ...(task.mergedTaskIDs ?? [])].map(Number)
@@ -1133,6 +1153,28 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
             )}
           </div>
 
+          {/* Geo Address Strip */}
+          {(geoLoading || geoAddress) && (
+            <div style={{
+              margin: '0 24px 14px',
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+              padding: '9px 13px', borderRadius: 10,
+              background: 'rgba(4,158,223,0.05)',
+              border: '1.5px solid rgba(4,158,223,0.18)',
+            }}>
+              <MapPin size={13} color="#049edf" style={{ flexShrink: 0, marginTop: 2 }} />
+              {geoLoading ? (
+                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Loader2 size={12} className="pg-spin" color="#049edf" /> Fetching location…
+                </span>
+              ) : (
+                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#3a3a5c', lineHeight: 1.5 }}>
+                  {geoAddress}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Footer */}
           <div className="pg-modal__foot">
             <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
@@ -1264,8 +1306,27 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
     tasks.length > 0 ? String(tasks[0].jobTaskID) : ''
   );
   const [lightbox, setLightbox] = useState(null);
+  const [geoAddress, setGeoAddress] = useState('');
+  const [geoLoading, setGeoLoading] = useState(false);
 
   const selectedTask = tasks.find(t => String(t.jobTaskID) === selectedTaskID);
+
+  // Fetch geo address whenever the selected task changes
+  useEffect(() => {
+    if (!selectedTaskID) { setGeoAddress(''); return; }
+    setGeoLoading(true);
+    setGeoAddress('');
+    apiService.getGeoLocationByTaskId(selectedTaskID)
+      .then(res => {
+        const rows = Array.isArray(res) ? res
+          : Array.isArray(res?.data) ? res.data
+          : Array.isArray(res?.$values) ? res.$values : [];
+        const addr = rows[0]?.address ?? rows[0]?.Address ?? '';
+        setGeoAddress(addr);
+      })
+      .catch(() => setGeoAddress(''))
+      .finally(() => setGeoLoading(false));
+  }, [selectedTaskID]);
 
   const taskAttachments = useMemo(() => {
     if (!selectedTaskID) return [];
@@ -1438,6 +1499,28 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
               </div>
             )}
           </div>
+
+          {/* Geo Address Strip */}
+          {(geoLoading || geoAddress) && (
+            <div style={{
+              margin: '0 24px 16px',
+              display: 'flex', alignItems: 'flex-start', gap: 8,
+              padding: '10px 14px', borderRadius: 10,
+              background: 'rgba(4,158,223,0.05)',
+              border: '1.5px solid rgba(4,158,223,0.18)',
+            }}>
+              <MapPin size={14} color="#049edf" style={{ flexShrink: 0, marginTop: 1 }} />
+              {geoLoading ? (
+                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Loader2 size={12} className="pg-spin" color="#049edf" /> Fetching location…
+                </span>
+              ) : (
+                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#3a3a5c', lineHeight: 1.5 }}>
+                  {geoAddress}
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Footer */}
           <div className="pg-modal__foot">

@@ -977,7 +977,8 @@ export default function WorkerTasksPage() {
             fd.append('LastUpdateDttm', nowISO); fd.append('LastUpdatedBy', String(userId));
             await apiService.uploadJobTaskAttachment(fd);
             const geoFd = new FormData();
-            geoFd.append('Image', file); geoFd.append('Latitude', String(geo.latitude));
+            geoFd.append('Image', file); geoFd.append('TaskId', String(data.jobTaskID));
+            geoFd.append('Latitude', String(geo.latitude));
             geoFd.append('Longitude', String(geo.longitude)); geoFd.append('Accuracy', String(geo.accuracy));
             geoFd.append('Address', geo.address); geoFd.append('CapturedAt', nowISO);
             await apiService.uploadGeoLocation(geoFd);

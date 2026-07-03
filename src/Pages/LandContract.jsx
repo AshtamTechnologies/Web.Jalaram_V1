@@ -713,35 +713,21 @@ function HoardingLookupModal({ hoardings, sites, ownerID, onSelectMultiple, onCl
 /* ═══════════════════════════════════════════════════════════
    CONTRACT ATTACHMENTS SECTION
 ═══════════════════════════════════════════════════════════ */
-function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
-  const [attachments, setAttachments] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+function ContractAttachmentsSection({
+  contractId,
+  ownerID,
+  hoardingID,
+  attachments = [],
+  onAddAttachment,
+  onReplaceAttachment,
+  onDeleteAttachment,
+  loading = false,
+}) {
   const [fileError, setFileError] = useState('');
-  const [apiError, setApiError] = useState('');
   const [replacingId, setReplacingId] = useState(null);
-  const [deletingId, setDeletingId] = useState(null);
   const [attachToDelete, setAttachToDelete] = useState(null);
   const uploadRef = useRef(null);
   const replaceRef = useRef(null);
-
-  const loadAttachments = useCallback(async () => {
-    if (!contractId) { setLoading(false); return; }
-    setLoading(true);
-    try {
-      const raw = await apiService.getLandContractAttachments(contractId);
-      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
-      setAttachments(list.map(item => {
-        const norm = normalizeAttachment(item);
-        const saved = getAttachName(norm.landContractAttachID);
-        if (saved) norm.contractFilename = saved;
-        return norm;
-      }));
-    } catch { setAttachments([]); }
-    finally { setLoading(false); }
-  }, [contractId]);
-
-  useEffect(() => { loadAttachments(); }, [loadAttachments]);
 
   const validateFile = (file) => {
     if (!ATTACH_ALLOWED_TYPES.includes(file.type))
@@ -751,66 +737,38 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
     return null;
   };
 
-  const handleUpload = async (e) => {
+  const handleUpload = (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
     const err = validateFile(file);
     if (err) { setFileError(err); return; }
-    setFileError(''); setUploading(true); setApiError('');
-    try {
-      const existingIds = new Set(attachments.map(a => a.landContractAttachID));
-      await apiService.uploadLandContractAttach(contractId, ownerID, hoardingID, file);
-      const rawList = await apiService.getLandContractAttachments(contractId);
-      const fullList = Array.isArray(rawList) ? rawList : Array.isArray(rawList?.data) ? rawList.data : [];
-      const normed = fullList.map(item => {
-        const n = normalizeAttachment(item);
-        const saved = getAttachName(n.landContractAttachID);
-        if (saved) n.contractFilename = saved;
-        return n;
-      });
-      const newAttach = normed.find(n => !existingIds.has(n.landContractAttachID));
-      if (newAttach?.landContractAttachID) {
-        saveAttachName(newAttach.landContractAttachID, file.name);
-        newAttach.contractFilename = file.name;
-      }
-      setAttachments(normed);
-    } catch (err) {
-      setApiError(err?.response?.data?.message || err?.message || 'Upload failed. Please try again.');
-    } finally { setUploading(false); }
+    setFileError('');
+    if (onAddAttachment) onAddAttachment(file);
   };
 
-  const handleReplace = async (e, attachId) => {
+  const handleReplace = (e, target) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
     const err = validateFile(file);
     if (err) { setFileError(err); setReplacingId(null); return; }
-    setFileError(''); setReplacingId(attachId); setApiError('');
-    try {
-      await apiService.updateLandContractAttach(attachId, file);
-      saveAttachName(attachId, file.name);
-      setAttachments(prev => prev.map(a =>
-        a.landContractAttachID === attachId ? { ...a, contractFilename: file.name } : a
-      ));
-    } catch (err) {
-      setApiError(err?.response?.data?.message || err?.message || 'Replace failed. Please try again.');
-    } finally { setReplacingId(null); }
+    setFileError('');
+    if (onReplaceAttachment) onReplaceAttachment(target, file);
+    setReplacingId(null);
   };
 
-  const handleDelete = (attachId, fileName) => {
-    setAttachToDelete({ id: attachId, name: fileName });
+  const handleDelete = (att) => {
+    const uuidPattern = /^\d+_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.([\w]+)$/i;
+    const rawFilename = att.contractFilename || att.contractFilePath?.split('/').pop() || '';
+    const uuidMatch = rawFilename.match(uuidPattern);
+    const name = uuidMatch ? `Contract-Document-${att.landContractAttachID}.${uuidMatch[1]}` : rawFilename || 'Document';
+    setAttachToDelete({ target: att, name });
   };
 
-  const executeDelete = async (attachId) => {
-    setDeletingId(attachId); setApiError('');
-    try {
-      await apiService.deleteLandContractAttach(attachId);
-      deleteAttachName(attachId);
-      setAttachments(prev => prev.filter(a => a.landContractAttachID !== attachId));
-    } catch (err) {
-      setApiError(err?.response?.data?.message || err?.message || 'Delete failed.');
-    } finally { setDeletingId(null); }
+  const executeDelete = (target) => {
+    if (onDeleteAttachment) onDeleteAttachment(target);
+    setAttachToDelete(null);
   };
 
   return (
@@ -826,13 +784,6 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
         <input ref={uploadRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleUpload} />
         <input ref={replaceRef} type="file" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={(e) => { if (replacingId) handleReplace(e, replacingId); }} />
 
-        {apiError && (
-          <div className="pg-field-error" style={{ marginBottom: 12 }}>
-            <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>{apiError}</span>
-            <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }} onClick={() => setApiError('')}>✕</button>
-          </div>
-        )}
         {fileError && (
           <div className="pg-field-error" style={{ marginBottom: 12 }}>
             <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
@@ -855,11 +806,11 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
                   const rawFilename = att.contractFilename || att.contractFilePath?.split('/').pop() || '';
                   const uuidMatch = rawFilename.match(uuidPattern);
                   const name = uuidMatch ? `Contract-Document-${att.landContractAttachID}.${uuidMatch[1]}` : rawFilename || 'Document';
-                  const isDeleting = deletingId === att.landContractAttachID;
-                  const isReplacing = replacingId === att.landContractAttachID;
+
+                  const isNew = !att.landContractAttachID;
 
                   return (
-                    <div key={att.landContractAttachID} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f8f8fd', border: '1.5px solid #e8e8f4', borderRadius: 10, opacity: isDeleting ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                    <div key={att.landContractAttachID || att.tempId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#f8f8fd', border: '1.5px solid #e8e8f4', borderRadius: 10 }}>
                       <FileText size={16} color="#049edf" style={{ flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: att.fileUrl ? 'pointer' : 'default', textDecoration: att.fileUrl ? 'underline' : 'none' }}
@@ -867,8 +818,8 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
                           {name}
                         </div>
                         <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#b0b0c8', fontWeight: 600, marginTop: 1 }}>
-                          Attachment #{att.landContractAttachID}
-                          {att.lastUpdateDttm && (<span style={{ marginLeft: 8 }}>· {fmtDate(att.lastUpdateDttm?.split?.('T')?.[0] ?? '')}</span>)}
+                          {isNew ? 'Staged (Unsaved)' : `Attachment #${att.landContractAttachID}`}
+                          {!isNew && att.lastUpdateDttm && (<span style={{ marginLeft: 8 }}>· {fmtDate(att.lastUpdateDttm?.split?.('T')?.[0] ?? '')}</span>)}
                         </div>
                       </div>
                       {att.fileUrl && (
@@ -877,19 +828,19 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
                           <ExternalLink size={11} /> View
                         </button>
                       )}
-                      {att.fileUrl && (
+                      {att.fileUrl && !isNew && (
                         <button onClick={() => forceDownload(att.fileUrl, name)} title="Download document"
                           style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.2)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#16a34a', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'Nunito, sans-serif' }}>
                           <Download size={11} /> Download
                         </button>
                       )}
-                      <button disabled={isReplacing || isDeleting} onClick={() => { setReplacingId(att.landContractAttachID); replaceRef.current.click(); }} title="Replace with a new file"
-                        style={{ background: 'rgba(109,99,255,0.08)', border: '1px solid rgba(109,99,255,0.2)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#6c63ff', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'Nunito, sans-serif', opacity: isReplacing || isDeleting ? 0.5 : 1 }}>
-                        {isReplacing ? <Loader2 size={10} className="pg-spin" /> : <RefreshCw size={11} />} Replace
+                      <button onClick={() => { setReplacingId(att); replaceRef.current.click(); }} title="Replace with a new file"
+                        style={{ background: 'rgba(109,99,255,0.08)', border: '1px solid rgba(109,99,255,0.2)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#6c63ff', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'Nunito, sans-serif' }}>
+                        <RefreshCw size={11} /> Replace
                       </button>
-                      <button disabled={isDeleting || isReplacing} onClick={() => handleDelete(att.landContractAttachID, name)} title="Delete attachment"
-                        style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#dc2626', opacity: isDeleting || isReplacing ? 0.5 : 1 }}>
-                        {isDeleting ? <Loader2 size={11} className="pg-spin" /> : <Trash2 size={12} />}
+                      <button onClick={() => handleDelete(att)} title="Delete attachment"
+                        style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: '#dc2626' }}>
+                        <Trash2 size={12} />
                       </button>
                     </div>
                   );
@@ -903,8 +854,8 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
                 <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, color: '#c0c0d8', marginTop: 3 }}>Click the button below to upload your first document</div>
               </div>
             )}
-            <button className="lc-upload-btn" onClick={() => { setFileError(''); uploadRef.current.click(); }} disabled={uploading}>
-              {uploading ? <><Loader2 size={14} className="pg-spin" /> Uploading…</> : <><Upload size={14} /> Add Document — {ATTACH_ALLOWED_LABEL} (max {ATTACH_MAX_MB} MB)</>}
+            <button className="lc-upload-btn" onClick={() => { setFileError(''); uploadRef.current.click(); }}>
+              <Upload size={14} /> Add Document — {ATTACH_ALLOWED_LABEL} (max {ATTACH_MAX_MB} MB)
             </button>
             {attachments.length > 0 && (
               <div style={{ marginTop: 8, fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600 }}>
@@ -919,7 +870,7 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
         <AttachmentDeleteConfirmModal
           fileName={attachToDelete.name}
           onConfirm={() => {
-            executeDelete(attachToDelete.id);
+            executeDelete(attachToDelete.target);
             setAttachToDelete(null);
           }}
           onClose={() => setAttachToDelete(null)}
@@ -928,6 +879,8 @@ function ContractAttachmentsSection({ contractId, ownerID, hoardingID }) {
     </div>
   );
 }
+
+
 
 function AttachmentDeleteConfirmModal({ fileName, onConfirm, onClose }) {
   const cancelBtnRef = useRef(null);
@@ -1022,70 +975,32 @@ function AttachmentDeleteConfirmModal({ fileName, onConfirm, onClose }) {
 /* ═══════════════════════════════════════════════════════════
    CONTRACT HOARDING MAP SECTION — multi-select add
 ═══════════════════════════════════════════════════════════ */
-function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
-  const [maps, setMaps] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [deletingId, setDeletingId] = useState(null);
-  const [apiError, setApiError] = useState('');
+function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites, selectedHoardings = [], onAddHoardings, onRemoveHoarding, loading = false }) {
   const [pickOpen, setPickOpen] = useState(false);
   const [mapToDelete, setMapToDelete] = useState(null);
 
-  const mappedHoardingIds = new Set(maps.map((m) => Number(m.hoardingID ?? m.HoardingID)));
+  const mappedHoardingIds = new Set(selectedHoardings.map(h => Number(h.hoardingID)));
 
-  const loadMaps = useCallback(async () => {
-    if (!contractId) { setLoading(false); return; }
-    setLoading(true);
-    try {
-      const raw = await apiService.getLandContractHoardingMaps(contractId);
-      const list = Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : [];
-      setMaps(list.map((m) => ({
-        landContrHrdngMapID: m.landContrHrdngMapID ?? m.LandContrHrdngMapID ?? null,
-        landContractID: m.landContractID ?? m.LandContractID,
-        ownerID: m.ownerID ?? m.OwnerID,
-        hoardingID: m.hoardingID ?? m.HoardingID,
-      })));
-    } catch { setMaps([]); }
-    finally { setLoading(false); }
-  }, [contractId]);
-
-  useEffect(() => { loadMaps(); }, [loadMaps]);
-
-  /* Accept array of hoarding objects from multi-select modal */
-  const handleAddMultiple = async (selectedHoardings) => {
-    if (!selectedHoardings.length) return;
-    setSaving(true); setApiError('');
-    try {
-      await Promise.all(
-        selectedHoardings.map(h =>
-          apiService.createLandContractHoardingMap({
-            landContractID: contractId,
-            ownerID,
-            hoardingID: h.hoardingID,
-          })
-        )
-      );
-      await loadMaps();
-    } catch (err) {
-      setApiError(err?.response?.data?.message || err?.message || 'Failed to add hoardings.');
-    } finally { setSaving(false); }
+  const handleAddMultiple = (pickedHoardings) => {
+    if (onAddHoardings) onAddHoardings(pickedHoardings);
   };
 
-  const handleDelete = (mapId, hoardingCode) => {
-    setMapToDelete({ id: mapId, code: hoardingCode });
+  const handleDelete = (hoardingID, hoardingCode) => {
+    setMapToDelete({ id: hoardingID, code: hoardingCode });
   };
 
-  const executeDelete = async (mapId) => {
-    setDeletingId(mapId); setApiError('');
-    try {
-      await apiService.deleteLandContractHoardingMap(mapId);
-      setMaps((prev) => prev.filter((m) => m.landContrHrdngMapID !== mapId));
-    } catch (err) {
-      setApiError(err?.response?.data?.message || err?.message || 'Failed to remove hoarding.');
-    } finally { setDeletingId(null); }
+  const executeDelete = (hoardingID) => {
+    if (onRemoveHoarding) onRemoveHoarding(hoardingID);
   };
 
-  const availableHoardings = hoardings.filter((h) => !mappedHoardingIds.has(Number(h.hoardingID)));
+  const ownerSiteIds = new Set(
+    sites.filter(s => ownerID && (s.ownerID === Number(ownerID) || s.ownerID === ownerID)).map(s => s.siteID)
+  );
+
+  const availableHoardings = ownerID
+    ? hoardings.filter(h => ownerSiteIds.has(h.siteID) && !mappedHoardingIds.has(Number(h.hoardingID)))
+    : hoardings.filter(h => !mappedHoardingIds.has(Number(h.hoardingID)));
+
   const siteMap = Object.fromEntries(sites.map((s) => [s.siteID, s]));
 
   return (
@@ -1098,14 +1013,6 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
         </div>
       </div>
       <div className="hd-section-body">
-        {apiError && (
-          <div className="pg-field-error" style={{ marginBottom: 12 }}>
-            <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
-            <span>{apiError}</span>
-            <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 11 }} onClick={() => setApiError('')}>✕</button>
-          </div>
-        )}
-
         {loading ? (
           <div style={{ padding: '24px 0', textAlign: 'center', color: '#9090a8' }}>
             <Loader2 size={22} className="pg-spin" style={{ marginBottom: 8 }} />
@@ -1113,7 +1020,7 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
           </div>
         ) : (
           <>
-            {maps.length > 0 && (
+            {selectedHoardings.length > 0 && (
               /* ── Compact table: Code, Material, Size, Status ── */
               <div style={{ marginBottom: 14, border: '1.5px solid #e8e8f4', borderRadius: 12, overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -1127,9 +1034,7 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {maps.map((m, idx) => {
-                      const h = hoardings.find((h) => Number(h.hoardingID) === Number(m.hoardingID));
-                      const isDeleting = deletingId === m.landContrHrdngMapID;
+                    {selectedHoardings.map((h, idx) => {
                       const hSt = h?.status ? (() => {
                         switch (h.status) {
                           case 'Active': return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
@@ -1140,23 +1045,20 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
                       })() : { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
 
                       return (
-                        <tr key={m.landContrHrdngMapID} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafe', opacity: isDeleting ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                        <tr key={h.hoardingID} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafe' }}>
                           {/* Code */}
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8' }}>
                             <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 12.5, color: '#6c63ff' }}>
-                              {h ? h.hoardingCode : `ID: ${m.hoardingID}`}
-                            </div>
-                            <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#c0c0d8', fontWeight: 600, marginTop: 1 }}>
-                              Map #{m.landContrHrdngMapID}
+                              {h.hoardingCode}
                             </div>
                           </td>
                           {/* Material */}
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8' }}>
-                            <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#4a5568' }}>{h?.material || '—'}</span>
+                            <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#4a5568' }}>{h.material || '—'}</span>
                           </td>
                           {/* Size */}
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8', whiteSpace: 'nowrap' }}>
-                            {h?.width && h?.height ? (
+                            {h.width && h.height ? (
                               <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#4a5568' }}>
                                 {h.width} × {h.height} ft
                               </span>
@@ -1165,14 +1067,14 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
                           {/* Status */}
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8' }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 20, background: hSt.bg, color: hSt.color, border: `1px solid ${hSt.border}`, fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
-                              {h?.status || '—'}
+                              {h.status || '—'}
                             </span>
                           </td>
                           {/* Delete */}
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8', textAlign: 'right' }}>
-                            <button disabled={isDeleting} onClick={() => handleDelete(m.landContrHrdngMapID, h ? h.hoardingCode : `ID: ${m.hoardingID}`)} title="Remove hoarding from this contract"
-                              style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', opacity: isDeleting ? 0.5 : 1 }}>
-                              {isDeleting ? <Loader2 size={12} className="pg-spin" /> : <Trash2 size={13} />}
+                            <button onClick={() => handleDelete(h.hoardingID, h.hoardingCode)} title="Remove hoarding from this contract"
+                              style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}>
+                              <Trash2 size={13} />
                             </button>
                           </td>
                         </tr>
@@ -1183,7 +1085,7 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
               </div>
             )}
 
-            {maps.length === 0 && (
+            {selectedHoardings.length === 0 && (
               <div style={{ textAlign: 'center', padding: '20px 0 14px', color: '#b0b0c8' }}>
                 <Building2 size={28} color="#d0d0e8" style={{ marginBottom: 8 }} />
                 <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: '#9090a8' }}>No hoardings mapped yet</div>
@@ -1192,19 +1094,17 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites }) {
             )}
 
             <button className="lc-upload-btn"
-              onClick={() => { setApiError(''); setPickOpen(true); }}
-              disabled={saving || availableHoardings.length === 0}>
-              {saving
-                ? <><Loader2 size={14} className="pg-spin" /> Adding…</>
-                : availableHoardings.length === 0
-                  ? <><Check size={14} /> All available hoardings already mapped</>
-                  : <><Plus size={14} /> Add Hoardings to Contract</>
+              onClick={() => { setPickOpen(true); }}
+              disabled={availableHoardings.length === 0}>
+              {availableHoardings.length === 0
+                ? <><Check size={14} /> All available hoardings already mapped</>
+                : <><Plus size={14} /> Add Hoardings to Contract</>
               }
             </button>
 
-            {maps.length > 0 && (
+            {selectedHoardings.length > 0 && (
               <div style={{ marginTop: 8, fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600 }}>
-                {maps.length} hoarding{maps.length !== 1 ? 's' : ''} mapped · Remove any entry using the delete button
+                {selectedHoardings.length} hoarding{selectedHoardings.length !== 1 ? 's' : ''} mapped · Remove any entry using the delete button
               </div>
             )}
           </>
@@ -1642,6 +1542,112 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
   const [formStep, setFormStep] = useState('details');
   const [savedContract, setSavedContract] = useState(null);
 
+  // Staged states for EDIT mode
+  const [stagedAttachments, setStagedAttachments] = useState([]);
+  const [stagedDeletedAttachIds, setStagedDeletedAttachIds] = useState([]);
+  const [stagedNewAttachments, setStagedNewAttachments] = useState([]);
+
+  const [stagedHoardingMaps, setStagedHoardingMaps] = useState([]);
+  const [stagedDeletedMapIds, setStagedDeletedMapIds] = useState([]);
+  const [stagedNewHoardingIds, setStagedNewHoardingIds] = useState([]);
+
+  const [loadingStagedData, setLoadingStagedData] = useState(false);
+
+  useEffect(() => {
+    if (isAdd || !contract?.landContractID) return;
+    
+    let active = true;
+    const loadStagedData = async () => {
+      setLoadingStagedData(true);
+      try {
+        // Load Maps
+        const mapsRaw = await apiService.getLandContractHoardingMaps(contract.landContractID);
+        const mapList = Array.isArray(mapsRaw) ? mapsRaw : Array.isArray(mapsRaw?.data) ? mapsRaw.data : [];
+        const loadedMappedHoardings = mapList.map(m => {
+          const hoardingID = m.hoardingID ?? m.HoardingID;
+          const h = hoardings.find(x => Number(x.hoardingID) === Number(hoardingID));
+          return h ? { ...h, _mapId: m.landContrHrdngMapID ?? m.LandContrHrdngMapID } : { hoardingID, hoardingCode: `ID: ${hoardingID}`, _mapId: m.landContrHrdngMapID ?? m.LandContrHrdngMapID };
+        });
+        
+        // Load Attachments
+        const attachRaw = await apiService.getLandContractAttachments(contract.landContractID);
+        const attachList = Array.isArray(attachRaw) ? attachRaw : Array.isArray(attachRaw?.data) ? attachRaw.data : [];
+        const loadedAttachments = attachList.map(item => {
+          const norm = normalizeAttachment(item);
+          const saved = getAttachName(norm.landContractAttachID);
+          if (saved) norm.contractFilename = saved;
+          return norm;
+        });
+
+        if (active) {
+          setStagedHoardingMaps(loadedMappedHoardings);
+          setStagedAttachments(loadedAttachments);
+        }
+      } catch (err) {
+        console.error('Failed to load staged mappings & attachments:', err);
+      } finally {
+        if (active) setLoadingStagedData(false);
+      }
+    };
+    
+    loadStagedData();
+    return () => { active = false; };
+  }, [isAdd, contract, hoardings]);
+
+  const handleAddHoardings = (pickedHoardings) => {
+    pickedHoardings.forEach(h => {
+      if (!stagedHoardingMaps.some(x => Number(x.hoardingID) === Number(h.hoardingID))) {
+        setStagedHoardingMaps(prev => [...prev, h]);
+        setStagedNewHoardingIds(prev => [...prev, h.hoardingID]);
+      }
+    });
+  };
+
+  const handleRemoveHoarding = (hoardingID) => {
+    const matched = stagedHoardingMaps.find(x => Number(x.hoardingID) === Number(hoardingID));
+    if (matched && matched._mapId) {
+      setStagedDeletedMapIds(prev => [...prev, matched._mapId]);
+    }
+    setStagedNewHoardingIds(prev => prev.filter(id => Number(id) !== Number(hoardingID)));
+    setStagedHoardingMaps(prev => prev.filter(x => Number(x.hoardingID) !== Number(hoardingID)));
+  };
+
+  const handleAddAttachment = (file) => {
+    const tempId = 'temp_' + Math.random().toString(36).substr(2, 9);
+    const newAttach = {
+      tempId,
+      contractFilename: file.name,
+      _file: file,
+    };
+    setStagedAttachments(prev => [...prev, newAttach]);
+    setStagedNewAttachments(prev => [...prev, newAttach]);
+  };
+
+  const handleReplaceAttachment = (target, file) => {
+    if (target.landContractAttachID) {
+      setStagedDeletedAttachIds(prev => [...prev, target.landContractAttachID]);
+    } else {
+      setStagedNewAttachments(prev => prev.filter(x => x.tempId !== target.tempId));
+    }
+    const tempId = 'temp_' + Math.random().toString(36).substr(2, 9);
+    const newAttach = {
+      tempId,
+      contractFilename: file.name,
+      _file: file,
+    };
+    setStagedAttachments(prev => prev.map(x => (x.landContractAttachID === target.landContractAttachID && target.landContractAttachID) || (x.tempId === target.tempId) ? newAttach : x));
+    setStagedNewAttachments(prev => [...prev, newAttach]);
+  };
+
+  const handleDeleteAttachment = (target) => {
+    if (target.landContractAttachID) {
+      setStagedDeletedAttachIds(prev => [...prev, target.landContractAttachID]);
+    } else {
+      setStagedNewAttachments(prev => prev.filter(x => x.tempId !== target.tempId));
+    }
+    setStagedAttachments(prev => prev.filter(x => (target.landContractAttachID ? x.landContractAttachID !== target.landContractAttachID : x.tempId !== target.tempId)));
+  };
+
   const freqOptions = paymentFreqs.length ? paymentFreqs : PAYMENT_FREQ_FALLBACK;
 
   const set = (key, val) => {
@@ -1692,6 +1698,44 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
         const res = await apiService.updateLandContract(payload);
         saved = normalizeContract(res?.data ?? res ?? { ...payload, landContractID: contract.landContractID });
 
+        // 1. Delete staged deleted maps
+        if (stagedDeletedMapIds.length > 0) {
+          for (const mapId of stagedDeletedMapIds) {
+            await apiService.deleteLandContractHoardingMap(mapId);
+          }
+        }
+
+        // 2. Create staged new maps
+        if (stagedNewHoardingIds.length > 0) {
+          for (const hId of stagedNewHoardingIds) {
+            await apiService.createLandContractHoardingMap({
+              landContractID: contract.landContractID,
+              ownerID: Number(form.ownerID),
+              hoardingID: Number(hId),
+            });
+          }
+        }
+
+        // 3. Delete staged deleted attachments
+        if (stagedDeletedAttachIds.length > 0) {
+          for (const attachId of stagedDeletedAttachIds) {
+            await apiService.deleteLandContractAttach(attachId);
+            deleteAttachName(attachId);
+          }
+        }
+
+        // 4. Upload staged new attachments
+        if (stagedNewAttachments.length > 0) {
+          const firstHId = (stagedHoardingMaps[0]?.hoardingID) || contract.hoardingID || 0;
+          for (const np of stagedNewAttachments) {
+            const resAttach = await apiService.uploadLandContractAttach(contract.landContractID, Number(form.ownerID), firstHId, np._file);
+            const savedAtt = normalizeAttachment(resAttach?.data ?? resAttach);
+            if (savedAtt?.landContractAttachID) {
+              saveAttachName(savedAtt.landContractAttachID, np.contractFilename);
+            }
+          }
+        }
+
         // If status changed to InActive, inactivate all mapped hoardings
         if (payload.status === 'InActive') {
           try {
@@ -1699,7 +1743,6 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
             const maps = await apiService.getLandContractHoardingMaps(contract.landContractID);
             const mapList = Array.isArray(maps) ? maps : Array.isArray(maps?.data) ? maps.data : [];
 
-            // 2. For each mapped hoarding, update its status to Inactive
             // 2. For each mapped hoarding, add a NEW effective-date row (today, Inactive)
             await Promise.allSettled(
               mapList.map(async (m) => {
@@ -2115,6 +2158,10 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                   ownerID={contract.ownerID}
                   hoardings={hoardings}
                   sites={sites}
+                  selectedHoardings={stagedHoardingMaps}
+                  onAddHoardings={handleAddHoardings}
+                  onRemoveHoarding={handleRemoveHoarding}
+                  loading={loadingStagedData}
                 />
               </div>
             )}
@@ -2126,6 +2173,11 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                   contractId={contract.landContractID}
                   ownerID={contract.ownerID}
                   hoardingID={contract.hoardingID}
+                  attachments={stagedAttachments}
+                  onAddAttachment={handleAddAttachment}
+                  onReplaceAttachment={handleReplaceAttachment}
+                  onDeleteAttachment={handleDeleteAttachment}
+                  loading={loadingStagedData}
                 />
               </div>
             )}
