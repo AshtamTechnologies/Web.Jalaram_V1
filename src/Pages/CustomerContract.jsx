@@ -16,12 +16,23 @@ import { useResizableColumns } from '../hooks/useResizableColumns';
 
 const forceDownload = async (url, filename) => {
   try {
-    const cleanUrl = url.split('?')[0];
+    let cleanUrl = url.split('?')[0];
+    if (process.env.NODE_ENV === 'development' && cleanUrl.startsWith(API_ROOT_URL)) {
+      cleanUrl = cleanUrl.replace(API_ROOT_URL, window.location.origin);
+    }
     const downloadUrl = `${cleanUrl}?t=${Date.now()}`;
-    const response = await axios.get(downloadUrl, {
-      responseType: 'blob',
+    const token = localStorage.getItem('authToken');
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(downloadUrl, {
+      method: 'GET',
+      headers,
     });
-    const localUrl = URL.createObjectURL(response.data);
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const blob = await response.blob();
+    const localUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = localUrl;
     a.download = filename;

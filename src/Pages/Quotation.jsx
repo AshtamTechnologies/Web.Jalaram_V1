@@ -2538,8 +2538,8 @@ function CreateContractFromQuotModal({
         isMerged: false,
         hoardingID: l.hoardingID,
         mergedHoardingIDs: [],
-        hoardingCode: h?.hoardingCode || `Hoarding ${l.hoardingID}`,
-        location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+        hoardingCode: h?.hoardingCode || l.purpose || `Hoarding ${l.hoardingID}`,
+        location: h ? buildSiteAddress(siteObj, h.hoardingCode || '') : '',
         size: h ? `${h.width} X ${h.height}` : '',
         startDate: l.periodBeginDate || '',
         endDate: l.periodEndDate || '',
@@ -3057,14 +3057,14 @@ function CreateContractFromQuotModal({
                         <input
                           type="date"
                           value={row.startDate}
-                          disabled={!row.selected}
+                          disabled={true}
                           onChange={e => { updateRow(row._id, 'startDate', e.target.value); setRowErrors(p => ({ ...p, [row._id]: '' })); }}
                           style={{
                             width: '100%', padding: '6px 8px',
                             border: `1.5px solid ${hasErr ? '#ef4444' : '#e8e8f4'}`,
                             borderRadius: 8, fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
-                            color: '#1a1a2e', background: row.selected ? '#fff' : 'transparent', outline: 'none',
-                            cursor: row.selected ? 'pointer' : 'not-allowed',
+                            color: '#718096', background: '#f4f4fb', outline: 'none',
+                            cursor: 'not-allowed',
                           }}
                         />
                         {hasErr && (
@@ -3079,14 +3079,14 @@ function CreateContractFromQuotModal({
                         <input
                           type="date"
                           value={row.endDate}
-                          disabled={!row.selected}
+                          disabled={true}
                           onChange={e => { updateRow(row._id, 'endDate', e.target.value); setRowErrors(p => ({ ...p, [row._id]: '' })); }}
                           style={{
                             width: '100%', padding: '6px 8px',
                             border: `1.5px solid ${hasErr ? '#ef4444' : '#e8e8f4'}`,
                             borderRadius: 8, fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
-                            color: '#1a1a2e', background: row.selected ? '#fff' : 'transparent', outline: 'none',
-                            cursor: row.selected ? 'pointer' : 'not-allowed',
+                            color: '#718096', background: '#f4f4fb', outline: 'none',
+                            cursor: 'not-allowed',
                           }}
                         />
                       </td>
@@ -3096,19 +3096,19 @@ function CreateContractFromQuotModal({
                         <div style={{
                           display: 'flex', alignItems: 'center', gap: 4,
                           border: '1.5px solid #e8e8f4', borderRadius: 8, padding: '5px 8px',
-                          background: row.selected ? '#fff' : 'transparent',
+                          background: '#f4f4fb',
                         }}>
                           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#b0b0c8', flexShrink: 0 }}>₹</span>
                           <input
                             type="number" min="0"
                             value={row.contractOrigValue}
-                            disabled={!row.selected}
+                            disabled={true}
                             onChange={e => updateRow(row._id, 'contractOrigValue', e.target.value)}
                             style={{
                               width: '100%', border: 'none', outline: 'none',
                               fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800,
-                              color: '#049edf', background: 'transparent',
-                              cursor: row.selected ? 'text' : 'not-allowed',
+                              color: '#718096', background: 'transparent',
+                              cursor: 'not-allowed',
                             }}
                           />
                         </div>
@@ -3119,19 +3119,19 @@ function CreateContractFromQuotModal({
                         <div style={{
                           display: 'flex', alignItems: 'center', gap: 4,
                           border: '1.5px solid #e8e8f4', borderRadius: 8, padding: '5px 8px',
-                          background: row.selected ? '#fff' : 'transparent',
+                          background: '#f4f4fb',
                         }}>
                           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#b0b0c8', flexShrink: 0 }}>₹</span>
                           <input
                             type="number" min="0"
                             value={row.amountPerFreq}
-                            disabled={!row.selected}
+                            disabled={true}
                             onChange={e => updateRow(row._id, 'amountPerFreq', e.target.value)}
                             style={{
                               width: '100%', border: 'none', outline: 'none',
                               fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800,
-                              color: '#16a34a', background: 'transparent',
-                              cursor: row.selected ? 'text' : 'not-allowed',
+                              color: '#718096', background: 'transparent',
+                              cursor: 'not-allowed',
                             }}
                           />
                         </div>
@@ -3141,14 +3141,14 @@ function CreateContractFromQuotModal({
                       <td style={{ padding: '7px 8px', borderBottom: '1px solid #f0f0f8' }}>
                         <select
                           value={row.status}
-                          disabled={!row.selected}
+                          disabled={true}
                           onChange={e => updateRow(row._id, 'status', e.target.value)}
                           style={{
                             width: '100%', padding: '6px 8px',
                             border: '1.5px solid #e8e8f4', borderRadius: 8,
                             fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700,
-                            color: '#1a1a2e', background: row.selected ? '#fff' : 'transparent',
-                            outline: 'none', cursor: row.selected ? 'pointer' : 'not-allowed',
+                            color: '#718096', background: '#f4f4fb',
+                            outline: 'none', cursor: 'not-allowed',
                           }}
                         >
                           {['Active', 'Pending', 'Expired', 'Terminated'].map(s => (
@@ -3465,7 +3465,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const handleViewProforma = async (quot) => {
     const matchingInvoices = proformaInvoices.filter(
       inv => Number(inv.quotationID ?? inv.QuotationID) === Number(quot.quotationID) &&
-             Number(inv.quotationRevisionNumber ?? inv.QuotationRevisionNumber) === Number(quot.quotationRevisionNumber)
+        Number(inv.quotationRevisionNumber ?? inv.QuotationRevisionNumber) === Number(quot.quotationRevisionNumber)
     );
 
     const myLines = quotLines.filter(l =>
@@ -3818,7 +3818,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         invoiceDate: new Date().toISOString(),
       });
       invoiceID = res?.invoiceID ?? res?.InvoiceID ?? res?.data?.invoiceID ?? res?.data?.InvoiceID ?? null;
-      
+
       const newInv = {
         invoiceID: invoiceID || 0,
         quotationID: Number(quot.quotationID),
@@ -3874,7 +3874,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           invoiceDate: new Date().toISOString(),
         });
         invoiceID = res?.invoiceID ?? res?.InvoiceID ?? res?.data?.invoiceID ?? res?.data?.InvoiceID ?? null;
-        
+
         const newInv = {
           invoiceID: invoiceID || 0,
           quotationID: Number(quot.quotationID),
@@ -6236,7 +6236,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                 <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
 
                   {/* Printing type dropdown — withPrinting mode only */}
-                  {withPrinting && (
+                  {/* {withPrinting && (
                     <div style={{ position: 'relative' }}>
                       <button
                         ref={printTypeBtnRef}
@@ -6278,7 +6278,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                         </div>
                       </PortalDropdown>
                     </div>
-                  )}
+                  )} */}
 
                   {/* Add Extra Charge — both modes */}
                   <button
@@ -6740,8 +6740,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
                             })()}
                             {/* Edit — edits this exact revision in place */}
                             {(() => {
-                              const doneProforma = proformaInvoices.some(inv => 
-                                Number(inv.quotationID ?? inv.QuotationID) === Number(latest.quotationID) && 
+                              const doneProforma = proformaInvoices.some(inv =>
+                                Number(inv.quotationID ?? inv.QuotationID) === Number(latest.quotationID) &&
                                 Number(inv.quotationRevisionNumber ?? inv.QuotationRevisionNumber) === Number(latest.quotationRevisionNumber)
                               );
                               const doneContract = contractedQuotIds.has(latest.quotationID);
@@ -6753,8 +6753,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
                                     doneContract
                                       ? 'Contract has been created. Cannot edit.'
                                       : doneProforma
-                                      ? 'Proforma invoice has been created. Cannot edit.'
-                                      : 'Edit this quotation (same number & revision)'
+                                        ? 'Proforma invoice has been created. Cannot edit.'
+                                        : 'Edit this quotation (same number & revision)'
                                   }
                                   style={{
                                     display: 'flex',

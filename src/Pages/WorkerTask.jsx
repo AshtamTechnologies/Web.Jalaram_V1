@@ -34,7 +34,7 @@ function normalizeTask(raw) {
         hoardingID: raw.hoardingID ?? raw.HoardingID ?? 0,
         status: raw.status ?? raw.Status ?? 'Open',
         actualCompletionDate: raw.actualCompletionDate ?? raw.ActualCompletionDate ?? '',
-        submitDTTM: raw.submitDTTM ?? raw.SubmitDTTM ?? '',
+        submitDTTM: raw.submitDttm ?? raw.submitDTTM ?? raw.SubmitDTTM ?? '',
         lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
         lastUpdatedBy: raw.lastUpdatedBy ?? raw.LastUpdatedBy ?? 0,
         job: raw.job ?? null,
@@ -59,10 +59,21 @@ function fmtDate(d) {
     try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
     catch { return d; }
 }
+function parseUtcDate(d) {
+    if (!d) return null;
+    if (typeof d === 'string' && d.includes(':')) {
+        const hasOffset = /([+-]\d{2}:\d{2}|Z)$/.test(d);
+        if (!hasOffset) {
+            return new Date(d.replace(' ', 'T') + 'Z');
+        }
+    }
+    return new Date(d);
+}
 function fmtDateTime(d) {
     if (!d) return '—';
     try {
-        return new Date(d).toLocaleString('en-IN', {
+        const parsed = parseUtcDate(d);
+        return parsed.toLocaleString('en-IN', {
             day: '2-digit', month: 'short', year: 'numeric',
             hour: '2-digit', minute: '2-digit', hour12: true,
         });
@@ -98,7 +109,6 @@ async function getGeoPayload() {
         return { latitude, longitude, accuracy, address };
     } catch (err) {
         console.error("Geolocation failed:", err);
-        alert(`Geolocation Error:\n- Message: ${err.message || 'Unknown'}\n- Code: ${err.code || 'None'}\n\nPlease check that your device's location services are enabled.`);
         return { latitude: 0, longitude: 0, accuracy: 0, address: '' };
     }
 }
@@ -339,13 +349,24 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
     };
 
     const handleSave = async () => {
+        setErrors({});
         const errs = validate();
-        setErrors(errs);
-        if (Object.keys(errs).length) return;
+        if (Object.keys(errs).length) {
+            setErrors(errs);
+            return;
+        }
         setSaving(true); setSaveErr(''); setGeoStatus('locating');
         try {
             const geo = await getGeoPayload();
-            setGeoStatus(geo.latitude !== 0 ? 'ready' : 'failed');
+            if (!geo || geo.latitude === 0 || geo.longitude === 0) {
+                setGeoStatus('failed');
+                setErrors({
+                    location: 'Your device GPS or browser location access is turned off or denied. To submit this task, you MUST enable location/GPS. Please turn it on and click "Submit Task" again.'
+                });
+                setSaving(false);
+                return;
+            }
+            setGeoStatus('ready');
             setGeoData(geo);
             await onSave({
                 ...task,
@@ -531,6 +552,21 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                 {/* ════ UPDATE TAB ════ */}
                 {tab === 'update' && (
                     <div className="wt-modal-body" style={{ padding: '18px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {errors.location && (
+                            <div style={{
+                                display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px', borderRadius: 12,
+                                background: '#fef2f2', border: '1.5px solid #fecaca',
+                                fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#dc2626',
+                                boxShadow: '0 2px 8px rgba(220,38,38,0.08)',
+                            }}>
+                                <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+                                <div>
+                                    <div style={{ fontWeight: 900, marginBottom: 3 }}>GPS / Location Access Required</div>
+                                    <div style={{ lineHeight: 1.4 }}>{errors.location}</div>
+                                </div>
+                            </div>
+                        )}
+
                         {/* Status preview */}
                         <div>
                             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, color: '#4a5568', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 8 }}>Task Status</div>
@@ -539,17 +575,6 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                                     {(() => { const S = getStatusStyle(task.status); return <S.icon size={13} color={S.color} />; })()}
                                     <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: getStatusStyle(task.status).color }}>{task.status}</span>
                                 </div>
-                                {willSubmit && (
-                                    <>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#6c63ff', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700 }}>
-                                            <ChevronRight size={14} /> Auto-change to
-                                        </div>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 14px', borderRadius: 10, background: '#f3e8ff', border: '1.5px solid #c4b5fd' }}>
-                                            <SendHorizonal size={13} color="#7c3aed" />
-                                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>Submitted</span>
-                                        </div>
-                                    </>
-                                )}
                             </div>
                         </div>
 
@@ -628,7 +653,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                                         </span>
                                     )}
                                 </>}
-                                {geoStatus === 'failed' && <><AlertTriangle size={13} /> Location unavailable — photo uploaded without GPS</>}
+                                {geoStatus === 'failed' && <><AlertTriangle size={13} /> GPS/Location is disabled or denied. Please enable location to submit this task.</>}
                             </div>
                         )}
 

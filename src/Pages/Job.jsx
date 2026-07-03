@@ -76,10 +76,21 @@ const fmtDate = (d) => {
   if (!d) return '—';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
 };
+const parseUtcDate = (d) => {
+  if (!d) return null;
+  if (typeof d === 'string' && d.includes('T')) {
+    const hasOffset = /([+-]\d{2}:\d{2}|Z)$/.test(d);
+    if (!hasOffset) {
+      return new Date(d + 'Z');
+    }
+  }
+  return new Date(d);
+};
 const fmtDateTime = (d) => {
   if (!d) return '—';
   try {
-    return new Date(d).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const parsed = parseUtcDate(d);
+    return parsed.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   } catch { return d; }
 };
 
@@ -181,7 +192,7 @@ function normalizeJobTask(raw) {
     hoardingID: raw.hoardingID ?? raw.HoardingID ?? 0,
     actualCompletionDate: (raw.actualCompletionDate ?? raw.ActualCompletionDate ?? '').split('T')[0],
     status: raw.status ?? raw.Status ?? 'Pending',
-    submitDTTM: raw.submitDTTM ?? raw.SubmitDTTM ?? '',
+    submitDTTM: raw.submitDttm ?? raw.submitDTTM ?? raw.SubmitDTTM ?? '',
     lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
     lastUpdatedBy: raw.lastUpdatedBy ?? raw.LastUpdatedBy ?? 0,
   };
@@ -742,14 +753,27 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
   };
 
   const handleSave = async () => {
+    setErrors({});
     const errs = validate();
-    setErrors(errs);
-    if (Object.keys(errs).length) return;
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      return;
+    }
     setSubmitting(true);
     setGeoStatus('locating');
     try {
       const geo = await getGeoPayload();
-      setGeoStatus(geo.latitude !== 0 ? 'ready' : 'failed');
+      if (!geo || geo.latitude === 0 || geo.longitude === 0) {
+        setGeoStatus('failed');
+        setErrors({
+          location: 'Your device GPS or browser location access is turned off or denied. To submit this task, you MUST enable location/GPS. Please turn it on and click "Submit Task" again.'
+        });
+        showToast('Location access is required to submit this task!', 'error');
+        setSubmitting(false);
+        return;
+      }
+
+      setGeoStatus('ready');
       setGeoData(geo);
       const userId = parseInt(localStorage.getItem('userId') || '0', 10);
       const nowISO = new Date().toISOString();
@@ -768,17 +792,15 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
         fd.append('LastUpdatedBy', String(userId));
         await apiService.uploadJobTaskAttachment(fd);
 
-        if (geo.latitude !== 0) {
-          const geoFd = new FormData();
-          geoFd.append('Image', file);
-          geoFd.append('TaskId', String(task.jobTaskID || 0));
-          geoFd.append('Latitude', String(geo.latitude));
-          geoFd.append('Longitude', String(geo.longitude));
-          geoFd.append('Accuracy', String(geo.accuracy));
-          geoFd.append('Address', geo.address);
-          geoFd.append('CapturedAt', nowISO);
-          await apiService.uploadGeoLocation(geoFd).catch(e => console.error("Geo upload failed:", e));
-        }
+        const geoFd = new FormData();
+        geoFd.append('Image', file);
+        geoFd.append('TaskId', String(task.jobTaskID || 0));
+        geoFd.append('Latitude', String(geo.latitude));
+        geoFd.append('Longitude', String(geo.longitude));
+        geoFd.append('Accuracy', String(geo.accuracy));
+        geoFd.append('Address', geo.address);
+        geoFd.append('CapturedAt', nowISO);
+        await apiService.uploadGeoLocation(geoFd).catch(e => console.error("Geo upload failed:", e));
       };
 
       for (const file of closeImg) await uploadWithGeo(file, 'Near Photo');
@@ -786,7 +808,7 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
 
       const todayISO = nowISO.split('T')[0];
       const taskIDs = task.tasks ? task.tasks.map(t => Number(t.jobTaskID)) : [Number(task.jobTaskID)];
-      
+
       for (const tid of taskIDs) {
         const individualTask = task.tasks ? task.tasks.find(t => Number(t.jobTaskID) === tid) : task;
         await apiService.updateJobTask({
@@ -814,7 +836,7 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
   return ReactDOM.createPortal(
     <div style={{ position: 'fixed', inset: 0, zIndex: 1060, background: 'rgba(15,23,42,0.58)', backdropFilter: 'blur(7px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
       <div style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 720, overflow: 'hidden', boxShadow: '0 20px 60px rgba(0,0,0,0.22)' }}>
-        
+
         {/* Head */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 24px', borderBottom: '1.5px solid #f0f0f8' }}>
           <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(4,158,223,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -836,6 +858,22 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
 
         {/* Body */}
         <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+          {errors.location && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 16px', borderRadius: 12,
+              background: '#fef2f2', border: '1.5px solid #fecaca',
+              fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#dc2626',
+              boxShadow: '0 2px 8px rgba(220,38,38,0.08)',
+            }}>
+              <AlertTriangle size={18} style={{ flexShrink: 0, marginTop: 1 }} />
+              <div>
+                <div style={{ fontWeight: 900, marginBottom: 3 }}>GPS / Location Access Required</div>
+                <div style={{ lineHeight: 1.4 }}>{errors.location}</div>
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
             <div>
               <ImageUploadZone
@@ -870,7 +908,7 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
             }}>
               {geoStatus === 'locating' && <><Loader2 size={13} className="pg-spin" /> Capturing location…</>}
               {geoStatus === 'ready' && <><MapPin size={13} /> Location captured · {geoData?.address}</>}
-              {geoStatus === 'failed' && <><AlertTriangle size={13} /> Location unavailable — photos will be submitted without GPS</>}
+              {geoStatus === 'failed' && <><AlertTriangle size={13} /> GPS/Location is disabled or denied. Please enable location to submit this task.</>}
             </div>
           )}
         </div>
@@ -905,12 +943,13 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
    TASK PHOTO MODAL  (replace entire function)
 ═══════════════════════════════════════════ */
 function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, onUploaded, isCompleted, onStatusChange }) {
-  const [deleting, setDeleting] = useState(null); // attachID being deleted
   const [lightbox, setLightbox] = useState(null);
   const [imgErrors, setImgErrors] = useState({}); // track broken images by index
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
   const [geoAddress, setGeoAddress] = useState('');
   const [geoLoading, setGeoLoading] = useState(false);
+  const [photoIdsToDelete, setPhotoIdsToDelete] = useState([]);
+  const [savingDeletes, setSavingDeletes] = useState(false);
 
   // Fetch geo address for this task
   useEffect(() => {
@@ -922,7 +961,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
       .then(res => {
         const rows = Array.isArray(res) ? res
           : Array.isArray(res?.data) ? res.data
-          : Array.isArray(res?.$values) ? res.$values : [];
+            : Array.isArray(res?.$values) ? res.$values : [];
         setGeoAddress(rows[0]?.address ?? rows[0]?.Address ?? '');
       })
       .catch(() => setGeoAddress(''))
@@ -936,14 +975,22 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
     a => taskIDs.has(Number(a.jobTaskID ?? a.JobTaskID))
   );
 
+  const visibleAttachments = myAttachments.filter(a => {
+    const attachID = a.jobTaskAttachID ?? a.JobTaskAttachID ?? a.id ?? a.ID;
+    return !photoIdsToDelete.includes(attachID);
+  });
 
-  const handleDelete = async (att, i) => {
-    const attachID = att.jobTaskAttachID ?? att.JobTaskAttachID ?? att.id ?? att.ID;
-    if (!attachID) { showToast('Cannot delete: no attachment ID found.', 'error'); return; }
-    setDeleting(attachID);
+  const handleSaveChanges = async () => {
+    if (photoIdsToDelete.length === 0) {
+      onClose();
+      return;
+    }
+    setSavingDeletes(true);
     try {
-      await apiService.deleteJobTaskAttachment(attachID);
-      showToast('Photo deleted.', 'success');
+      for (const attachID of photoIdsToDelete) {
+        await apiService.deleteJobTaskAttachment(attachID);
+      }
+      showToast('Selected photo(s) deleted successfully.', 'success');
 
       if (task.status === 'Submitted') {
         const userId = parseInt(localStorage.getItem('userId') || '0', 10);
@@ -964,12 +1011,15 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
           });
         }
         onStatusChange?.(tIDs, 'Open');
-        showToast('Task status reverted to Open because a photo was deleted.', 'info');
+        showToast('Task status reverted to Open because photo(s) were deleted.', 'info');
       }
       onUploaded?.();
+      onClose();
     } catch (err) {
-      showToast(err?.message || 'Delete failed.', 'error');
-    } finally { setDeleting(null); }
+      showToast(err?.message || 'Failed to delete photos.', 'error');
+    } finally {
+      setSavingDeletes(false);
+    }
   };
 
   return ReactDOM.createPortal(
@@ -1025,7 +1075,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
                     background: 'rgba(4,158,223,0.10)', color: '#049edf',
                     fontSize: 11, fontWeight: 800,
                   }}>
-                    {myAttachments.length} photo{myAttachments.length !== 1 ? 's' : ''}
+                    {visibleAttachments.length} photo{visibleAttachments.length !== 1 ? 's' : ''}
                   </span>
                 </p>
               </div>
@@ -1033,11 +1083,9 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
             <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
           </div>
 
-
-
           {/* Photo grid */}
           <div style={{ padding: '16px 24px', overflowY: 'auto', maxHeight: 340, minHeight: 80 }}>
-            {myAttachments.length === 0 ? (
+            {visibleAttachments.length === 0 ? (
               <div style={{
                 textAlign: 'center', padding: '32px 0',
                 fontFamily: 'Nunito,sans-serif', fontSize: 13.5,
@@ -1052,12 +1100,12 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
                 gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))',
                 gap: 12,
               }}>
-                {myAttachments.map((att, i) => {
+                {visibleAttachments.map((att, i) => {
                   const url = buildImageUrl(att);
                   const name = att.photoFilename ?? att.PhotoFilename ?? `Photo ${i + 1}`;
                   const attachID = att.jobTaskAttachID ?? att.JobTaskAttachID ?? att.id ?? att.ID;
-                  const isDeleting = deleting === attachID;
                   const hasError = imgErrors[i];
+                  const fileType = att.photoFileType ?? att.PhotoFileType ?? '';
 
                   return (
                     <div
@@ -1106,6 +1154,27 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
                             🖼️
                           </div>
                         )}
+
+                        {/* Photo File Type Badge */}
+                        {fileType && (
+                          <span style={{
+                            position: 'absolute',
+                            top: 8,
+                            left: 8,
+                            background: fileType.toLowerCase().includes('near') ? 'rgba(4, 158, 223, 0.9)' : 'rgba(108, 99, 255, 0.9)',
+                            color: '#fff',
+                            fontSize: '9px',
+                            fontWeight: 800,
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontFamily: 'Nunito,sans-serif',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                            boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                          }}>
+                            {fileType}
+                          </span>
+                        )}
                       </div>
 
                       {/* Filename row + delete button */}
@@ -1128,7 +1197,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
                         {!isCompleted && (
                           <button
                             onClick={e => { e.stopPropagation(); setDeleteConfirmTarget({ att, index: i }); }}
-                            disabled={isDeleting}
+                            disabled={savingDeletes}
                             title="Delete photo"
                             style={{
                               flexShrink: 0,
@@ -1136,13 +1205,11 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
                               width: 22, height: 22, borderRadius: 6,
                               border: '1px solid rgba(220,38,38,0.25)',
                               background: 'rgba(220,38,38,0.07)',
-                              color: '#dc2626', cursor: isDeleting ? 'wait' : 'pointer',
-                              padding: 0, opacity: isDeleting ? 0.5 : 1,
+                              color: '#dc2626', cursor: savingDeletes ? 'wait' : 'pointer',
+                              padding: 0, opacity: savingDeletes ? 0.5 : 1,
                             }}
                           >
-                            {isDeleting
-                              ? <Loader2 size={11} className="pg-spin" />
-                              : <Trash2 size={11} />}
+                            <Trash2 size={11} />
                           </button>
                         )}
                       </div>
@@ -1165,7 +1232,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
               <MapPin size={13} color="#049edf" style={{ flexShrink: 0, marginTop: 2 }} />
               {geoLoading ? (
                 <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Loader2 size={12} className="pg-spin" color="#049edf" /> Fetching location…
+                  <Loader2 size={12} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> Fetching location…
                 </span>
               ) : (
                 <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#3a3a5c', lineHeight: 1.5 }}>
@@ -1176,14 +1243,28 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
           )}
 
           {/* Footer */}
-          <div className="pg-modal__foot">
+          <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
-              {myAttachments.length > 0
+              {visibleAttachments.length > 0
                 ? 'Click any photo to enlarge' + (!isCompleted ? ' · Trash icon to delete' : '')
                 : 'No photos yet'}
             </span>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button className="pg-btn-cancel" onClick={onClose}>Close</button>
+              <button className="pg-btn-cancel" onClick={onClose} disabled={savingDeletes}>Cancel</button>
+              {!isCompleted && photoIdsToDelete.length > 0 && (
+                <button
+                  className="pg-btn-save"
+                  onClick={handleSaveChanges}
+                  disabled={savingDeletes}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  {savingDeletes ? (
+                    <><Loader2 size={13} className="spin" style={{ animation: 'spin 1s linear infinite' }} /> Saving…</>
+                  ) : (
+                    <>Save Changes</>
+                  )}
+                </button>
+              )}
             </div>
           </div>
 
@@ -1270,7 +1351,10 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
               </button>
               <button
                 onClick={() => {
-                  handleDelete(deleteConfirmTarget.att, deleteConfirmTarget.index);
+                  const attachID = deleteConfirmTarget.att.jobTaskAttachID ?? deleteConfirmTarget.att.JobTaskAttachID ?? deleteConfirmTarget.att.id ?? deleteConfirmTarget.att.ID;
+                  if (attachID) {
+                    setPhotoIdsToDelete(prev => [...prev, attachID]);
+                  }
                   setDeleteConfirmTarget(null);
                 }}
                 style={{
@@ -1320,7 +1404,7 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
       .then(res => {
         const rows = Array.isArray(res) ? res
           : Array.isArray(res?.data) ? res.data
-          : Array.isArray(res?.$values) ? res.$values : [];
+            : Array.isArray(res?.$values) ? res.$values : [];
         const addr = rows[0]?.address ?? rows[0]?.Address ?? '';
         setGeoAddress(addr);
       })
@@ -1458,6 +1542,7 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
                 {taskAttachments.map((att, i) => {
                   const url = buildImageUrl(att);
                   const name = att.photoFilename ?? att.PhotoFilename ?? `Photo ${i + 1}`;
+                  const fileType = att.photoFileType ?? att.PhotoFileType ?? '';
                   return (
                     <div
                       key={i}
@@ -1492,6 +1577,27 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
                         }}>
                           🖼️
                         </div>
+                      )}
+
+                      {/* Photo File Type Badge */}
+                      {fileType && (
+                        <span style={{
+                          position: 'absolute',
+                          top: 8,
+                          left: 8,
+                          background: fileType.toLowerCase().includes('near') ? 'rgba(4, 158, 223, 0.9)' : 'rgba(108, 99, 255, 0.9)',
+                          color: '#fff',
+                          fontSize: '9px',
+                          fontWeight: 800,
+                          padding: '2px 6px',
+                          borderRadius: '4px',
+                          fontFamily: 'Nunito,sans-serif',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px',
+                          boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                        }}>
+                          {fileType}
+                        </span>
                       )}
                     </div>
                   );
@@ -1858,6 +1964,7 @@ export default function JobPage() {
   /* ── Form ── */
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedContract, setSelectedContract] = useState(null);
+  const [pendingContract, setPendingContract] = useState(null);
   const [jobType, setJobType] = useState('');
   const [selectedSupervisor, setSelectedSupervisor] = useState(null);
   const [jobDescription, setJobDescription] = useState('');
@@ -2760,7 +2867,18 @@ export default function JobPage() {
                     <label className="qt-label">Customer Contract <span className="qt-label--opt">(optional — filters hoardings)</span></label>
                     <ComboField
                       value={selectedContract?.customerContractID}
-                      onChange={c => setSelectedContract(c)}
+                      onChange={async c => {
+                        if (!c) {
+                          setSelectedContract(null);
+                          return;
+                        }
+                        const banners = await apiService.getContractBannerImages(c.customerContractID);
+                        if (banners.length === 0) {
+                          setPendingContract(c);
+                        } else {
+                          setSelectedContract(c);
+                        }
+                      }}
                       options={customerContracts}
                       placeholder={selectedCustomer ? (customerContracts.length === 0 ? 'No contracts for this customer' : 'Select contract…') : 'Select customer first'}
                       icon={FileText}
@@ -3270,7 +3388,7 @@ export default function JobPage() {
                                   }}>📷</span>
                                 )}
                               </td>
-                               <td className="pg-td" style={{ textAlign: 'center' }}>
+                              <td className="pg-td" style={{ textAlign: 'center' }}>
                                 {(!editingJobID || !row.saved || row.jobTaskID === 0) && (
                                   <button
                                     className="pg-btn-view"
@@ -3718,6 +3836,15 @@ export default function JobPage() {
           jobRequestID={editingJobID}
           onClose={() => setSubmitTaskTarget(null)}
           onSubmitted={async () => {
+            const taskIDs = submitTaskTarget.tasks
+              ? submitTaskTarget.tasks.map(t => Number(t.jobTaskID))
+              : [Number(submitTaskTarget.jobTaskID)];
+            setTasks(prev => prev.map(t => {
+              if (taskIDs.includes(Number(t.jobTaskID))) {
+                return { ...t, status: 'Submitted', submitDttm: new Date().toISOString() };
+              }
+              return t;
+            }));
             await refreshJobs();
           }}
           showToast={showToast}
@@ -3759,6 +3886,115 @@ export default function JobPage() {
           }}
           onClose={() => setDeleteConfirmTarget(null)}
         />
+      )}
+      {pendingContract && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 9999999,
+          background: 'rgba(15,23,42,0.58)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div style={{
+            maxWidth: 420,
+            width: '90%',
+            background: '#fff',
+            borderRadius: 20,
+            overflow: 'hidden',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.25)',
+            fontFamily: 'Nunito,sans-serif',
+          }}>
+            {/* Header */}
+            <div style={{
+              background: 'linear-gradient(135deg,#e08a00,#f5b041)',
+              padding: '28px 24px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 12,
+              textAlign: 'center',
+            }}>
+              <div style={{
+                width: 60,
+                height: 60,
+                borderRadius: '50%',
+                background: 'rgba(255,255,255,0.2)',
+                border: '2px solid rgba(255,255,255,0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 28,
+                color: '#fff',
+              }}>
+                ⚠️
+              </div>
+              <div>
+                <div style={{ fontWeight: 900, fontSize: 19, color: '#fff', marginBottom: 4 }}>
+                  Banner Not Available
+                </div>
+                <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)', fontWeight: 700 }}>
+                  Contract #{pendingContract.customerContractID}
+                </div>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: '24px 20px', textAlign: 'center' }}>
+              <p style={{ margin: 0, fontSize: 14.5, color: '#2d3748', lineHeight: 1.6, fontWeight: 700 }}>
+                This contract does not have a <span style={{ color: '#e08a00', fontWeight: 900 }}>Banner Design</span> uploaded.
+              </p>
+              <p style={{ margin: '10px 0 0 0', fontSize: 13, color: '#718096', lineHeight: 1.5, fontWeight: 600 }}>
+                Do you still want to proceed?
+              </p>
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: 'flex', gap: 12, padding: '0 24px 24px 24px' }}>
+              <button
+                onClick={() => {
+                  setSelectedContract(null);
+                  setPendingContract(null);
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px 0',
+                  border: '1.5px solid #cbd5e1',
+                  borderRadius: 12,
+                  background: '#f8fafc',
+                  color: '#475569',
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                }}
+              >
+                No, Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setSelectedContract(pendingContract);
+                  setPendingContract(null);
+                }}
+                style={{
+                  flex: 1,
+                  padding: '12px 0',
+                  border: 'none',
+                  borderRadius: 12,
+                  background: '#e08a00',
+                  color: '#fff',
+                  fontSize: 13,
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(224,138,0,0.25)',
+                }}
+              >
+                Yes, Proceed
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

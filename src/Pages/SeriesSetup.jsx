@@ -299,7 +299,8 @@ function SeriesModal({ onClose, onSaved, editData }) {
                                     style={{ cursor: 'pointer' }}
                                 >
                                     <option value="">— Select type —</option>
-                                    <option value="Performa Invoice">Performa Invoice</option>
+                                    {/* <option value="Performa Invoice">Performa Invoice</option> */}
+                                    <option value="Preforma Invoice">Preforma Invoice</option>
                                     <option value="Quotation">Quotation</option>
                                 </select>
                             </div>
