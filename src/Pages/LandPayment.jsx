@@ -258,14 +258,14 @@ function LPAttachCell({ rowId, selectedFile, existingAttach, isUploading, onFile
               disabled={!url} title={url ? 'Open in new tab' : 'URL not available'}>
               <Eye size={10} /> View
             </button>
-            <button className="ea-saved-card__btn ea-saved-card__btn--download"
+            {/* <button className="ea-saved-card__btn ea-saved-card__btn--download"
               onClick={() => {
                 if (!url) return;
                 forceDownload(url, name);
               }}
               disabled={!url}>
               <Download size={10} /> Download
-            </button>
+            </button> */}
             <button className="ea-saved-card__btn ea-saved-card__btn--replace" onClick={trigger}>
               <RefreshCw size={10} /> Replace
             </button>
@@ -616,34 +616,34 @@ function ContractDropdown({ contracts, hoardings, hoardingMaps = [], ownerID, va
     ? contracts.filter(c => String(c.ownerID) === String(ownerID))
     : [];
 
-const enriched = ownerContracts.map(c => {
-  // Try direct hoardingID on contract first
-  let h = hoardings.find(hh => Number(hh.hoardingID) === Number(c.hoardingID));
+  const enriched = ownerContracts.map(c => {
+    // Try direct hoardingID on contract first
+    let h = hoardings.find(hh => Number(hh.hoardingID) === Number(c.hoardingID));
 
-  // If not found, look up via hoarding map table
-  if (!h) {
-    const map = hoardingMaps.find(m =>
-      Number(m.landContractID ?? m.LandContractID) === Number(c.landContractID)
-    );
-    if (map) {
-      const mapHID = map.hoardingID ?? map.HoardingID;
-      h = hoardings.find(hh => Number(hh.hoardingID) === Number(mapHID));
+    // If not found, look up via hoarding map table
+    if (!h) {
+      const map = hoardingMaps.find(m =>
+        Number(m.landContractID ?? m.LandContractID) === Number(c.landContractID)
+      );
+      if (map) {
+        const mapHID = map.hoardingID ?? map.HoardingID;
+        h = hoardings.find(hh => Number(hh.hoardingID) === Number(mapHID));
+      }
     }
-  }
 
-  const parts = [];
-  if (h?.hoardingCode) parts.push(h.hoardingCode);
-  if (h?.width && h?.height) parts.push(`${h.width}×${h.height} ft`);
-  if (h?.material) parts.push(h.material);
+    const parts = [];
+    if (h?.hoardingCode) parts.push(h.hoardingCode);
+    if (h?.width && h?.height) parts.push(`${h.width}×${h.height} ft`);
+    if (h?.material) parts.push(h.material);
 
-  return {
-    ...c,
-    hoardingCode: h?.hoardingCode || '',
-    hoardingInfo: parts.join(' · ') || `Contract #${c.landContractID}`,
-    dateRange: `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`,
-    statusLabel: c.status || 'Unknown',
-  };
-});
+    return {
+      ...c,
+      hoardingCode: h?.hoardingCode || '',
+      hoardingInfo: parts.join(' · ') || `Contract #${c.landContractID}`,
+      dateRange: `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`,
+      statusLabel: c.status || 'Unknown',
+    };
+  });
 
   const filtered = query.trim()
     ? enriched.filter(c =>
@@ -1856,13 +1856,13 @@ export default function LandPaymentPage() {
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
     try {
-const [rawOwners, rawHoardings, rawContracts, rawPayments, rawMaps] = await Promise.all([
-  apiService.getAllOwners(),
-  apiService.getAllHoardings(),
-  apiService.getAllLandContracts(),
-  apiService.getAllLandPayments(),
-  apiService.getAllLandContractHoardingMaps(),
-]);
+      const [rawOwners, rawHoardings, rawContracts, rawPayments, rawMaps] = await Promise.all([
+        apiService.getAllOwners(),
+        apiService.getAllHoardings(),
+        apiService.getAllLandContracts(),
+        apiService.getAllLandPayments(),
+        apiService.getAllLandContractHoardingMaps(),
+      ]);
 
       setOwners(Array.isArray(rawOwners) ? rawOwners : Array.isArray(rawOwners?.data) ? rawOwners.data : []);
       setHoardings(Array.isArray(rawHoardings) ? rawHoardings : Array.isArray(rawHoardings?.data) ? rawHoardings.data : []);
@@ -1886,8 +1886,8 @@ const [rawOwners, rawHoardings, rawContracts, rawPayments, rawMaps] = await Prom
       setPayments(list.map(normalizePayment));
       setPayments(list.map(normalizePayment));
 
-const mapList = Array.isArray(rawMaps) ? rawMaps : Array.isArray(rawMaps?.data) ? rawMaps.data : [];  // ← add
-setHoardingMaps(mapList);  // ← add
+      const mapList = Array.isArray(rawMaps) ? rawMaps : Array.isArray(rawMaps?.data) ? rawMaps.data : [];  // ← add
+      setHoardingMaps(mapList);  // ← add
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally {
@@ -2011,17 +2011,17 @@ setHoardingMaps(mapList);  // ← add
   /* ── Form view ── */
   if (view === 'form') {
     return (
-<PaymentForm
-  mode={formMode}
-  groupKey={editGroupKey}
-  allPayments={payments}
-  owners={owners}
-  hoardings={hoardings}
-  contracts={contracts}
-hoardingMaps={hoardingMaps}
-  onBack={() => { setView('grid'); setEditGroupKey(null); }}
-  onRefresh={fetchAll}
-/>
+      <PaymentForm
+        mode={formMode}
+        groupKey={editGroupKey}
+        allPayments={payments}
+        owners={owners}
+        hoardings={hoardings}
+        contracts={contracts}
+        hoardingMaps={hoardingMaps}
+        onBack={() => { setView('grid'); setEditGroupKey(null); }}
+        onRefresh={fetchAll}
+      />
     );
   }
 

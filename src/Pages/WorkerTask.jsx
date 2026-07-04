@@ -319,7 +319,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
     const [attLoading, setAttLoading] = useState(false);
 
     const job = task.job;
-    const todayISO = new Date().toISOString().split('T')[0];
+    const todayISO = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
 
     const willSubmit = (closeImg.length > 0 || existingClose.length > 0) &&
         (farImg.length > 0 || existingFar.length > 0);
@@ -990,7 +990,16 @@ export default function WorkerTasksPage() {
 
     const handleSave = async (data) => {
         const userId = parseInt(localStorage.getItem('userId') || '0', 10);
-        const nowISO = new Date().toISOString();
+        const getLocalISOString = () => {
+            const date = new Date();
+            const offset = -date.getTimezoneOffset();
+            const sign = offset >= 0 ? '+' : '-';
+            const pad = (num) => String(num).padStart(2, '0');
+            const formattedOffset = `${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
+            const localDate = new Date(date.getTime() + offset * 60 * 1000);
+            return localDate.toISOString().slice(0, -1) + formattedOffset;
+        };
+        const nowISO = getLocalISOString();
         const geo = data.geo ?? await getGeoPayload();
 
         const uploadWithGeo = async (file, photoFileType) => {

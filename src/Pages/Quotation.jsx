@@ -1018,9 +1018,9 @@ function buildProformaHTML(params) {
   const html = buildPrintHTML({
     ...params,
     docNoLabel: 'Invoice ID',
-    docNoValue: params.invoiceID != null && params.invoiceID !== 0
+    docNoValue: params.invoiceNumber || (params.invoiceID != null && params.invoiceID !== 0
       ? String(params.invoiceID)
-      : params.quotNo,   // fallback if invoiceID isn't available
+      : params.quotNo),
   });
   return html
     .replace(/>QUOTATION</g, '>PROFORMA INVOICE<')
@@ -1933,6 +1933,144 @@ function ProformaConfirmModal({ target, onConfirm, onCancel, onClose }) {
           >
             View Proforma
           </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+/* ═══════════════════════════════════════════
+   SERIES ALERT MODAL
+═══════════════════════════════════════════ */
+function SeriesAlertModal({ seriesType, reason, onClose }) {
+  useEffect(() => {
+    const handleKeyDown = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const isNotFound = reason === 'notFound';
+  const title = isNotFound
+    ? `"${seriesType}" Series Not Found`
+    : `"${seriesType}" Series is Inactive`;
+  const subtitle = isNotFound
+    ? 'No number series has been configured for this document type.'
+    : 'This number series has been disabled and cannot generate new numbers.';
+  const message = isNotFound
+    ? `To create Quotations or Proforma Invoices, you first need to configure a number series for "${seriesType}" in the Series Setup page.`
+    : `The "${seriesType}" series is currently inactive. Please go to Series Setup and mark it as Active to proceed.`;
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 99999,
+        background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(10px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 24, width: '100%', maxWidth: 460,
+          boxShadow: '0 24px 80px rgba(0,0,0,0.22)',
+          overflow: 'hidden', display: 'flex', flexDirection: 'column',
+          animation: 'slideUpFadeIn 0.22s ease',
+        }}
+      >
+        {/* Coloured top strip */}
+        <div style={{
+          height: 5,
+          background: 'linear-gradient(90deg, #f59e0b, #ef4444)',
+        }} />
+
+        <div style={{ padding: '28px 28px 24px' }}>
+          {/* Icon + title */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 18 }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: 16, flexShrink: 0,
+              background: 'linear-gradient(135deg, #fff7ed, #fef3c7)',
+              border: '2px solid #fde68a',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              boxShadow: '0 4px 12px rgba(245,158,11,0.18)',
+            }}>
+              <AlertTriangle size={26} color="#d97706" strokeWidth={2.2} />
+            </div>
+            <div style={{ paddingTop: 2 }}>
+              <h3 style={{
+                fontFamily: 'Nunito, sans-serif', fontWeight: 900,
+                fontSize: 17, color: '#1e293b', margin: 0, lineHeight: 1.2,
+              }}>
+                {title}
+              </h3>
+              <p style={{
+                fontFamily: 'Nunito, sans-serif', fontWeight: 600,
+                fontSize: 12.5, color: '#94a3b8', margin: '5px 0 0', lineHeight: 1.4,
+              }}>
+                {subtitle}
+              </p>
+            </div>
+          </div>
+
+          {/* Message body */}
+          <div style={{
+            background: '#fffbeb',
+            border: '1.5px solid #fde68a',
+            borderRadius: 14, padding: '14px 16px', marginBottom: 22,
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+          }}>
+            <Info size={16} color="#d97706" style={{ flexShrink: 0, marginTop: 2 }} />
+            <p style={{
+              fontFamily: 'Nunito, sans-serif', fontWeight: 700,
+              fontSize: 13.5, color: '#92400e', margin: 0, lineHeight: 1.65,
+            }}>
+              {message}
+            </p>
+          </div>
+
+          {/* Steps hint */}
+          <div style={{
+            background: '#f8fafc', borderRadius: 12, padding: '12px 16px',
+            marginBottom: 24, border: '1px solid #e2e8f0',
+          }}>
+            <p style={{
+              fontFamily: 'Nunito, sans-serif', fontWeight: 800,
+              fontSize: 12, color: '#64748b', margin: '0 0 8px', letterSpacing: 0.4,
+              textTransform: 'uppercase',
+            }}>How to fix:</p>
+            <ol style={{
+              margin: 0, paddingLeft: 18,
+              fontFamily: 'Nunito, sans-serif', fontWeight: 700,
+              fontSize: 13, color: '#475569', lineHeight: 1.7,
+            }}>
+              <li>Open <strong style={{ color: '#1e293b' }}>Series Setup</strong> from the sidebar</li>
+              {isNotFound
+                ? <li>Create a new series with type <strong style={{ color: '#1e293b' }}>"{seriesType}"</strong></li>
+                : <li>Find the <strong style={{ color: '#1e293b' }}>"{seriesType}"</strong> row and set it to <strong style={{ color: '#059669' }}>Active</strong></li>
+              }
+              <li>Come back and try again</li>
+            </ol>
+          </div>
+
+          {/* Button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={onClose}
+              autoFocus
+              style={{
+                padding: '11px 28px', borderRadius: 12, border: 'none',
+                background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+                color: '#fff', cursor: 'pointer',
+                fontFamily: 'Nunito, sans-serif', fontSize: 14, fontWeight: 800,
+                boxShadow: '0 4px 14px rgba(245,158,11,0.35)',
+                transition: 'all 0.18s',
+              }}
+              onMouseEnter={e => { e.target.style.transform = 'translateY(-1px)'; e.target.style.boxShadow = '0 6px 18px rgba(245,158,11,0.45)'; }}
+              onMouseLeave={e => { e.target.style.transform = 'translateY(0)'; e.target.style.boxShadow = '0 4px 14px rgba(245,158,11,0.35)'; }}
+            >
+              Got it, I'll fix it
+            </button>
+          </div>
         </div>
       </div>
     </div>,
@@ -3372,6 +3510,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [viewMergedRow, setViewMergedRow] = useState(null);
   const [proformaInvoices, setProformaInvoices] = useState([]);
   const [proformaGeneratingQuot, setProformaGeneratingQuot] = useState(null);
+  const [seriesAlertModal, setSeriesAlertModal] = useState(null); // { type, reason } where reason = 'notFound' | 'inactive'
   const [showProformaTermsModal, setShowProformaTermsModal] = useState(false);
   const [selectedProformaTerms, setSelectedProformaTerms] = useState([]);
   /* ── Step 2 resizable table ── */
@@ -3427,6 +3566,25 @@ export default function QuotationPage({ onNavigateToContracts }) {
     }
   };
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type }), []);
+  const checkSeriesActive = async (type) => {
+    try {
+      const res = await apiService.getAllSeriesIDs();
+      const list = normalizeList(res);
+      const series = list.find(s => s.seriesType === type);
+      if (!series) {
+        setSeriesAlertModal({ type, reason: 'notFound' });
+        return false;
+      }
+      if (!series.isActive) {
+        setSeriesAlertModal({ type, reason: 'inactive' });
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.error(`Failed to check Series Setup for ${type}:`, err);
+      return true;
+    }
+  };
 
   /* ── Site lookup map ── */
   const siteMap = useMemo(() => {
@@ -3652,6 +3810,9 @@ export default function QuotationPage({ onNavigateToContracts }) {
   };
 
   const generateAndStoreProforma = async (quot, terms) => {
+    const isActive = await checkSeriesActive('Proforma Invoice');
+    if (!isActive) return;
+
     const myLines = quotLines.filter(l =>
       Number(l.quotationID) === Number(quot.quotationID) &&
       Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
@@ -3809,21 +3970,35 @@ export default function QuotationPage({ onNavigateToContracts }) {
     const storedFinal = Math.round(storedGross);
 
     let invoiceID = null;
+    let invoiceNumber = '';
     try {
+      try {
+        const nextNumRes = await apiService.getNextProformaInvoiceNumber().catch(() => apiService.getNextProformaNumber().catch(() => null));
+        invoiceNumber = typeof nextNumRes === 'string' ? nextNumRes
+          : nextNumRes?.invoiceNumber ?? nextNumRes?.number ?? nextNumRes?.nextNumber
+          ?? nextNumRes?.seriesNumber ?? nextNumRes?.value ?? nextNumRes?.data ?? '';
+      } catch (e) {
+        console.warn('Failed to fetch next proforma number:', e);
+      }
+
       const res = await apiService.createPerformaInvoice({
         invoiceID: 0,
         quotationID: Number(quot.quotationID),
         quotationRevisionNumber: Number(quot.quotationRevisionNumber ?? 0),
         quotationNumber: quot.quotationNumber || '',
+        invoiceNumber: invoiceNumber,
         invoiceDate: new Date().toISOString(),
       });
       invoiceID = res?.invoiceID ?? res?.InvoiceID ?? res?.data?.invoiceID ?? res?.data?.InvoiceID ?? null;
+      const returnedNum = res?.invoiceNumber ?? res?.InvoiceNumber ?? res?.data?.invoiceNumber ?? res?.data?.InvoiceNumber ?? '';
+      if (returnedNum) invoiceNumber = returnedNum;
 
       const newInv = {
         invoiceID: invoiceID || 0,
         quotationID: Number(quot.quotationID),
         quotationRevisionNumber: Number(quot.quotationRevisionNumber ?? 0),
         quotationNumber: quot.quotationNumber || '',
+        invoiceNumber: invoiceNumber,
       };
       setProformaInvoices(prev => [...prev, newInv]);
       showToast('Proforma invoice saved.', 'success');
@@ -3854,6 +4029,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         return t?.description || '';
       }),
       invoiceID,
+      invoiceNumber,
     });
 
     const win = window.open('', '_blank');
@@ -3862,24 +4038,40 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
   const proceedWithProforma = async (target, shouldCreateNew) => {
     let invoiceID = null;
+    let invoiceNumber = '';
     const { quot, pdfRows, cust, storedSub, storedCgst, storedSgst, storedGross, storedFinal, matchingInvoices } = target;
 
     if (shouldCreateNew) {
+      const isActive = await checkSeriesActive('Proforma Invoice');
+      if (!isActive) return;
       try {
+        try {
+          const nextNumRes = await apiService.getNextProformaInvoiceNumber().catch(() => apiService.getNextProformaNumber().catch(() => null));
+          invoiceNumber = typeof nextNumRes === 'string' ? nextNumRes
+            : nextNumRes?.invoiceNumber ?? nextNumRes?.number ?? nextNumRes?.nextNumber
+            ?? nextNumRes?.seriesNumber ?? nextNumRes?.value ?? nextNumRes?.data ?? '';
+        } catch (e) {
+          console.warn('Failed to fetch next proforma number:', e);
+        }
+
         const res = await apiService.createPerformaInvoice({
           invoiceID: 0,
           quotationID: Number(quot.quotationID),
           quotationRevisionNumber: Number(quot.quotationRevisionNumber ?? 0),
           quotationNumber: quot.quotationNumber || '',
+          invoiceNumber: invoiceNumber,
           invoiceDate: new Date().toISOString(),
         });
         invoiceID = res?.invoiceID ?? res?.InvoiceID ?? res?.data?.invoiceID ?? res?.data?.InvoiceID ?? null;
+        const returnedNum = res?.invoiceNumber ?? res?.InvoiceNumber ?? res?.data?.invoiceNumber ?? res?.data?.InvoiceNumber ?? '';
+        if (returnedNum) invoiceNumber = returnedNum;
 
         const newInv = {
           invoiceID: invoiceID || 0,
           quotationID: Number(quot.quotationID),
           quotationRevisionNumber: Number(quot.quotationRevisionNumber ?? 0),
           quotationNumber: quot.quotationNumber || '',
+          invoiceNumber: invoiceNumber,
         };
         setProformaInvoices(prev => [...prev, newInv]);
         showToast('Proforma invoice saved.', 'success');
@@ -3893,6 +4085,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         return idB - idA;
       });
       invoiceID = sorted[0]?.invoiceID ?? sorted[0]?.InvoiceID ?? null;
+      invoiceNumber = sorted[0]?.invoiceNumber ?? sorted[0]?.InvoiceNumber ?? '';
     }
 
     let dbTerms = [];
@@ -3925,6 +4118,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         return t?.description || '';
       }),
       invoiceID,
+      invoiceNumber,
     });
 
     const win = window.open('', '_blank');
@@ -4373,6 +4567,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
   };
 
   const handleStartNew = async () => {
+    const isActive = await checkSeriesActive('Quotation');
+    if (!isActive) return;
     resetForm();
     setStep(1);
     setIsCreating(true);
@@ -4784,6 +4980,9 @@ export default function QuotationPage({ onNavigateToContracts }) {
   };
 
   const handleViewPDF = async (quot) => {
+    const isActive = await checkSeriesActive('Quotation');
+    if (!isActive) return;
+
     const myLines = quotLines.filter(l =>
       Number(l.quotationID) === Number(quot.quotationID) &&
       Number(l.quotationRevisionNumber) === Number(quot.quotationRevisionNumber)
@@ -5047,6 +5246,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
     if (rows.length === 0) {
       showToast('Please add at least one hoarding/item before saving.', 'error');
       return;
+    }
+
+    if (!editingQuotID) {
+      const isActive = await checkSeriesActive('Quotation');
+      if (!isActive) return;
     }
 
     // Validate details of each row
@@ -7018,6 +7222,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
             await proceedWithProforma(target, false);
           }}
           onClose={() => setProformaConfirmTarget(null)}
+        />
+      )}
+
+      {seriesAlertModal && (
+        <SeriesAlertModal
+          seriesType={seriesAlertModal.type}
+          reason={seriesAlertModal.reason}
+          onClose={() => setSeriesAlertModal(null)}
         />
       )}
     </>

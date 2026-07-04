@@ -847,10 +847,19 @@ export default function JobPaymentPage() {
 
   /* ── Job options enriched with customer name ── */
   const jobOptions = useMemo(() => {
-    const list = completedJobRequests.map(j => ({
-      ...j,
-      customerName: customers.find(c => c.customerID === j.customerID)?.customerName || '',
-    }));
+    const list = completedJobRequests
+      .filter(j => {
+        const totalValue = Number(j.totalAreaSQFT ?? 0) * Number(j.rateperSQFT ?? 0);
+        const totalPaid = payments
+          .filter(p => p.jobRequestID === j.jobRequestID && (!editingPayment || p.jobPaymentID !== editingPayment.jobPaymentID))
+          .reduce((sum, p) => sum + Number(p.paidAmount ?? 0), 0);
+        const remaining = totalValue - totalPaid;
+        return remaining > 0;
+      })
+      .map(j => ({
+        ...j,
+        customerName: customers.find(c => c.customerID === j.customerID)?.customerName || '',
+      }));
     if (editingPayment?.jobRequestID) {
       const exists = list.some(o => o.jobRequestID === editingPayment.jobRequestID);
       if (!exists) {
@@ -864,7 +873,7 @@ export default function JobPaymentPage() {
       }
     }
     return list;
-  }, [completedJobRequests, jobRequests, customers, editingPayment]);
+  }, [completedJobRequests, jobRequests, customers, editingPayment, payments]);
 
   /* ── Initial load using apiService ── */
   useEffect(() => {

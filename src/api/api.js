@@ -948,6 +948,9 @@ export const apiService = {
     api.get(`/JobRequest/GetByUserId/${userId}`),
 
   // QUOTATION CUSTOMER
+  getNextQuotationNumber: () => api.get('/SeriesID/NextQuotationNumber'),
+  getNextProformaInvoiceNumber: () => api.get('/SeriesID/NextProformaInvoiceNumber'),
+  getNextProformaNumber: () => api.get('/SeriesID/NextProformaNumber'),
   getAllQuotationCustomers: () => api.get('/QuotationCustomer'),
   getQuotationCustomerById: (id) => api.get(`/QuotationCustomer/${id}`),
   createQuotationCustomer: (data) => api.post('/QuotationCustomer', {

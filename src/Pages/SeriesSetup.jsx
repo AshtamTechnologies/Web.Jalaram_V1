@@ -300,7 +300,7 @@ function SeriesModal({ onClose, onSaved, editData }) {
                                 >
                                     <option value="">— Select type —</option>
                                     {/* <option value="Performa Invoice">Performa Invoice</option> */}
-                                    <option value="Preforma Invoice">Preforma Invoice</option>
+                                    <option value="Proforma Invoice">Proforma Invoice</option>
                                     <option value="Quotation">Quotation</option>
                                 </select>
                             </div>

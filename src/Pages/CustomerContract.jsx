@@ -1193,7 +1193,7 @@ async function fetchImageAsBase64(url) {
   return null;
 }
 
-function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachmentsChange, attachments: attachmentsFromProps, setAttachments: setAttachmentsFromProps, setDeletedAttachIDs: setDeletedAttachIDsFromProps }) {
+function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachmentsChange, attachments: attachmentsFromProps, setAttachments: setAttachmentsFromProps, setDeletedAttachIDs: setDeletedAttachIDsFromProps, hideDownload = false }) {
   const [localAttaches, setLocalAttaches] = useState([]);
   const attachments = attachmentsFromProps || localAttaches;
   const setAttachments = setAttachmentsFromProps || setLocalAttaches;
@@ -1246,7 +1246,7 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
     setTypeErr(''); setUploadErr('');
     if (!newFile) return;
     if (!newType) { setTypeErr('Please select a document type'); return; }
-    
+
     if (attachmentsFromProps) {
       const tempId = `_temp_${Date.now()}`;
       const newAttach = {
@@ -1294,7 +1294,7 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
     setReplaceErr('');
     if (!replaceFile) return;
     if (!replaceType) { setReplaceErr('Please select a document type'); return; }
-    
+
     if (attachmentsFromProps) {
       const tempId = `_temp_${Date.now()}`;
       const newAttach = {
@@ -1309,11 +1309,11 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
         file: replaceFile,
         _isNew: true,
       };
-      
+
       if (typeof editTarget.custContractAttachID === 'number' || !String(editTarget.custContractAttachID).startsWith('_temp')) {
         setDeletedAttachIDsFromProps(prev => [...prev, editTarget.custContractAttachID]);
       }
-      
+
       setAttachments(prev => {
         const updated = prev.filter(a => a.custContractAttachID !== editTarget.custContractAttachID).concat(newAttach);
         onAttachmentsChangeRef.current?.(updated);
@@ -1498,12 +1498,12 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
                           <Eye size={14} />
                         </button>
                       )}
-                      {url && (
+                      {/* {url && !hideDownload && (
                         <button onClick={() => forceDownload(url, a.contractFilename || 'Attachment')} title="Download / Open"
                           style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#049edf' }}>
                           <Download size={14} />
                         </button>
-                      )}
+                      )} */}
                       <button title="Replace file" onClick={() => { setEditTarget(a); setReplaceType(a.fileUploadType || ''); setReplaceFile(null); setReplaceErr(''); if (replaceInputRef.current) replaceInputRef.current.value = ''; }}
                         style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: isEditing ? '#eff6ff' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#049edf' }}>
                         <Edit2 size={14} />
@@ -1847,7 +1847,7 @@ function MultiHoardingLookupModal({ hoardings, sites, selectedIds = [], onSelect
     document.body
   );
 }
-function CustomerContractHoardingMapSection({ customerContractID, customerID, hoardings, allHoardingsRaw = hoardings, sites, startDate, endDate, maps: mapsFromProps, setMaps: setMapsFromProps, setDeletedMapIDs: setDeletedMapIDsFromProps }) {
+function CustomerContractHoardingMapSection({ customerContractID, customerID, hoardings, allHoardingsRaw = hoardings, sites, startDate, endDate, maps: mapsFromProps, setMaps: setMapsFromProps, setDeletedMapIDs: setDeletedMapIDsFromProps, readOnly = false }) {
   const [localMaps, setLocalMaps] = useState([]);
   const maps = mapsFromProps || localMaps;
   const setMaps = setMapsFromProps || setLocalMaps;
@@ -2204,8 +2204,8 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
             </span>
           </div>
 
-          {/* Direction toggle button */}
-          <button
+          {/* Direction toggle button — hidden in readOnly mode */}
+          {!readOnly && <button
             onClick={() => {
               const newDir = direction === 'H' ? 'V' : 'H';
               handleEditMerge(groupMerges, newDir);
@@ -2222,7 +2222,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
           >
             <RefreshCw size={10} />
             {direction === 'H' ? '↕ Switch to Vertical' : '↔ Switch to Horizontal'}
-          </button>
+          </button>}
         </div>
 
         {/* Rows */}
@@ -2260,10 +2260,12 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
                   </div>
                 )}
               </div>
-              <button disabled={isDeleting} onClick={() => setDeleteConfirmMerge({ mergeID: m.hoardingMergeID, hoardingCode: mapEntry?.hoardingCode || `Hoarding ${m.hoardingID}` })}
-                style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', flexShrink: 0 }}>
-                {isDeleting ? <Loader2 size={11} className="pg-spin" /> : <Trash2 size={12} />}
-              </button>
+              {!readOnly && (
+                <button disabled={isDeleting} onClick={() => setDeleteConfirmMerge({ mergeID: m.hoardingMergeID, hoardingCode: mapEntry?.hoardingCode || `Hoarding ${m.hoardingID}` })}
+                  style={{ width: 26, height: 26, borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', flexShrink: 0 }}>
+                  {isDeleting ? <Loader2 size={11} className="pg-spin" /> : <Trash2 size={12} />}
+                </button>
+              )}
             </div>
           );
         })}
@@ -2369,10 +2371,12 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
                             </span>
                           </td>
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8', textAlign: 'right' }}>
-                            <button disabled={isDeleting} onClick={() => setDeleteConfirmMap(m)}
-                              style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', opacity: isDeleting ? 0.5 : 1 }}>
-                              {isDeleting ? <Loader2 size={12} className="pg-spin" /> : <Trash2 size={13} />}
-                            </button>
+                            {!readOnly && (
+                              <button disabled={isDeleting} onClick={() => setDeleteConfirmMap(m)}
+                                style={{ width: 28, height: 28, borderRadius: 7, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: isDeleting ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626', opacity: isDeleting ? 0.5 : 1 }}>
+                                {isDeleting ? <Loader2 size={12} className="pg-spin" /> : <Trash2 size={13} />}
+                              </button>
+                            )}
                           </td>
                         </tr>
                       );
@@ -2389,7 +2393,8 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
               </div>
             )}
 
-            {/* ── Add Hoardings ── */}
+            {/* ── Add Hoardings — hidden in readOnly mode ── */}
+            {!readOnly && (
             <button
               onClick={() => { setApiError(''); setPickOpen(true); }}
               disabled={saving || loadingAvailable || (!startDate || !endDate)}
@@ -2399,10 +2404,11 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
             >
               {saving ? <><Loader2 size={14} className="pg-spin" /> Adding…</>
                 : loadingAvailable ? <><Loader2 size={14} className="pg-spin" /> Loading available…</>
-                : (!startDate || !endDate) ? <><Calendar size={14} /> Set contract dates first</>
-                : hoardingsForPicker.length === 0 ? <><Check size={14} /> No more hoardings available</>
-                : <><Plus size={14} /> Add Hoardings ({hoardingsForPicker.length} available)</>}
+                  : (!startDate || !endDate) ? <><Calendar size={14} /> Set contract dates first</>
+                    : hoardingsForPicker.length === 0 ? <><Check size={14} /> No more hoardings available</>
+                      : <><Plus size={14} /> Add Hoardings ({hoardingsForPicker.length} available)</>}
             </button>
+            )}
 
             {/* ── Merge divider ── */}
             {maps.length > 0 && (
@@ -2426,7 +2432,8 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
                 {renderMergeGroup(hMerges, 'H')}
                 {renderMergeGroup(vMerges, 'V')}
 
-                {/* ── Merge button ── */}
+                {/* ── Merge button — hidden in readOnly mode ── */}
+                {!readOnly && (
                 <button
                   onClick={() => { setApiError(''); setMergePickOpen(true); }}
                   disabled={mergeSaving || maps.length < 2}
@@ -2446,6 +2453,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
                     : maps.length < 2 ? <><Building2 size={14} /> Add at least 2 hoardings to merge</>
                       : <><GitMerge size={14} /> Merge Hoardings ({maps.length} available)</>}
                 </button>
+                )}
               </>
             )}
           </>
@@ -3655,6 +3663,7 @@ async function addHoardingEffdtRows(hoardingIDs, allHoardings, effdt, status) {
 ═══════════════════════════════════════════ */
 function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = [], sites, paymentFreqs, contracts, landContracts = [], hoardingMaps = [], quotations = [], onBack, onSave }) {
   const isAdd = mode === 'add';
+  const viewOnly = !isAdd; // edit mode = view-only (attachments still editable)
   const currentContractID = isAdd ? null : (contract?.customerContractID ?? null);
 
   // ── Multi-hoarding pre-selection (add mode only) ──
@@ -3723,6 +3732,8 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
   const [apiErr, setApiErr] = useState('');
+  const [savingAttach, setSavingAttach] = useState(false);
+  const [attachSaveOk, setAttachSaveOk] = useState(false);
   const [liveConflict, setLiveConflict] = useState(null);        // ← must be here
   const [landContractWarning, setLandContractWarning] = useState(null);
 
@@ -3782,7 +3793,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         });
         setLocalMaps(enriched);
       })
-      .catch(() => {});
+      .catch(() => { });
 
     // Fetch initial attachments
     apiService.getCustContractAttachments(savedContractID)
@@ -3791,7 +3802,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         const list = Array.isArray(res) ? res : [];
         setLocalAttachments(list.map(normalizeAttach));
       })
-      .catch(() => {});
+      .catch(() => { });
 
     return () => {
       active = false;
@@ -3837,7 +3848,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
       })
       .finally(() => { if (!cancelled) setLoadingAvailable(false); });
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.startDate, form.endDate, isAdd]);
 
   const set = (key, val) => {
@@ -3886,7 +3897,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
     for (const mapId of deletedMapIDs) {
       await apiService.deleteCustomerContractHoardingMap(mapId);
     }
-    
+
     // 2. Add maps
     const mapsToAdd = localMaps.filter(m => String(m.customerContractLineID).startsWith('_temp'));
     for (const m of mapsToAdd) {
@@ -3913,6 +3924,52 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         fileUploadType: a.fileUploadType,
         file: a.file,
       });
+    }
+  };
+
+  /* ── Save attachments only (edit / view mode) ── */
+  const handleSaveAttachments = async () => {
+    if (!savedContractID) return;
+    setSavingAttach(true); setApiErr('');
+    try {
+      // Delete removed attachments
+      for (const attachId of deletedAttachIDs) {
+        await apiService.deleteCustContractAttach(attachId);
+      }
+      setDeletedAttachIDs([]);
+
+      // Upload new attachments
+      const attachesToAdd = localAttachments.filter(a => a._isNew);
+      for (const a of attachesToAdd) {
+        await apiService.createCustContractAttach({
+          customerContractID: savedContractID,
+          ownerID: Number(a.ownerID) || 0,
+          hoardingID: Number(a.hoardingID) || 0,
+          fileUploadType: a.fileUploadType,
+          file: a.file,
+        });
+      }
+
+      // Refresh attachments from server
+      const fresh = await apiService.getCustContractAttachments(savedContractID).catch(() => []);
+      const normalized = (Array.isArray(fresh) ? fresh : []).map(a => ({
+        custContractAttachID: a.custContractAttachID ?? a.CustContractAttachID,
+        customerContractID: a.customerContractID ?? a.CustomerContractID,
+        ownerID: a.ownerID ?? a.OwnerID ?? 0,
+        hoardingID: a.hoardingID ?? a.HoardingID ?? 0,
+        fileUploadType: a.fileUploadType ?? a.FileUploadType ?? '',
+        contractFilePath: a.contractFilePath ?? a.ContractFilePath ?? '',
+        contractFilename: a.contractFilename ?? a.ContractFilename ?? '',
+        lastUpdateDttm: a.lastUpdateDttm ?? a.LastUpdateDttm ?? '',
+      }));
+      setLocalAttachments(normalized);
+      setAttachSaveOk(true);
+      setTimeout(() => setAttachSaveOk(false), 2500);
+    } catch (err) {
+      const msg = err?.response?.data?.message || err?.message || 'Failed to save attachments.';
+      setApiErr(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    } finally {
+      setSavingAttach(false);
     }
   };
 
@@ -4165,8 +4222,20 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
           </button>
           <div className="hd-topbar-divider" />
           <div>
-            <div className="hd-topbar-title">{isAdd ? 'Add Customer Contract' : `Edit Contract #${contract?.customerContractID}`}</div>
-            <div className="hd-topbar-sub">{isAdd ? 'Fill in the details to create a new customer contract' : 'Update customer contract details'}</div>
+            <div className="hd-topbar-title">{isAdd ? 'Add Customer Contract' : `Contract #${contract?.customerContractID}`}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="hd-topbar-sub">{isAdd ? 'Fill in the details to create a new customer contract' : 'View contract details — only attachments can be changed'}</div>
+              {viewOnly && (
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                  padding: '3px 10px', borderRadius: 20,
+                  background: 'rgba(4,158,223,0.10)', border: '1px solid rgba(4,158,223,0.25)',
+                  color: '#049edf', fontFamily: 'Nunito, sans-serif', fontSize: 11.5, fontWeight: 800,
+                }}>
+                  <Eye size={11} /> View Only
+                </span>
+              )}
+            </div>
           </div>
         </div>
         {!isAdd && savedContractID && (
@@ -4320,27 +4389,27 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                             const datesReady = !!(form.startDate && form.endDate);
                             const canOpen = datesReady && !loadingAvailable && !!form.customerID;
                             return (
-                          <button
-                            type="button"
-                            disabled={!canOpen}
-                            onClick={() => canOpen && setHoardingModalOpen(true)}
-                            style={{
-                              width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                              padding: '10px 14px', borderRadius: 10,
-                              border: `1.5px solid ${errors.hoardingID ? '#ef4444' : !datesReady ? '#fde68a' : '#e8e8f4'}`,
-                              background: !canOpen ? '#f8f8fd' : '#fff',
-                              cursor: !canOpen ? 'not-allowed' : 'pointer',
-                              fontFamily: 'Nunito, sans-serif', fontSize: 13,
-                              color: !canOpen ? '#b0b0c8' : '#1a1a2e', fontWeight: 600,
-                              boxShadow: errors.hoardingID ? '0 0 0 3px rgba(239,68,68,0.1)' : 'none',
-                              transition: 'border-color 0.15s',
-                            }}
-                            onMouseEnter={e => { if (canOpen) e.currentTarget.style.borderColor = '#049edf'; }}
-                            onMouseLeave={e => { if (canOpen) e.currentTarget.style.borderColor = errors.hoardingID ? '#ef4444' : '#e8e8f4'; }}
-                          >
-                            <Building2 size={14} color={!canOpen ? '#d0d0e0' : '#c0c0d8'} style={{ flexShrink: 0 }} />
-                            <span style={{ flex: 1, textAlign: 'left' }}>
-                              {loadingAvailable
+                              <button
+                                type="button"
+                                disabled={!canOpen}
+                                onClick={() => canOpen && setHoardingModalOpen(true)}
+                                style={{
+                                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                                  padding: '10px 14px', borderRadius: 10,
+                                  border: `1.5px solid ${errors.hoardingID ? '#ef4444' : !datesReady ? '#fde68a' : '#e8e8f4'}`,
+                                  background: !canOpen ? '#f8f8fd' : '#fff',
+                                  cursor: !canOpen ? 'not-allowed' : 'pointer',
+                                  fontFamily: 'Nunito, sans-serif', fontSize: 13,
+                                  color: !canOpen ? '#b0b0c8' : '#1a1a2e', fontWeight: 600,
+                                  boxShadow: errors.hoardingID ? '0 0 0 3px rgba(239,68,68,0.1)' : 'none',
+                                  transition: 'border-color 0.15s',
+                                }}
+                                onMouseEnter={e => { if (canOpen) e.currentTarget.style.borderColor = '#049edf'; }}
+                                onMouseLeave={e => { if (canOpen) e.currentTarget.style.borderColor = errors.hoardingID ? '#ef4444' : '#e8e8f4'; }}
+                              >
+                                <Building2 size={14} color={!canOpen ? '#d0d0e0' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+                                <span style={{ flex: 1, textAlign: 'left' }}>
+                                  {loadingAvailable
                                     ? 'Loading available hoardings…'
                                     : !form.customerID
                                       ? 'Select a customer first…'
@@ -4349,13 +4418,13 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                                         : selectedHoardings.length > 0
                                           ? `${selectedHoardings.length} hoarding${selectedHoardings.length !== 1 ? 's' : ''} selected`
                                           : `Browse available hoardings (${availableHoardings.length})…`}
-                            </span>
-                            {loadingAvailable
+                                </span>
+                                {loadingAvailable
                                   ? <Loader2 size={13} className="pg-spin" color="#c0c0d8" style={{ flexShrink: 0 }} />
                                   : selectedHoardings.length > 0
                                     ? <RefreshCw size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
                                     : <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
-                          </button>
+                              </button>
                             );
                           })()}
 
@@ -4463,20 +4532,22 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                     <div className="col-12 col-md-4">
                       <FieldLabel label="Start Date" required />
                       <InputWrap error={errors.startDate} icon={Calendar}>
-                        <input className="pg-field-input" type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} />
+                        <input className="pg-field-input" type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} disabled={viewOnly} style={viewOnly ? { cursor: 'not-allowed', color: '#4a5568', background: '#f8f8fd' } : {}} />
                       </InputWrap>
                       <FieldError msg={errors.startDate} />
                     </div>
                     <div className="col-12 col-md-4">
                       <FieldLabel label="End Date" required />
                       <InputWrap error={errors.endDate} icon={Calendar}>
-                        <input className="pg-field-input" type="date" value={form.endDate} min={form.startDate || undefined} onChange={e => set('endDate', e.target.value)} />
+                        <input className="pg-field-input" type="date" value={form.endDate} min={form.startDate || undefined} onChange={e => set('endDate', e.target.value)} disabled={viewOnly} style={viewOnly ? { cursor: 'not-allowed', color: '#4a5568', background: '#f8f8fd' } : {}} />
                       </InputWrap>
                       <FieldError msg={errors.endDate} />
                     </div>
                     <div className="col-12 col-md-4">
                       <FieldLabel label="Status" required />
-                      <ComboDropdown value={form.status} onChange={val => set('status', val)} onBlur={() => { }} hasError={!!errors.status} placeholder="Select status…" icon={ShieldCheck} options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))} />
+                      {viewOnly
+                        ? <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: '#4a5568', padding: '9px 12px', background: '#f8f8fd', border: '1.5px solid #e8e8f4', borderRadius: 8 }}>{form.status || '—'}</div>
+                        : <ComboDropdown value={form.status} onChange={val => set('status', val)} onBlur={() => { }} hasError={!!errors.status} placeholder="Select status…" icon={ShieldCheck} options={STATUS_OPTIONS.map(s => ({ value: s, label: s }))} />}
                       <FieldError msg={errors.status} />
                     </div>
                   </div>
@@ -4499,38 +4570,41 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Original Contract Value (Rs.)" required />
                       <InputWrap error={errors.contractOrigValue} icon={IndianRupee}>
-                        <CurrencyInput value={form.contractOrigValue} onChange={val => set('contractOrigValue', val)} placeholder="e.g. 5,00,000" />
+                        <CurrencyInput value={form.contractOrigValue} onChange={val => set('contractOrigValue', val)} placeholder="e.g. 5,00,000" readOnly={viewOnly} />
                       </InputWrap>
                       <FieldError msg={errors.contractOrigValue} />
                     </div>
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Payment Frequency" required />
-                      <ComboDropdown value={form.paymentFreqID} onChange={val => set('paymentFreqID', val)} onBlur={() => { }} hasError={!!errors.paymentFreqID} placeholder="Select frequency…" icon={CreditCard} options={freqOptions} />
+                      {viewOnly
+                        ? <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: '#4a5568', padding: '9px 12px', background: '#f8f8fd', border: '1.5px solid #e8e8f4', borderRadius: 8 }}>{freqOptions.find(f => String(f.value) === String(form.paymentFreqID))?.label || '—'}</div>
+                        : <ComboDropdown value={form.paymentFreqID} onChange={val => set('paymentFreqID', val)} onBlur={() => { }} hasError={!!errors.paymentFreqID} placeholder="Select frequency…" icon={CreditCard} options={freqOptions} />
+                      }
                       <FieldError msg={errors.paymentFreqID} />
                     </div>
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Amount per Frequency (Rs.)" required />
                       <InputWrap error={errors.amountPerFreq} icon={IndianRupee}>
-                        <CurrencyInput value={form.amountPerFreq} onChange={val => set('amountPerFreq', val)} placeholder="e.g. 25,000" />
+                        <CurrencyInput value={form.amountPerFreq} onChange={val => set('amountPerFreq', val)} placeholder="e.g. 25,000" readOnly={viewOnly} />
                       </InputWrap>
                       <FieldError msg={errors.amountPerFreq} />
                     </div>
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Advance Paid (Rs.)" optional />
                       <InputWrap icon={IndianRupee}>
-                        <CurrencyInput value={form.advancePaid} onChange={val => set('advancePaid', val)} placeholder="e.g. 50,000" />
+                        <CurrencyInput value={form.advancePaid} onChange={val => set('advancePaid', val)} placeholder="e.g. 50,000" readOnly={viewOnly} />
                       </InputWrap>
                     </div>
                     <div className="col-12 col-md-4">
                       <FieldLabel label="Discount Amount (Rs.)" optional />
                       <InputWrap icon={IndianRupee}>
-                        <CurrencyInput value={form.discountAmount} onChange={val => set('discountAmount', val)} placeholder="e.g. 10,000" />
+                        <CurrencyInput value={form.discountAmount} onChange={val => set('discountAmount', val)} placeholder="e.g. 10,000" readOnly={viewOnly} />
                       </InputWrap>
                     </div>
                     <div className="col-12 col-md-4">
                       <FieldLabel label="Adjustment Amount (Rs.)" optional />
                       <InputWrap icon={IndianRupee}>
-                        <CurrencyInput value={form.adjustmentAmount} onChange={val => set('adjustmentAmount', val)} placeholder="e.g. 5,000" />
+                        <CurrencyInput value={form.adjustmentAmount} onChange={val => set('adjustmentAmount', val)} placeholder="e.g. 5,000" readOnly={viewOnly} />
                       </InputWrap>
                     </div>
                     <div className="col-12 col-md-4">
@@ -4587,7 +4661,9 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                   <InputWrap icon={MessageSquare}>
                     <textarea className="pg-field-input lc-textarea" rows={3}
                       placeholder="Any notes or remarks..." value={form.comments}
-                      onChange={e => set('comments', e.target.value)} />
+                      onChange={e => set('comments', e.target.value)}
+                      readOnly={viewOnly}
+                      style={viewOnly ? { cursor: 'not-allowed', color: '#4a5568', background: '#f8f8fd', resize: 'none' } : {}} />
                   </InputWrap>
                 </div>
               </div>
@@ -4607,6 +4683,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                   maps={localMaps}
                   setMaps={setLocalMaps}
                   setDeletedMapIDs={setDeletedMapIDs}
+                  readOnly={viewOnly}
                 />
               </div>
             )}
@@ -4681,6 +4758,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                     attachments={localAttachments}
                     setAttachments={setLocalAttachments}
                     setDeletedAttachIDs={setDeletedAttachIDs}
+                    hideDownload={true}
                   />
                 );
               })()}
@@ -4719,8 +4797,34 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
           {isAdd && contractSaved ? 'Back to Contracts' : 'Cancel'}
         </button>
 
-        {/* Save button — shown only when contract not yet saved (add) or always in edit */}
-        {(!isAdd || !contractSaved) && (
+        {/* Save Attachments button — shown only in edit/view mode */}
+        {viewOnly && savedContractID && (
+          <button
+            onClick={handleSaveAttachments}
+            disabled={savingAttach}
+            style={{
+              padding: '10px 22px', borderRadius: 10, border: 'none',
+              background: attachSaveOk
+                ? 'linear-gradient(135deg, #16a34a, #15803d)'
+                : 'linear-gradient(135deg, #049edf, #0284c7)',
+              color: '#fff', cursor: savingAttach ? 'not-allowed' : 'pointer',
+              fontFamily: 'Nunito, sans-serif', fontSize: 13.5, fontWeight: 800,
+              display: 'flex', alignItems: 'center', gap: 7,
+              boxShadow: '0 4px 14px rgba(4,158,223,0.30)',
+              transition: 'all 0.18s',
+              opacity: savingAttach ? 0.7 : 1,
+            }}
+          >
+            {attachSaveOk
+              ? <><Check size={14} /> Attachments Saved!</>
+              : savingAttach
+                ? <><Loader2 size={14} className="pg-spin" /> Saving…</>
+                : <><Paperclip size={14} /> Save Attachments</>}
+          </button>
+        )}
+
+        {/* Save button — shown only when contract not yet saved (add) */}
+        {isAdd && (!isAdd || !contractSaved) && (
           <button
             className="pg-btn-save"
             onClick={handleSave}

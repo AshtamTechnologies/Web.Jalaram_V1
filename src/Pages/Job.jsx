@@ -2081,7 +2081,7 @@ export default function JobPage() {
       const submittedCnt = tasks.filter(t => t.status === 'Submitted').length;
       if (submittedCnt === tasks.length) return 'Submitted';
       if (submittedCnt > 0) return 'In Progress';
-      if (jobStatus === 'In Progress') return 'Accepted';
+      if (['In Progress', 'Accepted', 'Submitted'].includes(jobStatus)) return 'Accepted';
     }
     return jobStatus;
   }, [tasks, jobStatus]);
@@ -3687,7 +3687,7 @@ export default function JobPage() {
                               job.jobStatus === 'Completed'
                                 ? 'Completed'
                                 : myTasks.length > 0
-                                  ? (submittedCnt === myTasks.length ? 'Submitted' : (submittedCnt > 0 ? 'In Progress' : (job.jobStatus === 'In Progress' ? 'Accepted' : job.jobStatus)))
+                                  ? (submittedCnt === myTasks.length ? 'Submitted' : (submittedCnt > 0 ? 'In Progress' : (['In Progress', 'Accepted', 'Submitted'].includes(job.jobStatus) ? 'Accepted' : job.jobStatus)))
                                   : (job.jobStatus || 'Open')
                             }
                           />
