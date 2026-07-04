@@ -3658,6 +3658,37 @@ async function addHoardingEffdtRows(hoardingIDs, allHoardings, effdt, status) {
     })
   );
 }
+async function saveHoardingLinkWithPhotosRows(hoardingIDs, allHoardings, effdt, status) {
+  if (!hoardingIDs.length || !effdt) return;
+
+  await Promise.allSettled(
+    hoardingIDs.map(async (hid) => {
+      const h = allHoardings.find(hh =>
+        Number(hh.hoardingID ?? hh.HoardingID) === Number(hid)
+      );
+      if (!h || !h.hoardingCode) {
+        console.warn('[saveHoardingLinkWithPhotosRows] hoarding not found:', hid);
+        return;
+      }
+
+      const payload = {
+        hoardingID: Number(hid),
+        effdt: effdt ? effdt.split('T')[0] : new Date().toISOString().split('T')[0],
+        hoardingCode: h.hoardingCode ?? h.HoardingCode ?? '',
+        material: h.material ?? h.Material ?? '',
+        hoardingType: Number(h.hoardingType ?? h.HoardingType ?? 0),
+        status,
+        monthlyRent: Number(h.monthlyRent ?? h.MonthlyRent ?? 0),
+        width: Number(h.width ?? h.Width ?? 0),
+        height: Number(h.height ?? h.Height ?? 0),
+        siteID: Number(h.siteID ?? h.SiteID ?? h.site?.siteID ?? 0),
+      };
+
+      console.log('[saveHoardingLinkWithPhotosRows]', h.hoardingCode, '→', payload);
+      return apiService.saveHoardingLinkWithPhotos(payload);
+    })
+  );
+}
 /* ═══════════════════════════════════════════
    CONTRACT FORM
 ═══════════════════════════════════════════ */
@@ -4019,8 +4050,15 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
             )
           );
 
-          /* ← NEW: add Occupied effdt row for each hoarding (startDate) */
+          /*
           await addHoardingEffdtRows(
+            hoardingsToMap.map(h => Number(h.hoardingID)),
+            hoardings,          // the hoardings prop passed to ContractForm
+            form.startDate,     // effdt = contract start date
+            'Occupied'          // hoarding is now occupied
+          );
+          */
+          await saveHoardingLinkWithPhotosRows(
             hoardingsToMap.map(h => Number(h.hoardingID)),
             hoardings,          // the hoardings prop passed to ContractForm
             form.startDate,     // effdt = contract start date
@@ -4057,8 +4095,15 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
 
           const hoardingIDs = maps.map(m => Number(m.hoardingID ?? m.HoardingID ?? 0)).filter(Boolean);
 
-          /* Add Available effdt row from endDate */
+          /*
           await addHoardingEffdtRows(
+            hoardingIDs,
+            hoardings,        // the hoardings prop
+            form.endDate,     // effdt = contract end date
+            'Available'       // hoarding is now available
+          );
+          */
+          await saveHoardingLinkWithPhotosRows(
             hoardingIDs,
             hoardings,        // the hoardings prop
             form.endDate,     // effdt = contract end date

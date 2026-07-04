@@ -1221,17 +1221,75 @@ function HoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteCo
    Replace the ENTIRE function with this.
 ═══════════════════════════════════════════════════════════ */
 
-function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap }) {
+function ManualHoardingModal({ allHoardings, existingIds, onAdd, onClose, siteColorMap, siteMap, startDate, endDate }) {
+  const [hoardingsList, setHoardingsList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
 
+  useEffect(() => {
+    let active = true;
+    const fetchAvailable = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await apiService.getAvailableHoardings(startDate, endDate);
+        const list = normalizeList(res);
+        if (active) {
+          const mapped = list.map(item => {
+            const full = allHoardings.find(h => h.hoardingID === (item.hoardingId ?? item.hoardingID));
+            return {
+              hoardingID: item.hoardingId ?? item.hoardingID,
+              hoardingCode: item.hoardingCode ?? full?.hoardingCode ?? '',
+              monthlyRent: item.monthlyRent ?? full?.monthlyRent ?? 0,
+              width: item.width ?? full?.width ?? 0,
+              height: item.height ?? full?.height ?? 0,
+              status: 'Available',
+              siteID: full?.siteID ?? null,
+              site: full?.site || {
+                addressLine1: item.addressLine1 || '',
+                city: item.city || '',
+                district: item.district || '',
+                siteType: item.material || '',
+              }
+            };
+          });
+          setHoardingsList(mapped);
+        }
+      } catch (err) {
+        if (active) {
+          setError(err?.response?.data?.message || err?.message || 'Failed to load available hoardings.');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    if (startDate && endDate) {
+      fetchAvailable();
+    } else {
+      setLoading(false);
+      setError('Global period dates are not set.');
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [startDate, endDate, allHoardings]);
+
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
-    return s ? hoardings.filter(h =>
+    return s ? hoardingsList.filter(h =>
       (h.hoardingCode || '').toLowerCase().includes(s) ||
-      (h.site?.addressLine1 || '').toLowerCase().includes(s)
-    ) : hoardings;
-  }, [hoardings, search]);
+      (h.site?.addressLine1 || '').toLowerCase().includes(s) ||
+      (h.site?.city || '').toLowerCase().includes(s)
+    ) : hoardingsList;
+  }, [hoardingsList, search]);
+
+  const selectable = filtered.filter(h => !existingIds.has(h.hoardingID));
+  const allSelected = selectable.length > 0 && selectable.every(h => selected.has(h.hoardingID));
+  const someSelected = selectable.some(h => selected.has(h.hoardingID));
 
   const toggle = (id) => setSelected(p => {
     const n = new Set(p);
@@ -1239,15 +1297,23 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap 
     return n;
   });
 
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(p => { const n = new Set(p); selectable.forEach(h => n.delete(h.hoardingID)); return n; });
+    } else {
+      setSelected(p => { const n = new Set(p); selectable.forEach(h => n.add(h.hoardingID)); return n; });
+    }
+  };
+
   return ReactDOM.createPortal(
     <div className="pg-overlay">
-      <div className="pg-modal" style={{ maxWidth: 540, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+      <div className="pg-modal" style={{ maxWidth: 660, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
         <div className="pg-modal__head" style={{ flexShrink: 0 }}>
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap"><Building2 size={20} color="#049edf" /></div>
             <div>
               <h5 className="pg-modal__title">Add Hoarding Manually</h5>
-              <p className="pg-modal__subtitle">All hoardings — including occupied &amp; maintenance</p>
+              <p className="pg-modal__subtitle">{loading ? 'Loading...' : `${hoardingsList.length} available`} · Colour-coded by site</p>
             </div>
           </div>
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
@@ -1257,109 +1323,109 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap 
           <div className="pg-search-box">
             <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
             <input
-              placeholder="Search all hoardings…"
+              placeholder="Search by code, site address…"
               value={search}
               onChange={e => setSearch(e.target.value)}
+              disabled={loading || !!error}
             />
             {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
           </div>
         </div>
 
+        {!loading && !error && selectable.length > 0 && (
+          <div className="qt-select-all-row" style={{ flexShrink: 0 }} onClick={toggleAll}>
+            <div className={`qt-modal-check ${allSelected ? 'qt-modal-check--all' : someSelected ? 'qt-modal-check--on' : ''}`}>
+              {allSelected ? <Check size={12} color="#fff" /> : someSelected ? <div style={{ width: 8, height: 2, background: '#049edf', borderRadius: 2 }} /> : null}
+            </div>
+            <span>{allSelected ? 'Deselect All' : `Select All (${selectable.length})`}</span>
+          </div>
+        )}
+
         <div style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 360, minHeight: 0 }}>
-          {filtered.map(h => {
-            const isSelected = selected.has(h.hoardingID);
-            const av = isAvailable(h);
-            const statusLabel = typeof h.status === 'boolean'
-              ? (h.status ? 'Available' : 'Unavailable')
-              : (h.status || 'Unknown');
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', gap: 8 }}>
+              <Loader2 size={24} className="pg-spin" color="#049edf" />
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#9090a8' }}>Loading available hoardings…</span>
+            </div>
+          ) : error ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: '#dc2626', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600 }}>
+              {error}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="pg-empty__inner" style={{ padding: '32px 20px' }}>
+              <Building2 size={32} color="#d0d0e8" />
+              <span className="pg-empty__label">No available hoardings found</span>
+            </div>
+          ) : (
+            filtered.map(h => {
+              const checked = selected.has(h.hoardingID);
+              const alreadyIn = existingIds.has(h.hoardingID);
+              const sid = h.siteID ?? h.site?.siteID;
+              const siteColor = toSID(sid) != null ? siteColorMap.get(toSID(sid)) : null;
+              const site = h.site ? normalizeSite(h.site) : null;
+              const resolvedSite = site ?? (toSID(sid) != null ? siteMap?.get(toSID(sid)) ?? null : null);
+              const { line1, line2 } = getSiteDisplayLines(resolvedSite, h.hoardingCode);
 
-            // ── Resolve site: first try h.site, then fall back to siteMap ──
-            const rawSid = h.siteID ?? h.site?.siteID ?? h.site?.SiteID;
-            const sid = toSID(rawSid);
-            const siteColor = sid != null ? siteColorMap.get(sid) : null;
-            const embeddedSite = h.site ? normalizeSite(h.site) : null;
-            const resolvedSite = embeddedSite ?? (sid != null ? (siteMap?.get(sid) ?? null) : null);
-
-            // Build display lines from resolved site
-            const addrParts = resolvedSite
-              ? [resolvedSite.addressLine1, resolvedSite.addressLine2, resolvedSite.addressLine3].filter(Boolean)
-              : [];
-            const cityDistrict = resolvedSite
-              ? [resolvedSite.city, resolvedSite.district].filter(Boolean).join(', ')
-              : '';
-            const landmarkPart = resolvedSite?.landmark ? `Nr. ${resolvedSite.landmark}` : '';
-
-            // line1: address lines or city/district; fallback to hoarding code
-            const line1 = addrParts.length > 0
-              ? addrParts.join(', ')
-              : cityDistrict || h.hoardingCode;
-
-            // line2: landmark + city/district (when line1 had address lines)
-            const line2Parts = [landmarkPart, addrParts.length > 0 ? cityDistrict : ''].filter(Boolean);
-            const line2 = line2Parts.join(' · ');
-
-            return (
-              <div
-                key={h.hoardingID}
-                onClick={() => toggle(h.hoardingID)}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  padding: '10px 24px',
-                  borderBottom: '1px solid #f8f8f8',
-                  borderLeft: siteColor ? `4px solid ${siteColor.border}` : '4px solid transparent',
-                  cursor: 'pointer',
-                  background: isSelected
-                    ? 'rgba(4,158,223,0.05)'
-                    : siteColor ? siteColor.bg : '#fff',
-                }}
-              >
-                {/* Checkbox */}
-                <div className={`qt-modal-check ${isSelected ? 'qt-modal-check--on' : ''}`}>
-                  {isSelected && <Check size={12} color="#fff" />}
-                </div>
-
-                {/* Site colour dot */}
-                {siteColor && (
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%',
-                    background: siteColor.dot, flexShrink: 0,
-                  }} />
-                )}
-
-                {/* Address / info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="pg-td__primary" style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
-                    <MapPin size={11} color="#9090a8" style={{ flexShrink: 0, marginTop: 4 }} />
-                    <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-word', whiteSpace: 'normal' }}>{line1}</span>
+              return (
+                <div
+                  key={h.hoardingID}
+                  onClick={() => !alreadyIn && toggle(h.hoardingID)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '10px 24px',
+                    borderBottom: '1px solid #f8f8f8',
+                    borderLeft: siteColor ? `4px solid ${siteColor.border}` : '4px solid transparent',
+                    cursor: alreadyIn ? 'not-allowed' : 'pointer',
+                    background: checked ? 'rgba(4,158,223,0.05)' : siteColor ? siteColor.bg : '#fff',
+                    opacity: alreadyIn ? 0.55 : 1,
+                  }}
+                >
+                  <div className={`qt-modal-check ${checked ? 'qt-modal-check--on' : ''}`}>
+                    {checked && <Check size={12} color="#fff" />}
                   </div>
-                  {line2 && (
+
+                  {siteColor && (
                     <div style={{
-                      fontFamily: 'Nunito,sans-serif', fontSize: 11,
-                      color: '#7a8499', marginTop: 1,
-                      wordBreak: 'break-word', whiteSpace: 'normal'
-                    }}>
-                      {line2}
-                    </div>
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: siteColor.dot, flexShrink: 0,
+                    }} />
                   )}
-                  <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                    Code: {h.hoardingCode} · {h.width}×{h.height} ft
-                    {h.monthlyRent ? ` · ₹${Number(h.monthlyRent).toLocaleString('en-IN')}/mo` : ''}
-                  </div>
-                </div>
 
-                {/* Status badge */}
-                <span style={{
-                  fontSize: 10.5, fontWeight: 700, padding: '2px 8px',
-                  borderRadius: 5, flexShrink: 0,
-                  background: av ? 'rgba(22,163,74,0.10)' : 'rgba(220,38,38,0.10)',
-                  color: av ? '#16a34a' : '#dc2626',
-                  border: `1px solid ${av ? 'rgba(22,163,74,0.2)' : 'rgba(220,38,38,0.2)'}`,
-                }}>
-                  {statusLabel}
-                </span>
-              </div>
-            );
-          })}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="pg-td__primary" style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <MapPin size={11} color="#9090a8" style={{ flexShrink: 0, marginTop: 4 }} />
+                      <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                        {line1 || h.hoardingCode}
+                        {alreadyIn && <span style={{ color: '#9090a8', fontSize: 11, marginLeft: 6, fontWeight: 500, whiteSpace: 'nowrap' }}>· Already added</span>}
+                      </span>
+                    </div>
+                    {line2 && (
+                      <div style={{
+                        fontFamily: 'Nunito,sans-serif', fontSize: 11,
+                        color: '#7a8499', marginTop: 1,
+                        wordBreak: 'break-word', whiteSpace: 'normal'
+                      }}>
+                        {line2}
+                      </div>
+                    )}
+                    <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                      Code: {h.hoardingCode} · {h.width}×{h.height} ft · ₹{Number(h.monthlyRent || 0).toLocaleString('en-IN')}/mo
+                    </div>
+                  </div>
+
+                  <span style={{
+                    fontSize: 10.5, fontWeight: 700, padding: '2px 8px',
+                    borderRadius: 5, flexShrink: 0,
+                    background: 'rgba(22,163,74,0.10)',
+                    color: '#16a34a',
+                    border: '1px solid rgba(22,163,74,0.2)',
+                  }}>
+                    Available
+                  </span>
+                </div>
+              );
+            })
+          )}
         </div>
 
         <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
@@ -1374,7 +1440,7 @@ function ManualHoardingModal({ hoardings, onAdd, onClose, siteColorMap, siteMap 
             <button
               className="pg-btn-save"
               onClick={() => onAdd(selected)}
-              disabled={selected.size === 0}
+              disabled={selected.size === 0 || loading || !!error}
             >
               <Plus size={14} /> Add {selected.size > 0 ? `(${selected.size})` : ''}
             </button>
@@ -2870,7 +2936,6 @@ function CreateContractFromQuotModal({
           const allContracts = await apiService.getAllCustomerContracts();
           const allList = Array.isArray(allContracts) ? allContracts : [];
 
-
           const forThisCustomer = allList
             .filter(c => Number(c.customerContractID ?? c.CustomerContractID) > 0)
             .sort((a, b) =>
@@ -2908,7 +2973,6 @@ function CreateContractFromQuotModal({
         }
       }
 
-
       // Step 3: Create hoarding maps
       const occupiedMsgs = [];
       for (const hID of allHoardingIDsToMap) {
@@ -2920,7 +2984,6 @@ function CreateContractFromQuotModal({
             hoardingID: hID,
           });
         } catch (err) {
-          // Log full error for debugging
           console.error('[HoardingMap] Error for hID', hID,
             '| status:', err?.response?.status,
             '| data:', JSON.stringify(err?.response?.data),
@@ -2933,10 +2996,10 @@ function CreateContractFromQuotModal({
             const code = h?.hoardingCode ? ` (${h.hoardingCode})` : '';
             const msg = occ.replace(/Hoarding\s+\d+/, `Hoarding #${hID}${code}`);
             occupiedMsgs.push(msg);
-            showToast(msg, 'error');      // ← toast so it's always visible
+            showToast(msg, 'error');
           } else {
             const fallback = err?.response?.data?.message || err?.message || `Failed to map Hoarding #${hID}`;
-            showToast(fallback, 'error'); // ← generic errors as toast too
+            showToast(fallback, 'error');
             console.error('[HoardingMap] Non-occupancy error:', hID, fallback);
           }
         }
@@ -2944,10 +3007,42 @@ function CreateContractFromQuotModal({
       if (occupiedMsgs.length > 0) {
         setOccupancyWarnings(occupiedMsgs);
         setSaving(false);
-        return;  // keep modal open — user sees banner + toasts
+        return;
       }
 
-      /* ← NEW: add Occupied effdt row for each hoarding (startDate) */
+      // Save hoarding link details with photos using new endpoint
+      try {
+        for (const hID of allHoardingIDsToMap) {
+          const h = hoardings.find(hh => Number(hh.hoardingID) === Number(hID));
+          if (!h) continue;
+
+          // Find the row containing this hoarding to get the correct start date and rent
+          const row = selectedRows.find(r => 
+            r.hoardingID === hID || (r.isMerged && r.mergedHoardingIDs?.includes(hID))
+          ) || {};
+
+          const payload = {
+            hoardingID: Number(hID),
+            effdt: row.startDate || startDate || quot.quotationDate?.split('T')[0] || new Date().toISOString().split('T')[0],
+            hoardingCode: h.hoardingCode ?? h.HoardingCode ?? '',
+            material: h.material ?? h.Material ?? '',
+            hoardingType: Number(h.hoardingType ?? h.HoardingType ?? 0),
+            status: 'Occupied',
+            monthlyRent: Number(row.isMerged ? (h.monthlyRent ?? 0) : (row.contractOrigValue || h.monthlyRent || 0)),
+            width: Number(h.width ?? h.Width ?? 0),
+            height: Number(h.height ?? h.Height ?? 0),
+            siteID: Number(h.siteID ?? h.SiteID ?? h.site?.siteID ?? 0),
+          };
+
+          await apiService.saveHoardingLinkWithPhotos(payload);
+        }
+      } catch (err) {
+        console.error('[SaveHoardingLinkWithPhotos] Failed:', err?.message);
+        showToast(err?.response?.data?.message || err?.message || 'Failed to save hoarding link with photos.', 'error');
+      }
+
+      /*
+      // ← NEW: add Occupied effdt row for each hoarding (startDate)
       try {
         await addHoardingEffdtRows(
           Array.from(allHoardingIDsToMap),
@@ -2958,6 +3053,7 @@ function CreateContractFromQuotModal({
       } catch (effdtErr) {
         console.error('[ContractEffdt] Failed to add effdt rows:', effdtErr);
       }
+      */
 
       // Step 4: Merge records — only for hoardings that were actually mapped
       const thisMerges = quotMerges.filter(m =>
@@ -2966,7 +3062,7 @@ function CreateContractFromQuotModal({
 
       for (const m of thisMerges) {
         const hID = Number(m.hoardingID);
-        if (!allHoardingIDsToMap.has(hID)) continue; // ← this gate is the real fix
+        if (!allHoardingIDsToMap.has(hID)) continue;
         try {
           await apiService.createHoardingMerge({
             hoardingID: hID,
@@ -7123,11 +7219,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
       )}
       {showManualModal && (
         <ManualHoardingModal
-          hoardings={hoardings}
+          allHoardings={hoardings}
+          existingIds={existingHoardingIds}
           onAdd={handleAddManual}
           onClose={() => setShowManualModal(false)}
           siteColorMap={siteColorMap}
           siteMap={siteMap}
+          startDate={globalStart}
+          endDate={globalEnd}
         />
       )}
       {/* Hoarding date conflict modal */}

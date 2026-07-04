@@ -479,10 +479,26 @@ const handleDissolve = async (endDate, availableFrom) => {
             siteID,
           };
  
-          /* Log the exact payload so you can spot what's wrong */
+          /*
           console.log('[Dissolve] addHoardingEffdt →', hoardingCode, payload);
- 
           return apiService.addHoardingEffdt(hoardingCode, payload);
+          */
+
+          const newPayload = {
+            hoardingID: Number(hid),
+            effdt: availableFrom,
+            hoardingCode,
+            material,
+            hoardingType: Number(hoardingType),
+            status: 'Available',
+            monthlyRent: Number(monthlyRent),
+            width: Number(width),
+            height: Number(height),
+            siteID: Number(siteID),
+          };
+
+          console.log('[Dissolve] saveHoardingLinkWithPhotos →', hid, newPayload);
+          return apiService.saveHoardingLinkWithPhotos(newPayload);
         })
       );
  

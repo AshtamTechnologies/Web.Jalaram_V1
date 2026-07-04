@@ -227,6 +227,18 @@ export const apiService = {
     height: Number(data.height),
     siteID: Number(data.siteID),
   }),
+  saveHoardingLinkWithPhotos: (data) => api.post('/Hoarding/SaveHoardingLinkWithPhotos', {
+    hoardingID: Number(data.hoardingID),
+    effdt: data.effdt ? data.effdt : new Date().toISOString().split('T')[0],
+    hoardingCode: data.hoardingCode,
+    material: data.material,
+    hoardingType: Number(data.hoardingType),
+    status: data.status,
+    monthlyRent: Number(data.monthlyRent),
+    width: Number(data.width),
+    height: Number(data.height),
+    siteID: Number(data.siteID),
+  }),
   updateHoarding: (hoardingID, data) => api.put(`/Hoarding/${hoardingID}`, {
     hoardingID: Number(hoardingID),
     effdt: data.effdt ? data.effdt.split('T')[0] : new Date().toISOString().split('T')[0],
