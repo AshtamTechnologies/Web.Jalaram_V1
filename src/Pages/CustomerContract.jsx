@@ -1498,12 +1498,12 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
                           <Eye size={14} />
                         </button>
                       )}
-                      {/* {url && !hideDownload && (
+                      {url && !hideDownload && (
                         <button onClick={() => forceDownload(url, a.contractFilename || 'Attachment')} title="Download / Open"
                           style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#049edf' }}>
                           <Download size={14} />
                         </button>
-                      )} */}
+                      )}
                       <button title="Replace file" onClick={() => { setEditTarget(a); setReplaceType(a.fileUploadType || ''); setReplaceFile(null); setReplaceErr(''); if (replaceInputRef.current) replaceInputRef.current.value = ''; }}
                         style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: isEditing ? '#eff6ff' : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#049edf' }}>
                         <Edit2 size={14} />
@@ -2395,19 +2395,19 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
 
             {/* ── Add Hoardings — hidden in readOnly mode ── */}
             {!readOnly && (
-            <button
-              onClick={() => { setApiError(''); setPickOpen(true); }}
-              disabled={saving || loadingAvailable || (!startDate || !endDate)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', borderRadius: 10, border: '1.5px dashed #d0d0e8', background: '#f8f8fd', cursor: (saving || loadingAvailable || !startDate || !endDate) ? 'not-allowed' : 'pointer', fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: (!startDate || !endDate) ? '#b0b0c8' : '#6c63ff', transition: 'all 0.15s', marginBottom: 6 }}
-              onMouseEnter={e => { if (!saving && !loadingAvailable && startDate && endDate) e.currentTarget.style.borderColor = '#6c63ff'; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = '#d0d0e8'; }}
-            >
-              {saving ? <><Loader2 size={14} className="pg-spin" /> Adding…</>
-                : loadingAvailable ? <><Loader2 size={14} className="pg-spin" /> Loading available…</>
-                  : (!startDate || !endDate) ? <><Calendar size={14} /> Set contract dates first</>
-                    : hoardingsForPicker.length === 0 ? <><Check size={14} /> No more hoardings available</>
-                      : <><Plus size={14} /> Add Hoardings ({hoardingsForPicker.length} available)</>}
-            </button>
+              <button
+                onClick={() => { setApiError(''); setPickOpen(true); }}
+                disabled={saving || loadingAvailable || (!startDate || !endDate)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 0', borderRadius: 10, border: '1.5px dashed #d0d0e8', background: '#f8f8fd', cursor: (saving || loadingAvailable || !startDate || !endDate) ? 'not-allowed' : 'pointer', fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800, color: (!startDate || !endDate) ? '#b0b0c8' : '#6c63ff', transition: 'all 0.15s', marginBottom: 6 }}
+                onMouseEnter={e => { if (!saving && !loadingAvailable && startDate && endDate) e.currentTarget.style.borderColor = '#6c63ff'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#d0d0e8'; }}
+              >
+                {saving ? <><Loader2 size={14} className="pg-spin" /> Adding…</>
+                  : loadingAvailable ? <><Loader2 size={14} className="pg-spin" /> Loading available…</>
+                    : (!startDate || !endDate) ? <><Calendar size={14} /> Set contract dates first</>
+                      : hoardingsForPicker.length === 0 ? <><Check size={14} /> No more hoardings available</>
+                        : <><Plus size={14} /> Add Hoardings ({hoardingsForPicker.length} available)</>}
+              </button>
             )}
 
             {/* ── Merge divider ── */}
@@ -2434,25 +2434,25 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
 
                 {/* ── Merge button — hidden in readOnly mode ── */}
                 {!readOnly && (
-                <button
-                  onClick={() => { setApiError(''); setMergePickOpen(true); }}
-                  disabled={mergeSaving || maps.length < 2}
-                  style={{
-                    width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                    padding: '9px 0', borderRadius: 10,
-                    border: `1.5px dashed ${maps.length < 2 ? '#e0e0e0' : 'rgba(124,58,237,0.40)'}`,
-                    background: maps.length < 2 ? '#f8f8fd' : 'rgba(124,58,237,0.03)',
-                    cursor: mergeSaving || maps.length < 2 ? 'not-allowed' : 'pointer',
-                    fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800,
-                    color: maps.length < 2 ? '#c0c0d8' : '#7c3aed', transition: 'all 0.15s',
-                  }}
-                  onMouseEnter={e => { if (maps.length >= 2) { e.currentTarget.style.borderColor = '#7c3aed'; e.currentTarget.style.background = 'rgba(124,58,237,0.06)'; } }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = maps.length < 2 ? '#e0e0e0' : 'rgba(124,58,237,0.40)'; e.currentTarget.style.background = maps.length < 2 ? '#f8f8fd' : 'rgba(124,58,237,0.03)'; }}
-                >
-                  {mergeSaving ? <><Loader2 size={14} className="pg-spin" /> Merging…</>
-                    : maps.length < 2 ? <><Building2 size={14} /> Add at least 2 hoardings to merge</>
-                      : <><GitMerge size={14} /> Merge Hoardings ({maps.length} available)</>}
-                </button>
+                  <button
+                    onClick={() => { setApiError(''); setMergePickOpen(true); }}
+                    disabled={mergeSaving || maps.length < 2}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+                      padding: '9px 0', borderRadius: 10,
+                      border: `1.5px dashed ${maps.length < 2 ? '#e0e0e0' : 'rgba(124,58,237,0.40)'}`,
+                      background: maps.length < 2 ? '#f8f8fd' : 'rgba(124,58,237,0.03)',
+                      cursor: mergeSaving || maps.length < 2 ? 'not-allowed' : 'pointer',
+                      fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800,
+                      color: maps.length < 2 ? '#c0c0d8' : '#7c3aed', transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { if (maps.length >= 2) { e.currentTarget.style.borderColor = '#7c3aed'; e.currentTarget.style.background = 'rgba(124,58,237,0.06)'; } }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = maps.length < 2 ? '#e0e0e0' : 'rgba(124,58,237,0.40)'; e.currentTarget.style.background = maps.length < 2 ? '#f8f8fd' : 'rgba(124,58,237,0.03)'; }}
+                  >
+                    {mergeSaving ? <><Loader2 size={14} className="pg-spin" /> Merging…</>
+                      : maps.length < 2 ? <><Building2 size={14} /> Add at least 2 hoardings to merge</>
+                        : <><GitMerge size={14} /> Merge Hoardings ({maps.length} available)</>}
+                  </button>
                 )}
               </>
             )}
@@ -4803,7 +4803,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                     attachments={localAttachments}
                     setAttachments={setLocalAttachments}
                     setDeletedAttachIDs={setDeletedAttachIDs}
-                    hideDownload={true}
+                    hideDownload={false}
                   />
                 );
               })()}
