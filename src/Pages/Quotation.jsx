@@ -17,21 +17,22 @@ import {
 import { apiService } from '../api/api';
 import { useResizableColumns } from '../hooks/useResizableColumns';
 import "./Common1.css";
+import paragSign from '../Assets/paragSign.png';
 
 /* ═══════════════════════════════════════════
    CONSTANTS
 ═══════════════════════════════════════════ */
 const COMPANY = {
   name: 'JALARAM AD',
-  line1: '9/B/1, Industrial Estate, Opp. Real Bakers, Nr.Borsad Crossing',
-  line2: 'Jitodiya Road, Anand - 388001. Parag Patel # 7383999444',
+  line1: '103/4/5/6, Drashti Arcade, Opp. Anand ITI',
+  line2: 'Nr. Grid Crossing, Anand - 388001, GUJ. INDIA. Parag Patel # 9428151123',
   gstin: '24AAMFJ0339H2ZG',
   pan: 'AAMFJ0339H',
   bank: 'AXIS BANK',
   branch: 'GRID CHOKDI, ANAND',
   account: '920020035728954',
   ifsc: 'UTIB0003220',
-  signatory: 'P.C.Pradep',
+  signatory: '',
 };
 
 const ROWS_PER_PRINT_PAGE = 13;
@@ -768,7 +769,7 @@ function SortIcon({ col, sortKey, sortDir }) {
 function buildPrintHTML({ rows, withPrinting, selectedCustomer, quotNo, quotDate,
   revisionNo, cgstPct, sgstPct, subTotal, cgstAmt, sgstAmt,
   roundOff, finalTotal, selectedTerms, termsTexts,
-  docNoLabel = 'Quotation No.', docNoValue = null }) {
+  docNoLabel = 'Quotation No.', docNoValue = null, docTitle = null }) {
 
   const pages = rows.length === 0 ? [[]] : [];
   for (let i = 0; i < rows.length; i += ROWS_PER_PRINT_PAGE) pages.push(rows.slice(i, i + ROWS_PER_PRINT_PAGE));
@@ -820,8 +821,8 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
 .f-main-row{display:flex;border-top:1px solid #000;}
 .f-bank{flex:1;padding:5px 8px;border-right:1px solid #000;font-size:10px;line-height:1.7;}
 .f-qr{width:110px;border-right:1px solid #000;display:flex;align-items:center;justify-content:center;padding:5px;}
-.f-sig{width:165px;padding:5px 8px;text-align:right;font-size:10px;display:flex;flex-direction:column;}
-.f-sig-company{font-weight:bold;font-size:11px;margin-bottom:40px;}
+.f-sig{width:165px;padding:5px 8px;text-align:center;font-size:10px;display:flex;flex-direction:column;}
+.f-sig-company{font-weight:bold;font-size:11px;margin-bottom:5px;}
 .f-sig-name{font-size:10px;}
 .f-grand-box{border-top:1px solid #000;margin-top:5px;padding-top:4px;display:flex;justify-content:space-between;align-items:center;}
 .f-grand-lbl{font-size:10.5px;font-weight:bold;}
@@ -854,7 +855,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
     ${first && c?.addressLine1 ? `<br>${c.addressLine1}` : ''}
     ${first && c?.city ? `<br>${[c.city, c.district].filter(Boolean).join(', ')}` : ''}
     ${first && c?.gstNumber ? `<br><span style="font-size:10px;"><strong>GSTIN :</strong> ${c.gstNumber}</span>` : ''}
-    ${first ? `<br><span style="font-size:10px;"><strong>PAN No :</strong> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>` : ''}
+    ${first ? `<br><span style="font-size:10px;"><strong>GST No :</strong> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>` : ''}
   </div>
   <div class="cright">
     <table>
@@ -871,7 +872,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
         <th style="width:30px;">SR No.</th>
         <th class="l">Site Address / Product</th>
         <th style="width:62px;">SIZE</th>
-        <th style="width:55px;">NOS/Qty</th>
+        <th style="width:55px;">Month</th>
         <th style="width:70px;">Rate PER MONTH</th>
         <th style="width:82px;">Printing Cost</th>
         <th style="width:80px;">Amount</th>
@@ -965,16 +966,16 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
   <div class="f-main-row">
     <div class="f-bank">
       ${bankSection}
-      <div style="margin-top:5px;padding-top:4px;border-top:1px dashed #bbb;display:flex;align-items:center;gap:6px;">
-        <strong style="white-space:nowrap;">Pending Amt :</strong>
-        <span style="flex:1;border-bottom:1px solid #ccc;">&nbsp;</span>
-      </div>
+      
     </div>
     <div class="f-qr">
       <img src="${qrUrl}" width="98" height="98" style="display:block;" alt="UPI QR"/>
     </div>
     <div class="f-sig">
       <div class="f-sig-company">For, JALARAM AD</div>
+      <div style="height:45px; display:flex; align-items:center; justify-content:center; margin-bottom:5px;">
+        <img src="${paragSign}" style="max-height:45px; max-width:140px; object-fit:contain;" alt="Signature"/>
+      </div>
       <div class="f-sig-name">${COMPANY.signatory}</div>
       <div class="f-sig-name">(Authorised Signatory)</div>
       <div class="f-grand-box">
@@ -987,6 +988,10 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
   <div class="f-eoe"><span>E.&amp;O.E</span><span></span></div>
 </div>`;
   };
+  // <div style="margin-top:5px;padding-top:4px;border-top:1px dashed #bbb;display:flex;align-items:center;gap:6px;">
+  //       <strong style="white-space:nowrap;">Pending Amt :</strong>
+  //       <span style="flex:1;border-bottom:1px solid #ccc;">&nbsp;</span>
+  //     </div>
 
   const pagesHtml = pages.map((pgRows, pgIdx) => {
     const isLast = pgIdx === pages.length - 1;
@@ -1012,15 +1017,28 @@ ${renderFooter(isLast)}
 </div>`;
   }).join('');
 
-  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Quotation - ${quotNo}</title><style>${css}</style></head><body>${pagesHtml}<script>window.onload=()=>setTimeout(()=>window.print(),400);</script></body></html>`;
+  return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${docTitle || `Quotation - ${quotNo}`}</title><style>${css}</style></head><body>${pagesHtml}<script>window.onload=()=>setTimeout(()=>window.print(),400);</script></body></html>`;
 }
 function buildProformaHTML(params) {
+  let invoiceId = params.invoiceNumber || (params.invoiceID != null && params.invoiceID !== 0
+    ? String(params.invoiceID)
+    : params.quotNo);
+
+  if (params.quotNo) {
+    const fyMatch = params.quotNo.match(/-\d{2,4}-\d{2}$/);
+    if (fyMatch) {
+      const fySuffix = fyMatch[0];
+      if (invoiceId && !invoiceId.endsWith(fySuffix)) {
+        invoiceId = invoiceId + fySuffix;
+      }
+    }
+  }
+
   const html = buildPrintHTML({
     ...params,
     docNoLabel: 'Invoice ID',
-    docNoValue: params.invoiceNumber || (params.invoiceID != null && params.invoiceID !== 0
-      ? String(params.invoiceID)
-      : params.quotNo),
+    docNoValue: invoiceId,
+    docTitle: `proforma_Invoice - ${invoiceId}`,
   });
   return html
     .replace(/>QUOTATION</g, '>PROFORMA INVOICE<')
@@ -1455,8 +1473,21 @@ function ManualHoardingModal({ allHoardings, existingIds, onAdd, onClose, siteCo
 /* ═══════════════════════════════════════════
    TERMS MODAL
 ═══════════════════════════════════════════ */
-function TermsModal({ selected, onSelect, termsList, onClose }) {
+function TermsModal({ selected, onSelect, onSelectAll, termsList, onClose }) {
   const sorted = useMemo(() => [...termsList].sort((a, b) => (a.order || 0) - (b.order || 0)), [termsList]);
+
+  const allIds = useMemo(() => sorted.map(t => t.termID), [sorted]);
+  const isAllSelected = sorted.length > 0 && sorted.every(t => selected.includes(t.termID));
+  const isSomeSelected = sorted.some(t => selected.includes(t.termID)) && !isAllSelected;
+
+  const handleSelectAll = () => {
+    if (isAllSelected) {
+      onSelectAll([]);
+    } else {
+      onSelectAll(allIds);
+    }
+  };
+
   return ReactDOM.createPortal(
     <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 560, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
@@ -1465,11 +1496,21 @@ function TermsModal({ selected, onSelect, termsList, onClose }) {
             <div className="pg-modal__icon-wrap"><List size={20} color="#049edf" /></div>
             <div>
               <h5 className="pg-modal__title">Terms &amp; Conditions</h5>
-              <p className="pg-modal__subtitle">Select up to 3.</p>
+              <p className="pg-modal__subtitle">Select terms to display on the print layout.</p>
             </div>
           </div>
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
+
+        {sorted.length > 0 && (
+          <div className="qt-select-all-row" style={{ flexShrink: 0 }} onClick={handleSelectAll}>
+            <div className={`qt-modal-check ${isAllSelected ? 'qt-modal-check--all' : isSomeSelected ? 'qt-modal-check--on' : ''}`}>
+              {isAllSelected ? <Check size={12} color="#fff" /> : isSomeSelected ? <div style={{ width: 8, height: 2, background: '#049edf', borderRadius: 2 }} /> : null}
+            </div>
+            <span>{isAllSelected ? 'Deselect All' : `Select All (${sorted.length})`}</span>
+          </div>
+        )}
+
         <div style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 440, minHeight: 0, padding: '16px 24px' }}>
           {sorted.length === 0 && (
             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#9090a8', textAlign: 'center', padding: '28px 0' }}>
@@ -1478,11 +1519,10 @@ function TermsModal({ selected, onSelect, termsList, onClose }) {
           )}
           {sorted.map(term => {
             const checked = selected.includes(term.termID);
-            const disabled = !checked && selected.length >= 3;
             return (
-              <div key={term.termID} style={{ border: `1.5px solid ${checked ? '#049edf40' : '#f0f0f8'}`, borderRadius: 12, padding: '11px 13px', marginBottom: 10, background: checked ? 'rgba(4,158,223,0.03)' : '#fff', opacity: disabled ? 0.5 : 1 }}>
+              <div key={term.termID} style={{ border: `1.5px solid ${checked ? '#049edf40' : '#f0f0f8'}`, borderRadius: 12, padding: '11px 13px', marginBottom: 10, background: checked ? 'rgba(4,158,223,0.03)' : '#fff' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                  <button onClick={() => !disabled && onSelect(term.termID)} style={{ background: 'none', border: 'none', cursor: disabled ? 'not-allowed' : 'pointer', padding: 0, marginTop: 3, flexShrink: 0 }}>
+                  <button onClick={() => onSelect(term.termID)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 3, flexShrink: 0 }}>
                     <div style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${checked ? '#049edf' : '#d0d0e0'}`, background: checked ? '#049edf' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {checked && <Check size={12} color="#fff" />}
                     </div>
@@ -1496,7 +1536,7 @@ function TermsModal({ selected, onSelect, termsList, onClose }) {
           })}
         </div>
         <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#9090a8', fontWeight: 600 }}>{selected.length}/3 selected</span>
+          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#9090a8', fontWeight: 600 }}>{selected.length} selected</span>
           <button className="pg-btn-save" onClick={onClose}><Check size={14} /> Done</button>
         </div>
       </div>
@@ -3017,7 +3057,7 @@ function CreateContractFromQuotModal({
           if (!h) continue;
 
           // Find the row containing this hoarding to get the correct start date and rent
-          const row = selectedRows.find(r => 
+          const row = selectedRows.find(r =>
             r.hoardingID === hID || (r.isMerged && r.mergedHoardingIDs?.includes(hID))
           ) || {};
 
@@ -4584,7 +4624,6 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const toggleTerm = (termID) => {
     setSelectedTerms(p => {
       if (p.includes(termID)) return p.filter(i => i !== termID);
-      if (p.length >= 3) return p;
       return [...p, termID];
     });
   };
@@ -6640,7 +6679,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
                     <div className="qt-terms-head">
                       <div className="qt-section-head" style={{ margin: 0 }}>
-                        Terms &amp; Conditions <span className="qt-label--opt">(max 3)</span>
+                        Terms &amp; Conditions
                       </div>
                       <button className="pg-btn-cancel" onClick={() => setShowTermsModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
                         <List size={12} /> Choose
@@ -7240,6 +7279,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         <TermsModal
           selected={selectedTerms}
           onSelect={toggleTerm}
+          onSelectAll={(allIds) => setSelectedTerms(allIds)}
           termsList={termsList}
           onClose={() => setShowTermsModal(false)}
         />

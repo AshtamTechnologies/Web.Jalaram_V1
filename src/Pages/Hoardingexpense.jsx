@@ -53,12 +53,7 @@ const forceDownload = async (url, filename) => {
 ───────────────────────────────────────── */
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
 
-const EXPENSE_TYPE_OPTIONS = [
-  'C - CHANNEL', '20X10', 'SITE RENT FOR YEAR', 'BAMBOO', 'Tempo rent',
-  'LABOUR', 'Concrete', 'CISSOR STRUCTURE', 'FITTING STUFF', 'VARI PATRI',
-  'NUT - BOLT', 'WOODEN PATTI', 'ANGLE FOR SUPPORT',
-];
-const EXPENSE_TYPE_COMBO_OPTIONS = EXPENSE_TYPE_OPTIONS.map(t => ({ value: t, label: t }));
+
 
 const EMPTY_ROW = {
   _rowId: '', expenseDate: '', expenseType: '',
@@ -629,7 +624,7 @@ function EntryAttachField({ rowId, selectedFile, onFileSelect, onFileClear }) {
 /* ─────────────────────────────────────────
    EXPENSE ENTRY PANEL
 ───────────────────────────────────────── */
-function ExpenseEntryPanel({ row, errors, onChange, attachFile, onFileSelect, onFileClear }) {
+function ExpenseEntryPanel({ row, errors, onChange, attachFile, onFileSelect, onFileClear, expenseTypeOptions = [] }) {
   return (
     <div className="exp-entry-panel">
       <div className="row g-3">
@@ -645,7 +640,7 @@ function ExpenseEntryPanel({ row, errors, onChange, attachFile, onFileSelect, on
           <FieldLabel label="Expense Type" required />
           <ComboDropdown value={row.expenseType} onChange={v => onChange('expenseType', v)} onBlur={() => { }}
             hasError={!!errors.expenseType} placeholder="Select expense type…" icon={Tag}
-            options={EXPENSE_TYPE_COMBO_OPTIONS} searchable emptyText="No matching types" />
+            options={expenseTypeOptions} searchable emptyText="No matching types" />
           <FieldError msg={errors.expenseType} />
         </div>
         <div className="col-12">
@@ -699,7 +694,7 @@ function ExpenseEntryPanel({ row, errors, onChange, attachFile, onFileSelect, on
 /* ─────────────────────────────────────────
    EXPENSE ROWS TABLE
 ───────────────────────────────────────── */
-function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingRowId, attachFiles, existingAttaches, onFileSelect, onFileClear, uploadingRowIds }) {
+function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingRowId, attachFiles, existingAttaches, onFileSelect, onFileClear, uploadingRowIds, expenseTypeOptions = [] }) {
   if (rows.length === 0) return null;
   const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
@@ -759,7 +754,7 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
                     </td>
                     <td className="exp-td">
                       <CellComboDropdown value={row.expenseType} onChange={v => onChangeRow(row._rowId, 'expenseType', v)}
-                        options={EXPENSE_TYPE_COMBO_OPTIONS} hasError={!!errs.expenseType} placeholder="Select…" />
+                        options={expenseTypeOptions} hasError={!!errs.expenseType} placeholder="Select…" />
                       {errs.expenseType && <div className="exp-cell-err">{errs.expenseType}</div>}
                     </td>
                     <td className="exp-td">
@@ -832,7 +827,7 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
                 <div className="col-12">
                   <div className="exp-mob-label">Expense Type <span className="exp-req">*</span></div>
                   <CellComboDropdown value={row.expenseType} onChange={v => onChangeRow(row._rowId, 'expenseType', v)}
-                    options={EXPENSE_TYPE_COMBO_OPTIONS} hasError={!!errs.expenseType} placeholder="Select…" />
+                    options={expenseTypeOptions} hasError={!!errs.expenseType} placeholder="Select…" />
                   {errs.expenseType && <div className="exp-cell-err">{errs.expenseType}</div>}
                 </div>
                 <div className="col-12">
@@ -877,7 +872,7 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
 /* ─────────────────────────────────────────
    EXPENSE FORM  (Add / Edit)
 ───────────────────────────────────────── */
-function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
+function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, expenseTypeOptions = [] }) {
   const isAdd = mode === 'add';
 
   const [hoardingID, setHoardingID] = useState(isAdd ? '' : (expense?.hoardingID || ''));
@@ -1020,7 +1015,7 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
         const payload = {
           hoardingID: Number(hoardingID),
           expenseDate: row.expenseDate,
-          expenseType: row.expenseType,
+          expenseType: row.expenseType ? String(row.expenseType) : '',
           expenseDTL: row.expenseDTL,
           amount: Number(row.amount),
           paidBy: row.paidBy,
@@ -1159,6 +1154,7 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
                         attachFile={attachFiles[currentRow._rowId] || null}
                         onFileSelect={handleFileSelect}
                         onFileClear={handleFileClear}
+                        expenseTypeOptions={expenseTypeOptions}
                       />
                       <div className="exp-addrow-bar">
                         <button className="exp-btn-addrow" onClick={handleAddRow}><Plus size={14} /> Add Expense Row</button>
@@ -1181,6 +1177,7 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
                     onFileSelect={handleFileSelect}
                     onFileClear={handleFileClear}
                     uploadingRowIds={uploadingRowIds}
+                    expenseTypeOptions={expenseTypeOptions}
                   />
 
                   {!isAdd && rows.length === 0 && !showEntryForm && (
@@ -1221,6 +1218,7 @@ export default function HoardingExpensePage() {
   const [hoardings, setHoardings] = useState([]);
   const [sites, setSites] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [expenseTypeOptions, setExpenseTypeOptions] = useState([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadingExp, setLoadingExp] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -1244,7 +1242,11 @@ export default function HoardingExpensePage() {
   const fetchMeta = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
     try {
-      const [rawHoardings, rawSites] = await Promise.all([apiService.getAllHoardings(), apiService.getAllSites()]);
+      const [rawHoardings, rawSites, rawExpenseTypes] = await Promise.all([
+        apiService.getAllHoardings(),
+        apiService.getAllSites(),
+        apiService.getAllExpenseTypes().catch(() => [])
+      ]);
       const map = {};
       (Array.isArray(rawHoardings) ? rawHoardings : []).forEach(rec => {
         const code = rec.hoardingCode;
@@ -1257,6 +1259,14 @@ export default function HoardingExpensePage() {
       });
       setHoardings(Object.values(map));
       setSites(Array.isArray(rawSites) ? rawSites : []);
+
+      const allTypes = Array.isArray(rawExpenseTypes) ? rawExpenseTypes : rawExpenseTypes?.data ?? rawExpenseTypes?.$values ?? [];
+      const activeTypes = allTypes.filter(t => (t.status ?? t.Status ?? '').toLowerCase() === 'active');
+      const mappedOptions = activeTypes.map(t => ({
+        value: t.expenseTypeID ?? t.ExpenseTypeID,
+        label: t.expenseTypeName ?? t.ExpenseTypeName
+      }));
+      setExpenseTypeOptions(mappedOptions);
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally { setLoadingMeta(false); }
@@ -1336,6 +1346,7 @@ export default function HoardingExpensePage() {
         mode={formMode} expense={editTarget}
         hoardings={hoardings} sites={sites}
         allExpenses={expenses} onBack={handleFormBack}
+        expenseTypeOptions={expenseTypeOptions}
       />
     );
   }

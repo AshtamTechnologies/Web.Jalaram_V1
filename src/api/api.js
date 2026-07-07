@@ -1026,6 +1026,13 @@ export const apiService = {
   getJobTaskAssignsByUserId: (userId) =>
     api.get(`/JobTaskAssign/GetByUserId/${userId}`),
 
+  // ── Expense Type ──
+  getAllExpenseTypes: () => api.get('/ExpenseType'),
+  getExpenseTypeById: (id) => api.get(`/ExpenseType/${id}`),
+  createExpenseType: (data) => api.post('/ExpenseType', data),
+  updateExpenseType: (id, data) => api.put(`/ExpenseType/${id}`, data),
+  deleteExpenseType: (id) => api.delete(`/ExpenseType/${id}`),
+
 
 
   // Workers

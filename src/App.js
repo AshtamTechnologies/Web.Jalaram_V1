@@ -115,7 +115,7 @@ export default function App() {
       case 'JobPayment': return <JobPaymentPage />;
       case 'SeriesSetup': return <SeriesSetup />;
       case 'DissloveContract': return <DissloveContract />;
-case 'Registration': return <RegistrationPage />;
+      case 'Registration': return <RegistrationPage />;
 
 
 

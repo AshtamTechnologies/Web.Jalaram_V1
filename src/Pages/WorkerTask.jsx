@@ -990,16 +990,14 @@ export default function WorkerTasksPage() {
 
     const handleSave = async (data) => {
         const userId = parseInt(localStorage.getItem('userId') || '0', 10);
-        const getLocalISOString = () => {
+        const getISTISOString = () => {
             const date = new Date();
-            const offset = -date.getTimezoneOffset();
-            const sign = offset >= 0 ? '+' : '-';
+            const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
+            const istDate = new Date(utc + (3600000 * 5.5));
             const pad = (num) => String(num).padStart(2, '0');
-            const formattedOffset = `${sign}${pad(Math.floor(Math.abs(offset) / 60))}:${pad(Math.abs(offset) % 60)}`;
-            const localDate = new Date(date.getTime() + offset * 60 * 1000);
-            return localDate.toISOString().slice(0, -1) + formattedOffset;
+            return `${istDate.getFullYear()}-${pad(istDate.getMonth() + 1)}-${pad(istDate.getDate())}T${pad(istDate.getHours())}:${pad(istDate.getMinutes())}:${pad(istDate.getSeconds())}.${String(istDate.getMilliseconds()).padStart(3, '0')}`;
         };
-        const nowISO = getLocalISOString();
+        const nowISO = getISTISOString();
         const geo = data.geo ?? await getGeoPayload();
 
         const uploadWithGeo = async (file, photoFileType) => {

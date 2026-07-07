@@ -64,9 +64,9 @@ function parseOccupancyError(err) {
 }
 const CONTRACT_COMPANY = {
   name: 'JALARAM AD',
-  line1: '9/B/1, Industrial Estate, Opp. Real Bakers, Nr.Borsad Crossing',
-  line2: 'Jitodiya Road, Anand - 388001',
-  phone: 'Parag Patel # 7383999444',
+  line1: '103/4/5/6, Drashti Arcade, Opp. Anand ITI',
+  line2: 'Nr. Grid Crossing, Anand - 388001, GUJ. INDIA',
+  phone: 'Parag Patel # 9428151123',
 };
 
 const CONTRACT_PDF_TERMS = [
@@ -493,7 +493,7 @@ function buildContractPDFHTML({ company, customer, contract,
         ${item.material ? `&nbsp;&mdash;&nbsp;${item.material}` : ''}
       </div>
       <div class="hrd-row">
-        <div class="hrd-cell"><span class="hrd-lbl">Media Type:</span>&nbsp;Hoarding</div>
+        <div class="hrd-cell"><span class="hrd-lbl">Media Type:</span>&nbsp;${item.hoardingTypeName || 'Hoarding'}</div>
         <div class="hrd-cell">
           <span class="hrd-lbl">Availability:</span>&nbsp;
           <span class="hrd-green">${item.contractStatus || 'Available Now'}</span>
@@ -555,6 +555,9 @@ function buildContractPDFHTML({ company, customer, contract,
       </div>
       <div class="cov-body">
         <div class="cov-name">${customer.customerName}</div>
+        ${customer.authorizedName
+      ? `<div class="cov-phone" style="font-weight: 700; font-size: 15px; margin-bottom: 6px;">Authorized Person: ${customer.authorizedName}</div>`
+      : ''}
         ${customer.phone1
       ? `<div class="cov-phone">${customer.phone1}</div>` : ''}
         ${(customer.addressLine1 || customer.city)
@@ -621,6 +624,17 @@ function buildContractPDFHTML({ company, customer, contract,
 
   /* ── TERMS (all 8 on 1 page) ── */
   /* ── TERMS ── */
+  // const termsPage = terms.length === 0 ? '' : `
+  // <div class="page" style="display:flex;flex-direction:column;">
+  //   ${ph}
+  //   <div class="terms-hdr">Terms and Conditions &mdash;</div>
+  //   <ol class="terms-ol">
+  //     ${terms.map(t => `<li>${t}</li>`).join('')}
+  //   </ol>
+  //   <div class="terms-foot">
+  //     <span>${customer.authorizedName || customer.customerName}<br>${company.phone}</span>
+  //   </div>
+  // </div>`;
   const termsPage = terms.length === 0 ? '' : `
   <div class="page" style="display:flex;flex-direction:column;">
     ${ph}
@@ -629,7 +643,7 @@ function buildContractPDFHTML({ company, customer, contract,
       ${terms.map(t => `<li>${t}</li>`).join('')}
     </ol>
     <div class="terms-foot">
-      <span>${customer.authorizedName || customer.customerName}<br>${company.phone}</span>
+      <span>${company.phone}</span>
     </div>
   </div>`;
 
@@ -3040,18 +3054,32 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
   const [selectedTermIds, setSelectedTermIds] = useState(new Set());
   const [termsLoading, setTermsLoading] = useState(true);
   const [allHoardingsRaw, setAllHoardingsRaw] = useState([]);
+  const [hoardingTypes, setHoardingTypes] = useState([]);
 
   const siteMap = useMemo(
     () => Object.fromEntries(sites.map(s => [s.siteID, s])),
     [sites]
   );
+
+  const hoardingTypeMap = useMemo(() => {
+    return Object.fromEntries(hoardingTypes.map(t => [t.hoardingType, t.typeName]));
+  }, [hoardingTypes]);
+
   useEffect(() => {
     (async () => {
       try {
-        const res = await apiService.getAllHoardings();
-        const list = Array.isArray(res) ? res : res?.data ?? [];
-        // Do NOT deduplicate here — keep all records so any hoardingID can be found
-        setAllHoardingsRaw(list);
+        const [res, rawTypes] = await Promise.all([
+          apiService.getAllHoardings(),
+          apiService.getAllHoardingTypes(),
+        ]);
+        const extractArray = (r) => {
+          if (Array.isArray(r)) return r;
+          if (Array.isArray(r?.$values)) return r.$values;
+          if (Array.isArray(r?.data)) return r?.data;
+          return [];
+        };
+        setAllHoardingsRaw(extractArray(res));
+        setHoardingTypes(extractArray(rawTypes));
       } catch { /* silent */ }
     })();
   }, []);
@@ -3193,8 +3221,9 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
       material: h?.material || '',
       contractStatus: h?.status || 'Available Now',
       monthlyRent: h?.monthlyRent || 0,
+      hoardingTypeName: hoardingTypeMap[h?.hoardingType] || 'Hoarding',
     };
-  }), [maps, allHoardingsRaw, siteMap]);
+  }), [maps, allHoardingsRaw, siteMap, hoardingTypeMap]);
 
   const togglePhoto = (hid) =>
     setPhotoSelections(p => ({ ...p, [hid]: !p[hid] }));

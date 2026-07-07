@@ -1142,8 +1142,8 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     try {
       const checkID = effdtForm.hoardingID || (sortedVersions.length > 0 ? sortedVersions[0].hoardingID : null);
       if (checkID) {
-        const originalStatus = isPanelNew 
-          ? (sortedVersions.length > 0 ? sortedVersions[0].status : null) 
+        const originalStatus = isPanelNew
+          ? (sortedVersions.length > 0 ? sortedVersions[0].status : null)
           : activeVersion?.status;
         const currentStatus = effdtForm.status;
 
@@ -1631,9 +1631,17 @@ export default function HoardingPage() {
         apiService.getAllSites(),
         apiService.getAllHoardingTypes(),
       ]);
-      setHoardings(groupHoardingsByCode(Array.isArray(rawHoardings) ? rawHoardings : []));
-      setSites(Array.isArray(rawSites) ? rawSites : []);
-      setHoardingTypes(Array.isArray(rawTypes) ? rawTypes : []);
+
+      const extractArray = (res) => {
+        if (Array.isArray(res)) return res;
+        if (Array.isArray(res?.$values)) return res.$values;
+        if (Array.isArray(res?.data)) return res.data;
+        return [];
+      };
+
+      setHoardings(groupHoardingsByCode(extractArray(rawHoardings)));
+      setSites(extractArray(rawSites));
+      setHoardingTypes(extractArray(rawTypes));
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load hoardings.');
     } finally { setLoading(false); }
@@ -1888,7 +1896,7 @@ function HoardingConflictModal({ conflict, onClose }) {
   return ReactDOM.createPortal(
     <div className="pg-overlay" style={{ zIndex: 1070 }} onClick={onClose}>
       <div className="pg-modal" style={{ maxWidth: 620, width: '90%' }} onClick={e => e.stopPropagation()}>
-        
+
         {/* Head */}
         <div className="pg-modal__head" style={{ borderBottom: '1.5px solid #fee2e2', background: '#fef2f2' }}>
           <div className="pg-modal__head-left">

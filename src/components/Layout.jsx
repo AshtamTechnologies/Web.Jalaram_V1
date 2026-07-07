@@ -29,8 +29,8 @@ const MENU = [
     badge: null,
     children: [
       { id: 'customer-details', icon: UserCircle, label: 'Customer Details' },
-      { id: 'customer-contract', icon: FileText, label: 'Customer Contract' },
       { id: 'quotation', icon: BarChart3, label: 'Quotation' },
+      { id: 'customer-contract', icon: FileText, label: 'Customer Contract' },
       { id: 'DissloveContract', icon: FileX, label: 'Dissolve Contract' },
 
     ],
@@ -72,6 +72,7 @@ const MENU = [
       { id: 'terms', icon: FileText, label: 'Terms' },
       { id: 'FinancialYear', icon: FileText, label: 'Financial Year' },
       { id: 'SeriesSetup', icon: Hash, label: 'Series Setup' },
+
 
     ],
   },

@@ -5,7 +5,7 @@ import {
   Building2, MapPin, Search, Users, RefreshCw,
   X, AlertCircle, Check, Edit2, Eye, ChevronDown, ChevronUp,
   ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
-  Filter, Mail, Loader2, CheckCircle2,
+  Filter, Mail, Loader2, CheckCircle2, Key,
 } from 'lucide-react';
 import './Common1.css';
 import { apiService } from '../api/api';
@@ -786,8 +786,153 @@ function UserModal({ onClose, onSaved, editData }) {
   );
 }
 
+/* ─── Reset Password Modal ─── */
+function ResetPasswordModal({ user, onClose }) {
+  const [email] = useState(user?.email || '');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [apiError, setApiError] = useState('');
+
+  const validate = () => {
+    const errs = {};
+    if (!newPassword) {
+      errs.newPassword = 'New password is required';
+    } else if (newPassword.length < 6) {
+      errs.newPassword = 'Password must be at least 6 characters long';
+    }
+    if (!confirmPassword) {
+      errs.confirmPassword = 'Confirm password is required';
+    } else if (newPassword !== confirmPassword) {
+      errs.confirmPassword = 'Passwords do not match';
+    }
+    return errs;
+  };
+
+  const handleSubmit = async () => {
+    setErrors({});
+    setApiError('');
+    const errs = validate();
+    if (Object.keys(errs).length) {
+      setErrors(errs);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await apiService.resetPassword({ email, newPassword });
+      setSuccess(true);
+      await new Promise(r => setTimeout(r, 600));
+      onClose();
+    } catch (err) {
+      setApiError(err?.response?.data?.message || err?.message || 'Failed to reset password. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return ReactDOM.createPortal(
+    <div className="pg-overlay">
+      <div className="pg-modal" style={{ maxWidth: 450 }}>
+        <div className="pg-modal__head">
+          <div className="pg-modal__head-left">
+            <div className="pg-modal__icon-wrap" style={{ background: 'rgba(245,158,11,0.08)' }}>
+              <Key size={20} color="#d97706" />
+            </div>
+            <div>
+              <h5 className="pg-modal__title">Change Password</h5>
+              <p className="pg-modal__subtitle">Reset password for {fullName(user)}</p>
+            </div>
+          </div>
+          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+        </div>
+
+        <div className="pg-modal__body" style={{ padding: '20px 24px' }}>
+          {success && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, marginBottom: 16, fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#16a34a' }}>
+              <CheckCircle2 size={16} />
+              Password updated successfully!
+            </div>
+          )}
+          {apiError && (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, marginBottom: 16, fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#dc2626' }}>
+              <AlertCircle size={16} style={{ flexShrink: 0, marginTop: 1 }} /> {apiError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label className="pg-field-label">Email Address 🔒</label>
+              <div className="pg-field-wrap pg-field-wrap--readonly">
+                <input
+                  type="email"
+                  value={email}
+                  readOnly
+                  className="pg-field-input pg-field-input--readonly"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="pg-field-label">New Password *</label>
+              <div className={`pg-field-wrap ${errors.newPassword ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}>
+                <input
+                  type="password"
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  className="pg-field-input"
+                  onChange={e => setNewPassword(e.target.value)}
+                />
+              </div>
+              {errors.newPassword && (
+                <div className="pg-field-error">
+                  <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span>{errors.newPassword}</span>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <label className="pg-field-label">Confirm Password *</label>
+              <div className={`pg-field-wrap ${errors.confirmPassword ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}>
+                <input
+                  type="password"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  className="pg-field-input"
+                  onChange={e => setConfirmPassword(e.target.value)}
+                />
+              </div>
+              {errors.confirmPassword && (
+                <div className="pg-field-error">
+                  <AlertCircle size={11} style={{ flexShrink: 0, marginTop: 1 }} />
+                  <span>{errors.confirmPassword}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="pg-modal__foot">
+          <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting} style={{ background: 'linear-gradient(135deg,#f59e0b,#d97706)', boxShadow: '0 4px 14px rgba(245,158,11,0.3)' }}>
+            {success
+              ? <><Check size={14} /> Saved!</>
+              : submitting
+                ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
+                : <><Key size={14} /> Reset Password</>}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 /* ─── Mobile User Card ─── */
-function UserCard({ u, onView, onEdit }) {
+function UserCard({ u, onView, onEdit, onChangePassword }) {
   const rc = ROLE_COLORS[u.role];
   return (
     <div className="pg-card">
@@ -803,6 +948,7 @@ function UserCard({ u, onView, onEdit }) {
         <div className="pg-card__actions">
           <button className="pg-card__btn-edit" onClick={() => onEdit(u)} title="Edit"><Edit2 size={13} /></button>
           <button className="pg-card__btn-view" onClick={() => onView(u)} title="View"><Eye size={13} /></button>
+          <button className="pg-card__btn-view" onClick={() => onChangePassword(u)} title="Change Password" style={{ background: 'rgba(245,158,11,0.08)', color: '#d97706', border: '1px solid rgba(245,158,11,0.2)' }}><Key size={13} /></button>
         </div>
       </div>
       <div className="pg-card__body">
@@ -845,6 +991,7 @@ export default function RegistrationPage() {
   const [showModal, setShowModal] = useState(false);
   const [editUser, setEditUser] = useState(null);   // null = Add, object = Edit
   const [viewUser, setViewUser] = useState(null);
+  const [resetPasswordUser, setResetPasswordUser] = useState(null);
 
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('firstName');
@@ -1082,6 +1229,9 @@ export default function RegistrationPage() {
                         <button className="pg-btn-view" onClick={() => setViewUser(u)} title="View">
                           <Eye size={13} />
                         </button>
+                        <button className="pg-btn-view" onClick={() => setResetPasswordUser(u)} title="Change Password" style={{ background: 'rgba(245,158,11,0.08)', color: '#d97706', boxShadow: 'none' }}>
+                          <Key size={13} />
+                        </button>
                       </div>
                     </td>
 
@@ -1099,7 +1249,7 @@ export default function RegistrationPage() {
                 <span className="pg-empty__label">No users found</span>
               </div>
             ) : paginated.map((u, idx) => (
-              <UserCard key={u._id ?? idx} u={u} onView={setViewUser} onEdit={handleEdit} />
+              <UserCard key={u._id ?? idx} u={u} onView={setViewUser} onEdit={handleEdit} onChangePassword={setResetPasswordUser} />
             ))}
           </div>
 
@@ -1155,6 +1305,14 @@ export default function RegistrationPage() {
           user={viewUser}
           onClose={() => setViewUser(null)}
           onEdit={u => { setViewUser(null); handleEdit(u); }}
+        />
+      )}
+
+      {/* Change Password modal */}
+      {resetPasswordUser && (
+        <ResetPasswordModal
+          user={resetPasswordUser}
+          onClose={() => setResetPasswordUser(null)}
         />
       )}
 

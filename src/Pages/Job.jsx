@@ -71,7 +71,13 @@ const STEPS = [
 ═══════════════════════════════════════════ */
 const uid = () => Math.random().toString(36).substr(2, 9);
 const todayISO = () => new Date().toISOString().split('T')[0];
-const nowISO = () => new Date().toISOString();
+const nowISO = () => {
+  const date = new Date();
+  const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
+  const istDate = new Date(utc + (3600000 * 5.5));
+  const pad = (num) => String(num).padStart(2, '0');
+  return `${istDate.getFullYear()}-${pad(istDate.getMonth() + 1)}-${pad(istDate.getDate())}T${pad(istDate.getHours())}:${pad(istDate.getMinutes())}:${pad(istDate.getSeconds())}.${String(istDate.getMilliseconds()).padStart(3, '0')}`;
+};
 const fmtDate = (d) => {
   if (!d) return '—';
   return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -85,6 +91,18 @@ const parseUtcDate = (d) => {
     }
   }
   return new Date(d);
+};
+const getTaskSubmitTimeFromAttachments = (taskID, allAttachments) => {
+  const taskIDNum = Number(taskID);
+  if (!taskIDNum || !allAttachments) return null;
+  const mine = allAttachments.filter(a => Number(a.jobTaskID ?? a.JobTaskID ?? 0) === taskIDNum);
+  if (mine.length === 0) return null;
+  const sorted = [...mine].sort((a, b) => {
+    const da = new Date(a.lastUpdateDttm ?? a.LastUpdateDttm ?? 0).getTime();
+    const db = new Date(b.lastUpdateDttm ?? b.LastUpdateDttm ?? 0).getTime();
+    return db - da;
+  });
+  return sorted[0]?.lastUpdateDttm ?? sorted[0]?.LastUpdateDttm ?? null;
 };
 const fmtDateTime = (d) => {
   if (!d) return '—';
@@ -776,7 +794,7 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
       setGeoStatus('ready');
       setGeoData(geo);
       const userId = parseInt(localStorage.getItem('userId') || '0', 10);
-      const nowISO = new Date().toISOString();
+      const nowISOStr = nowISO();
 
       const uploadWithGeo = async (file, photoFileType) => {
         const fd = new FormData();
@@ -788,7 +806,7 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
         fd.append('Files', file);
         fd.append('PhotoFilePath', '');
         fd.append('PhotoFilename', file.name);
-        fd.append('LastUpdateDttm', nowISO);
+        fd.append('LastUpdateDttm', nowISOStr);
         fd.append('LastUpdatedBy', String(userId));
         await apiService.uploadJobTaskAttachment(fd);
 
@@ -799,14 +817,14 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
         geoFd.append('Longitude', String(geo.longitude));
         geoFd.append('Accuracy', String(geo.accuracy));
         geoFd.append('Address', geo.address);
-        geoFd.append('CapturedAt', nowISO);
+        geoFd.append('CapturedAt', nowISOStr);
         await apiService.uploadGeoLocation(geoFd).catch(e => console.error("Geo upload failed:", e));
       };
 
       for (const file of closeImg) await uploadWithGeo(file, 'Near Photo');
       for (const file of farImg) await uploadWithGeo(file, 'Far Photo');
 
-      const todayISO = nowISO.split('T')[0];
+      const todayISO = nowISOStr.split('T')[0];
       const taskIDs = task.tasks ? task.tasks.map(t => Number(t.jobTaskID)) : [Number(task.jobTaskID)];
 
       for (const tid of taskIDs) {
@@ -817,8 +835,8 @@ function SubmitTaskPhotoModal({ task, jobRequestID, onClose, onSubmitted, showTo
           hoardingID: individualTask?.hoardingID || task.hoardingID,
           status: 'Submitted',
           actualCompletionDate: todayISO,
-          submitDTTM: nowISO,
-          lastUpdateDttm: nowISO,
+          submitDTTM: nowISOStr,
+          lastUpdateDttm: nowISOStr,
           lastUpdatedBy: userId,
         });
       }
@@ -994,7 +1012,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
 
       if (task.status === 'Submitted') {
         const userId = parseInt(localStorage.getItem('userId') || '0', 10);
-        const nowISO = new Date().toISOString();
+        const nowISOStr = nowISO();
         const tIDs = task.tasks ? task.tasks.map(t => Number(t.jobTaskID)) : [Number(task.jobTaskID)];
 
         for (const tid of tIDs) {
@@ -1006,7 +1024,7 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
             status: 'Open',
             actualCompletionDate: individualTask?.actualCompletionDate || '',
             submitDTTM: null,
-            lastUpdateDttm: nowISO,
+            lastUpdateDttm: nowISOStr,
             lastUpdatedBy: userId,
           });
         }
@@ -3206,7 +3224,15 @@ export default function JobPage() {
                                 <td className="pg-td">
                                   {allSubmitted ? (
                                     <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>
-                                      {row.submitDttm ? fmtDateTime(row.submitDttm) : fmtDateTime(nowISO())}
+                                      {(() => {
+                                        let submitTime = null;
+                                        for (const t of row.tasks) {
+                                          submitTime = getTaskSubmitTimeFromAttachments(t.jobTaskID, allAttachments);
+                                          if (submitTime) break;
+                                        }
+                                        const finalTime = submitTime || row.submitDttm;
+                                        return finalTime ? fmtDateTime(finalTime) : fmtDateTime(nowISO());
+                                      })()}
                                       <span style={{ fontSize: 10, color: '#d0d0e0', marginLeft: 4 }}>🔒</span>
                                     </div>
                                   ) : (
@@ -3344,7 +3370,11 @@ export default function JobPage() {
                               <td className="pg-td">
                                 {row.status === 'Submitted' ? (
                                   <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#16a34a', fontWeight: 700 }}>
-                                    {row.submitDttm ? fmtDateTime(row.submitDttm) : fmtDateTime(nowISO())}
+                                    {(() => {
+                                      const submitTime = getTaskSubmitTimeFromAttachments(row.jobTaskID, allAttachments);
+                                      const finalTime = submitTime || row.submitDttm;
+                                      return finalTime ? fmtDateTime(finalTime) : fmtDateTime(nowISO());
+                                    })()}
                                     <span style={{ fontSize: 10, color: '#d0d0e0', marginLeft: 4 }}>🔒</span>
                                   </div>
                                 ) : (

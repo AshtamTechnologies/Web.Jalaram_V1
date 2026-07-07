@@ -52,6 +52,41 @@ function fmtDate(d) {
   try { return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }); }
   catch { return d; }
 }
+function getTaskSubmitTimeFromAttachments(taskID, allAttachments) {
+  const taskIDNum = Number(taskID);
+  if (!taskIDNum || !allAttachments) return null;
+  const mine = allAttachments.filter(a => {
+    const id = Number(
+      a.jobTaskID ?? a.JobTaskID ??
+      a.jobtaskid ?? a.job_task_id ?? 0
+    );
+    return id === taskIDNum;
+  });
+  if (mine.length === 0) return null;
+  const sorted = [...mine].sort((a, b) => {
+    const da = new Date(a.lastUpdateDttm ?? a.LastUpdateDttm ?? 0).getTime();
+    const db = new Date(b.lastUpdateDttm ?? b.LastUpdateDttm ?? 0).getTime();
+    return db - da;
+  });
+  return sorted[0]?.lastUpdateDttm ?? sorted[0]?.LastUpdateDttm ?? null;
+}
+const parseUtcDate = (d) => {
+  if (!d) return null;
+  if (typeof d === 'string' && d.includes('T')) {
+    const hasOffset = /([+-]\d{2}:\d{2}|Z)$/.test(d);
+    if (!hasOffset) {
+      return new Date(d + 'Z');
+    }
+  }
+  return new Date(d);
+};
+const fmtDateTime = (d) => {
+  if (!d) return '—';
+  try {
+    const parsed = parseUtcDate(d);
+    return parsed.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch { return d; }
+};
 function normalizeJob(raw) {
   return {
     jobRequestID: raw.jobRequestID || raw.JobRequestID || 0,
@@ -77,6 +112,7 @@ function normalizeTask(raw) {
     hoardingID: raw.hoardingID || raw.HoardingID || 0,
     status: raw.status || raw.Status || 'Open',
     actualCompletionDate: (raw.actualCompletionDate || raw.ActualCompletionDate || '').split('T')[0],
+    submitDTTM: raw.submitDttm || raw.submitDTTM || raw.SubmitDTTM || '',
   };
 }
 function normalizeAssignment(raw) {
@@ -432,7 +468,7 @@ function GeoAddressRow({ taskId }) {
       .then(res => {
         const rows = Array.isArray(res) ? res
           : Array.isArray(res?.data) ? res.data
-          : Array.isArray(res?.$values) ? res.$values : [];
+            : Array.isArray(res?.$values) ? res.$values : [];
         setAddress(rows[0]?.address ?? rows[0]?.Address ?? '');
       })
       .catch(() => setAddress(''))
@@ -480,7 +516,8 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
   const [selectedIds, setSelectedIds] = useState([]);
   const [primaryId, setPrimaryId] = useState(null);
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
-  const isTaskCompleted = groupTasks.some(t => t.status === 'Completed');
+  const isJobCompleted = (jobStatus || '').toLowerCase() === 'completed';
+  const isTaskCompleted = groupTasks.some(t => t.status === 'Completed') || isJobCompleted;
   const isTaskSubmitted = groupTasks.some(t => t.status === 'Submitted');
   const isLocked = isTaskCompleted || isTaskSubmitted;
 
@@ -1210,12 +1247,26 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                                 </div>
                               ))}
                               {/* Task IDs row */}
-                              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                                {groupTasks.map(t => (
-                                  <span key={t.jobTaskID} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.07)', color: '#049edf', border: '1px solid rgba(4,158,223,0.18)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                    Task #{t.jobTaskID} <TaskStatusBadge status={t.status} />
-                                  </span>
-                                ))}
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                                {groupTasks.map(t => {
+                                  const displayStatus = job.jobStatus?.toLowerCase() === 'completed' ? 'Completed' : t.status;
+                                  const showSubBadge = (displayStatus?.toLowerCase() === 'submitted' || displayStatus?.toLowerCase() === 'completed');
+                                  const submitTime = getTaskSubmitTimeFromAttachments(t.jobTaskID, allAttachments);
+                                  const finalTime = submitTime || t.submitDTTM;
+                                  return (
+                                    <div key={t.jobTaskID} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                      <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.07)', color: '#049edf', border: '1px solid rgba(4,158,223,0.18)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                        Task #{t.jobTaskID} <TaskStatusBadge status={displayStatus} />
+                                      </span>
+                                      {showSubBadge && (
+                                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 600, color: '#52525b', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                          <Clock size={11} color="#71717a" />
+                                          <span>Submitted: {finalTime ? fmtDateTime(finalTime) : fmtDateTime(new Date().toISOString())}</span>
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
@@ -1237,7 +1288,7 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                       {/* ── Single (unmerged) task cards ── */}
                       {singleTasks.map(task => (
                         <div key={task.jobTaskID} style={{ marginBottom: 16, border: '1.5px solid rgba(4,158,223,0.22)', borderRadius: 14, overflow: 'hidden' }}>
-                          
+
                           {/* Task/Hoarding Header */}
                           <div style={{ padding: '12px 18px', background: 'linear-gradient(135deg, rgba(4,158,223,0.06), rgba(4,158,223,0.02))', borderBottom: '1px solid rgba(4,158,223,0.12)', display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
@@ -1250,9 +1301,27 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                                     · {task.material} {task.width && task.height ? `(${task.width}×${task.height} ft)` : ''}
                                   </span>
                                 )}
-                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.07)', color: '#049edf', border: '1px solid rgba(4,158,223,0.18)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                  Task #{task.jobTaskID} <TaskStatusBadge status={task.status} />
-                                </span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  {(() => {
+                                    const displayStatus = job.jobStatus?.toLowerCase() === 'completed' ? 'Completed' : task.status;
+                                    const showSubBadge = (displayStatus?.toLowerCase() === 'submitted' || displayStatus?.toLowerCase() === 'completed');
+                                    const submitTime = getTaskSubmitTimeFromAttachments(task.jobTaskID, allAttachments);
+                                    const finalTime = submitTime || task.submitDTTM;
+                                    return (
+                                      <>
+                                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.07)', color: '#049edf', border: '1px solid rgba(4,158,223,0.18)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                          Task #{task.jobTaskID} <TaskStatusBadge status={displayStatus} />
+                                        </span>
+                                        {showSubBadge && (
+                                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 600, color: '#52525b', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                            <Clock size={11} color="#71717a" />
+                                            <span>Submitted: {finalTime ? fmtDateTime(finalTime) : fmtDateTime(new Date().toISOString())}</span>
+                                          </span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
                               </div>
                               {task.siteAddress && (
                                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'flex-start', gap: 4 }}>
