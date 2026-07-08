@@ -126,6 +126,13 @@ export const apiService = {
   resetPassword: (data) =>
     api.post('/Login/reset-password', { email: data.email, newPassword: data.newPassword }),
 
+  changePassword: (data) =>
+    api.post('/Login/change-password', {
+      email: data.email,
+      oldPassword: data.oldPassword,
+      newPassword: data.newPassword,
+    }),
+
   logoutUser: () => {
     const attachNames = localStorage.getItem('lc_attach_names');
     localStorage.clear();
@@ -680,9 +687,12 @@ export const apiService = {
   _exportReport: async (reportType, format, defaultExt) => {
     const token = localStorage.getItem('authToken');
     const today = new Date().toISOString().slice(0, 10);
+    const acceptHeader = format === 'pdf'
+      ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel';
     const response = await fetch(
-      `${API_ROOT_URL}/api/Report/ExportReport?reportType=${reportType}`,
-      { method: 'GET', headers: { 'Accept': '*/*', ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
+      `${API_ROOT_URL}/api/Report/ExportReport?reportType=${reportType}&format=${format}`,
+      { method: 'GET', headers: { 'Accept': acceptHeader, ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
     );
     if (!response.ok) {
       let errMsg = `Server error: ${response.status}`;
@@ -722,7 +732,42 @@ export const apiService = {
     window.URL.revokeObjectURL(url);
   },
   exportReportExcel: function (reportType) { return this._exportReport(reportType, 'excel', 'xlsx'); },
-  exportReportPDF: function (reportType) { return this._exportReport(reportType, 'pdf', 'pdf'); },
+  exportReportPDF: async function () {
+    const token = localStorage.getItem('authToken');
+    const today = new Date().toISOString().slice(0, 10);
+    const response = await fetch(
+      `${API_ROOT_URL}/api/Report/ExportPDF`,
+      { method: 'GET', headers: { 'Accept': 'application/pdf', ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
+    );
+    if (!response.ok) {
+      let errMsg = `Server error: ${response.status}`;
+      try {
+        const text = await response.text();
+        try {
+          const errorData = JSON.parse(text);
+          errMsg = errorData.message || errorData.error || errMsg;
+        } catch {
+          if (text && text.trim().length < 200) errMsg = text.trim();
+        }
+      } catch { /* ignore */ }
+      throw new Error(errMsg);
+    }
+    const blob = await response.blob();
+    if (blob.size === 0) throw new Error('Server returned an empty file.');
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const nameMatch = disposition.match(/filename\*?=(?:UTF-8''|")?([^";\n]+)/i);
+    const filename = nameMatch
+      ? decodeURIComponent(nameMatch[1].replace(/['"]/g, '').trim())
+      : `AvailableHoardings_${today}.pdf`;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
 
   // CUSTOMER TERMS
   getAllCustomerTerms: () => api.get('/CustomerTerms'),

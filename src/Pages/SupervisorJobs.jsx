@@ -196,6 +196,88 @@ function Toast({ msg, type, onDone }) {
   );
 }
 
+/* ─────────────────────────────────────────
+   JOB CARD (For mobile view)
+───────────────────────────────────────── */
+function JobCard({ job, onAccept, accepting, onOpenDetail }) {
+  const done = job.tasks.filter(t => t.status === 'Completed' || t.status === 'Submitted').length;
+  const canAccept = job.jobStatus !== 'Accepted' && job.jobStatus !== 'Completed';
+
+  return (
+    <div className="pg-card">
+      <div className="pg-card__header">
+        <div className="pg-card__title-wrap">
+          <div className="pg-card__title" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>#{job.jobRequestID} · {job.customerName}</div>
+          {job.jobType && (
+            <div style={{ marginTop: 4 }}>
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2.5px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', color: '#049edf', border: '1px solid rgba(4,158,223,0.2)' }}>
+                {job.jobType}
+              </span>
+            </div>
+          )}
+        </div>
+        <div className="pg-card__actions">
+          {canAccept && (
+            <button className="pg-card__btn-edit" onClick={() => onAccept(job)} disabled={accepting} title="Accept"
+              style={{ background: 'rgba(108,63,199,0.08)', color: '#7c3aed', border: '1px solid rgba(108,63,199,0.2)', boxShadow: 'none' }}>
+              {accepting ? <Loader2 size={12} className="pg-spin" /> : <ThumbsUp size={13} />}
+            </button>
+          )}
+          <button className="pg-card__btn-view" onClick={() => onOpenDetail(job)} title="View & Assign">
+            <LayoutGrid size={13} />
+          </button>
+        </div>
+      </div>
+
+      <div className="pg-card__body">
+        {job.jobDescription && (
+          <div className="pg-card__row">
+            <Briefcase size={12} className="pg-card__row-icon" />
+            <span className="pg-card__row-text">{job.jobDescription}</span>
+          </div>
+        )}
+
+        <div className="pg-card__row">
+          <Calendar size={12} className="pg-card__row-icon" />
+          <span className="pg-card__row-text">Target Date: {fmtDate(job.targetCompletionDate)}</span>
+        </div>
+
+        <div className="pg-card__grid2">
+          <div className="pg-card__grid-cell">
+            <Layers size={11} className="pg-card__grid-cell--muted" style={{ flexShrink: 0 }} />
+            <span className="pg-card__grid-text"><strong>{job.noofHoardings || '0'}</strong> Hoardings</span>
+          </div>
+
+          <div className="pg-card__grid-cell">
+            <ClipboardList size={11} className="pg-card__grid-cell--muted" style={{ flexShrink: 0 }} />
+            <span className="pg-card__grid-text">
+              {job.tasks.length > 0 ? (
+                <>
+                  <strong>{done}</strong>/{job.tasks.length} Tasks
+                </>
+              ) : (
+                'No Tasks'
+              )}
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 4, paddingTop: 8, borderTop: '1px solid #eeeefc' }}>
+          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#1a1a2e', fontWeight: 800 }}>
+            {(job.rateperSQFT && job.totalAreaSQFT) ? (
+              <>
+                ₹{((Number(job.rateperSQFT) * Number(job.totalAreaSQFT))).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </>
+            ) : '—'}
+          </span>
+          <JobStatusBadge status={getDerivedJobStatus(job)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 /* ═══════════════════════════════════════════
    BANNER STRIP
 ═══════════════════════════════════════════ */
@@ -1801,7 +1883,7 @@ export default function SupervisorJobsPage() {
           </div>
 
           {/* ── Table ── */}
-          <div style={{ overflowX: 'auto', border: '1px solid #f0f0f8', borderRadius: 12, marginBottom: 12 }}>
+          <div className="pg-desktop-table" style={{ overflowX: 'auto', border: '1px solid #f0f0f8', borderRadius: 12, marginBottom: 12 }}>
             <table className="pg-table" ref={tableRef}>
               <thead>
                 <tr>
@@ -1895,6 +1977,26 @@ export default function SupervisorJobsPage() {
                 }
               </tbody>
             </table>
+          </div>
+
+          {/* ── Mobile Cards ── */}
+          <div className="pg-mobile-cards">
+            {paginated.length === 0 ? (
+              <div className="pg-empty__inner" style={{ padding: '40px 20px' }}>
+                <Briefcase size={36} color="#d0d0e8" />
+                <span className="pg-empty__label">No jobs found</span>
+              </div>
+            ) : (
+              paginated.map(job => (
+                <JobCard
+                  key={job.jobRequestID}
+                  job={job}
+                  onAccept={setAcceptConfirmTarget}
+                  accepting={acceptingId === job.jobRequestID && accepting}
+                  onOpenDetail={openDetail}
+                />
+              ))
+            )}
           </div>
 
           {/* ── Pagination ── */}

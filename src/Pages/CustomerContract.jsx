@@ -493,7 +493,7 @@ function buildContractPDFHTML({ company, customer, contract,
         ${item.material ? `&nbsp;&mdash;&nbsp;${item.material}` : ''}
       </div>
       <div class="hrd-row">
-        <div class="hrd-cell"><span class="hrd-lbl">Media Type:</span>&nbsp;${item.hoardingTypeName || 'Hoarding'}</div>
+        <div class="hrd-cell"><span class="hrd-lbl">Hoarding Type:</span>&nbsp;${item.hoardingTypeName || 'Hoarding'}</div>
         <div class="hrd-cell">
           <span class="hrd-lbl">Availability:</span>&nbsp;
           <span class="hrd-green">${item.contractStatus || 'Available Now'}</span>
@@ -4024,7 +4024,10 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
       }));
       setLocalAttachments(normalized);
       setAttachSaveOk(true);
-      setTimeout(() => setAttachSaveOk(false), 2500);
+      setTimeout(() => {
+        setAttachSaveOk(false);
+        onBack?.();
+      }, 900);
     } catch (err) {
       const msg = err?.response?.data?.message || err?.message || 'Failed to save attachments.';
       setApiErr(typeof msg === 'string' ? msg : JSON.stringify(msg));

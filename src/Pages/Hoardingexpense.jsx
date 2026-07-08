@@ -548,14 +548,14 @@ function AttachCell({ rowId, expenseID, selectedFile, existingAttach, isUploadin
             >
               <Eye size={10} /> View
             </button>
-            {/* <button
+            <button
               className="ea-saved-card__btn ea-saved-card__btn--download"
               onClick={handleDownload}
               disabled={!fileUrl}
               title={fileUrl ? 'Download file' : 'URL not available'}
             >
               <Download size={10} /> Download
-            </button> */}
+            </button>
             <button
               className="ea-saved-card__btn ea-saved-card__btn--replace"
               onClick={trigger}

@@ -258,14 +258,14 @@ function LPAttachCell({ rowId, selectedFile, existingAttach, isUploading, onFile
               disabled={!url} title={url ? 'Open in new tab' : 'URL not available'}>
               <Eye size={10} /> View
             </button>
-            {/* <button className="ea-saved-card__btn ea-saved-card__btn--download"
+            <button className="ea-saved-card__btn ea-saved-card__btn--download"
               onClick={() => {
                 if (!url) return;
                 forceDownload(url, name);
               }}
               disabled={!url}>
               <Download size={10} /> Download
-            </button> */}
+            </button>
             <button className="ea-saved-card__btn ea-saved-card__btn--replace" onClick={trigger}>
               <RefreshCw size={10} /> Replace
             </button>

@@ -19,7 +19,7 @@ export default function Login({ onLogin, onNavigate }) {
   const [forceChange, setForceChange] = useState(false);
   const [changeStep, setChangeStep] = useState(1);
   const [changeData, setChangeData] = useState({
-    email: '', userId: null, resetToken: '', newPassword: '', confirmPassword: '',
+    email: '', userId: null, resetToken: '', oldPassword: '', newPassword: '', confirmPassword: '',
   });
   const [showNewPw, setShowNewPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
@@ -101,13 +101,14 @@ export default function Login({ onLogin, onNavigate }) {
     setLoading(true);
     setErrors({});
     try {
-      await apiService.resetPassword({
+      await apiService.changePassword({
         email: changeData.email,
+        oldPassword: changeData.oldPassword,
         newPassword: changeData.newPassword,
       });
       setChangeStep(3);
     } catch (err) {
-      setErrors({ submit: err.response?.data?.message || 'Failed to reset password. Please try again.' });
+      setErrors({ submit: err.response?.data?.message || 'Failed to change password. Please try again.' });
     } finally {
       setLoading(false);
     }
@@ -136,6 +137,7 @@ export default function Login({ onLogin, onNavigate }) {
           email: formData.email,
           userId: response.userId,
           resetToken: '',
+          oldPassword: formData.password || '',
           newPassword: '',
           confirmPassword: '',
         });
@@ -344,7 +346,7 @@ export default function Login({ onLogin, onNavigate }) {
                   setForceChange(false);
                   setChangeStep(1);
                   setFormData({ email: changeData.email, password: '' });
-                  setChangeData({ email: '', userId: null, resetToken: '', newPassword: '', confirmPassword: '' });
+                  setChangeData({ email: '', userId: null, resetToken: '', oldPassword: '', newPassword: '', confirmPassword: '' });
                 }}
                 style={{ marginBottom: 0 }}
               >

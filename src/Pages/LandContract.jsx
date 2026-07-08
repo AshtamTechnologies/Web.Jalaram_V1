@@ -839,12 +839,12 @@ function ContractAttachmentsSection({
                           <ExternalLink size={11} /> View
                         </button>
                       )}
-                      {/* {att.fileUrl && !isNew && (
+                      {att.fileUrl && !isNew && (
                         <button onClick={() => forceDownload(att.fileUrl, name)} title="Download document"
                           style={{ background: 'rgba(22,163,74,0.08)', border: '1px solid rgba(22,163,74,0.2)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#16a34a', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'Nunito, sans-serif' }}>
                           <Download size={11} /> Download
                         </button>
-                      )} */}
+                      )}
                       <button onClick={() => { setReplacingId(att); replaceRef.current.click(); }} title="Replace with a new file"
                         style={{ background: 'rgba(109,99,255,0.08)', border: '1px solid rgba(109,99,255,0.2)', borderRadius: 6, padding: '4px 9px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, color: '#6c63ff', fontSize: 11, fontWeight: 700, flexShrink: 0, fontFamily: 'Nunito, sans-serif' }}>
                         <RefreshCw size={11} /> Replace
