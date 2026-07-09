@@ -2,6 +2,7 @@
   "name": "jalaram",
   "version": "0.1.0",
   "private": true,
+  "proxy": "https://api.jalaram-ad.ashtamtechnologies.com",
   "dependencies": {
     "axios": "^1.13.6",
     "bootstrap": "^5.3.8",

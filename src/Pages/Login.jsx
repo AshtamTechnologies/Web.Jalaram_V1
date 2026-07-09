@@ -3,26 +3,26 @@ import './Common.css';
 import { apiService } from '../api/api';
 
 export default function Login({ onLogin, onNavigate }) {
-  const [formData, setFormData]         = useState({ email: '', password: '' });
-  const [errors, setErrors]             = useState({});
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [errors, setErrors] = useState({});
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember]         = useState(true);
-  const [loading, setLoading]           = useState(false);
-  const [visible, setVisible]           = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
 
   // ── Forgot password ──────────────────────────────────────
   const [forgotLoading, setForgotLoading] = useState(false);
-  const [forgotError,   setForgotError]   = useState('');
+  const [forgotError, setForgotError] = useState('');
   const [forgotSuccess, setForgotSuccess] = useState('');
 
   // ── Forced password change ───────────────────────────────
-  const [forceChange,     setForceChange]     = useState(false);
-  const [changeStep,      setChangeStep]      = useState(1);
-  const [changeData,      setChangeData]      = useState({
-    email: '', userId: null, resetToken: '', newPassword: '', confirmPassword: '',
+  const [forceChange, setForceChange] = useState(false);
+  const [changeStep, setChangeStep] = useState(1);
+  const [changeData, setChangeData] = useState({
+    email: '', userId: null, resetToken: '', oldPassword: '', newPassword: '', confirmPassword: '',
   });
-  const [showNewPw,       setShowNewPw]       = useState(false);
-  const [showConfirmPw,   setShowConfirmPw]   = useState(false);
+  const [showNewPw, setShowNewPw] = useState(false);
+  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 60);
@@ -101,17 +101,14 @@ export default function Login({ onLogin, onNavigate }) {
     setLoading(true);
     setErrors({});
     try {
-      await apiService.resetPassword({
-        email:       changeData.email,
+      await apiService.changePassword({
+        email: changeData.email,
+        oldPassword: changeData.oldPassword,
         newPassword: changeData.newPassword,
       });
-      alert('Password changed successfully! Please log in with your new password.');
-      setForceChange(false);
-      setChangeStep(1);
-      setChangeData({ email: '', userId: null, resetToken: '', newPassword: '', confirmPassword: '' });
-      setFormData({ email: changeData.email, password: '' });
+      setChangeStep(3);
     } catch (err) {
-      setErrors({ submit: err.response?.data?.message || 'Failed to reset password. Please try again.' });
+      setErrors({ submit: err.response?.data?.message || 'Failed to change password. Please try again.' });
     } finally {
       setLoading(false);
     }
@@ -137,10 +134,11 @@ export default function Login({ onLogin, onNavigate }) {
       // forced password change — apiService returns early without storing tokens
       if (response.forcePasswordChange === true) {
         setChangeData({
-          email:           formData.email,
-          userId:          response.userId,
-          resetToken:      '',
-          newPassword:     '',
+          email: formData.email,
+          userId: response.userId,
+          resetToken: '',
+          oldPassword: formData.password || '',
+          newPassword: '',
           confirmPassword: '',
         });
         setChangeStep(2);
@@ -150,11 +148,22 @@ export default function Login({ onLogin, onNavigate }) {
       }
 
       // Role-based navigation — localStorage is already set by apiService
+      const roleStr = (response.role || response.user?.role || '').toLowerCase().trim();
       const roleId = response.roleId || response.user?.roleId;
-      if (roleId === 1 || roleId === '1') {
+
+
+
+      if (roleStr === 'admin' || roleId === 1 || roleId === '1') {
         onNavigate('admin');
-      } else {
-        onLogin && onLogin();
+      }
+      else if (roleStr === 'supervisor') {
+        onNavigate('supervisor');
+      }
+      else if (roleStr === 'worker') {
+        onNavigate('workertask');
+      }
+      else {
+        alert(`Unknown role: ${roleStr}`);
       }
     } catch (error) {
       // Surface the error message from the API (e.g. "Invalid credentials")
@@ -162,7 +171,7 @@ export default function Login({ onLogin, onNavigate }) {
       if (error.response) {
         const msg =
           error.response.data?.message ||
-          error.response.data?.error   ||
+          error.response.data?.error ||
           (error.response.status === 401 ? 'Invalid email or password.' : null) ||
           (error.response.status === 400 ? 'Invalid request. Check your details.' : null) ||
           'Login failed. Please try again.';
@@ -206,32 +215,38 @@ export default function Login({ onLogin, onNavigate }) {
           </div>
 
           {/* Lock icon badge */}
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
-            <div style={{
-              width: '52px', height: '52px', borderRadius: '16px',
-              background: 'linear-gradient(135deg,rgba(4,158,223,0.18),rgba(108,99,255,0.14))',
-              border: '1.5px solid rgba(4,158,223,0.25)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#lpGrad)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <defs>
-                  <linearGradient id="lpGrad" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#049edf" />
-                    <stop offset="100%" stopColor="#6c63ff" />
-                  </linearGradient>
-                </defs>
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
+          {changeStep !== 3 && (
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
+              <div style={{
+                width: '52px', height: '52px', borderRadius: '16px',
+                background: 'linear-gradient(135deg,rgba(4,158,223,0.18),rgba(108,99,255,0.14))',
+                border: '1.5px solid rgba(4,158,223,0.25)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#lpGrad)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <defs>
+                    <linearGradient id="lpGrad" x1="0" y1="0" x2="1" y2="1">
+                      <stop offset="0%" stopColor="#049edf" />
+                      <stop offset="100%" stopColor="#6c63ff" />
+                    </linearGradient>
+                  </defs>
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+              </div>
             </div>
-          </div>
+          )}
 
-          <h1 className="lp-title" style={{ fontSize: '20px', marginBottom: '4px' }}>
-            Change Your Password
-          </h1>
-          <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: '13px', color: '#9090a8', fontWeight: 600, textAlign: 'center', marginBottom: '22px', lineHeight: 1.5 }}>
-            For your security, set a new password<br />before continuing.
-          </p>
+          {changeStep !== 3 && (
+            <>
+              <h1 className="lp-title" style={{ fontSize: '20px', marginBottom: '4px' }}>
+                Change Your Password
+              </h1>
+              <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: '13px', color: '#9090a8', fontWeight: 600, textAlign: 'center', marginBottom: '22px', lineHeight: 1.5 }}>
+                For your security, set a new password<br />before continuing.
+              </p>
+            </>
+          )}
 
           {changeStep === 1 && (
             <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: '13px', color: '#9090a8', textAlign: 'center' }}>
@@ -300,15 +315,57 @@ export default function Login({ onLogin, onNavigate }) {
             </>
           )}
 
+          {changeStep === 3 && (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', animation: 'fadeIn 0.4s ease-out' }}>
+              <div style={{
+                width: '64px',
+                height: '64px',
+                borderRadius: '20px',
+                background: 'rgba(34,197,94,0.14)',
+                border: '1.5px solid rgba(34,197,94,0.3)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '20px',
+                boxShadow: '0 8px 24px rgba(34,197,94,0.15)',
+              }}>
+                <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <h2 className="lp-title" style={{ fontSize: '20px', marginBottom: '8px', color: '#16a34a' }}>
+                Password Updated!
+              </h2>
+              <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: '13.5px', color: '#707085', fontWeight: 600, marginBottom: '24px', lineHeight: 1.5 }}>
+                Your password was changed successfully.<br />Please log in using your new password.
+              </p>
+              <button
+                type="button"
+                className="lp-submit"
+                onClick={() => {
+                  setForceChange(false);
+                  setChangeStep(1);
+                  setFormData({ email: changeData.email, password: '' });
+                  setChangeData({ email: '', userId: null, resetToken: '', oldPassword: '', newPassword: '', confirmPassword: '' });
+                }}
+                style={{ marginBottom: 0 }}
+              >
+                Go to Login
+              </button>
+            </div>
+          )}
+
           {/* back link */}
-          <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: '12.5px', color: '#b0b0c8', textAlign: 'center', marginTop: '18px', fontWeight: 600 }}>
-            <button
-              type="button"
-              onClick={() => { setForceChange(false); setErrors({}); }}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontWeight: 700, fontSize: '12.5px' }}>
-              ← Back to Login
-            </button>
-          </p>
+          {changeStep !== 3 && (
+            <p style={{ fontFamily: 'Nunito,sans-serif', fontSize: '12.5px', color: '#b0b0c8', textAlign: 'center', marginTop: '18px', fontWeight: 600 }}>
+              <button
+                type="button"
+                onClick={() => { setForceChange(false); setErrors({}); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontWeight: 700, fontSize: '12.5px' }}>
+                ← Back to Login
+              </button>
+            </p>
+          )}
         </div>
 
         {/* tagline — desktop */}
@@ -483,8 +540,8 @@ function EyeOffIcon() {
 function PasswordStrengthBar({ password }) {
   if (!password) return null;
   const len = password.length;
-  const hasUpper  = /[A-Z]/.test(password);
-  const hasNum    = /[0-9]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasNum = /[0-9]/.test(password);
   const hasSymbol = /[^A-Za-z0-9]/.test(password);
   const score = (len >= 8 ? 1 : 0) + (hasUpper ? 1 : 0) + (hasNum ? 1 : 0) + (hasSymbol ? 1 : 0);
   const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];

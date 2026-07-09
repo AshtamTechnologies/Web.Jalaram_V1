@@ -172,10 +172,10 @@ function ViewModal({ term, onClose, onEdit }) {
 function TermModal({ initial, onSave, onClose, saving }) {
   const isEdit = !!initial?.termID;
 
-  const [form, setForm]         = useState({ order: initial?.order ?? '', description: initial?.description ?? '' });
-  const [errors, setErrors]     = useState({});
-  const [touched, setTouched]   = useState({});
-  const [success, setSuccess]   = useState(false);
+  const [form, setForm] = useState({ order: initial?.order ?? '', description: initial?.description ?? '' });
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
+  const [success, setSuccess] = useState(false);
   const [apiError, setApiError] = useState('');
 
   const validate = (f) => {
@@ -215,7 +215,8 @@ function TermModal({ initial, onSave, onClose, saving }) {
   };
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 540 }}>
 
         {/* Header */}
@@ -311,9 +312,9 @@ function TermModal({ initial, onSave, onClose, saving }) {
 
           </div>
 
-          <p className="pg-form__note">
+          {/* <p className="pg-form__note">
             <span className="pg-field-label__required">*</span> Required fields
-          </p>
+          </p> */}
         </div>
 
         {/* Footer */}
@@ -339,20 +340,20 @@ function TermModal({ initial, onSave, onClose, saving }) {
    MAIN PAGE
 ═══════════════════════════════════════════ */
 export default function TermsPage() {
-  const [terms,      setTerms]      = useState([]);
-  const [loading,    setLoading]    = useState(true);
+  const [terms, setTerms] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
-  const [search,     setSearch]     = useState('');
-  const [sortDir,    setSortDir]    = useState('asc');
-  const [page,       setPage]       = useState(1);
-  const [pageSize,   setPageSize]   = useState(10);
+  const [search, setSearch] = useState('');
+  const [sortDir, setSortDir] = useState('asc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
 
   const [showModal, setShowModal] = useState(false);
-  const [editTerm,  setEditTerm]  = useState(null);
-  const [viewTerm,  setViewTerm]  = useState(null);
+  const [editTerm, setEditTerm] = useState(null);
+  const [viewTerm, setViewTerm] = useState(null);
   const [delTarget, setDelTarget] = useState(null);
-  const [saving,    setSaving]    = useState(false);
-  const [deleting,  setDeleting]  = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   /* ── Fetch ── */
   const fetchData = useCallback(async () => {
@@ -415,8 +416,8 @@ export default function TermsPage() {
 
   /* ── Pagination ── */
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage   = Math.min(page, totalPages);
-  const paginated  = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
     .filter(p => p === 1 || p === totalPages || Math.abs(p - safePage) <= 1)
