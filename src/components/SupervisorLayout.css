@@ -1,0 +1,293 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap');
+
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-family: 'Nunito', sans-serif; }
+
+/* ── Animations ── */
+@keyframes spin     { to { transform: rotate(360deg); } }
+@keyframes fadeUp   { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes fadeDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(108,99,255,0.22); border-radius: 10px; }
+
+/* ═══════════════════════════════
+   ROOT SHELL
+═══════════════════════════════ */
+.sup-root {
+  min-height: 100vh;
+  background: #f0f0fa;
+  position: relative;
+}
+
+/* ── Background blobs ── */
+.sup-bg-blobs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+.sup-blob-1 {
+  position: absolute;
+  width: 480px; height: 480px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #c6e8f8, #86e0b8);
+  top: -240px; left: -200px;
+  opacity: 0.45;
+}
+.sup-blob-2 {
+  position: absolute;
+  width: 320px; height: 320px;
+  border-radius: 50%;
+  background: linear-gradient(160deg, #c6e8f8, #a0c8ea);
+  bottom: -160px; right: -120px;
+  opacity: 0.3;
+}
+.sup-blob-3 {
+  position: absolute;
+  width: 220px; height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #a0c8ea, #6c63ff);
+  bottom: 80px; left: 28%;
+  filter: blur(35px);
+  opacity: 0.25;
+}
+
+/* ── Mobile overlay ── */
+.sup-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26,46,36,0.42);
+  z-index: 30;
+  backdrop-filter: blur(3px);
+}
+
+/* ═══════════════════════════════
+   SIDEBAR
+═══════════════════════════════ */
+.sup-sidebar-desktop {
+  width: 255px;
+  height: 100vh;
+  position: fixed;
+  top: 0; left: 0;
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(24px) saturate(160%);
+  border-right: 1.5px solid rgba(255,255,255,0.8);
+  box-shadow: 4px 0 28px rgba(100,100,180,0.09);
+  z-index: 20;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sup-sidebar-mobile {
+  position: fixed;
+  top: 0; left: 0;
+  height: 100vh; width: 265px;
+  background: rgba(255,255,255,0.96);
+  backdrop-filter: blur(28px) saturate(180%);
+  border-right: 1.5px solid rgba(255,255,255,0.85);
+  box-shadow: 8px 0 40px rgba(4,158,223,0.18);
+  z-index: 40;
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform 0.3s cubic-bezier(0.22,1,0.36,1);
+}
+.sup-sidebar-mobile.open { transform: translateX(0); }
+
+.sup-sidebar-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ── Logo area ── */
+.sup-sidebar-logo-area {
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid rgba(16,185,129,0.1);
+  flex-shrink: 0;
+  background: linear-gradient(160deg, rgba(4,158,223,0.06), rgba(108,99,255,0.04));
+}
+.sup-sidebar-logo-img-wrap {
+  width: 100px; height: 70px;
+  border-radius: 20px;
+  background: transparent;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: none;
+  position: relative; overflow: hidden;
+  margin-left: 15px;
+}
+
+/* ── Role badge ── */
+.sup-role-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(4,158,223,0.10);
+  border: 1px solid rgba(108,99,255,0.22);
+  color: #0381bb;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 4px 12px; border-radius: 20px;
+  margin: 10px 0 2px 18px;
+  width: fit-content;
+}
+
+/* ── Section label ── */
+.sup-sidebar-section-label {
+  padding: 16px 20px 4px;
+  font-size: 10px; font-weight: 800;
+  color: #c0c0d8; letter-spacing: 1.4px;
+  text-transform: uppercase;
+}
+
+/* ── Nav ── */
+.sup-sidebar-nav {
+  padding: 8px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sup-nav-btn {
+  width: 100%;
+  display: flex; align-items: center; gap: 11px;
+  margin-bottom: 3px; padding: 10px 12px;
+  background: transparent; border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0 12px 12px 0;
+  cursor: pointer; color: #7878a0;
+  font-family: 'Nunito', sans-serif; font-weight: 600; font-size: 14px;
+  transition: all 0.18s; text-align: left;
+}
+.sup-nav-btn:hover { background: rgba(4,158,223,0.06); color: #049edf; }
+
+.sup-nav-btn-icon {
+  width: 34px; height: 34px; border-radius: 10px;
+  flex-shrink: 0; background: rgba(104,104,160,0.07);
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.18s;
+  color: #9090b8;
+}
+
+.sup-nav-btn-label {
+  flex: 1; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* ── Submenu ── */
+.sup-nav-submenu { will-change: max-height; }
+
+.sup-nav-sub-btn {
+  width: 100%;
+  display: flex; align-items: center; gap: 9px;
+  padding: 8px 12px 8px 18px;
+  background: transparent; border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0 12px 12px 0;
+  cursor: pointer; color: #9090a8;
+  font-family: 'Nunito', sans-serif; font-weight: 600; font-size: 13px;
+  transition: all 0.16s; text-align: left;
+  margin-bottom: 2px;
+}
+.sup-nav-sub-btn:hover { background: rgba(4,158,223,0.05); color: #049edf; }
+
+/* ── Mobile close ── */
+.sup-mobile-close-btn {
+  position: absolute; top: 14px; right: 12px;
+  background: rgba(240,240,250,0.9); border: none;
+  border-radius: 8px; padding: 6px; cursor: pointer;
+  color: #6868a0; display: flex; z-index: 1;
+}
+
+/* ═══════════════════════════════
+   MAIN AREA
+═══════════════════════════════ */
+.sup-main-area {
+  display: flex; flex-direction: column;
+  min-height: 100vh;
+  position: relative; z-index: 1;
+  margin-left: 255px;
+}
+.sup-main-area.mobile { margin-left: 0; }
+
+/* ── Top bar ── */
+.sup-topbar {
+  height: 62px;
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 0 16px; gap: 12px;
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-bottom: 1.5px solid rgba(255,255,255,0.78);
+  position: sticky; top: 0; z-index: 9;
+  box-shadow: 0 2px 18px rgba(100,100,180,0.07);
+}
+.sup-topbar-left  { display: flex; align-items: center; gap: 10px; }
+.sup-topbar-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.sup-hamburger-btn {
+  background: rgba(240,240,250,0.9);
+  border: 1.5px solid rgba(220,220,240,0.7);
+  cursor: pointer; color: #6868a0;
+  display: flex; padding: 7px; border-radius: 10px;
+  transition: all 0.18s; flex-shrink: 0;
+}
+.sup-hamburger-btn:hover { background: rgba(16,185,129,0.1); color: #049edf; }
+
+/* ── Profile button ── */
+.sup-profile-btn {
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(240,240,250,0.9);
+  border: 1.5px solid rgba(220,220,240,0.7);
+  border-radius: 11px; padding: 5px 10px 5px 5px;
+  cursor: pointer; transition: all 0.18s;
+}
+.sup-profile-btn:hover {
+  background: rgba(4,158,223,0.08);
+  border-color: rgba(4,158,223,0.25);
+}
+.sup-profile-avatar {
+  width: 30px; height: 30px; border-radius: 9px;
+  background: linear-gradient(135deg, #049edf, #0381bb);
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 900; font-size: 13px; flex-shrink: 0;
+}
+.sup-profile-name {
+  font-family: 'Nunito', sans-serif; font-weight: 700;
+  font-size: 13px; color: #1a1a2e; white-space: nowrap;
+}
+
+/* ── Profile dropdown ── */
+.sup-profile-dropdown {
+  position: absolute; top: calc(100% + 8px); right: 0;
+  min-width: 175px;
+  background: rgba(255,255,255,0.96); backdrop-filter: blur(20px);
+  border-radius: 14px; box-shadow: 0 8px 36px rgba(100,100,180,0.18);
+  border: 1.5px solid rgba(255,255,255,0.9);
+  overflow: hidden; z-index: 50;
+  animation: fadeDown 0.16s ease both;
+}
+.sup-dropdown-logout {
+  width: 100%; display: flex; align-items: center; gap: 9px;
+  padding: 10px 14px; background: none; border: none;
+  cursor: pointer; color: #e84040;
+  font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 13px;
+  transition: background 0.15s;
+}
+.sup-dropdown-logout:hover { background: rgba(232,64,64,0.07); }
+
+/* ── Page content ── */
+.sup-page-content {
+  flex: 1;
+  padding: clamp(14px, 3vw, 26px);
+}
+
+/* ── Responsive ── */
+@media (max-width: 1280px) and (min-width: 1024px) {
+  .sup-sidebar-desktop { width: 210px; }
+  .sup-main-area       { margin-left: 210px; }
+}
+@media (max-width: 480px) {
+  .sup-profile-name { display: none !important; }
+}

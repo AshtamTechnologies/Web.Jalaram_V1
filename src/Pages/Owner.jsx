@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef  } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import {
   UserCircle, Plus, Phone, Home, Globe,
@@ -22,216 +22,216 @@ const EMPTY_FORM = {
    INDIA STATES & DISTRICTS
 ───────────────────────────────────────── */
 const INDIA_STATES = [
-  'Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh',
-  'Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka',
-  'Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram',
-  'Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana',
-  'Tripura','Uttar Pradesh','Uttarakhand','West Bengal',
-  'Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu',
-  'Delhi','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry',
+  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
+  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
+  'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
+  'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana',
+  'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands', 'Chandigarh', 'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi', 'Jammu and Kashmir', 'Ladakh', 'Lakshadweep', 'Puducherry',
 ];
 
 const DISTRICTS_BY_STATE = {
   'Gujarat': [
-    'Ahmedabad','Amreli','Anand','Aravalli','Banaskantha','Bharuch',
-    'Bhavnagar','Botad','Chhota Udaipur','Dahod','Dang','Devbhoomi Dwarka',
-    'Gandhinagar','Gir Somnath','Jamnagar','Junagadh','Kheda','Kutch',
-    'Mahisagar','Mehsana','Morbi','Narmada','Navsari','Panchmahal','Patan',
-    'Porbandar','Rajkot','Sabarkantha','Surat','Surendranagar','Tapi',
-    'Vadodara','Valsad',
+    'Ahmedabad', 'Amreli', 'Anand', 'Aravalli', 'Banaskantha', 'Bharuch',
+    'Bhavnagar', 'Botad', 'Chhota Udaipur', 'Dahod', 'Dang', 'Devbhoomi Dwarka',
+    'Gandhinagar', 'Gir Somnath', 'Jamnagar', 'Junagadh', 'Kheda', 'Kutch',
+    'Mahisagar', 'Mehsana', 'Morbi', 'Narmada', 'Navsari', 'Panchmahal', 'Patan',
+    'Porbandar', 'Rajkot', 'Sabarkantha', 'Surat', 'Surendranagar', 'Tapi',
+    'Vadodara', 'Valsad',
   ],
   'Maharashtra': [
-    'Ahmednagar','Akola','Amravati','Aurangabad','Beed','Bhandara','Buldhana',
-    'Chandrapur','Dhule','Gadchiroli','Gondia','Hingoli','Jalgaon','Jalna',
-    'Kolhapur','Latur','Mumbai City','Mumbai Suburban','Nagpur','Nanded',
-    'Nandurbar','Nashik','Osmanabad','Palghar','Parbhani','Pune','Raigad',
-    'Ratnagiri','Sangli','Satara','Sindhudurg','Solapur','Thane','Wardha',
-    'Washim','Yavatmal',
+    'Ahmednagar', 'Akola', 'Amravati', 'Aurangabad', 'Beed', 'Bhandara', 'Buldhana',
+    'Chandrapur', 'Dhule', 'Gadchiroli', 'Gondia', 'Hingoli', 'Jalgaon', 'Jalna',
+    'Kolhapur', 'Latur', 'Mumbai City', 'Mumbai Suburban', 'Nagpur', 'Nanded',
+    'Nandurbar', 'Nashik', 'Osmanabad', 'Palghar', 'Parbhani', 'Pune', 'Raigad',
+    'Ratnagiri', 'Sangli', 'Satara', 'Sindhudurg', 'Solapur', 'Thane', 'Wardha',
+    'Washim', 'Yavatmal',
   ],
   'Rajasthan': [
-    'Ajmer','Alwar','Banswara','Baran','Barmer','Bharatpur','Bhilwara',
-    'Bikaner','Bundi','Chittorgarh','Churu','Dausa','Dholpur','Dungarpur',
-    'Ganganagar','Hanumangarh','Jaipur','Jaisalmer','Jalore','Jhalawar',
-    'Jhunjhunu','Jodhpur','Karauli','Kota','Nagaur','Pali','Pratapgarh',
-    'Rajsamand','Sawai Madhopur','Sikar','Sirohi','Tonk','Udaipur',
+    'Ajmer', 'Alwar', 'Banswara', 'Baran', 'Barmer', 'Bharatpur', 'Bhilwara',
+    'Bikaner', 'Bundi', 'Chittorgarh', 'Churu', 'Dausa', 'Dholpur', 'Dungarpur',
+    'Ganganagar', 'Hanumangarh', 'Jaipur', 'Jaisalmer', 'Jalore', 'Jhalawar',
+    'Jhunjhunu', 'Jodhpur', 'Karauli', 'Kota', 'Nagaur', 'Pali', 'Pratapgarh',
+    'Rajsamand', 'Sawai Madhopur', 'Sikar', 'Sirohi', 'Tonk', 'Udaipur',
   ],
   'Uttar Pradesh': [
-    'Agra','Aligarh','Ambedkar Nagar','Amethi','Amroha','Auraiya','Ayodhya',
-    'Azamgarh','Baghpat','Bahraich','Ballia','Balrampur','Banda','Barabanki',
-    'Bareilly','Basti','Bhadohi','Bijnor','Budaun','Bulandshahr','Chandauli',
-    'Chitrakoot','Deoria','Etah','Etawah','Farrukhabad','Fatehpur','Firozabad',
-    'Gautam Buddh Nagar','Ghaziabad','Ghazipur','Gonda','Gorakhpur','Hamirpur',
-    'Hapur','Hardoi','Hathras','Jalaun','Jaunpur','Jhansi','Kannauj',
-    'Kanpur Dehat','Kanpur Nagar','Kasganj','Kaushambi','Kushinagar',
-    'Lakhimpur Kheri','Lalitpur','Lucknow','Maharajganj','Mahoba','Mainpuri',
-    'Mathura','Mau','Meerut','Mirzapur','Moradabad','Muzaffarnagar','Pilibhit',
-    'Pratapgarh','Prayagraj','Raebareli','Rampur','Saharanpur','Sambhal',
-    'Sant Kabir Nagar','Shahjahanpur','Shamli','Shravasti','Siddharthnagar',
-    'Sitapur','Sonbhadra','Sultanpur','Unnao','Varanasi',
+    'Agra', 'Aligarh', 'Ambedkar Nagar', 'Amethi', 'Amroha', 'Auraiya', 'Ayodhya',
+    'Azamgarh', 'Baghpat', 'Bahraich', 'Ballia', 'Balrampur', 'Banda', 'Barabanki',
+    'Bareilly', 'Basti', 'Bhadohi', 'Bijnor', 'Budaun', 'Bulandshahr', 'Chandauli',
+    'Chitrakoot', 'Deoria', 'Etah', 'Etawah', 'Farrukhabad', 'Fatehpur', 'Firozabad',
+    'Gautam Buddh Nagar', 'Ghaziabad', 'Ghazipur', 'Gonda', 'Gorakhpur', 'Hamirpur',
+    'Hapur', 'Hardoi', 'Hathras', 'Jalaun', 'Jaunpur', 'Jhansi', 'Kannauj',
+    'Kanpur Dehat', 'Kanpur Nagar', 'Kasganj', 'Kaushambi', 'Kushinagar',
+    'Lakhimpur Kheri', 'Lalitpur', 'Lucknow', 'Maharajganj', 'Mahoba', 'Mainpuri',
+    'Mathura', 'Mau', 'Meerut', 'Mirzapur', 'Moradabad', 'Muzaffarnagar', 'Pilibhit',
+    'Pratapgarh', 'Prayagraj', 'Raebareli', 'Rampur', 'Saharanpur', 'Sambhal',
+    'Sant Kabir Nagar', 'Shahjahanpur', 'Shamli', 'Shravasti', 'Siddharthnagar',
+    'Sitapur', 'Sonbhadra', 'Sultanpur', 'Unnao', 'Varanasi',
   ],
   'Madhya Pradesh': [
-    'Agar Malwa','Alirajpur','Anuppur','Ashoknagar','Balaghat','Barwani',
-    'Betul','Bhind','Bhopal','Burhanpur','Chhatarpur','Chhindwara','Damoh',
-    'Datia','Dewas','Dhar','Dindori','Guna','Gwalior','Harda','Hoshangabad',
-    'Indore','Jabalpur','Jhabua','Katni','Khandwa','Khargone','Mandla',
-    'Mandsaur','Morena','Narsinghpur','Neemuch','Niwari','Panna','Raisen',
-    'Rajgarh','Ratlam','Rewa','Sagar','Satna','Sehore','Seoni','Shahdol',
-    'Shajapur','Sheopur','Shivpuri','Sidhi','Singrauli','Tikamgarh','Ujjain',
-    'Umaria','Vidisha',
+    'Agar Malwa', 'Alirajpur', 'Anuppur', 'Ashoknagar', 'Balaghat', 'Barwani',
+    'Betul', 'Bhind', 'Bhopal', 'Burhanpur', 'Chhatarpur', 'Chhindwara', 'Damoh',
+    'Datia', 'Dewas', 'Dhar', 'Dindori', 'Guna', 'Gwalior', 'Harda', 'Hoshangabad',
+    'Indore', 'Jabalpur', 'Jhabua', 'Katni', 'Khandwa', 'Khargone', 'Mandla',
+    'Mandsaur', 'Morena', 'Narsinghpur', 'Neemuch', 'Niwari', 'Panna', 'Raisen',
+    'Rajgarh', 'Ratlam', 'Rewa', 'Sagar', 'Satna', 'Sehore', 'Seoni', 'Shahdol',
+    'Shajapur', 'Sheopur', 'Shivpuri', 'Sidhi', 'Singrauli', 'Tikamgarh', 'Ujjain',
+    'Umaria', 'Vidisha',
   ],
   'Karnataka': [
-    'Bagalkot','Ballari','Belagavi','Bengaluru Rural','Bengaluru Urban',
-    'Bidar','Chamarajanagar','Chikkaballapur','Chikkamagaluru','Chitradurga',
-    'Dakshina Kannada','Davanagere','Dharwad','Gadag','Hassan','Haveri',
-    'Kalaburagi','Kodagu','Kolar','Koppal','Mandya','Mysuru','Raichur',
-    'Ramanagara','Shivamogga','Tumakuru','Udupi','Uttara Kannada','Vijayapura',
+    'Bagalkot', 'Ballari', 'Belagavi', 'Bengaluru Rural', 'Bengaluru Urban',
+    'Bidar', 'Chamarajanagar', 'Chikkaballapur', 'Chikkamagaluru', 'Chitradurga',
+    'Dakshina Kannada', 'Davanagere', 'Dharwad', 'Gadag', 'Hassan', 'Haveri',
+    'Kalaburagi', 'Kodagu', 'Kolar', 'Koppal', 'Mandya', 'Mysuru', 'Raichur',
+    'Ramanagara', 'Shivamogga', 'Tumakuru', 'Udupi', 'Uttara Kannada', 'Vijayapura',
     'Yadgir',
   ],
   'Tamil Nadu': [
-    'Ariyalur','Chengalpattu','Chennai','Coimbatore','Cuddalore','Dharmapuri',
-    'Dindigul','Erode','Kallakurichi','Kancheepuram','Kanyakumari','Karur',
-    'Krishnagiri','Madurai','Mayiladuthurai','Nagapattinam','Namakkal',
-    'Nilgiris','Perambalur','Pudukkottai','Ramanathapuram','Ranipet','Salem',
-    'Sivagangai','Tenkasi','Thanjavur','Theni','Thoothukudi','Tiruchirappalli',
-    'Tirunelveli','Tirupathur','Tiruppur','Tiruvallur','Tiruvannamalai',
-    'Tiruvarur','Vellore','Viluppuram','Virudhunagar',
+    'Ariyalur', 'Chengalpattu', 'Chennai', 'Coimbatore', 'Cuddalore', 'Dharmapuri',
+    'Dindigul', 'Erode', 'Kallakurichi', 'Kancheepuram', 'Kanyakumari', 'Karur',
+    'Krishnagiri', 'Madurai', 'Mayiladuthurai', 'Nagapattinam', 'Namakkal',
+    'Nilgiris', 'Perambalur', 'Pudukkottai', 'Ramanathapuram', 'Ranipet', 'Salem',
+    'Sivagangai', 'Tenkasi', 'Thanjavur', 'Theni', 'Thoothukudi', 'Tiruchirappalli',
+    'Tirunelveli', 'Tirupathur', 'Tiruppur', 'Tiruvallur', 'Tiruvannamalai',
+    'Tiruvarur', 'Vellore', 'Viluppuram', 'Virudhunagar',
   ],
   'West Bengal': [
-    'Alipurduar','Bankura','Birbhum','Cooch Behar','Dakshin Dinajpur',
-    'Darjeeling','Hooghly','Howrah','Jalpaiguri','Jhargram','Kalimpong',
-    'Kolkata','Malda','Murshidabad','Nadia','North 24 Parganas',
-    'Paschim Bardhaman','Paschim Medinipur','Purba Bardhaman','Purba Medinipur',
-    'Purulia','South 24 Parganas','Uttar Dinajpur',
+    'Alipurduar', 'Bankura', 'Birbhum', 'Cooch Behar', 'Dakshin Dinajpur',
+    'Darjeeling', 'Hooghly', 'Howrah', 'Jalpaiguri', 'Jhargram', 'Kalimpong',
+    'Kolkata', 'Malda', 'Murshidabad', 'Nadia', 'North 24 Parganas',
+    'Paschim Bardhaman', 'Paschim Medinipur', 'Purba Bardhaman', 'Purba Medinipur',
+    'Purulia', 'South 24 Parganas', 'Uttar Dinajpur',
   ],
   'Andhra Pradesh': [
-    'Alluri Sitharama Raju','Anakapalli','Ananthapuramu','Annamayya',
-    'Bapatla','Chittoor','East Godavari','Eluru','Guntur','Kakinada',
-    'Konaseema','Krishna','Kurnool','Nandyal','NTR','Palnadu','Parvathipuram Manyam',
-    'Prakasam','Sri Potti Sriramulu Nellore','Sri Sathya Sai','Srikakulam',
-    'Tirupati','Visakhapatnam','Vizianagaram','West Godavari','YSR Kadapa',
+    'Alluri Sitharama Raju', 'Anakapalli', 'Ananthapuramu', 'Annamayya',
+    'Bapatla', 'Chittoor', 'East Godavari', 'Eluru', 'Guntur', 'Kakinada',
+    'Konaseema', 'Krishna', 'Kurnool', 'Nandyal', 'NTR', 'Palnadu', 'Parvathipuram Manyam',
+    'Prakasam', 'Sri Potti Sriramulu Nellore', 'Sri Sathya Sai', 'Srikakulam',
+    'Tirupati', 'Visakhapatnam', 'Vizianagaram', 'West Godavari', 'YSR Kadapa',
   ],
   'Telangana': [
-    'Adilabad','Bhadradri Kothagudem','Hanumakonda','Hyderabad','Jagtial',
-    'Jangaon','Jayashankar Bhupalpally','Jogulamba Gadwal','Kamareddy',
-    'Karimnagar','Khammam','Kumuram Bheem','Mahabubabad','Mahabubnagar',
-    'Mancherial','Medak','Medchal–Malkajgiri','Mulugu','Nagarkurnool',
-    'Nalgonda','Narayanpet','Nirmal','Nizamabad','Peddapalli','Rajanna Sircilla',
-    'Rangareddy','Sangareddy','Siddipet','Suryapet','Vikarabad','Wanaparthy',
-    'Warangal','Yadadri Bhuvanagiri',
+    'Adilabad', 'Bhadradri Kothagudem', 'Hanumakonda', 'Hyderabad', 'Jagtial',
+    'Jangaon', 'Jayashankar Bhupalpally', 'Jogulamba Gadwal', 'Kamareddy',
+    'Karimnagar', 'Khammam', 'Kumuram Bheem', 'Mahabubabad', 'Mahabubnagar',
+    'Mancherial', 'Medak', 'Medchal–Malkajgiri', 'Mulugu', 'Nagarkurnool',
+    'Nalgonda', 'Narayanpet', 'Nirmal', 'Nizamabad', 'Peddapalli', 'Rajanna Sircilla',
+    'Rangareddy', 'Sangareddy', 'Siddipet', 'Suryapet', 'Vikarabad', 'Wanaparthy',
+    'Warangal', 'Yadadri Bhuvanagiri',
   ],
   'Delhi': [
-    'Central Delhi','East Delhi','New Delhi','North Delhi','North East Delhi',
-    'North West Delhi','Shahdara','South Delhi','South East Delhi',
-    'South West Delhi','West Delhi',
+    'Central Delhi', 'East Delhi', 'New Delhi', 'North Delhi', 'North East Delhi',
+    'North West Delhi', 'Shahdara', 'South Delhi', 'South East Delhi',
+    'South West Delhi', 'West Delhi',
   ],
   'Punjab': [
-    'Amritsar','Barnala','Bathinda','Faridkot','Fatehgarh Sahib','Fazilka',
-    'Ferozepur','Gurdaspur','Hoshiarpur','Jalandhar','Kapurthala','Ludhiana',
-    'Malerkotla','Mansa','Moga','Mohali','Muktsar','Pathankot','Patiala',
-    'Rupnagar','Sangrur','Shahid Bhagat Singh Nagar','Tarn Taran',
+    'Amritsar', 'Barnala', 'Bathinda', 'Faridkot', 'Fatehgarh Sahib', 'Fazilka',
+    'Ferozepur', 'Gurdaspur', 'Hoshiarpur', 'Jalandhar', 'Kapurthala', 'Ludhiana',
+    'Malerkotla', 'Mansa', 'Moga', 'Mohali', 'Muktsar', 'Pathankot', 'Patiala',
+    'Rupnagar', 'Sangrur', 'Shahid Bhagat Singh Nagar', 'Tarn Taran',
   ],
   'Haryana': [
-    'Ambala','Bhiwani','Charkhi Dadri','Faridabad','Fatehabad','Gurugram',
-    'Hisar','Jhajjar','Jind','Kaithal','Karnal','Kurukshetra','Mahendragarh',
-    'Nuh','Palwal','Panchkula','Panipat','Rewari','Rohtak','Sirsa','Sonipat',
+    'Ambala', 'Bhiwani', 'Charkhi Dadri', 'Faridabad', 'Fatehabad', 'Gurugram',
+    'Hisar', 'Jhajjar', 'Jind', 'Kaithal', 'Karnal', 'Kurukshetra', 'Mahendragarh',
+    'Nuh', 'Palwal', 'Panchkula', 'Panipat', 'Rewari', 'Rohtak', 'Sirsa', 'Sonipat',
     'Yamunanagar',
   ],
   'Bihar': [
-    'Araria','Arwal','Aurangabad','Banka','Begusarai','Bhagalpur','Bhojpur',
-    'Buxar','Darbhanga','East Champaran','Gaya','Gopalganj','Jamui','Jehanabad',
-    'Kaimur','Katihar','Khagaria','Kishanganj','Lakhisarai','Madhepura',
-    'Madhubani','Munger','Muzaffarpur','Nalanda','Nawada','Patna','Purnia',
-    'Rohtas','Saharsa','Samastipur','Saran','Sheikhpura','Sheohar',
-    'Sitamarhi','Siwan','Supaul','Vaishali','West Champaran',
+    'Araria', 'Arwal', 'Aurangabad', 'Banka', 'Begusarai', 'Bhagalpur', 'Bhojpur',
+    'Buxar', 'Darbhanga', 'East Champaran', 'Gaya', 'Gopalganj', 'Jamui', 'Jehanabad',
+    'Kaimur', 'Katihar', 'Khagaria', 'Kishanganj', 'Lakhisarai', 'Madhepura',
+    'Madhubani', 'Munger', 'Muzaffarpur', 'Nalanda', 'Nawada', 'Patna', 'Purnia',
+    'Rohtas', 'Saharsa', 'Samastipur', 'Saran', 'Sheikhpura', 'Sheohar',
+    'Sitamarhi', 'Siwan', 'Supaul', 'Vaishali', 'West Champaran',
   ],
   'Odisha': [
-    'Angul','Balangir','Balasore','Bargarh','Bhadrak','Boudh','Cuttack',
-    'Deogarh','Dhenkanal','Gajapati','Ganjam','Jagatsinghpur','Jajpur',
-    'Jharsuguda','Kalahandi','Kandhamal','Kendrapara','Kendujhar','Khordha',
-    'Koraput','Malkangiri','Mayurbhanj','Nabarangpur','Nayagarh','Nuapada',
-    'Puri','Rayagada','Sambalpur','Subarnapur','Sundargarh',
+    'Angul', 'Balangir', 'Balasore', 'Bargarh', 'Bhadrak', 'Boudh', 'Cuttack',
+    'Deogarh', 'Dhenkanal', 'Gajapati', 'Ganjam', 'Jagatsinghpur', 'Jajpur',
+    'Jharsuguda', 'Kalahandi', 'Kandhamal', 'Kendrapara', 'Kendujhar', 'Khordha',
+    'Koraput', 'Malkangiri', 'Mayurbhanj', 'Nabarangpur', 'Nayagarh', 'Nuapada',
+    'Puri', 'Rayagada', 'Sambalpur', 'Subarnapur', 'Sundargarh',
   ],
   'Kerala': [
-    'Alappuzha','Ernakulam','Idukki','Kannur','Kasaragod','Kollam',
-    'Kottayam','Kozhikode','Malappuram','Palakkad','Pathanamthitta',
-    'Thiruvananthapuram','Thrissur','Wayanad',
+    'Alappuzha', 'Ernakulam', 'Idukki', 'Kannur', 'Kasaragod', 'Kollam',
+    'Kottayam', 'Kozhikode', 'Malappuram', 'Palakkad', 'Pathanamthitta',
+    'Thiruvananthapuram', 'Thrissur', 'Wayanad',
   ],
   'Assam': [
-    'Bajali','Baksa','Barpeta','Biswanath','Bongaigaon','Cachar','Charaideo',
-    'Chirang','Darrang','Dhemaji','Dhubri','Dibrugarh','Dima Hasao',
-    'Goalpara','Golaghat','Hailakandi','Hojai','Jorhat','Kamrup',
-    'Kamrup Metropolitan','Karbi Anglong','Karimganj','Kokrajhar','Lakhimpur',
-    'Majuli','Morigaon','Nagaon','Nalbari','Sivasagar','Sonitpur','South Salmara-Mankachar',
-    'Tinsukia','Udalguri','West Karbi Anglong',
+    'Bajali', 'Baksa', 'Barpeta', 'Biswanath', 'Bongaigaon', 'Cachar', 'Charaideo',
+    'Chirang', 'Darrang', 'Dhemaji', 'Dhubri', 'Dibrugarh', 'Dima Hasao',
+    'Goalpara', 'Golaghat', 'Hailakandi', 'Hojai', 'Jorhat', 'Kamrup',
+    'Kamrup Metropolitan', 'Karbi Anglong', 'Karimganj', 'Kokrajhar', 'Lakhimpur',
+    'Majuli', 'Morigaon', 'Nagaon', 'Nalbari', 'Sivasagar', 'Sonitpur', 'South Salmara-Mankachar',
+    'Tinsukia', 'Udalguri', 'West Karbi Anglong',
   ],
   'Chhattisgarh': [
-    'Balod','Baloda Bazar','Balrampur','Bastar','Bemetara','Bijapur',
-    'Bilaspur','Dantewada','Dhamtari','Durg','Gariyaband','Gaurela-Pendra-Marwahi',
-    'Janjgir-Champa','Jashpur','Kabirdham','Kanker','Khairagarh','Kondagaon',
-    'Korba','Korea','Mahasamund','Manendragarh','Mohla-Manpur','Mungeli',
-    'Narayanpur','Raigarh','Raipur','Rajnandgaon','Sakti','Sarangarh-Bilaigarh',
-    'Sukma','Surajpur','Surguja',
+    'Balod', 'Baloda Bazar', 'Balrampur', 'Bastar', 'Bemetara', 'Bijapur',
+    'Bilaspur', 'Dantewada', 'Dhamtari', 'Durg', 'Gariyaband', 'Gaurela-Pendra-Marwahi',
+    'Janjgir-Champa', 'Jashpur', 'Kabirdham', 'Kanker', 'Khairagarh', 'Kondagaon',
+    'Korba', 'Korea', 'Mahasamund', 'Manendragarh', 'Mohla-Manpur', 'Mungeli',
+    'Narayanpur', 'Raigarh', 'Raipur', 'Rajnandgaon', 'Sakti', 'Sarangarh-Bilaigarh',
+    'Sukma', 'Surajpur', 'Surguja',
   ],
   'Jharkhand': [
-    'Bokaro','Chatra','Deoghar','Dhanbad','Dumka','East Singhbhum','Garhwa',
-    'Giridih','Godda','Gumla','Hazaribagh','Jamtara','Khunti','Koderma',
-    'Latehar','Lohardaga','Pakur','Palamu','Ramgarh','Ranchi','Sahebganj',
-    'Seraikela Kharsawan','Simdega','West Singhbhum',
+    'Bokaro', 'Chatra', 'Deoghar', 'Dhanbad', 'Dumka', 'East Singhbhum', 'Garhwa',
+    'Giridih', 'Godda', 'Gumla', 'Hazaribagh', 'Jamtara', 'Khunti', 'Koderma',
+    'Latehar', 'Lohardaga', 'Pakur', 'Palamu', 'Ramgarh', 'Ranchi', 'Sahebganj',
+    'Seraikela Kharsawan', 'Simdega', 'West Singhbhum',
   ],
   'Himachal Pradesh': [
-    'Bilaspur','Chamba','Hamirpur','Kangra','Kinnaur','Kullu','Lahaul and Spiti',
-    'Mandi','Shimla','Sirmaur','Solan','Una',
+    'Bilaspur', 'Chamba', 'Hamirpur', 'Kangra', 'Kinnaur', 'Kullu', 'Lahaul and Spiti',
+    'Mandi', 'Shimla', 'Sirmaur', 'Solan', 'Una',
   ],
   'Uttarakhand': [
-    'Almora','Bageshwar','Chamoli','Champawat','Dehradun','Haridwar',
-    'Nainital','Pauri Garhwal','Pithoragarh','Rudraprayag','Tehri Garhwal',
-    'Udham Singh Nagar','Uttarkashi',
+    'Almora', 'Bageshwar', 'Chamoli', 'Champawat', 'Dehradun', 'Haridwar',
+    'Nainital', 'Pauri Garhwal', 'Pithoragarh', 'Rudraprayag', 'Tehri Garhwal',
+    'Udham Singh Nagar', 'Uttarkashi',
   ],
-  'Goa': ['North Goa','South Goa'],
+  'Goa': ['North Goa', 'South Goa'],
   'Manipur': [
-    'Bishnupur','Chandel','Churachandpur','Imphal East','Imphal West',
-    'Jiribam','Kakching','Kamjong','Kangpokpi','Noney','Pherzawl',
-    'Senapati','Tamenglong','Tengnoupal','Thoubal','Ukhrul',
+    'Bishnupur', 'Chandel', 'Churachandpur', 'Imphal East', 'Imphal West',
+    'Jiribam', 'Kakching', 'Kamjong', 'Kangpokpi', 'Noney', 'Pherzawl',
+    'Senapati', 'Tamenglong', 'Tengnoupal', 'Thoubal', 'Ukhrul',
   ],
   'Meghalaya': [
-    'East Garo Hills','East Jaintia Hills','East Khasi Hills','Eastern West Khasi Hills',
-    'North Garo Hills','Ri Bhoi','South Garo Hills','South West Garo Hills',
-    'South West Khasi Hills','West Garo Hills','West Jaintia Hills','West Khasi Hills',
+    'East Garo Hills', 'East Jaintia Hills', 'East Khasi Hills', 'Eastern West Khasi Hills',
+    'North Garo Hills', 'Ri Bhoi', 'South Garo Hills', 'South West Garo Hills',
+    'South West Khasi Hills', 'West Garo Hills', 'West Jaintia Hills', 'West Khasi Hills',
   ],
   'Arunachal Pradesh': [
-    'Anjaw','Changlang','Dibang Valley','East Kameng','East Siang','Itanagar Capital Complex',
-    'Kamle','Kra Daadi','Kurung Kumey','Lepa Rada','Lohit','Longding',
-    'Lower Dibang Valley','Lower Siang','Lower Subansiri','Namsai','Pakke-Kessang',
-    'Papum Pare','Shi Yomi','Siang','Tawang','Tirap','Upper Dibang Valley',
-    'Upper Siang','Upper Subansiri','West Kameng','West Siang',
+    'Anjaw', 'Changlang', 'Dibang Valley', 'East Kameng', 'East Siang', 'Itanagar Capital Complex',
+    'Kamle', 'Kra Daadi', 'Kurung Kumey', 'Lepa Rada', 'Lohit', 'Longding',
+    'Lower Dibang Valley', 'Lower Siang', 'Lower Subansiri', 'Namsai', 'Pakke-Kessang',
+    'Papum Pare', 'Shi Yomi', 'Siang', 'Tawang', 'Tirap', 'Upper Dibang Valley',
+    'Upper Siang', 'Upper Subansiri', 'West Kameng', 'West Siang',
   ],
   'Nagaland': [
-    'Chumoukedima','Dimapur','Kiphire','Kohima','Longleng','Mokokchung',
-    'Mon','Niuland','Noklak','Peren','Phek','Shamator','Tseminyü',
-    'Tuensang','Wokha','Zunheboto',
+    'Chumoukedima', 'Dimapur', 'Kiphire', 'Kohima', 'Longleng', 'Mokokchung',
+    'Mon', 'Niuland', 'Noklak', 'Peren', 'Phek', 'Shamator', 'Tseminyü',
+    'Tuensang', 'Wokha', 'Zunheboto',
   ],
   'Mizoram': [
-    'Aizawl','Champhai','Hnahthial','Khawzawl','Kolasib','Lawngtlai',
-    'Lunglei','Mamit','Saiha','Saitual','Serchhip',
+    'Aizawl', 'Champhai', 'Hnahthial', 'Khawzawl', 'Kolasib', 'Lawngtlai',
+    'Lunglei', 'Mamit', 'Saiha', 'Saitual', 'Serchhip',
   ],
   'Tripura': [
-    'Dhalai','Gomati','Khowai','North Tripura','Sepahijala','South Tripura',
-    'Unakoti','West Tripura',
+    'Dhalai', 'Gomati', 'Khowai', 'North Tripura', 'Sepahijala', 'South Tripura',
+    'Unakoti', 'West Tripura',
   ],
-  'Sikkim': ['East Sikkim','North Sikkim','Pakyong','Soreng','South Sikkim','West Sikkim'],
+  'Sikkim': ['East Sikkim', 'North Sikkim', 'Pakyong', 'Soreng', 'South Sikkim', 'West Sikkim'],
   'Jammu and Kashmir': [
-    'Anantnag','Bandipora','Baramulla','Budgam','Doda','Ganderbal',
-    'Jammu','Kathua','Kishtwar','Kulgam','Kupwara','Poonch','Pulwama',
-    'Rajouri','Ramban','Reasi','Samba','Shopian','Srinagar','Udhampur',
+    'Anantnag', 'Bandipora', 'Baramulla', 'Budgam', 'Doda', 'Ganderbal',
+    'Jammu', 'Kathua', 'Kishtwar', 'Kulgam', 'Kupwara', 'Poonch', 'Pulwama',
+    'Rajouri', 'Ramban', 'Reasi', 'Samba', 'Shopian', 'Srinagar', 'Udhampur',
   ],
-  'Ladakh': ['Kargil','Leh'],
-  'Puducherry': ['Karaikal','Mahe','Puducherry','Yanam'],
+  'Ladakh': ['Kargil', 'Leh'],
+  'Puducherry': ['Karaikal', 'Mahe', 'Puducherry', 'Yanam'],
   'Chandigarh': ['Chandigarh'],
-  'Andaman and Nicobar Islands': ['Nicobar','North and Middle Andaman','South Andaman'],
-  'Dadra and Nagar Haveli and Daman and Diu': ['Dadra and Nagar Haveli','Daman','Diu'],
+  'Andaman and Nicobar Islands': ['Nicobar', 'North and Middle Andaman', 'South Andaman'],
+  'Dadra and Nagar Haveli and Daman and Diu': ['Dadra and Nagar Haveli', 'Daman', 'Diu'],
   'Lakshadweep': ['Lakshadweep'],
 };
-const NAME_REGEX  = /^[a-zA-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s.''\-]{0,99}$/;
+const NAME_REGEX = /^[a-zA-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s.''\-]{0,99}$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^\+?[\d][\d\s\-]{4,18}$/;
 
@@ -241,22 +241,22 @@ function validatePhone(value) {
   if (!PHONE_REGEX.test(v))
     return 'Enter a valid phone / landline number (digits, spaces, hyphens, optional + prefix)';
   const digits = v.replace(/\D/g, '');
-  if (digits.length < 6)  return `Too short — only ${digits.length} digit${digits.length === 1 ? '' : 's'} entered (minimum 6)`;
+  if (digits.length < 6) return `Too short — only ${digits.length} digit${digits.length === 1 ? '' : 's'} entered (minimum 6)`;
   if (digits.length > 15) return `Too long — ${digits.length} digits entered (maximum 15)`;
   return '';
 }
 
 const FIELDS = [
   { key: 'ownerName', label: 'Owner Name', icon: UserCircle, placeholder: 'e.g. Rajesh Mehta', col: 6, required: true, type: 'text' },
-  { key: 'alternateContactName', label: 'Alternate Contact Name', icon: Users,      placeholder: 'e.g. R. Mehta',                  col: 6,  required: false, type: 'name'     },
-  { key: 'ownerAddress',         label: 'Owner Address',          icon: Home,       placeholder: 'Street / Area',                  col: 12, required: false, type: 'text'     },
-  { key: 'phone1',               label: 'Phone 1',                icon: Phone,      placeholder: '+91 98765 43210 or 079-27650000', col: 6,  required: true,  type: 'phone'    },
-  { key: 'phone2',               label: 'Phone 2',                icon: Phone,      placeholder: '+91 79001 12233 or 0265-2xxxxxx', col: 6,  required: false, type: 'phone'    },
-  { key: 'city',                 label: 'City',                   icon: Building2,  placeholder: 'e.g. Ahmedabad',                 col: 6,  required: true,  type: 'text'     },
-  { key: 'state',    label: 'State',    icon: MapPin, placeholder: '', col: 6, required: true,  type: 'combo-state'    },
-{ key: 'district', label: 'District', icon: MapPin, placeholder: '', col: 6, required: true,  type: 'combo-district' },
-  { key: 'country',              label: 'Country',                icon: Globe,      placeholder: 'India',                          col: 6,  required: true,  type: 'readonly' },
-  { key: 'emailAddress',         label: 'Email Address',          icon: Mail,       placeholder: 'example@email.com',              col: 12, required: false, type: 'email'    },
+  { key: 'alternateContactName', label: 'Alternate Contact Name', icon: Users, placeholder: 'e.g. R. Mehta', col: 6, required: false, type: 'name' },
+  { key: 'ownerAddress', label: 'Owner Address', icon: Home, placeholder: 'Street / Area', col: 12, required: false, type: 'text' },
+  { key: 'phone1', label: 'Phone 1', icon: Phone, placeholder: '+91 98765 43210 or 079-27650000', col: 6, required: true, type: 'phone' },
+  { key: 'phone2', label: 'Phone 2', icon: Phone, placeholder: '+91 79001 12233 or 0265-2xxxxxx', col: 6, required: false, type: 'phone' },
+  { key: 'state', label: 'State', icon: MapPin, placeholder: '', col: 6, required: true, type: 'combo-state' },
+  { key: 'district', label: 'District', icon: MapPin, placeholder: '', col: 6, required: true, type: 'combo-district' },
+  { key: 'city', label: 'City', icon: Building2, placeholder: 'e.g. Ahmedabad', col: 6, required: true, type: 'text' },
+  { key: 'country', label: 'Country', icon: Globe, placeholder: 'India', col: 6, required: true, type: 'readonly' },
+  { key: 'emailAddress', label: 'Email Address', icon: Mail, placeholder: 'example@email.com', col: 12, required: false, type: 'email' },
 ];
 
 const PAGE_SIZE_OPTIONS = [10, 12, 15, 20];
@@ -265,7 +265,7 @@ function validateField(key, value, type, required) {
   const v = (value || '').trim();
   if (required && !v) return 'This field is required';
   if (!v) return '';
-  if (type === 'name')  { if (!NAME_REGEX.test(v))  return "Only letters, spaces, and . ' - are allowed"; }
+  if (type === 'name') { if (!NAME_REGEX.test(v)) return "Only letters, spaces, and . ' - are allowed"; }
   if (type === 'phone') return validatePhone(v);
   if (type === 'email') { if (!EMAIL_REGEX.test(v)) return 'Enter a valid email address'; }
   return '';
@@ -274,12 +274,12 @@ function validateField(key, value, type, required) {
    STATE COMBO
 ═══════════════════════════════════════════ */
 function StateCombo({ value, onChange, onBlur, hasError }) {
-  const [open, setOpen]           = useState(false);
-  const [query, setQuery]         = useState('');
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [wasOpened, setWasOpened] = useState(false);
-  const wrapRef  = useRef(null);
+  const wrapRef = useRef(null);
   const inputRef = useRef(null);
-  const listRef  = useRef(null);
+  const listRef = useRef(null);
 
   const filtered = INDIA_STATES.filter(s =>
     s.toLowerCase().includes(query.toLowerCase())
@@ -396,14 +396,14 @@ function StateCombo({ value, onChange, onBlur, hasError }) {
    DISTRICT COMBO  (depends on state)
 ═══════════════════════════════════════════ */
 function DistrictCombo({ value, onChange, onBlur, hasError, stateValue }) {
-  const [open, setOpen]           = useState(false);
-  const [query, setQuery]         = useState('');
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [wasOpened, setWasOpened] = useState(false);
-  const wrapRef  = useRef(null);
+  const wrapRef = useRef(null);
   const inputRef = useRef(null);
-  const listRef  = useRef(null);
+  const listRef = useRef(null);
 
-  const options  = stateValue ? (DISTRICTS_BY_STATE[stateValue] || []) : [];
+  const options = stateValue ? (DISTRICTS_BY_STATE[stateValue] || []) : [];
   const disabled = !stateValue;
 
   const filtered = options.filter(d =>
@@ -472,10 +472,9 @@ function DistrictCombo({ value, onChange, onBlur, hasError, stateValue }) {
   return (
     <div className="pg-combo-wrap" ref={wrapRef}>
       <div
-        className={`pg-field-wrap pg-combo-trigger ${
-          disabled    ? 'pg-field-wrap--readonly' :
-          hasError    ? 'pg-field-wrap--error'    : 'pg-field-wrap--normal'
-        }`}
+        className={`pg-field-wrap pg-combo-trigger ${disabled ? 'pg-field-wrap--readonly' :
+          hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'
+          }`}
         onClick={openDropdown}
         tabIndex={disabled ? -1 : 0}
         onKeyDown={handleTriggerKeyDown}
@@ -535,16 +534,15 @@ function DistrictCombo({ value, onChange, onBlur, hasError, stateValue }) {
    state, country, emailAddress
 ───────────────────────────────────────── */
 function normalizeOwner(raw) {
-  console.log('Owner raw from API:', raw);
 
   // Swagger confirms the PK field is "ownerID"
   const id =
-    raw.ownerID              ??   // ← confirmed from Swagger screenshot
-    raw.ownerId              ??   // fallback camelCase variant
-    raw.OwnerId              ??
-    raw.owner_id             ??
-    raw.id                   ??
-    raw.Id                   ??
+    raw.ownerID ??   // ← confirmed from Swagger screenshot
+    raw.ownerId ??   // fallback camelCase variant
+    raw.OwnerId ??
+    raw.owner_id ??
+    raw.id ??
+    raw.Id ??
     null;
 
   if (id === null || id === undefined) {
@@ -564,17 +562,17 @@ function normalizeOwner(raw) {
 
 function buildOwner(id, raw) {
   return {
-    _id:                  id,
-    ownerName:            raw.ownerName            ?? raw.OwnerName            ?? '',
+    _id: id,
+    ownerName: raw.ownerName ?? raw.OwnerName ?? '',
     alternateContactName: raw.alternateContactName ?? raw.AlternateContactName ?? '',
-    ownerAddress:         raw.ownerAddress         ?? raw.OwnerAddress         ?? '',
-    phone1:               raw.phone1               ?? raw.Phone1               ?? '',
-    phone2:               raw.phone2               ?? raw.Phone2               ?? '',
-    city:                 raw.city                 ?? raw.City                 ?? '',
-    district:             raw.district             ?? raw.District             ?? '',
-    state:                raw.state                ?? raw.State                ?? '',
-    country:              raw.country              ?? raw.Country              ?? 'India',
-    emailAddress:         raw.emailAddress         ?? raw.EmailAddress         ?? '',
+    ownerAddress: raw.ownerAddress ?? raw.OwnerAddress ?? '',
+    phone1: raw.phone1 ?? raw.Phone1 ?? '',
+    phone2: raw.phone2 ?? raw.Phone2 ?? '',
+    city: raw.city ?? raw.City ?? '',
+    district: raw.district ?? raw.District ?? '',
+    state: raw.state ?? raw.State ?? '',
+    country: raw.country ?? raw.Country ?? 'India',
+    emailAddress: raw.emailAddress ?? raw.EmailAddress ?? '',
   };
 }
 
@@ -587,16 +585,16 @@ function buildOwner(id, raw) {
 ───────────────────────────────────────── */
 function toPayload(form) {
   return {
-    ownerName:            form.ownerName.trim(),
+    ownerName: form.ownerName.trim(),
     alternateContactName: form.alternateContactName.trim(),
-    ownerAddress:         form.ownerAddress.trim(),
-    phone1:               form.phone1.trim(),
-    phone2:               form.phone2.trim(),
-    city:                 form.city.trim(),
-    district:             form.district.trim(),
-    state:                form.state.trim(),
-    country:              form.country.trim(),
-    emailAddress:         form.emailAddress.trim(),
+    ownerAddress: form.ownerAddress.trim(),
+    phone1: form.phone1.trim(),
+    phone2: form.phone2.trim(),
+    city: form.city.trim(),
+    district: form.district.trim(),
+    state: form.state.trim(),
+    country: form.country.trim(),
+    emailAddress: form.emailAddress.trim(),
   };
 }
 
@@ -607,7 +605,7 @@ function SortIcon({ col, sortKey, sortDir }) {
   const active = sortKey === col;
   return (
     <span className="pg-sort-icon">
-      <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"   />
+      <ChevronUp size={10} color={active && sortDir === 'asc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
       <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
     </span>
   );
@@ -656,15 +654,15 @@ function ViewModal({ owner, onClose, onEdit }) {
 
         <div className="pg-view__body">
           <div className="pg-view__section-label">Contact</div>
-          <InfoRow icon={Phone} label="Phone 1"       value={owner.phone1}       highlight />
-          <InfoRow icon={Phone} label="Phone 2"       value={owner.phone2}       />
-          <InfoRow icon={Mail}  label="Email Address" value={owner.emailAddress} highlight />
+          <InfoRow icon={Phone} label="Phone 1" value={owner.phone1} highlight />
+          <InfoRow icon={Phone} label="Phone 2" value={owner.phone2} />
+          <InfoRow icon={Mail} label="Email Address" value={owner.emailAddress} highlight />
           <div className="pg-view__section-label pg-view__section-label--mt">Address</div>
-          <InfoRow icon={Home}      label="Street / Area" value={owner.ownerAddress} />
-          <InfoRow icon={Building2} label="City"          value={owner.city}         />
-          <InfoRow icon={MapPin}    label="District"      value={owner.district}     />
-          <InfoRow icon={MapPin}    label="State"         value={owner.state}        />
-          <InfoRow icon={Globe}     label="Country"       value={owner.country}      />
+          <InfoRow icon={Home} label="Street / Area" value={owner.ownerAddress} />
+          <InfoRow icon={Building2} label="City" value={owner.city} />
+          <InfoRow icon={MapPin} label="District" value={owner.district} />
+          <InfoRow icon={MapPin} label="State" value={owner.state} />
+          <InfoRow icon={Globe} label="Country" value={owner.country} />
         </div>
 
         <div className="pg-view__foot">
@@ -683,12 +681,12 @@ function ViewModal({ owner, onClose, onEdit }) {
 ═══════════════════════════════════════════ */
 function OwnerModal({ onClose, onSaved, editData }) {
   const isEdit = !!editData;
-  const [form, setForm]             = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
-  const [errors, setErrors]         = useState({});
-  const [touched, setTouched]       = useState({});
+  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess]       = useState(false);
-  const [apiError, setApiError]     = useState('');
+  const [success, setSuccess] = useState(false);
+  const [apiError, setApiError] = useState('');
 
   const runValidate = (f) => {
     const e = {};
@@ -750,7 +748,6 @@ function OwnerModal({ onClose, onSaved, editData }) {
       let saved;
 
       if (isEdit) {
-        console.log(`Updating owner ID: ${editData._id}`, payload);
         const response = await apiService.updateOwner(editData._id, payload);
         const raw = response?.data ?? response;
         saved = (raw && typeof raw === 'object' && (raw.ownerID ?? raw.ownerId ?? raw.id))
@@ -771,9 +768,9 @@ function OwnerModal({ onClose, onSaved, editData }) {
       console.error('Save owner error:', err);
       const msg =
         err?.response?.data?.message ||
-        err?.response?.data?.title   ||
-        err?.response?.data          ||
-        err?.message                 ||
+        err?.response?.data?.title ||
+        err?.response?.data ||
+        err?.message ||
         'Something went wrong. Please try again.';
       setApiError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
@@ -782,7 +779,8 @@ function OwnerModal({ onClose, onSaved, editData }) {
   };
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal">
 
         {/* Header */}
@@ -799,7 +797,7 @@ function OwnerModal({ onClose, onSaved, editData }) {
 
         {/* API error banner */}
         {apiError && (
-          <div style={{margin:'0 24px 4px',padding:'10px 14px',background:'#fef2f2',border:'1px solid #fecaca',borderRadius:11,color:'#dc2626',fontSize:12.5,fontWeight:600,display:'flex',gap:8,alignItems:'flex-start'}}>
+          <div style={{ margin: '0 24px 4px', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 11, color: '#dc2626', fontSize: 12.5, fontWeight: 600, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
             <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>{apiError}</span>
           </div>
@@ -809,11 +807,11 @@ function OwnerModal({ onClose, onSaved, editData }) {
         <div className="pg-modal__body">
           <div className="row g-3">
             {FIELDS.map(({ key, label, icon: Icon, placeholder, col, required, type }) => {
-              const isReadonly      = type === 'readonly';
-              const isComboState    = type === 'combo-state';
+              const isReadonly = type === 'readonly';
+              const isComboState = type === 'combo-state';
               const isComboDistrict = type === 'combo-district';
-              const hasError        = !!errors[key];
-              const wrapClass       = `pg-field-wrap ${isReadonly ? 'pg-field-wrap--readonly' : hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`;
+              const hasError = !!errors[key];
+              const wrapClass = `pg-field-wrap ${isReadonly ? 'pg-field-wrap--readonly' : hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`;
 
               return (
                 <div key={key} className={`col-12 col-sm-${col}`}>
@@ -959,18 +957,18 @@ function OwnerCard({ o, onEdit, onView }) {
    OWNER PAGE
 ═══════════════════════════════════════════ */
 export default function OwnerPage() {
-  const [owners, setOwners]         = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const [owners, setOwners] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
 
   const [showModal, setShowModal] = useState(false);
   const [editOwner, setEditOwner] = useState(null);
   const [viewOwner, setViewOwner] = useState(null);
 
-  const [search, setSearch]     = useState('');
-  const [sortKey, setSortKey]   = useState('ownerName');
-  const [sortDir, setSortDir]   = useState('asc');
-  const [page, setPage]         = useState(1);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('ownerName');
+  const [sortDir, setSortDir] = useState('asc');
+  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
@@ -988,12 +986,11 @@ export default function OwnerPage() {
         : Array.isArray(response?.data)
           ? response.data
           : [];
-      console.log('Raw owners list from API:', list);
       setOwners(list.map(normalizeOwner));
     } catch (err) {
       const msg =
         err?.response?.data?.message ||
-        err?.message                 ||
+        err?.message ||
         'Failed to load owners. Please try again.';
       setFetchError(msg);
     } finally {
@@ -1007,13 +1004,13 @@ export default function OwnerPage() {
   const filtered = owners.filter(o => {
     const q = search.toLowerCase();
     return (
-      (o.ownerName            || '').toLowerCase().includes(q) ||
+      (o.ownerName || '').toLowerCase().includes(q) ||
       (o.alternateContactName || '').toLowerCase().includes(q) ||
-      (o.city                 || '').toLowerCase().includes(q) ||
-      (o.district             || '').toLowerCase().includes(q) ||
-      (o.state                || '').toLowerCase().includes(q) ||
-      (o.phone1               || '').includes(search)          ||
-      (o.emailAddress         || '').toLowerCase().includes(q)
+      (o.city || '').toLowerCase().includes(q) ||
+      (o.district || '').toLowerCase().includes(q) ||
+      (o.state || '').toLowerCase().includes(q) ||
+      (o.phone1 || '').includes(search) ||
+      (o.emailAddress || '').toLowerCase().includes(q)
     );
   });
 
@@ -1024,7 +1021,7 @@ export default function OwnerPage() {
   });
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
+  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
 
   /* ── Handlers ── */
   const handleSort = (key) => {
@@ -1048,19 +1045,19 @@ export default function OwnerPage() {
   };
   const closeModal = () => { setShowModal(false); setEditOwner(null); };
   const handleView = (o) => setViewOwner(o);
-  const closeView  = () => setViewOwner(null);
+  const closeView = () => setViewOwner(null);
 
   /* ── Table columns ── */
   const COLS = [
-    { key: 'ownerName',    label: 'Owner Name', w: '15%' },
-    { key: 'ownerAddress', label: 'Address',    w: '15%' },
-    { key: 'phone1',       label: 'Phone 1',    w: '12%' },
-    { key: 'phone2',       label: 'Phone 2',    w: '11%' },
-    { key: 'city',         label: 'City',       w: '9%'  },
-    { key: 'district',     label: 'District',   w: '9%'  },
-    { key: 'state',        label: 'State',      w: '9%'  },
-    { key: 'emailAddress', label: 'Email',      w: '12%' },
-    { key: '_action',      label: 'Action',     w: '8%',  noSort: true },
+    { key: 'ownerName', label: 'Owner Name', w: '15%' },
+    { key: 'ownerAddress', label: 'Address', w: '15%' },
+    { key: 'phone1', label: 'Phone 1', w: '12%' },
+    { key: 'phone2', label: 'Phone 2', w: '11%' },
+    { key: 'city', label: 'City', w: '9%' },
+    { key: 'district', label: 'District', w: '9%' },
+    { key: 'state', label: 'State', w: '9%' },
+    { key: 'emailAddress', label: 'Email', w: '12%' },
+    { key: '_action', label: 'Action', w: '8%', noSort: true },
   ];
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -1105,9 +1102,9 @@ export default function OwnerPage() {
         {/* Page Header */}
         <div className="pg-header">
           <div>
-            <h1 className="pg-header__title">Owners</h1>
+            <h1 className="pg-header__title">Land Lords</h1>
             <p className="pg-header__subtitle">
-              Manage all hoarding &amp; site <strong>owners</strong> in one place.
+              Manage all hoarding &amp; site <strong>Land Lords</strong> in one place.
             </p>
           </div>
           <button className="pg-btn-add" onClick={() => { setEditOwner(null); setShowModal(true); }}>
@@ -1269,10 +1266,10 @@ export default function OwnerPage() {
                 p === '…'
                   ? <span key={`e${i}`} className="pg-pg-ellipsis">…</span>
                   : <button
-                      key={p}
-                      className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`}
-                      onClick={() => setPage(p)}
-                    >{p}</button>
+                    key={p}
+                    className={`pg-pg-btn${page === p ? ' pg-pg-btn--active' : ''}`}
+                    onClick={() => setPage(p)}
+                  >{p}</button>
               )}
               <button className="pg-pg-btn" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
                 <ChevronRight size={13} />

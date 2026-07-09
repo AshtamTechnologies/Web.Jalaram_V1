@@ -1,22 +1,5 @@
 import { useEffect } from 'react';
 
-/**
- * useResizableColumns
- *
- * Attaches drag-to-resize handles to every <th> in the given table ref.
- *
- * @param {React.RefObject} tableRef   - ref attached to the <table> element
- * @param {boolean}         tableReady - set to true once the table is rendered
- * @param {number[]}        initialWidths - optional array of starting column widths (px)
- *
- * Usage:
- *   const tableRef = useRef(null);
- *   const [tableReady, setTableReady] = useState(false);
- *   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
- *   useResizableColumns(tableRef, tableReady, [140, 200, 110, 100, 70]);
- *
- *   <table ref={tableRef}>…</table>
- */
 export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
   useEffect(() => {
     if (!tableReady) return;
@@ -26,39 +9,78 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
     const ths = Array.from(table.querySelectorAll('thead th'));
     const DEFAULT_WIDTH = 120;
 
+    // Set table to fixed layout so width changes take effect (with important priority to override any stylesheets)
+    table.style.setProperty('table-layout', 'fixed', 'important');
+
     ths.forEach((th, i) => {
       th.style.width    = (initialWidths[i] ?? DEFAULT_WIDTH) + 'px';
+      th.style.minWidth = (initialWidths[i] ?? DEFAULT_WIDTH) + 'px';
       th.style.position = 'relative';
       th.style.overflow = 'visible';
+      th.style.userSelect = 'none';
     });
 
-    let startX, startW, activeTh;
+    let startX, startW, activeTh, activeLine;
+
+    const startResize = (clientX, header, line) => {
+      activeTh   = header;
+      activeLine = line;
+      startX     = clientX;
+      startW     = header.offsetWidth;
+      line.style.background         = '#049edf';
+      document.body.style.cursor    = 'col-resize';
+      document.body.style.userSelect = 'none';
+    };
+
+    const resizeMove = (clientX) => {
+      if (!activeTh) return;
+      const newW = Math.max(60, startW + (clientX - startX));
+      activeTh.style.width    = newW + 'px';
+      activeTh.style.minWidth = newW + 'px';
+    };
+
+    const endResize = () => {
+      if (activeLine) {
+        activeLine.style.background = 'rgba(4,158,223,0.35)';
+      }
+      activeTh   = null;
+      activeLine = null;
+      document.body.style.cursor    = '';
+      document.body.style.userSelect = '';
+    };
 
     const onMouseMove = (e) => {
-      if (!activeTh) return;
-      const newW = Math.max(60, startW + (e.clientX - startX));
-      activeTh.style.width = newW + 'px';
+      resizeMove(e.clientX);
     };
 
     const onMouseUp = () => {
-      if (activeTh) {
-        activeTh.querySelector('.col-resizer')?.classList.remove('resizing');
-        activeTh = null;
-      }
+      endResize();
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup',   onMouseUp);
     };
 
+    const onTouchMove = (e) => {
+      if (e.touches.length > 0) {
+        resizeMove(e.touches[0].clientX);
+      }
+    };
+
+    const onTouchEnd = () => {
+      endResize();
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend',   onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchEnd);
+    };
+
     ths.forEach((header) => {
-      // Remove any stale resizer from a previous render
       header.querySelector('.col-resizer')?.remove();
 
       const resizer = document.createElement('div');
       resizer.className = 'col-resizer';
       resizer.style.cssText = `
-        position: absolute; right: 0; top: 0;
-        height: 100%; width: 8px;
-        cursor: col-resize; user-select: none; z-index: 10;
+        position: absolute; right: -1px; top: 0;
+        height: 100%; width: 10px;
+        cursor: col-resize; user-select: none; z-index: 20;
         display: flex; align-items: center; justify-content: center;
       `;
 
@@ -77,15 +99,28 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
       resizer.addEventListener('mouseleave', () => {
         if (activeTh !== header) line.style.background = 'rgba(4,158,223,0.35)';
       });
+
+      // Mouse Resizing
       resizer.addEventListener('mousedown', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        activeTh = header;
-        startX   = e.clientX;
-        startW   = header.offsetWidth;
-        line.style.background = '#049edf';
+        startResize(e.clientX, header, line);
         document.addEventListener('mousemove', onMouseMove);
         document.addEventListener('mouseup',   onMouseUp);
+      });
+
+      // Touch Resizing
+      resizer.addEventListener('touchstart', (e) => {
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+        e.stopPropagation();
+        if (e.touches.length > 0) {
+          startResize(e.touches[0].clientX, header, line);
+        }
+        document.addEventListener('touchmove', onTouchMove, { passive: false });
+        document.addEventListener('touchend',   onTouchEnd);
+        document.addEventListener('touchcancel', onTouchEnd);
       });
 
       header.appendChild(resizer);
@@ -95,6 +130,11 @@ export function useResizableColumns(tableRef, tableReady, initialWidths = []) {
       ths.forEach(header => header.querySelector('.col-resizer')?.remove());
       document.removeEventListener('mousemove', onMouseMove);
       document.removeEventListener('mouseup',   onMouseUp);
+      document.removeEventListener('touchmove', onTouchMove);
+      document.removeEventListener('touchend',   onTouchEnd);
+      document.removeEventListener('touchcancel', onTouchEnd);
+      document.body.style.cursor    = '';
+      document.body.style.userSelect = '';
     };
-  }, [tableReady]); // re-runs only when the table becomes ready
+  }, [tableReady, initialWidths]);
 }

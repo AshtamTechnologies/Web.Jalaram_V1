@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import axios from 'axios';
 import {
   Plus, Search, X, AlertCircle, Check, Edit2,
   RefreshCw, Calendar, ChevronUp, ChevronDown,
@@ -12,6 +13,38 @@ import {
 import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
 import { useResizableColumns } from '../hooks/useResizableColumns';
+
+const forceDownload = async (url, filename) => {
+  try {
+    let cleanUrl = url.split('?')[0];
+    if (process.env.NODE_ENV === 'development' && cleanUrl.startsWith(API_ROOT_URL)) {
+      cleanUrl = cleanUrl.replace(API_ROOT_URL, window.location.origin);
+    }
+    const downloadUrl = `${cleanUrl}?t=${Date.now()}`;
+    const token = localStorage.getItem('authToken');
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(downloadUrl, {
+      method: 'GET',
+      headers,
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const blob = await response.blob();
+    const localUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = localUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(localUrl);
+  } catch (err) {
+    console.error('Download failed, fallback to direct link', err);
+    window.open(url, '_blank');
+  }
+};
 
 /* ─────────────────────────────────────────
    CONSTANTS
@@ -87,16 +120,21 @@ function paymentModeStyle(mode) {
 }
 
 function normalizePayment(raw) {
+  const cleanDate = (d) => {
+    if (!d) return '';
+    const dateStr = d.split('T')[0];
+    return dateStr === '0001-01-01' ? '' : dateStr;
+  };
   return {
     landPaymentID: raw.landPaymentID ?? raw.LandPaymentID ?? 0,
     ownerID: raw.ownerID ?? raw.OwnerID ?? '',
     landContractID: raw.landContractID ?? raw.LandContractID ?? '',
     hoardingID: raw.hoardingID ?? raw.HoardingID ?? '',
-    paymentDate: (raw.paymentDate ?? raw.PaymentDate ?? '').split('T')[0],
+    paymentDate: cleanDate(raw.paymentDate ?? raw.PaymentDate),
     paymentPurpose: raw.paymentPurpose ?? raw.PaymentPurpose ?? '',
     amountPaid: raw.amountPaid ?? raw.AmountPaid ?? '',
     paymentMode: raw.paymentMode ?? raw.PaymentMode ?? '',
-    nextDueDate: (raw.nextDueDate ?? raw.NextDueDate ?? '').split('T')[0],
+    nextDueDate: cleanDate(raw.nextDueDate ?? raw.NextDueDate),
     bankName: raw.bankName ?? raw.BankName ?? '',
     referenceNumber: raw.referenceNumber ?? raw.ReferenceNumber ?? '',
     paidBy: raw.paidBy ?? raw.PaidBy ?? '',
@@ -106,16 +144,21 @@ function normalizePayment(raw) {
   };
 }
 
-function validateRow(row) {
+function validateRow(row, maxVal) {
   const e = {};
   if (!row.paymentDate) e.paymentDate = 'Required';
   if (!row.paymentPurpose) e.paymentPurpose = 'Required';
   if (row.amountPaid === '' || row.amountPaid == null) e.amountPaid = 'Required';
   else if (isNaN(Number(row.amountPaid)) || Number(row.amountPaid) <= 0) e.amountPaid = 'Must be positive';
+  else if (maxVal != null && maxVal > 0 && Number(row.amountPaid) > Number(maxVal)) {
+    e.amountPaid = `Cannot exceed Contract Value (${maxVal.toLocaleString('en-IN')})`;
+  }
   if (!row.paymentMode) e.paymentMode = 'Required';
   if (!row.paidBy) e.paidBy = 'Required';
   if (row.nextDueDate && row.paymentDate && row.nextDueDate < row.paymentDate)
     e.nextDueDate = 'Must be after payment date';
+  if (row.referenceNumber && row.referenceNumber.length > 30)
+    e.referenceNumber = 'Max 30 characters';
   return e;
 }
 /* ─────────────────────────────────────────
@@ -218,10 +261,7 @@ function LPAttachCell({ rowId, selectedFile, existingAttach, isUploading, onFile
             <button className="ea-saved-card__btn ea-saved-card__btn--download"
               onClick={() => {
                 if (!url) return;
-                const a = document.createElement('a');
-                a.href = url; a.download = name;
-                a.target = '_blank'; a.rel = 'noopener noreferrer';
-                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                forceDownload(url, name);
               }}
               disabled={!url}>
               <Download size={10} /> Download
@@ -576,34 +616,34 @@ function ContractDropdown({ contracts, hoardings, hoardingMaps = [], ownerID, va
     ? contracts.filter(c => String(c.ownerID) === String(ownerID))
     : [];
 
-const enriched = ownerContracts.map(c => {
-  // Try direct hoardingID on contract first
-  let h = hoardings.find(hh => Number(hh.hoardingID) === Number(c.hoardingID));
+  const enriched = ownerContracts.map(c => {
+    // Try direct hoardingID on contract first
+    let h = hoardings.find(hh => Number(hh.hoardingID) === Number(c.hoardingID));
 
-  // If not found, look up via hoarding map table
-  if (!h) {
-    const map = hoardingMaps.find(m =>
-      Number(m.landContractID ?? m.LandContractID) === Number(c.landContractID)
-    );
-    if (map) {
-      const mapHID = map.hoardingID ?? map.HoardingID;
-      h = hoardings.find(hh => Number(hh.hoardingID) === Number(mapHID));
+    // If not found, look up via hoarding map table
+    if (!h) {
+      const map = hoardingMaps.find(m =>
+        Number(m.landContractID ?? m.LandContractID) === Number(c.landContractID)
+      );
+      if (map) {
+        const mapHID = map.hoardingID ?? map.HoardingID;
+        h = hoardings.find(hh => Number(hh.hoardingID) === Number(mapHID));
+      }
     }
-  }
 
-  const parts = [];
-  if (h?.hoardingCode) parts.push(h.hoardingCode);
-  if (h?.width && h?.height) parts.push(`${h.width}×${h.height} ft`);
-  if (h?.material) parts.push(h.material);
+    const parts = [];
+    if (h?.hoardingCode) parts.push(h.hoardingCode);
+    if (h?.width && h?.height) parts.push(`${h.width}×${h.height} ft`);
+    if (h?.material) parts.push(h.material);
 
-  return {
-    ...c,
-    hoardingCode: h?.hoardingCode || '',
-    hoardingInfo: parts.join(' · ') || `Contract #${c.landContractID}`,
-    dateRange: `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`,
-    statusLabel: c.status || 'Unknown',
-  };
-});
+    return {
+      ...c,
+      hoardingCode: h?.hoardingCode || '',
+      hoardingInfo: parts.join(' · ') || `Contract #${c.landContractID}`,
+      dateRange: `${fmtDate(c.startDate)} → ${fmtDate(c.endDate)}`,
+      statusLabel: c.status || 'Unknown',
+    };
+  });
 
   const filtered = query.trim()
     ? enriched.filter(c =>
@@ -961,12 +1001,13 @@ function PaymentRowsTable({
 
                     {/* Reference */}
                     <td className="exp-td">
-                      <input className="exp-cell-input"
+                      <input className={`exp-cell-input${errs.referenceNumber ? ' exp-cell-input--err' : ''}`}
                         placeholder={showBank ? 'Ref / Cheque no…' : 'N/A'}
                         value={row.referenceNumber}
                         onChange={e => onChangeRow(row._rowId, 'referenceNumber', e.target.value)}
                         disabled={!showBank}
                         style={!showBank ? { color: '#b0b0c8', cursor: 'not-allowed' } : {}} />
+                      {errs.referenceNumber && <div className="exp-cell-err">{errs.referenceNumber}</div>}
                     </td>
 
                     {/* Comments */}
@@ -1078,9 +1119,10 @@ function PaymentRowsTable({
                   </div>
                   <div className="col-6">
                     <div className="exp-mob-label">Reference</div>
-                    <input className="exp-cell-input" placeholder="Ref / Cheque no…"
+                    <input className={`exp-cell-input${errs.referenceNumber ? ' exp-cell-input--err' : ''}`} placeholder="Ref / Cheque no…"
                       value={row.referenceNumber}
                       onChange={e => onChangeRow(row._rowId, 'referenceNumber', e.target.value)} />
+                    {errs.referenceNumber && <div className="exp-cell-err">{errs.referenceNumber}</div>}
                   </div>
                 </>)}
                 <div className="col-12">
@@ -1181,10 +1223,11 @@ function QuickAddPanel({ row, errors, onChange, attachFile, onFileSelect, onFile
             </div>
             <div className="col-12 col-md-6">
               <FieldLabel label="Reference / Cheque Number" optional />
-              <InputWrap icon={Hash}>
+              <InputWrap error={errors.referenceNumber} icon={Hash}>
                 <input className="pg-field-input" placeholder="Transaction / Cheque number"
                   value={row.referenceNumber} onChange={e => onChange('referenceNumber', e.target.value)} autoComplete="off" />
               </InputWrap>
+              <FieldError msg={errors.referenceNumber} />
             </div>
           </>
         )}
@@ -1311,31 +1354,9 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   }, []);
 
   /* ── File handlers ── */
-  const handleFileSelect = useCallback(async (rowId, file) => {
-    const row = rows.find(r => r._rowId === rowId);
-    const paymentID = row?._paymentID;
-    const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
-    const hID = Number(contract?.hoardingID || 0);
-
-    if (paymentID && existingAttaches[paymentID]) {
-      const attach = existingAttaches[paymentID];
-      setUploadingRowIds(prev => new Set(prev).add(rowId));
-      try {
-        await apiService.updateLandPaymentAttach(
-          attach, Number(paymentID), Number(ownerID),
-          Number(landContractID), hID, file
-        );
-        const updated = await apiService.getLandPaymentAttachByPaymentId(paymentID);
-        setExistingAttaches(prev => ({ ...prev, [paymentID]: updated }));
-      } catch (err) {
-        setApiErr(err?.response?.data?.message || err?.message || 'Failed to replace attachment.');
-      } finally {
-        setUploadingRowIds(prev => { const n = new Set(prev); n.delete(rowId); return n; });
-      }
-    } else {
-      setAttachFiles(prev => ({ ...prev, [rowId]: file }));
-    }
-  }, [rows, existingAttaches, ownerID, landContractID, contracts]);
+  const handleFileSelect = useCallback((rowId, file) => {
+    setAttachFiles(prev => ({ ...prev, [rowId]: file }));
+  }, []);
 
   const handleFileClear = useCallback((rowId) => {
     setAttachFiles(prev => { const n = { ...prev }; delete n[rowId]; return n; });
@@ -1351,6 +1372,19 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   const [apiErr, setApiErr] = useState('');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingRowId, setDeletingRowId] = useState(null);
+  const [stagedDeletedPaymentIds, setStagedDeletedPaymentIds] = useState([]);
+
+  const errorRef = useRef(null);
+
+  useEffect(() => {
+    if (apiErr) {
+      // Small delay to ensure the DOM element is rendered and laid out
+      const timer = setTimeout(() => {
+        errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 50);
+      return () => clearTimeout(timer);
+    }
+  }, [apiErr]);
 
   // auto-fill hoardingID from contract
   const getHoardingIDForContract = (cid) => {
@@ -1364,8 +1398,21 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   };
 
   const handleAddRow = () => {
-    const errs = validateRow(currentRow);
-    if (Object.keys(errs).length) { setCurrentErrors(errs); return; }
+    const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
+    const maxVal = contract ? Number(contract.totalContractValue) : null;
+    const errs = validateRow(currentRow, maxVal);
+    if (Object.keys(errs).length) {
+      setCurrentErrors(errs);
+      setTimeout(() => {
+        const firstErr = document.querySelector('.exp-entry-panel .pg-field-wrap--error');
+        if (firstErr) {
+          const input = firstErr.querySelector('input, select, textarea');
+          if (input) input.focus();
+          else firstErr.focus();
+        }
+      }, 50);
+      return;
+    }
     setRows(prev => [...prev, { ...currentRow }]);
     setCurrentRow(emptyCurrentRow());
     setCurrentErrors({});
@@ -1383,24 +1430,16 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
     setDeleteTarget(row);
   };
 
-  const confirmDeleteRow = async () => {
+  const confirmDeleteRow = () => {
     if (!deleteTarget) return;
     const row = deleteTarget;
     setDeleteTarget(null);
-    setDeletingRowId(row._rowId);
-    setApiErr('');
-    try {
-      if (row._paymentID) {
-        await apiService.deleteLandPayment(row._paymentID);
-      }
-      setRows(prev => prev.filter(r => r._rowId !== row._rowId));
-      setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
-    } catch (err) {
-      const msg = err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Failed to delete payment.';
-      setApiErr(msg);
-    } finally {
-      setDeletingRowId(null);
+    if (row._paymentID) {
+      setStagedDeletedPaymentIds(prev => [...prev, row._paymentID]);
     }
+    setRows(prev => prev.filter(r => r._rowId !== row._rowId));
+    setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
+    setAttachFiles(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
   };
 
   const handleSave = () => {
@@ -1409,27 +1448,76 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
     else setOwnerError('');
     if (!landContractID) { setContractError('Contract is required'); hasHeaderErr = true; }
     else setContractError('');
-    if (hasHeaderErr) return;
+    if (hasHeaderErr) {
+      setTimeout(() => {
+        const firstErr = document.querySelector('.pg-field-wrap--error');
+        if (firstErr) {
+          const input = firstErr.querySelector('input, select, textarea');
+          if (input) input.focus();
+          else firstErr.focus();
+        }
+      }, 50);
+      return;
+    }
+
+    const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
+    const maxVal = contract ? Number(contract.totalContractValue) : 0;
 
     const newRowErrors = {};
     let hasErr = false;
-    rows.forEach(r => { const e = validateRow(r); if (Object.keys(e).length) { newRowErrors[r._rowId] = e; hasErr = true; } });
+    rows.forEach(r => { const e = validateRow(r, maxVal); if (Object.keys(e).length) { newRowErrors[r._rowId] = e; hasErr = true; } });
 
     const entryHasData = Object.entries(currentRow)
       .filter(([k]) => k !== '_rowId')
       .some(([, v]) => v !== '');
 
+    let allRowsToSave = [...rows];
     if (showEntryForm && entryHasData) {
-      const errs = validateRow(currentRow);
-      if (Object.keys(errs).length) { setCurrentErrors(errs); return; }
-      if (hasErr) { setRowErrors(newRowErrors); return; }
-      _doSave([...rows, { ...currentRow }]);
+      const errs = validateRow(currentRow, maxVal);
+      if (Object.keys(errs).length) {
+        setCurrentErrors(errs);
+        setTimeout(() => {
+          const firstErr = document.querySelector('.exp-entry-panel .pg-field-wrap--error');
+          if (firstErr) {
+            const input = firstErr.querySelector('input, select, textarea');
+            if (input) input.focus();
+            else firstErr.focus();
+          }
+        }, 50);
+        return;
+      }
+      if (hasErr) {
+        setRowErrors(newRowErrors);
+        setTimeout(() => {
+          const firstErr = document.querySelector('.exp-rows-wrap .exp-cell-input--err');
+          if (firstErr) {
+            firstErr.focus();
+          }
+        }, 50);
+        return;
+      }
+      allRowsToSave.push({ ...currentRow });
+    }
+
+    if (allRowsToSave.length === 0) { setApiErr('Please add at least one payment row.'); return; }
+    if (hasErr) {
+      setRowErrors(newRowErrors);
+      setTimeout(() => {
+        const firstErr = document.querySelector('.exp-rows-wrap .exp-cell-input--err');
+        if (firstErr) {
+          firstErr.focus();
+        }
+      }, 50);
       return;
     }
 
-    if (rows.length === 0) { setApiErr('Please add at least one payment row.'); return; }
-    if (hasErr) { setRowErrors(newRowErrors); return; }
-    _doSave(rows);
+    const sumPaid = allRowsToSave.reduce((s, r) => s + (Number(r.amountPaid) || 0), 0);
+    if (maxVal > 0 && sumPaid > maxVal) {
+      setApiErr(`Total payments (${fmtCurrency(sumPaid)}) cannot exceed the Land Contract amount (${fmtCurrency(maxVal)}).`);
+      return;
+    }
+
+    _doSave(allRowsToSave);
   };
 
   const _doSave = async (allRows) => {
@@ -1438,6 +1526,13 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
     const hoardingID = Number(contract?.hoardingID || 0);
     const attachErrors = [];
     try {
+      // Delete staged deleted payments first
+      if (stagedDeletedPaymentIds.length > 0) {
+        for (const id of stagedDeletedPaymentIds) {
+          await apiService.deleteLandPayment(id);
+        }
+      }
+
       for (const row of allRows) {
         const payload = {
           ownerID: Number(ownerID),
@@ -1466,10 +1561,18 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
         if (file && resolvedID) {
           setUploadingRowIds(prev => new Set(prev).add(row._rowId));
           try {
-            await apiService.createLandPaymentAttach(
-              resolvedID, Number(ownerID),
-              Number(landContractID), hoardingID, file
-            );
+            const existing = existingAttaches[resolvedID];
+            if (existing) {
+              await apiService.updateLandPaymentAttach(
+                existing, resolvedID, Number(ownerID),
+                Number(landContractID), hoardingID, file
+              );
+            } else {
+              await apiService.createLandPaymentAttach(
+                resolvedID, Number(ownerID),
+                Number(landContractID), hoardingID, file
+              );
+            }
           } catch (e) {
             attachErrors.push(e?.response?.data?.message || e?.message || 'Upload failed');
           } finally {
@@ -1539,7 +1642,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
       <div className="hd-form-body">
         <div className="container-fluid px-0">
           {apiErr && (
-            <div className="pg-field-error hd-api-error mb-3">
+            <div ref={errorRef} className="pg-field-error hd-api-error mb-3">
               <AlertCircle size={14} /><span>{apiErr}</span>
               <button
                 style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}
@@ -1602,6 +1705,29 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                       />
                       <FieldError msg={contractError} />
                     </div>
+                    {contract && (
+                      <div className="col-12 mt-2">
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '10px 14px',
+                          borderRadius: 10,
+                          background: 'rgba(4, 158, 223, 0.05)',
+                          border: '1.5px solid rgba(4, 158, 223, 0.15)',
+                          fontFamily: 'Nunito, sans-serif',
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: '#1a1a2e',
+                        }}>
+                          <IndianRupee size={15} color="#049edf" />
+                          <span>Land Contract Amount: </span>
+                          <strong style={{ color: '#049edf', fontSize: 14 }}>
+                            {fmtCurrency(contract.totalContractValue)}
+                          </strong>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1730,13 +1856,13 @@ export default function LandPaymentPage() {
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
     try {
-const [rawOwners, rawHoardings, rawContracts, rawPayments, rawMaps] = await Promise.all([
-  apiService.getAllOwners(),
-  apiService.getAllHoardings(),
-  apiService.getAllLandContracts(),
-  apiService.getAllLandPayments(),
-  apiService.getAllLandContractHoardingMaps(),
-]);
+      const [rawOwners, rawHoardings, rawContracts, rawPayments, rawMaps] = await Promise.all([
+        apiService.getAllOwners(),
+        apiService.getAllHoardings(),
+        apiService.getAllLandContracts(),
+        apiService.getAllLandPayments(),
+        apiService.getAllLandContractHoardingMaps(),
+      ]);
 
       setOwners(Array.isArray(rawOwners) ? rawOwners : Array.isArray(rawOwners?.data) ? rawOwners.data : []);
       setHoardings(Array.isArray(rawHoardings) ? rawHoardings : Array.isArray(rawHoardings?.data) ? rawHoardings.data : []);
@@ -1751,6 +1877,7 @@ const [rawOwners, rawHoardings, rawContracts, rawPayments, rawMaps] = await Prom
         startDate: (c.startDate ?? c.StartDate ?? '').split('T')[0],
         endDate: (c.endDate ?? c.EndDate ?? '').split('T')[0],
         status: c.status ?? c.Status ?? '',
+        totalContractValue: c.totalContractValue ?? c.TotalContractValue ?? 0,
       })));
 
       const list = Array.isArray(rawPayments)
@@ -1759,8 +1886,8 @@ const [rawOwners, rawHoardings, rawContracts, rawPayments, rawMaps] = await Prom
       setPayments(list.map(normalizePayment));
       setPayments(list.map(normalizePayment));
 
-const mapList = Array.isArray(rawMaps) ? rawMaps : Array.isArray(rawMaps?.data) ? rawMaps.data : [];  // ← add
-setHoardingMaps(mapList);  // ← add
+      const mapList = Array.isArray(rawMaps) ? rawMaps : Array.isArray(rawMaps?.data) ? rawMaps.data : [];  // ← add
+      setHoardingMaps(mapList);  // ← add
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally {
@@ -1777,8 +1904,26 @@ setHoardingMaps(mapList);  // ← add
       const key = `${p.ownerID}_${p.landContractID}`;
       if (!map[key]) {
         const owner = owners.find(o => o.ownerID === Number(p.ownerID) || o.ownerID === p.ownerID);
-        const hoarding = hoardings.find(h => h.hoardingID === Number(p.hoardingID) || h.hoardingID === p.hoardingID);
         const contract = contracts.find(c => String(c.landContractID) === String(p.landContractID));
+
+        // 1) Try hoardingID directly on the payment
+        let hoarding = hoardings.find(h => h.hoardingID === Number(p.hoardingID) || h.hoardingID === p.hoardingID);
+
+        // 2) Fallback: use contract.hoardingID
+        if (!hoarding && contract?.hoardingID) {
+          hoarding = hoardings.find(h => Number(h.hoardingID) === Number(contract.hoardingID));
+        }
+
+        // 3) Fallback: look up via hoardingMaps table
+        if (!hoarding) {
+          const mapEntry = hoardingMaps.find(m =>
+            Number(m.landContractID ?? m.LandContractID) === Number(p.landContractID)
+          );
+          if (mapEntry) {
+            const mapHID = mapEntry.hoardingID ?? mapEntry.HoardingID;
+            hoarding = hoardings.find(h => Number(h.hoardingID) === Number(mapHID));
+          }
+        }
         map[key] = {
           groupKey: key,
           ownerID: p.ownerID,
@@ -1801,7 +1946,7 @@ setHoardingMaps(mapList);  // ← add
       }
     });
     return Object.values(map);
-  }, [payments, owners, hoardings, contracts]);
+  }, [payments, owners, hoardings, contracts, hoardingMaps]);
 
   const filtered = groupedRows.filter(r => {
     const q = search.toLowerCase();
@@ -1866,17 +2011,17 @@ setHoardingMaps(mapList);  // ← add
   /* ── Form view ── */
   if (view === 'form') {
     return (
-<PaymentForm
-  mode={formMode}
-  groupKey={editGroupKey}
-  allPayments={payments}
-  owners={owners}
-  hoardings={hoardings}
-  contracts={contracts}
-hoardingMaps={hoardingMaps}
-  onBack={() => { setView('grid'); setEditGroupKey(null); }}
-  onRefresh={fetchAll}
-/>
+      <PaymentForm
+        mode={formMode}
+        groupKey={editGroupKey}
+        allPayments={payments}
+        owners={owners}
+        hoardings={hoardings}
+        contracts={contracts}
+        hoardingMaps={hoardingMaps}
+        onBack={() => { setView('grid'); setEditGroupKey(null); }}
+        onRefresh={fetchAll}
+      />
     );
   }
 
