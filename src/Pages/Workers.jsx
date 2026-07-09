@@ -16,13 +16,13 @@ import { useResizableColumns } from '../hooks/useResizableColumns';
    CONSTANTS
 ───────────────────────────────────────── */
 const GUJARAT_DISTRICTS = [
-  'Ahmedabad','Amreli','Anand','Aravalli','Banaskantha',
-  'Bharuch','Bhavnagar','Botad','Chhota Udaipur','Dahod',
-  'Dang','Devbhoomi Dwarka','Gandhinagar','Gir Somnath',
-  'Jamnagar','Junagadh','Kheda','Kutch','Mahisagar',
-  'Mehsana','Morbi','Narmada','Navsari','Panchmahal',
-  'Patan','Porbandar','Rajkot','Sabarkantha','Surat',
-  'Surendranagar','Tapi','Vadodara','Valsad',
+  'Ahmedabad', 'Amreli', 'Anand', 'Aravalli', 'Banaskantha',
+  'Bharuch', 'Bhavnagar', 'Botad', 'Chhota Udaipur', 'Dahod',
+  'Dang', 'Devbhoomi Dwarka', 'Gandhinagar', 'Gir Somnath',
+  'Jamnagar', 'Junagadh', 'Kheda', 'Kutch', 'Mahisagar',
+  'Mehsana', 'Morbi', 'Narmada', 'Navsari', 'Panchmahal',
+  'Patan', 'Porbandar', 'Rajkot', 'Sabarkantha', 'Surat',
+  'Surendranagar', 'Tapi', 'Vadodara', 'Valsad',
 ];
 
 const EMPTY_FORM = {
@@ -39,11 +39,11 @@ const PAGE_SIZE_OPTIONS = [10, 12, 15, 20];
 /* ─────────────────────────────────────────
    VALIDATION
 ───────────────────────────────────────── */
-const NAME_REGEX    = /^[a-zA-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s.\-]{0,49}$/;
+const NAME_REGEX = /^[a-zA-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s.\-]{0,49}$/;
 const ADDRESS_REGEX = /^[\w\s,.\-/'&#()]{1,200}$/;
-const PHONE_REGEX   = /^[0-9+\-\s()]{7,20}$/;
-const EMAIL_REGEX   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const CITY_REGEX    = /^[a-zA-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s.\-]{0,99}$/;
+const PHONE_REGEX = /^[0-9+\-\s()]{7,20}$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const CITY_REGEX = /^[a-zA-Z\u00C0-\u024F][a-zA-Z\u00C0-\u024F\s.\-]{0,99}$/;
 
 function validateField(key, value) {
   const v = (value || '').trim();
@@ -84,7 +84,7 @@ function validateField(key, value) {
   }
 }
 
-const REQUIRED_FIELDS = ['firstName','lastName','email','phone1','addressLine1','city','district'];
+const REQUIRED_FIELDS = ['firstName', 'lastName', 'email', 'phone1', 'addressLine1', 'city', 'district'];
 
 /* ─────────────────────────────────────────
    PORTAL DROPDOWN
@@ -126,22 +126,22 @@ function useOutsideClick(wrapRef, panelRef, open, onClose) {
    DISTRICT COMBO
 ───────────────────────────────────────── */
 function DistrictCombo({ value, onChange, onBlur, hasError }) {
-  const [open, setOpen]           = useState(false);
-  const [query, setQuery]         = useState('');
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [wasOpened, setWasOpened] = useState(false);
-  const wrapRef    = useRef(null); const triggerRef = useRef(null);
-  const panelRef   = useRef(null); const inputRef   = useRef(null); const listRef = useRef(null);
+  const wrapRef = useRef(null); const triggerRef = useRef(null);
+  const panelRef = useRef(null); const inputRef = useRef(null); const listRef = useRef(null);
 
-  const close  = useCallback(() => { setOpen(false); setQuery(''); if (wasOpened) { onBlur?.(); setWasOpened(false); } }, [wasOpened, onBlur]);
+  const close = useCallback(() => { setOpen(false); setQuery(''); if (wasOpened) { onBlur?.(); setWasOpened(false); } }, [wasOpened, onBlur]);
   useOutsideClick(wrapRef, panelRef, open, close);
 
   const filtered = GUJARAT_DISTRICTS.filter(d => d.toLowerCase().includes(query.toLowerCase()));
-  const openDD   = () => { setOpen(true); setWasOpened(true); setQuery(''); setTimeout(() => inputRef.current?.focus(), 0); };
-  const select   = (d) => { onChange(d); setOpen(false); setQuery(''); setWasOpened(false); };
-  const clear    = (e) => { e.stopPropagation(); onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.(); };
-  const nav      = (e) => {
+  const openDD = () => { setOpen(true); setWasOpened(true); setQuery(''); setTimeout(() => inputRef.current?.focus(), 0); };
+  const select = (d) => { onChange(d); setOpen(false); setQuery(''); setWasOpened(false); };
+  const clear = (e) => { e.stopPropagation(); onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.(); };
+  const nav = (e) => {
     const items = listRef.current?.querySelectorAll('.pg-combo-option');
-    const idx   = Array.from(items || []).indexOf(document.activeElement);
+    const idx = Array.from(items || []).indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
     else if (e.key === 'Escape') close();
@@ -195,7 +195,7 @@ function SortIcon({ col, sortKey, sortDir }) {
   const active = sortKey === col;
   return (
     <span className="pg-sort-icon">
-      <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
+      <ChevronUp size={10} color={active && sortDir === 'asc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
       <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
     </span>
   );
@@ -207,12 +207,12 @@ function SortIcon({ col, sortKey, sortDir }) {
 function WorkerModal({ onClose, onSaved, editData }) {
   const isEdit = !!editData;
 
-  const [form, setForm]             = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
-  const [errors, setErrors]         = useState({});
-  const [touched, setTouched]       = useState({});
+  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
-  const [success, setSuccess]       = useState(false);
-  const [apiError, setApiError]     = useState('');
+  const [success, setSuccess] = useState(false);
+  const [apiError, setApiError] = useState('');
 
   const applyChange = (key, val) => {
     setForm(p => ({ ...p, [key]: val }));
@@ -253,8 +253,8 @@ function WorkerModal({ onClose, onSaved, editData }) {
     } catch (err) {
       setApiError(
         err?.response?.data?.message ||
-        err?.response?.data?.title   ||
-        err?.message                 ||
+        err?.response?.data?.title ||
+        err?.message ||
         'Something went wrong.'
       );
     } finally { setSubmitting(false); }
@@ -262,19 +262,20 @@ function WorkerModal({ onClose, onSaved, editData }) {
 
   /* ── Field definitions ── */
   const TEXT_FIELDS = [
-    { key: 'firstName',    label: 'First Name',     icon: UserCircle, placeholder: 'e.g. Ramesh',                col: 6,  required: true  },
-    { key: 'lastName',     label: 'Last Name',      icon: UserCircle, placeholder: 'e.g. Patel',                 col: 6,  required: true  },
-    { key: 'email',        label: 'Email Address',  icon: Mail,       placeholder: 'e.g. ramesh@example.com',    col: 12, required: true  },
-    { key: 'phone1',       label: 'Phone 1',        icon: Phone,      placeholder: 'e.g. +91 98765 43210',       col: 6,  required: true  },
-    { key: 'phone2',       label: 'Phone 2',        icon: Phone,      placeholder: 'e.g. +91 91234 56789',       col: 6,  required: false },
-    { key: 'addressLine1', label: 'Address Line 1', icon: Home,       placeholder: 'e.g. 14, Navrangpura',       col: 12, required: true  },
-    { key: 'addressLine2', label: 'Address Line 2', icon: Home,       placeholder: 'e.g. Near Gujarat College',  col: 6,  required: false },
-    { key: 'addressLine3', label: 'Address Line 3', icon: Home,       placeholder: 'e.g. Opp. Fire Station',     col: 6,  required: false },
-    { key: 'city',         label: 'City',           icon: Building2,  placeholder: 'e.g. Ahmedabad',             col: 6,  required: true  },
+    { key: 'firstName', label: 'First Name', icon: UserCircle, placeholder: 'e.g. Ramesh', col: 6, required: true },
+    { key: 'lastName', label: 'Last Name', icon: UserCircle, placeholder: 'e.g. Patel', col: 6, required: true },
+    { key: 'email', label: 'Email Address', icon: Mail, placeholder: 'e.g. ramesh@example.com', col: 12, required: true },
+    { key: 'phone1', label: 'Phone 1', icon: Phone, placeholder: 'e.g. +91 98765 43210', col: 6, required: true },
+    { key: 'phone2', label: 'Phone 2', icon: Phone, placeholder: 'e.g. +91 91234 56789', col: 6, required: false },
+    { key: 'addressLine1', label: 'Address Line 1', icon: Home, placeholder: 'e.g. 14, Navrangpura', col: 12, required: true },
+    { key: 'addressLine2', label: 'Address Line 2', icon: Home, placeholder: 'e.g. Near Gujarat College', col: 6, required: false },
+    { key: 'addressLine3', label: 'Address Line 3', icon: Home, placeholder: 'e.g. Opp. Fire Station', col: 6, required: false },
+    { key: 'city', label: 'City', icon: Building2, placeholder: 'e.g. Ahmedabad', col: 6, required: true },
   ];
 
   return ReactDOM.createPortal(
-    <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
       <div className="pg-modal">
 
         {/* Header */}
@@ -399,19 +400,19 @@ function WorkerModal({ onClose, onSaved, editData }) {
 ───────────────────────────────────────── */
 function normalizeWorker(raw) {
   return {
-    id:          raw.id          ?? raw.Id          ?? 0,
-    firstName:   raw.first_Name  ?? raw.firstName   ?? raw.First_Name   ?? '',
-    lastName:    raw.last_Name   ?? raw.lastName    ?? raw.Last_Name    ?? '',
-    email:       raw.email       ?? raw.Email       ?? '',
-    phone1:      raw.phone_1     ?? raw.phone1      ?? raw.Phone_1      ?? '',
-    phone2:      raw.phone_2     ?? raw.phone2      ?? raw.Phone_2      ?? '',
-    addressLine1:raw.address_Line_1 ?? raw.addressLine1 ?? '',
-    addressLine2:raw.address_Line_2 ?? raw.addressLine2 ?? '',
-    addressLine3:raw.address_Line_3 ?? raw.addressLine3 ?? '',
-    city:        raw.city        ?? raw.City        ?? '',
-    district:    raw.district    ?? raw.District    ?? '',
-    country:     raw.country     ?? raw.Country     ?? 'India',
-    role:        raw.role        ?? raw.Role        ?? '',
+    id: raw.id ?? raw.Id ?? 0,
+    firstName: raw.first_Name ?? raw.firstName ?? raw.First_Name ?? '',
+    lastName: raw.last_Name ?? raw.lastName ?? raw.Last_Name ?? '',
+    email: raw.email ?? raw.Email ?? '',
+    phone1: raw.phone_1 ?? raw.phone1 ?? raw.Phone_1 ?? '',
+    phone2: raw.phone_2 ?? raw.phone2 ?? raw.Phone_2 ?? '',
+    addressLine1: raw.address_Line_1 ?? raw.addressLine1 ?? '',
+    addressLine2: raw.address_Line_2 ?? raw.addressLine2 ?? '',
+    addressLine3: raw.address_Line_3 ?? raw.addressLine3 ?? '',
+    city: raw.city ?? raw.City ?? '',
+    district: raw.district ?? raw.District ?? '',
+    country: raw.country ?? raw.Country ?? 'India',
+    role: raw.role ?? raw.Role ?? '',
   };
 }
 
@@ -430,7 +431,7 @@ function WorkerCard({ w, onEdit }) {
       </div>
       <div className="pg-card__body">
         {w.phone1 && <div className="pg-card__row"><Phone size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{w.phone1}</span></div>}
-        {w.city   && <div className="pg-card__row"><Building2 size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{w.city}{w.district ? `, ${w.district}` : ''}</span></div>}
+        {w.city && <div className="pg-card__row"><Building2 size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{w.city}{w.district ? `, ${w.district}` : ''}</span></div>}
         {w.addressLine1 && <div className="pg-card__row"><Home size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text--ellipsis">{w.addressLine1}</span></div>}
         <div className="pg-card__row"><Briefcase size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-sitetype-pill" style={{ color: 'rgb(74,85,104)' }}>Worker</span></div>
       </div>
@@ -442,18 +443,18 @@ function WorkerCard({ w, onEdit }) {
    WORKERS PAGE
 ═══════════════════════════════════════════ */
 export default function WorkersPage() {
-  const [workers, setWorkers]       = useState([]);
-  const [loading, setLoading]       = useState(true);
+  const [workers, setWorkers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
-  const [showModal, setShowModal]   = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const [editWorker, setEditWorker] = useState(null);
-  const [search, setSearch]         = useState('');
-  const [sortKey, setSortKey]       = useState('firstName');
-  const [sortDir, setSortDir]       = useState('asc');
-  const [page, setPage]             = useState(1);
-  const [pageSize, setPageSize]     = useState(12);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('firstName');
+  const [sortDir, setSortDir] = useState('asc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
 
-  const tableRef   = useRef(null);
+  const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
   useResizableColumns(tableRef, tableReady, [140, 140, 180, 130, 110, 130, 100, 80]);
@@ -479,13 +480,13 @@ export default function WorkersPage() {
   const filtered = workers.filter(w => {
     const q = search.toLowerCase();
     return (
-      (w.firstName   || '').toLowerCase().includes(q) ||
-      (w.lastName    || '').toLowerCase().includes(q) ||
-      (w.email       || '').toLowerCase().includes(q) ||
-      (w.phone1      || '').toLowerCase().includes(q) ||
-      (w.city        || '').toLowerCase().includes(q) ||
-      (w.district    || '').toLowerCase().includes(q) ||
-      (w.addressLine1|| '').toLowerCase().includes(q)
+      (w.firstName || '').toLowerCase().includes(q) ||
+      (w.lastName || '').toLowerCase().includes(q) ||
+      (w.email || '').toLowerCase().includes(q) ||
+      (w.phone1 || '').toLowerCase().includes(q) ||
+      (w.city || '').toLowerCase().includes(q) ||
+      (w.district || '').toLowerCase().includes(q) ||
+      (w.addressLine1 || '').toLowerCase().includes(q)
     );
   });
 
@@ -496,7 +497,7 @@ export default function WorkersPage() {
   });
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
-  const paginated  = sorted.slice((page - 1) * pageSize, page * pageSize);
+  const paginated = sorted.slice((page - 1) * pageSize, page * pageSize);
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortKey(key); setSortDir('asc'); }
@@ -506,14 +507,14 @@ export default function WorkersPage() {
   const handleSaved = useCallback(() => { fetchData(); }, [fetchData]);
 
   const COLS = [
-    { key: 'firstName',    label: 'First Name',  w: '14%' },
-    { key: 'lastName',     label: 'Last Name',   w: '14%' },
-    { key: 'email',        label: 'Email',       w: '18%' },
-    { key: 'phone1',       label: 'Phone 1',     w: '12%', tabletHide: true },
-    { key: 'phone2',       label: 'Phone 2',     w: '11%', tabletHide: true },
-    { key: 'city',         label: 'City / District', w: '13%' },
-    { key: 'addressLine1', label: 'Address',     w: '10%', tabletHide: true },
-    { key: '_action',      label: 'Action',      w: '8%',  noSort: true },
+    { key: 'firstName', label: 'First Name', w: '14%' },
+    { key: 'lastName', label: 'Last Name', w: '14%' },
+    { key: 'email', label: 'Email', w: '18%' },
+    { key: 'phone1', label: 'Phone 1', w: '12%', tabletHide: true },
+    { key: 'phone2', label: 'Phone 2', w: '11%', tabletHide: true },
+    { key: 'city', label: 'City / District', w: '13%' },
+    { key: 'addressLine1', label: 'Address', w: '10%', tabletHide: true },
+    { key: '_action', label: 'Action', w: '8%', noSort: true },
   ];
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)

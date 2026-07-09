@@ -2,6 +2,8 @@ import { useState } from 'react';
 import SupervisorLayout from '../components/SupervisorLayout.jsx';
 import SupDashboardHome from './SupDashboardHome.jsx';
 import WorkersPage from './Workers.jsx';
+import SupervisorJobsPage from './SupervisorJobs.jsx';
+
 import { BarChart3, Layers, MapPin, Briefcase, CheckSquare } from 'lucide-react';
 
 /* ── Placeholder for pages not yet built ── */
@@ -36,14 +38,14 @@ export default function SupervisorDashboard({ onLogout }) {
 
 const renderPage = () => {
   switch (tab) {
-    case 'sup-dashboard': return <SupDashboardHome changeTab={changeTab} />;
-    case 'sup-hoardings': return <PlaceholderPage title="Hoardings"    Icon={Layers}      color="#10b981" />;
-    case 'sup-sites':     return <PlaceholderPage title="Sites"        Icon={MapPin}      color="#049edf" />;
-    case 'sup-job-list':  return <PlaceholderPage title="Job Requests" Icon={Briefcase}   color="#f59e0b" />;
-    case 'sup-job-tasks': return <PlaceholderPage title="Job Tasks"    Icon={CheckSquare} color="#8b5cf6" />;
-    case 'sup-reports':   return <PlaceholderPage title="Reports"      Icon={BarChart3}   color="#e84040" />;
-    case 'workers':       return <WorkersPage />;   // ← add this line
-    default:              return <SupDashboardHome changeTab={changeTab} />;
+    case 'sup-jobs':
+      return <SupervisorJobsPage />;
+
+    case 'workers':
+      return <WorkersPage />;
+
+    default:
+      return <SupervisorJobsPage />;
   }
 };
 

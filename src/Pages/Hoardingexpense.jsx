@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import ReactDOM from 'react-dom';
+import axios from 'axios';
 import {
   Plus, Search, X, AlertCircle, Check, Edit2,
   RefreshCw, Calendar,
@@ -15,17 +16,44 @@ import './Common1.css';
 // import './expense-attach.css';
 import { useResizableColumns } from '../hooks/useResizableColumns';
 
+const forceDownload = async (url, filename) => {
+  try {
+    let cleanUrl = url.split('?')[0];
+    if (process.env.NODE_ENV === 'development' && cleanUrl.startsWith(API_ROOT_URL)) {
+      cleanUrl = cleanUrl.replace(API_ROOT_URL, window.location.origin);
+    }
+    const downloadUrl = `${cleanUrl}?t=${Date.now()}`;
+    const token = localStorage.getItem('authToken');
+    const headers = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    const response = await fetch(downloadUrl, {
+      method: 'GET',
+      headers,
+    });
+    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    const blob = await response.blob();
+    const localUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = localUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(localUrl);
+  } catch (err) {
+    console.error('Download failed, fallback to direct link', err);
+    window.open(url, '_blank');
+  }
+};
+
 /* ─────────────────────────────────────────
    CONSTANTS
 ───────────────────────────────────────── */
 const PAGE_SIZE_OPTIONS = [10, 15, 20, 25];
 
-const EXPENSE_TYPE_OPTIONS = [
-  'C - CHANNEL', '20X10', 'SITE RENT FOR YEAR', 'BAMBOO', 'Tempo rent',
-  'LABOUR', 'Concrete', 'CISSOR STRUCTURE', 'FITTING STUFF', 'VARI PATRI',
-  'NUT - BOLT', 'WOODEN PATTI', 'ANGLE FOR SUPPORT',
-];
-const EXPENSE_TYPE_COMBO_OPTIONS = EXPENSE_TYPE_OPTIONS.map(t => ({ value: t, label: t }));
+
 
 const EMPTY_ROW = {
   _rowId: '', expenseDate: '', expenseType: '',
@@ -41,12 +69,12 @@ function getAttachUrl(attach) {
   const raw =
     attach.horadingExpenseFilePath ||  // server typo, camelCase
     attach.HoradingExpenseFilePath ||  // server typo, PascalCase (some serializers)
-    attach.fileUrl                 ||
-    attach.filePath                ||
+    attach.fileUrl ||
+    attach.filePath ||
     attach.horadingExpenseFilePath ||
-    attach.attachFilePath          ||
-    attach.url                     ||
-    attach.path                    ||
+    attach.attachFilePath ||
+    attach.url ||
+    attach.path ||
     null;
   if (!raw) return null;
   if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
@@ -59,9 +87,9 @@ function getAttachName(attach) {
     attach?.horadingExpenseFilename ||  // camelCase
     attach?.HoradingExpenseFilename ||  // PascalCase
     attach?.horadingExpenseFilename ||
-    attach?.attachFilename          ||
-    attach?.fileName                ||
-    attach?.name                    ||
+    attach?.attachFilename ||
+    attach?.fileName ||
+    attach?.name ||
     'Attachment'
   );
 }
@@ -86,11 +114,11 @@ function fmtCurrency(v) {
 }
 function validateRow(row) {
   const e = {};
-  if (!row.expenseDate)                        e.expenseDate = 'Required';
-  if (!row.expenseType)                        e.expenseType = 'Required';
-  if (!row.expenseDTL)                         e.expenseDTL  = 'Required';
-  if (row.amount === '' || row.amount == null) e.amount      = 'Required';
-  if (!row.paidBy)                             e.paidBy      = 'Required';
+  if (!row.expenseDate) e.expenseDate = 'Required';
+  if (!row.expenseType) e.expenseType = 'Required';
+  if (!row.expenseDTL) e.expenseDTL = 'Required';
+  if (row.amount === '' || row.amount == null) e.amount = 'Required';
+  if (!row.paidBy) e.paidBy = 'Required';
   return e;
 }
 function getLatest(h) {
@@ -114,9 +142,9 @@ function PortalDropdown({ open, triggerRef, panelRef, children }) {
     const update = () => {
       const r = triggerRef.current?.getBoundingClientRect();
       if (!r) return;
-      const panelH     = panelRef.current?.offsetHeight || 260;
+      const panelH = panelRef.current?.offsetHeight || 260;
       const spaceBelow = window.innerHeight - r.bottom;
-      const flipUp     = spaceBelow < panelH + 8 && r.top > panelH + 8;
+      const flipUp = spaceBelow < panelH + 8 && r.top > panelH + 8;
       setStyle({ position: 'fixed', top: flipUp ? r.top - panelH - 4 : r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 });
     };
     update();
@@ -132,7 +160,7 @@ function useOutsideClick(wrapRef, panelRef, open, onClose) {
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
-      const inWrap  = wrapRef.current  && wrapRef.current.contains(e.target);
+      const inWrap = wrapRef.current && wrapRef.current.contains(e.target);
       const inPanel = panelRef.current && panelRef.current.contains(e.target);
       if (!inWrap && !inPanel) onClose();
     };
@@ -148,7 +176,7 @@ function SortIcon({ col, sortKey, sortDir }) {
   const active = sortKey === col;
   return (
     <span className="pg-sort-icon">
-      <ChevronUp   size={10} color={active && sortDir === 'asc'  ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up"   />
+      <ChevronUp size={10} color={active && sortDir === 'asc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__up" />
       <ChevronDown size={10} color={active && sortDir === 'desc' ? '#049edf' : '#c0c0d8'} className="pg-sort-icon__down" />
     </span>
   );
@@ -184,14 +212,14 @@ function FieldError({ msg }) {
    COMBO DROPDOWN
 ═══════════════════════════════════════════ */
 function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: Icon, options, searchable = false, emptyText = 'No options' }) {
-  const [open, setOpen]           = useState(false);
-  const [query, setQuery]         = useState('');
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const [wasOpened, setWasOpened] = useState(false);
-  const wrapRef    = useRef(null);
+  const wrapRef = useRef(null);
   const triggerRef = useRef(null);
-  const panelRef   = useRef(null);
-  const inputRef   = useRef(null);
-  const listRef    = useRef(null);
+  const panelRef = useRef(null);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
 
   const close = useCallback(() => { setOpen(false); setQuery(''); if (wasOpened) { onBlur?.(); setWasOpened(false); } }, [wasOpened, onBlur]);
   useOutsideClick(wrapRef, panelRef, open, close);
@@ -207,11 +235,11 @@ function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: I
       if (items?.length) { const ai = Array.from(items).findIndex(el => el.classList.contains('pg-combo-option--active')); (ai >= 0 ? items[ai] : items[0])?.focus(); }
     }, 0);
   };
-  const select   = (opt) => { onChange(opt.value); setOpen(false); setQuery(''); setWasOpened(false); };
-  const clear    = (e)   => { e.stopPropagation(); onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.(); };
-  const arrowNav = (e)   => {
+  const select = (opt) => { onChange(opt.value); setOpen(false); setQuery(''); setWasOpened(false); };
+  const clear = (e) => { e.stopPropagation(); onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.(); };
+  const arrowNav = (e) => {
     const items = listRef.current?.querySelectorAll('.pg-combo-option');
-    const idx   = Array.from(items || []).indexOf(document.activeElement);
+    const idx = Array.from(items || []).indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
     else if (e.key === 'Escape') close();
@@ -259,21 +287,21 @@ function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: I
 ═══════════════════════════════════════════ */
 function CellComboDropdown({ value, onChange, options, hasError, placeholder = 'Select…' }) {
   const [open, setOpen] = useState(false);
-  const wrapRef    = useRef(null);
+  const wrapRef = useRef(null);
   const triggerRef = useRef(null);
-  const panelRef   = useRef(null);
-  const listRef    = useRef(null);
+  const panelRef = useRef(null);
+  const listRef = useRef(null);
 
-  const close    = useCallback(() => setOpen(false), []);
+  const close = useCallback(() => setOpen(false), []);
   useOutsideClick(wrapRef, panelRef, open, close);
 
   const selected = options.find(o => String(o.value) === String(value));
-  const openDD   = () => { setOpen(v => !v); setTimeout(() => { const items = listRef.current?.querySelectorAll('.exp-cell-combo-option'); if (items?.length) { const ai = Array.from(items).findIndex(el => el.classList.contains('exp-cell-combo-option--active')); (ai >= 0 ? items[ai] : items[0])?.focus(); } }, 0); };
-  const select   = (opt) => { onChange(opt.value); setOpen(false); };
-  const clear    = (e)   => { e.stopPropagation(); onChange(''); setOpen(false); };
-  const arrowNav = (e)   => {
+  const openDD = () => { setOpen(v => !v); setTimeout(() => { const items = listRef.current?.querySelectorAll('.exp-cell-combo-option'); if (items?.length) { const ai = Array.from(items).findIndex(el => el.classList.contains('exp-cell-combo-option--active')); (ai >= 0 ? items[ai] : items[0])?.focus(); } }, 0); };
+  const select = (opt) => { onChange(opt.value); setOpen(false); };
+  const clear = (e) => { e.stopPropagation(); onChange(''); setOpen(false); };
+  const arrowNav = (e) => {
     const items = listRef.current?.querySelectorAll('.exp-cell-combo-option');
-    const idx   = Array.from(items || []).indexOf(document.activeElement);
+    const idx = Array.from(items || []).indexOf(document.activeElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
     else if (e.key === 'Escape') close();
@@ -309,12 +337,12 @@ function CellComboDropdown({ value, onChange, options, hasError, placeholder = '
    HOARDING SEARCH WIDGET
 ───────────────────────────────────────── */
 function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabled }) {
-  const [query, setQuery]           = useState('');
-  const [open, setOpen]             = useState(false);
-  const [results, setResults]       = useState([]);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [results, setResults] = useState([]);
   const [focusedIdx, setFocusedIdx] = useState(-1);
-  const wrapRef  = useRef(null);
-  const listRef  = useRef(null);
+  const wrapRef = useRef(null);
+  const listRef = useRef(null);
   const inputRef = useRef(null);
 
   const selectedHoarding = hoardings.find(h => h.versions.some(v => v.hoardingID === Number(value)));
@@ -324,11 +352,11 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
     const q = query.toLowerCase();
     const matched = hoardings.filter(h => {
       const latest = getLatest(h);
-      const site   = sites.find(s => s.siteID === latest?.siteID);
+      const site = sites.find(s => s.siteID === latest?.siteID);
       if (!site) return false;
-      return ['addressLine1','addressLine2','addressLine3','landmark','city','district']
-        .some(k => (site[k]||'').toLowerCase().includes(q)) ||
-        (h.hoardingCode||'').toLowerCase().includes(q);
+      return ['addressLine1', 'addressLine2', 'addressLine3', 'landmark', 'city', 'district']
+        .some(k => (site[k] || '').toLowerCase().includes(q)) ||
+        (h.hoardingCode || '').toLowerCase().includes(q);
     });
     setResults(matched.slice(0, 12)); setFocusedIdx(-1);
   }, [query, hoardings, sites]);
@@ -342,7 +370,7 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
   }, []);
 
   const selectH = (h) => { onChange(getLatest(h)?.hoardingID); setQuery(''); setOpen(false); setResults([]); setFocusedIdx(-1); };
-  const clearH  = ()  => { onChange(''); setQuery(''); setResults([]); setFocusedIdx(-1); };
+  const clearH = () => { onChange(''); setQuery(''); setResults([]); setFocusedIdx(-1); };
 
   const handleInputKeyDown = (e) => {
     if (!open || results.length === 0) return;
@@ -371,8 +399,8 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
         <div className="exp-hoarding-dropdown" ref={listRef}>
           {results.map((h, idx) => {
             const latest = getLatest(h);
-            const site   = sites.find(s => s.siteID === latest?.siteID);
-            const addr   = site ? ['addressLine1','addressLine2','addressLine3','landmark','city','district'].map(k => site[k]).filter(Boolean).join(', ') : `Site ${latest?.siteID}`;
+            const site = sites.find(s => s.siteID === latest?.siteID);
+            const addr = site ? ['addressLine1', 'addressLine2', 'addressLine3', 'landmark', 'city', 'district'].map(k => site[k]).filter(Boolean).join(', ') : `Site ${latest?.siteID}`;
             return (
               <div key={h.hoardingCode} className={`exp-hoarding-option${idx === focusedIdx ? ' exp-hoarding-option--focused' : ''}`}
                 onMouseDown={() => selectH(h)} onMouseEnter={() => setFocusedIdx(idx)}>
@@ -392,8 +420,8 @@ function HoardingSearchWidget({ hoardings, sites, value, onChange, error, disabl
       )}
       {value && selectedHoarding && (() => {
         const latest = getLatest(selectedHoarding);
-        const site   = latest ? sites.find(s => s.siteID === latest.siteID) : null;
-        const addr   = site ? ['addressLine1','addressLine2','addressLine3','landmark','city','district'].map(k => site[k]).filter(Boolean).join(', ') : '';
+        const site = latest ? sites.find(s => s.siteID === latest.siteID) : null;
+        const addr = site ? ['addressLine1', 'addressLine2', 'addressLine3', 'landmark', 'city', 'district'].map(k => site[k]).filter(Boolean).join(', ') : '';
         return (
           <div className="exp-selected-hoarding">
             <div className="exp-selected-hoarding__inner">
@@ -447,8 +475,8 @@ function DeleteRowModal({ row, onConfirm, onCancel, deleting }) {
 ═══════════════════════════════════════════════════════════════ */
 function AttachCell({ rowId, expenseID, selectedFile, existingAttach, isUploading, onFileSelect, onFileClear }) {
   const inputRef = useRef(null);
-  const trigger  = () => inputRef.current?.click();
-  const onPick   = (e) => { const f = e.target.files?.[0]; if (f) onFileSelect(rowId, f); e.target.value = ''; };
+  const trigger = () => inputRef.current?.click();
+  const onPick = (e) => { const f = e.target.files?.[0]; if (f) onFileSelect(rowId, f); e.target.value = ''; };
 
   const fileInput = (
     <input ref={inputRef} type="file" style={{ display: 'none' }}
@@ -488,7 +516,7 @@ function AttachCell({ rowId, expenseID, selectedFile, existingAttach, isUploadin
 
   /* STATE 3 — attachment already on server */
   if (existingAttach) {
-    const name    = getAttachName(existingAttach);
+    const name = getAttachName(existingAttach);
     const fileUrl = getAttachUrl(existingAttach);
 
     const handleView = () => {
@@ -496,14 +524,7 @@ function AttachCell({ rowId, expenseID, selectedFile, existingAttach, isUploadin
     };
     const handleDownload = () => {
       if (!fileUrl) return;
-      const a = document.createElement('a');
-      a.href     = fileUrl;
-      a.download = name;
-      a.target   = '_blank';
-      a.rel      = 'noopener noreferrer';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      forceDownload(fileUrl, name);
     };
 
     return (
@@ -564,8 +585,8 @@ function AttachCell({ rowId, expenseID, selectedFile, existingAttach, isUploadin
 ═══════════════════════════════════════════════════════════════ */
 function EntryAttachField({ rowId, selectedFile, onFileSelect, onFileClear }) {
   const inputRef = useRef(null);
-  const trigger  = () => inputRef.current?.click();
-  const onPick   = (e) => { const f = e.target.files?.[0]; if (f) onFileSelect(rowId, f); e.target.value = ''; };
+  const trigger = () => inputRef.current?.click();
+  const onPick = (e) => { const f = e.target.files?.[0]; if (f) onFileSelect(rowId, f); e.target.value = ''; };
 
   return (
     <div className={`ea-entry-section${selectedFile ? ' ea-entry-section--filled' : ''}`}>
@@ -603,7 +624,7 @@ function EntryAttachField({ rowId, selectedFile, onFileSelect, onFileClear }) {
 /* ─────────────────────────────────────────
    EXPENSE ENTRY PANEL
 ───────────────────────────────────────── */
-function ExpenseEntryPanel({ row, errors, onChange, attachFile, onFileSelect, onFileClear }) {
+function ExpenseEntryPanel({ row, errors, onChange, attachFile, onFileSelect, onFileClear, expenseTypeOptions = [] }) {
   return (
     <div className="exp-entry-panel">
       <div className="row g-3">
@@ -617,9 +638,9 @@ function ExpenseEntryPanel({ row, errors, onChange, attachFile, onFileSelect, on
         </div>
         <div className="col-12 col-md-8">
           <FieldLabel label="Expense Type" required />
-          <ComboDropdown value={row.expenseType} onChange={v => onChange('expenseType', v)} onBlur={() => {}}
+          <ComboDropdown value={row.expenseType} onChange={v => onChange('expenseType', v)} onBlur={() => { }}
             hasError={!!errors.expenseType} placeholder="Select expense type…" icon={Tag}
-            options={EXPENSE_TYPE_COMBO_OPTIONS} searchable emptyText="No matching types" />
+            options={expenseTypeOptions} searchable emptyText="No matching types" />
           <FieldError msg={errors.expenseType} />
         </div>
         <div className="col-12">
@@ -673,7 +694,7 @@ function ExpenseEntryPanel({ row, errors, onChange, attachFile, onFileSelect, on
 /* ─────────────────────────────────────────
    EXPENSE ROWS TABLE
 ───────────────────────────────────────── */
-function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingRowId, attachFiles, existingAttaches, onFileSelect, onFileClear, uploadingRowIds }) {
+function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingRowId, attachFiles, existingAttaches, onFileSelect, onFileClear, uploadingRowIds, expenseTypeOptions = [] }) {
   if (rows.length === 0) return null;
   const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
 
@@ -716,11 +737,11 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
             </thead>
             <tbody>
               {rows.map((row, idx) => {
-                const errs       = rowErrors[row._rowId] || {};
+                const errs = rowErrors[row._rowId] || {};
                 const isDeleting = deletingRowId === row._rowId;
                 const isUploading = uploadingRowIds?.has(row._rowId);
-                const selFile    = attachFiles[row._rowId] || null;
-                const existing   = row._expenseID ? (existingAttaches[row._expenseID] || null) : null;
+                const selFile = attachFiles[row._rowId] || null;
+                const existing = row._expenseID ? (existingAttaches[row._expenseID] || null) : null;
                 return (
                   <tr key={row._rowId}
                     className={`${Object.keys(errs).length ? 'exp-tbl-row exp-tbl-row--err' : 'exp-tbl-row'}${isDeleting ? ' exp-tbl-row--deleting' : ''}`}
@@ -733,7 +754,7 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
                     </td>
                     <td className="exp-td">
                       <CellComboDropdown value={row.expenseType} onChange={v => onChangeRow(row._rowId, 'expenseType', v)}
-                        options={EXPENSE_TYPE_COMBO_OPTIONS} hasError={!!errs.expenseType} placeholder="Select…" />
+                        options={expenseTypeOptions} hasError={!!errs.expenseType} placeholder="Select…" />
                       {errs.expenseType && <div className="exp-cell-err">{errs.expenseType}</div>}
                     </td>
                     <td className="exp-td">
@@ -778,11 +799,11 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
       {/* ─── Mobile ─── */}
       <div className="exp-rows-mobile">
         {rows.map((row, idx) => {
-          const errs       = rowErrors[row._rowId] || {};
+          const errs = rowErrors[row._rowId] || {};
           const isDeleting = deletingRowId === row._rowId;
           const isUploading = uploadingRowIds?.has(row._rowId);
-          const selFile    = attachFiles[row._rowId] || null;
-          const existing   = row._expenseID ? (existingAttaches[row._expenseID] || null) : null;
+          const selFile = attachFiles[row._rowId] || null;
+          const existing = row._expenseID ? (existingAttaches[row._expenseID] || null) : null;
           return (
             <div key={row._rowId} className={`exp-mob-card${Object.keys(errs).length ? ' exp-mob-card--err' : ''}`}
               style={{ opacity: isDeleting ? 0.5 : 1, pointerEvents: isDeleting ? 'none' : 'auto' }}>
@@ -806,7 +827,7 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
                 <div className="col-12">
                   <div className="exp-mob-label">Expense Type <span className="exp-req">*</span></div>
                   <CellComboDropdown value={row.expenseType} onChange={v => onChangeRow(row._rowId, 'expenseType', v)}
-                    options={EXPENSE_TYPE_COMBO_OPTIONS} hasError={!!errs.expenseType} placeholder="Select…" />
+                    options={expenseTypeOptions} hasError={!!errs.expenseType} placeholder="Select…" />
                   {errs.expenseType && <div className="exp-cell-err">{errs.expenseType}</div>}
                 </div>
                 <div className="col-12">
@@ -829,8 +850,8 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
                     value={row.comments} onChange={e => onChangeRow(row._rowId, 'comments', e.target.value)} />
                 </div>
                 <div className="col-12">
-                  <div className="exp-mob-label" style={{ display:'flex', alignItems:'center', gap:4, marginBottom:4 }}>
-                    <Paperclip size={11} color="#9090a8" /> Photo / Doc <span style={{ fontSize:10, color:'#b0b0c8' }}>(optional)</span>
+                  <div className="exp-mob-label" style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                    <Paperclip size={11} color="#9090a8" /> Photo / Doc <span style={{ fontSize: 10, color: '#b0b0c8' }}>(optional)</span>
                   </div>
                   <AttachCell
                     rowId={row._rowId} expenseID={row._expenseID}
@@ -851,16 +872,16 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
 /* ─────────────────────────────────────────
    EXPENSE FORM  (Add / Edit)
 ───────────────────────────────────────── */
-function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
+function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, expenseTypeOptions = [] }) {
   const isAdd = mode === 'add';
 
-  const [hoardingID, setHoardingID]       = useState(isAdd ? '' : (expense?.hoardingID || ''));
+  const [hoardingID, setHoardingID] = useState(isAdd ? '' : (expense?.hoardingID || ''));
   const [hoardingError, setHoardingError] = useState('');
 
   const [rows, setRows] = useState(() => {
     if (isAdd || !expense) return [];
     const siblings = (allExpenses || []).filter(e => e.hoardingID === expense.hoardingID);
-    const source   = siblings.length > 0 ? siblings : [expense];
+    const source = siblings.length > 0 ? siblings : [expense];
     return source.map(e => ({
       ...EMPTY_ROW, _rowId: makeRowId(), _expenseID: e.expenseID,
       expenseDate: toDateInputValue(e.expenseDate),
@@ -869,82 +890,56 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack }) {
     }));
   });
 
-  const [rowErrors, setRowErrors]         = useState({});
-  const emptyCurrentRow                   = () => ({ ...EMPTY_ROW, _rowId: makeRowId() });
-  const [currentRow, setCurrentRow]       = useState(emptyCurrentRow);
+  const [rowErrors, setRowErrors] = useState({});
+  const emptyCurrentRow = () => ({ ...EMPTY_ROW, _rowId: makeRowId() });
+  const [currentRow, setCurrentRow] = useState(emptyCurrentRow);
   const [currentErrors, setCurrentErrors] = useState({});
   const [showEntryForm, setShowEntryForm] = useState(isAdd);
 
-  const [saving, setSaving]   = useState(false);
-  const [saveOk, setSaveOk]   = useState(false);
-  const [apiErr, setApiErr]   = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveOk, setSaveOk] = useState(false);
+  const [apiErr, setApiErr] = useState('');
 
   /* ── Attachment state ── */
-  const [attachFiles, setAttachFiles]           = useState({});
+  const [attachFiles, setAttachFiles] = useState({});
   const [existingAttaches, setExistingAttaches] = useState({});
-  const [uploadingRowIds, setUploadingRowIds]   = useState(new Set());
-  const [attachLoadDone, setAttachLoadDone]     = useState(isAdd);
+  const [uploadingRowIds, setUploadingRowIds] = useState(new Set());
+  const [attachLoadDone, setAttachLoadDone] = useState(isAdd);
 
   /* ── Per-row delete state ── */
-  const [deleteTarget, setDeleteTarget]   = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingRowId, setDeletingRowId] = useState(null);
+  const [stagedDeletedExpenseIds, setStagedDeletedExpenseIds] = useState([]);
 
   /* ── Load existing attachments for all saved rows on edit mount ── */
-useEffect(() => {
-  if (isAdd || rows.length === 0) { setAttachLoadDone(true); return; }
-  const ids = rows.map(r => r._expenseID).filter(Boolean);
-  if (!ids.length) { setAttachLoadDone(true); return; }
-  
-  console.log('🔍 Loading attachments for expense IDs:', ids); // ADD THIS
-  
-  let cancelled = false;
-  Promise.allSettled(ids.map(id => apiService.getExpenseAttachByExpenseId(id))).then(results => {
-    if (cancelled) return;
-    
-    console.log('📦 Attach results:', results); // ADD THIS
-    
-    const map = {};
-    results.forEach((res, i) => { 
-      if (res.status === 'fulfilled' && res.value) map[ids[i]] = res.value; 
+  useEffect(() => {
+    if (isAdd || rows.length === 0) { setAttachLoadDone(true); return; }
+    const ids = rows.map(r => r._expenseID).filter(Boolean);
+    if (!ids.length) { setAttachLoadDone(true); return; }
+
+
+    let cancelled = false;
+    Promise.allSettled(ids.map(id => apiService.getExpenseAttachByExpenseId(id))).then(results => {
+      if (cancelled) return;
+
+
+      const map = {};
+      results.forEach((res, i) => {
+        if (res.status === 'fulfilled' && res.value) map[ids[i]] = res.value;
+      });
+
+
+      setExistingAttaches(map);
+      setAttachLoadDone(true);
     });
-    
-    console.log('🗺️ Attach map built:', map); // ADD THIS
-    
-    setExistingAttaches(map);
-    setAttachLoadDone(true);
-  });
-  return () => { cancelled = true; };
-}, []);
+    return () => { cancelled = true; };
+  }, []);
 
   /* ── File handlers ── */
-const handleFileSelect = useCallback(async (rowId, file) => {
-  const row = rows.find(r => r._rowId === rowId);
-  const expenseID = row?._expenseID;
-
-  // REPLACE CASE — attachment already exists on server
-  if (expenseID && existingAttaches[expenseID]) {
-    const attach = existingAttaches[expenseID];
-    setUploadingRowIds(prev => new Set(prev).add(rowId));
-    try {
-      await apiService.updateExpenseAttach(
-        attach,           // full attach object (we read the ID from it inside api.js)
-        Number(hoardingID),
-        Number(expenseID),
-        file
-      );
-      // Refresh so the saved card shows the new filename
-      const updated = await apiService.getExpenseAttachByExpenseId(expenseID);
-      setExistingAttaches(prev => ({ ...prev, [expenseID]: updated }));
-    } catch (err) {
-      setApiErr(err?.response?.data?.message || err?.message || 'Failed to replace attachment.');
-    } finally {
-      setUploadingRowIds(prev => { const n = new Set(prev); n.delete(rowId); return n; });
-    }
-  } else {
-    // NEW FILE CASE — queue for upload when Save is clicked
+  /* ── File handlers ── */
+  const handleFileSelect = useCallback((rowId, file) => {
     setAttachFiles(prev => ({ ...prev, [rowId]: file }));
-  }
-}, [rows, existingAttaches, hoardingID]);
+  }, []);
   const handleFileClear = useCallback((rowId) => {
     setAttachFiles(prev => { const n = { ...prev }; delete n[rowId]; return n; });
   }, []);
@@ -974,18 +969,16 @@ const handleFileSelect = useCallback(async (rowId, file) => {
     if (row) setDeleteTarget(row);
   };
 
-  const confirmDeleteRow = async () => {
+  const confirmDeleteRow = () => {
     if (!deleteTarget) return;
     const row = deleteTarget;
-    setDeleteTarget(null); setDeletingRowId(row._rowId); setApiErr('');
-    try {
-      if (row._expenseID) await apiService.deleteExpense(row._expenseID);
-      setRows(prev => prev.filter(r => r._rowId !== row._rowId));
-      setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
-      setAttachFiles(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
-    } catch (err) {
-      setApiErr(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Failed to delete expense.');
-    } finally { setDeletingRowId(null); }
+    setDeleteTarget(null);
+    if (row._expenseID) {
+      setStagedDeletedExpenseIds(prev => [...prev, row._expenseID]);
+    }
+    setRows(prev => prev.filter(r => r._rowId !== row._rowId));
+    setRowErrors(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
+    setAttachFiles(prev => { const n = { ...prev }; delete n[row._rowId]; return n; });
   };
 
   /* ── Save ── */
@@ -1011,15 +1004,22 @@ const handleFileSelect = useCallback(async (rowId, file) => {
     setSaving(true); setApiErr('');
     const attachErrors = [];
     try {
+      // Delete staged deleted expenses first
+      if (stagedDeletedExpenseIds.length > 0) {
+        for (const id of stagedDeletedExpenseIds) {
+          await apiService.deleteExpense(id);
+        }
+      }
+
       for (const row of allRows) {
         const payload = {
-          hoardingID:  Number(hoardingID),
+          hoardingID: Number(hoardingID),
           expenseDate: row.expenseDate,
-          expenseType: row.expenseType,
-          expenseDTL:  row.expenseDTL,
-          amount:      Number(row.amount),
-          paidBy:      row.paidBy,
-          comments:    row.comments || '',
+          expenseType: row.expenseType ? String(row.expenseType) : '',
+          expenseDTL: row.expenseDTL,
+          amount: Number(row.amount),
+          paidBy: row.paidBy,
+          comments: row.comments || '',
         };
 
         let resolvedID = row._expenseID;
@@ -1034,7 +1034,12 @@ const handleFileSelect = useCallback(async (rowId, file) => {
         if (file && resolvedID) {
           setUploadingRowIds(prev => new Set(prev).add(row._rowId));
           try {
-            await apiService.createExpenseAttach(resolvedID, Number(hoardingID), file);
+            const existing = existingAttaches[resolvedID];
+            if (existing) {
+              await apiService.updateExpenseAttach(existing, Number(hoardingID), resolvedID, file);
+            } else {
+              await apiService.createExpenseAttach(resolvedID, Number(hoardingID), file);
+            }
           } catch (e) {
             attachErrors.push(e?.response?.data?.message || e?.message || 'Upload failed');
           } finally {
@@ -1057,7 +1062,7 @@ const handleFileSelect = useCallback(async (rowId, file) => {
   };
 
   const totalAmount = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
-  const saveLabel   = `Save ${rows.length > 0 ? rows.length : ''} Expense${rows.length !== 1 ? 's' : ''}`.trim();
+  const saveLabel = `Save ${rows.length > 0 ? rows.length : ''} Expense${rows.length !== 1 ? 's' : ''}`.trim();
 
   return (
     <div className="hd-form-page">
@@ -1086,7 +1091,7 @@ const handleFileSelect = useCallback(async (rowId, file) => {
           {apiErr && (
             <div className="pg-field-error hd-api-error mb-3">
               <AlertCircle size={14} /><span>{apiErr}</span>
-              <button style={{ marginLeft:'auto', background:'none', border:'none', color:'#dc2626', cursor:'pointer', fontSize:12 }} onClick={() => setApiErr('')}>✕</button>
+              <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }} onClick={() => setApiErr('')}>✕</button>
             </div>
           )}
 
@@ -1149,6 +1154,7 @@ const handleFileSelect = useCallback(async (rowId, file) => {
                         attachFile={attachFiles[currentRow._rowId] || null}
                         onFileSelect={handleFileSelect}
                         onFileClear={handleFileClear}
+                        expenseTypeOptions={expenseTypeOptions}
                       />
                       <div className="exp-addrow-bar">
                         <button className="exp-btn-addrow" onClick={handleAddRow}><Plus size={14} /> Add Expense Row</button>
@@ -1171,6 +1177,7 @@ const handleFileSelect = useCallback(async (rowId, file) => {
                     onFileSelect={handleFileSelect}
                     onFileClear={handleFileClear}
                     uploadingRowIds={uploadingRowIds}
+                    expenseTypeOptions={expenseTypeOptions}
                   />
 
                   {!isAdd && rows.length === 0 && !showEntryForm && (
@@ -1194,10 +1201,10 @@ const handleFileSelect = useCallback(async (rowId, file) => {
           {saveOk
             ? <><Check size={13} /> Saved!</>
             : saving
-            ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
-            : uploadingRowIds.size > 0
-            ? <><Loader2 size={13} className="pg-spin" /> Uploading…</>
-            : <><Check size={13} /> {saveLabel}</>}
+              ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
+              : uploadingRowIds.size > 0
+                ? <><Loader2 size={13} className="pg-spin" /> Uploading…</>
+                : <><Check size={13} /> {saveLabel}</>}
         </button>
       </div>
     </div>
@@ -1208,12 +1215,13 @@ const handleFileSelect = useCallback(async (rowId, file) => {
    MAIN PAGE
 ───────────────────────────────────────── */
 export default function HoardingExpensePage() {
-  const [hoardings, setHoardings]     = useState([]);
-  const [sites, setSites]             = useState([]);
-  const [expenses, setExpenses]       = useState([]);
+  const [hoardings, setHoardings] = useState([]);
+  const [sites, setSites] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [expenseTypeOptions, setExpenseTypeOptions] = useState([]);
   const [loadingMeta, setLoadingMeta] = useState(true);
-  const [loadingExp, setLoadingExp]   = useState(true);
-  const [loadError, setLoadError]     = useState('');
+  const [loadingExp, setLoadingExp] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
@@ -1221,32 +1229,44 @@ export default function HoardingExpensePage() {
   useEffect(() => { if (!isLoading) setTableReady(true); }, [isLoading]);
   useResizableColumns(tableRef, tableReady, [300, 200, 80]);
 
-const [view, setView] = useState('grid');
-const [formMode, setFormMode] = useState(null);
-const [editTarget, setEditTarget] = useState(null);
+  const [view, setView] = useState('grid');
+  const [formMode, setFormMode] = useState(null);
+  const [editTarget, setEditTarget] = useState(null);
 
-  const [search, setSearch]     = useState('');
-  const [sortKey, setSortKey]   = useState('hoardingCode');
-  const [sortDir, setSortDir]   = useState('asc');
-  const [page, setPage]         = useState(1);
+  const [search, setSearch] = useState('');
+  const [sortKey, setSortKey] = useState('hoardingCode');
+  const [sortDir, setSortDir] = useState('asc');
+  const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
   const fetchMeta = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
     try {
-      const [rawHoardings, rawSites] = await Promise.all([apiService.getAllHoardings(), apiService.getAllSites()]);
+      const [rawHoardings, rawSites, rawExpenseTypes] = await Promise.all([
+        apiService.getAllHoardings(),
+        apiService.getAllSites(),
+        apiService.getAllExpenseTypes().catch(() => [])
+      ]);
       const map = {};
       (Array.isArray(rawHoardings) ? rawHoardings : []).forEach(rec => {
         const code = rec.hoardingCode;
         if (!map[code]) map[code] = { hoardingCode: code, versions: [] };
         map[code].versions.push({
           hoardingID: rec.hoardingID, effdt: rec.effdt ? rec.effdt.split('T')[0] : '',
-          material: rec.material||'', hoardingType: rec.hoardingType||'', status: rec.status||'',
-          monthlyRent: rec.monthlyRent??'', width: rec.width??'', height: rec.height??'', siteID: rec.siteID||'',
+          material: rec.material || '', hoardingType: rec.hoardingType || '', status: rec.status || '',
+          monthlyRent: rec.monthlyRent ?? '', width: rec.width ?? '', height: rec.height ?? '', siteID: rec.siteID || '',
         });
       });
       setHoardings(Object.values(map));
       setSites(Array.isArray(rawSites) ? rawSites : []);
+
+      const allTypes = Array.isArray(rawExpenseTypes) ? rawExpenseTypes : rawExpenseTypes?.data ?? rawExpenseTypes?.$values ?? [];
+      const activeTypes = allTypes.filter(t => (t.status ?? t.Status ?? '').toLowerCase() === 'active');
+      const mappedOptions = activeTypes.map(t => ({
+        value: t.expenseTypeID ?? t.ExpenseTypeID,
+        label: t.expenseTypeName ?? t.ExpenseTypeName
+      }));
+      setExpenseTypeOptions(mappedOptions);
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally { setLoadingMeta(false); }
@@ -1280,17 +1300,17 @@ const [editTarget, setEditTarget] = useState(null);
       const key = exp.hoardingID;
       if (!map[key]) {
         const hoarding = hoardings.find(h => h.versions.some(v => v.hoardingID === exp.hoardingID));
-        const latest   = hoarding ? getLatest(hoarding) : null;
-        const site     = latest   ? sites.find(s => s.siteID === latest.siteID) : null;
+        const latest = hoarding ? getLatest(hoarding) : null;
+        const site = latest ? sites.find(s => s.siteID === latest.siteID) : null;
         map[key] = {
-          hoardingID:   key,
+          hoardingID: key,
           hoardingCode: hoarding?.hoardingCode || `ID ${key}`,
-          siteLabel:    site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : `Hoarding ID ${key}`,
+          siteLabel: site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : `Hoarding ID ${key}`,
           totalAmount: 0, count: 0, _firstExpense: exp,
         };
       }
       map[key].totalAmount += Number(exp.amount) || 0;
-      map[key].count       += 1;
+      map[key].count += 1;
     });
     return Object.values(map);
   }, [expenses, hoardings, sites]);
@@ -1306,8 +1326,8 @@ const [editTarget, setEditTarget] = useState(null);
     return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
   });
 
-  const totalPages  = Math.max(1, Math.ceil(sortedRows.length / pageSize));
-  const paginated   = sortedRows.slice((page - 1) * pageSize, page * pageSize);
+  const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
+  const paginated = sortedRows.slice((page - 1) * pageSize, page * pageSize);
   const totalAmount = expenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -1316,8 +1336,8 @@ const [editTarget, setEditTarget] = useState(null);
 
   const COLS = [
     { key: 'hoardingCode', label: 'Hoarding' },
-    { key: 'totalAmount',  label: 'Total Amount' },
-    { key: '_action',      label: 'Actions', noSort: true },
+    { key: 'totalAmount', label: 'Total Amount' },
+    { key: '_action', label: 'Actions', noSort: true },
   ];
 
   if (view === 'form') {
@@ -1326,6 +1346,7 @@ const [editTarget, setEditTarget] = useState(null);
         mode={formMode} expense={editTarget}
         hoardings={hoardings} sites={sites}
         allExpenses={expenses} onBack={handleFormBack}
+        expenseTypeOptions={expenseTypeOptions}
       />
     );
   }
@@ -1348,9 +1369,9 @@ const [editTarget, setEditTarget] = useState(null);
       {!isLoading && expenses.length > 0 && (
         <div className="exp-stats-strip">
           {[
-            { icon: <FileText size={16} color="#049edf" />,    bg: 'rgba(4,158,223,0.1)',   label: 'Total Expenses',    val: expenses.length },
-            { icon: <IndianRupee size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)',   label: 'Total Amount',      val: fmtCurrency(totalAmount) },
-            { icon: <Building2 size={16} color="#6c63ff" />,   bg: 'rgba(108,99,255,0.1)',  label: 'Hoardings Covered', val: new Set(expenses.map(e => e.hoardingID)).size },
+            { icon: <FileText size={16} color="#049edf" />, bg: 'rgba(4,158,223,0.1)', label: 'Total Expenses', val: expenses.length },
+            { icon: <IndianRupee size={16} color="#16a34a" />, bg: 'rgba(22,163,74,0.1)', label: 'Total Amount', val: fmtCurrency(totalAmount) },
+            { icon: <Building2 size={16} color="#6c63ff" />, bg: 'rgba(108,99,255,0.1)', label: 'Hoardings Covered', val: new Set(expenses.map(e => e.hoardingID)).size },
           ].map(s => (
             <div key={s.label} className="exp-stat-item">
               <div className="exp-stat-item__icon" style={{ background: s.bg }}>{s.icon}</div>
@@ -1363,7 +1384,7 @@ const [editTarget, setEditTarget] = useState(null);
       {loadError && (
         <div className="pg-field-error hd-api-error mb-3" style={{ margin: '0 0 16px 0' }}>
           <AlertCircle size={14} /><span>{loadError}</span>
-          <button style={{ marginLeft:'auto', background:'none', border:'none', color:'#ef4444', cursor:'pointer', fontSize:12 }}
+          <button style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 12 }}
             onClick={() => { fetchMeta(); fetchExpenses(); }}>Retry</button>
         </div>
       )}
@@ -1382,25 +1403,25 @@ const [editTarget, setEditTarget] = useState(null);
               {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
             </div>
             <button className="pg-pg-btn" onClick={() => { fetchMeta(); fetchExpenses(); }} title="Refresh"
-              style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:4 }}>
+              style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4 }}>
               <RefreshCw size={13} className={isLoading ? 'pg-spin' : ''} />
             </button>
           </div>
         </div>
 
         {isLoading && (
-          <div style={{ padding:'60px 0', textAlign:'center', color:'#9090a8' }}>
-            <Loader2 size={28} className="pg-spin" style={{ marginBottom:10 }} />
-            <div style={{ fontSize:13 }}>Loading expenses…</div>
+          <div style={{ padding: '60px 0', textAlign: 'center', color: '#9090a8' }}>
+            <Loader2 size={28} className="pg-spin" style={{ marginBottom: 10 }} />
+            <div style={{ fontSize: 13 }}>Loading expenses…</div>
           </div>
         )}
 
         {!isLoading && expenses.length === 0 && (
-          <div className="pg-empty" style={{ padding:'70px 20px' }}>
+          <div className="pg-empty" style={{ padding: '70px 20px' }}>
             <div className="pg-empty__inner">
               <FileText size={42} color="#d0d0e8" />
               <span className="pg-empty__label">No expenses recorded yet</span>
-              <span style={{ fontSize:12, color:'#b0b0c8', fontFamily:'Nunito, sans-serif' }}>Click <strong>Add Expense</strong> to record the first one</span>
+              <span style={{ fontSize: 12, color: '#b0b0c8', fontFamily: 'Nunito, sans-serif' }}>Click <strong>Add Expense</strong> to record the first one</span>
             </div>
           </div>
         )}
@@ -1431,8 +1452,8 @@ const [editTarget, setEditTarget] = useState(null);
                   <tr key={r.hoardingID} className="pg-tr">
                     <td className="pg-td">
                       <div className="pg-td__primary hd-code-cell">{r.hoardingCode}</div>
-                      <div style={{ fontSize:11, color:'#9090a8', marginTop:2 }}>{r.siteLabel}</div>
-                      <div style={{ fontSize:11, color:'#b0b0c8', marginTop:1 }}>{r.count} expense{r.count !== 1 ? 's' : ''}</div>
+                      <div style={{ fontSize: 11, color: '#9090a8', marginTop: 2 }}>{r.siteLabel}</div>
+                      <div style={{ fontSize: 11, color: '#b0b0c8', marginTop: 1 }}>{r.count} expense{r.count !== 1 ? 's' : ''}</div>
                     </td>
                     <td className="pg-td"><span className="exp-amount-val">{fmtCurrency(r.totalAmount)}</span></td>
                     <td className="pg-td">
@@ -1468,7 +1489,7 @@ const [editTarget, setEditTarget] = useState(null);
                 <div className="pg-card__body">
                   <div className="pg-card__row">
                     <IndianRupee size={12} color="#c0c0d8" className="pg-card__row-icon" />
-                    <span className="pg-card__row-text" style={{ fontWeight:800, color:'#1a1a2e' }}>{fmtCurrency(r.totalAmount)}</span>
+                    <span className="pg-card__row-text" style={{ fontWeight: 800, color: '#1a1a2e' }}>{fmtCurrency(r.totalAmount)}</span>
                   </div>
                   <div className="pg-card__row">
                     <FileText size={12} color="#c0c0d8" className="pg-card__row-icon" />

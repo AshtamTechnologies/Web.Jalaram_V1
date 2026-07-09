@@ -1,17 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     LogOut, Menu, X, ChevronDown, ChevronRight,
-    Layers, MapPin, Briefcase, BarChart3, CheckSquare,HardHat
+    Layers, MapPin, Briefcase, BarChart3, CheckSquare, HardHat
 } from 'lucide-react';
 import './SupervisorLayout.css';
 
 /* ─────────────────────────────────────
-   SUPERVISOR MENU — add/remove as needed
+   SUPERVISOR MENU
 ───────────────────────────────────── */
 const SUP_MENU = [
-  { id: 'sup-dashboard', icon: BarChart3,  label: 'Dashboard' },
-  { id: 'sup-hoardings', icon: Layers,     label: 'Tasks'     },
-  { id: 'workers',       icon: HardHat,    label: 'Workers'   }, 
+    // { id: 'sup-dashboard', icon: BarChart3,  label: 'Dashboard' },
+    { id: 'sup-jobs',      icon: Briefcase,  label: 'Jobs'      },  // ← fixed: was 'sup-hoardings'
+    { id: 'workers',       icon: HardHat,    label: 'Workers'   },
 ];
 
 /* ── Lookup maps ── */
@@ -108,7 +108,7 @@ export default function SupervisorLayout({ tab, changeTab, onLogout, children })
     const isParentActive = (item) => item.children?.some(c => c.id === tab) ?? false;
 
     /* ══════════════════════════════════════
-       SIDEBAR INNER — matches admin style exactly
+       SIDEBAR INNER
     ══════════════════════════════════════ */
     const SideInner = () => (
         <div className="sup-sidebar-inner">
@@ -127,15 +127,6 @@ export default function SupervisorLayout({ tab, changeTab, onLogout, children })
                     />
                 </div>
             </div>
-
-            {/* Role badge */}
-            {/* <div className="sup-role-badge">
-        <svg width="9" height="9" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-        </svg>
-        Supervisor
-      </div> */}
 
             <div className="sup-sidebar-section-label">Main Menu</div>
 
@@ -159,7 +150,6 @@ export default function SupervisorLayout({ tab, changeTab, onLogout, children })
                                     color: 'rgb(4, 158, 223)',
                                     fontWeight: 800,
                                     paddingLeft: 'calc(-3px + 1rem)',
-
                                 } : {}}
                             >
                                 <div
@@ -186,7 +176,6 @@ export default function SupervisorLayout({ tab, changeTab, onLogout, children })
                                 )}
                             </button>
 
-                            {/* Animated submenu */}
                             {hasChildren && (
                                 <div
                                     className="sup-nav-submenu"
@@ -210,7 +199,6 @@ export default function SupervisorLayout({ tab, changeTab, onLogout, children })
                                                     fontWeight: 800,
                                                 } : {}}
                                             >
-                                                {/* Sub indicator bar */}
                                                 <div style={{
                                                     width: '6px', height: '6px', borderRadius: '50%',
                                                     background: 'currentColor',
@@ -243,9 +231,6 @@ export default function SupervisorLayout({ tab, changeTab, onLogout, children })
         </div>
     );
 
-    /* ══════════════════════════════════════
-       RENDER
-    ══════════════════════════════════════ */
     return (
         <div className="sup-root">
 

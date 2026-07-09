@@ -2,6 +2,10 @@ import axios from 'axios';
 
 const API_BASE_URL = 'https://api.jalaram-ad.ashtamtechnologies.com/api';
 export const API_ROOT_URL = 'https://api.jalaram-ad.ashtamtechnologies.com';
+// https://uatapi.jalaram-ad.ashtamtechnologies.com/swagger/index.htmls
+
+// const API_BASE_URL = 'https://uatapi.jalaram-ad.ashtamtechnologies.com/api';
+// export const API_ROOT_URL = 'https://uatapi.jalaram-ad.ashtamtechnologies.com';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -67,6 +71,20 @@ export const apiService = {
   loginUser: async ({ email, password }) => {
     const response = await api.post('/Login/login', { email, password });
     if (response.forcePasswordChange === true) return response;
+
+    // ── Inactive account — API returns 200 with a plain message string ──
+    if (typeof response === 'string' && response.toLowerCase().includes('inactive')) {
+      const err = new Error(response);
+      err.response = { data: { message: response } };
+      throw err;
+    }
+    // Also handles if it comes back as an object with a message field but no token
+    if (!response.token && !response.accessToken && response.message) {
+      const err = new Error(response.message);
+      err.response = { data: { message: response.message } };
+      throw err;
+    }
+
     const rawToken = response.token || response.accessToken;
     if (!isValidJWT(rawToken)) {
       localStorage.clear();
@@ -93,11 +111,11 @@ export const apiService = {
     let userId = response.userId || response.user?.id || null;
     if (!userId) userId = decoded?.nameid || decoded?.sub || decoded?.userId || decoded?.id;
     if (userId) localStorage.setItem('userId', String(userId));
-// ✅ NEW
-const roleId  = response.roleId  || response.user?.roleId || 2;
-const roleStr = (response.role   || response.user?.role   || '').toLowerCase().trim();
-localStorage.setItem('roleId',   String(roleId));
-localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId === '1' ? 'admin' : 'user'));
+    // ✅ NEW
+    const roleId = response.roleId || response.user?.roleId || 2;
+    const roleStr = (response.role || response.user?.role || '').toLowerCase().trim();
+    localStorage.setItem('roleId', String(roleId));
+    localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId === '1' ? 'admin' : 'user'));
     localStorage.setItem('userData', JSON.stringify(response.user || response));
     localStorage.setItem('isLoggedIn', 'true');
     return response;
@@ -107,6 +125,13 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
 
   resetPassword: (data) =>
     api.post('/Login/reset-password', { email: data.email, newPassword: data.newPassword }),
+
+  changePassword: (data) =>
+    api.post('/Login/change-password', {
+      email: data.email,
+      oldPassword: data.oldPassword,
+      newPassword: data.newPassword,
+    }),
 
   logoutUser: () => {
     const attachNames = localStorage.getItem('lc_attach_names');
@@ -181,7 +206,10 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
 
   // HOARDINGS
   getAllHoardings: () => api.get('/Hoarding'),
+  getAvailableHoardings: (startDate, endDate) => api.get(`/Hoarding/available?startDate=${startDate}&endDate=${endDate}`),
+  getAllavailableforJob: () => api.get('/Hoarding/availableforJob'), //Show the hoarding available
   getHoardingById: (hoardingID) => api.get(`/Hoarding/${hoardingID}`),
+  getHoardingAvailabilityDetails: (hoardingID) => api.get(`/Hoarding/${hoardingID}/HoardingAvailabilityDetails`),
   createHoarding: (data) => api.post('/Hoarding', {
     hoardingID: 0,
     effdt: data.effdt ? data.effdt : new Date().toISOString().split('T')[0],
@@ -198,6 +226,18 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
     hoardingID: 0,
     effdt: data.effdt ? data.effdt : new Date().toISOString().split('T')[0],
     hoardingCode: hoardingCode,
+    material: data.material,
+    hoardingType: Number(data.hoardingType),
+    status: data.status,
+    monthlyRent: Number(data.monthlyRent),
+    width: Number(data.width),
+    height: Number(data.height),
+    siteID: Number(data.siteID),
+  }),
+  saveHoardingLinkWithPhotos: (data) => api.post('/Hoarding/SaveHoardingLinkWithPhotos', {
+    hoardingID: Number(data.hoardingID),
+    effdt: data.effdt ? data.effdt : new Date().toISOString().split('T')[0],
+    hoardingCode: data.hoardingCode,
     material: data.material,
     hoardingType: Number(data.hoardingType),
     status: data.status,
@@ -344,7 +384,7 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
       paymentPurpose: data.paymentPurpose || '',
       amountPaid: Number(data.amountPaid),
       paymentMode: data.paymentMode || '',
-      nextDueDate: data.nextDueDate ? data.nextDueDate.split('T')[0] : null,
+      nextDueDate: data.nextDueDate ? data.nextDueDate.split('T')[0] : '0001-01-01',
       bankName: data.bankName || null,
       referenceNumber: data.referenceNumber || null,
       paidBy: data.paidBy || '',
@@ -364,7 +404,7 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
       paymentPurpose: data.paymentPurpose || '',
       amountPaid: Number(data.amountPaid),
       paymentMode: data.paymentMode || '',
-      nextDueDate: data.nextDueDate ? data.nextDueDate.split('T')[0] : null,
+      nextDueDate: data.nextDueDate ? data.nextDueDate.split('T')[0] : '0001-01-01',
       bankName: data.bankName || null,
       referenceNumber: data.referenceNumber || null,
       paidBy: data.paidBy || '',
@@ -412,11 +452,16 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
   deleteCustomer: (id) => api.delete(`/CustomerDTL/Delete/${id}`),
 
   // CUSTOMER CONTRACTS
-  getAllCustomerContracts: () => api.get('/CustomerContract/GetAll'),
+  getAllCustomerContracts: async () => {
+    const res = await api.get('/CustomerContract/GetAll');
+    if (Array.isArray(res)) return res;
+    if (Array.isArray(res?.data)) return res.data;
+    if (Array.isArray(res?.$values)) return res.$values;
+    return [];
+  },
   createCustomerContract: (data) => api.post('/CustomerContract/Create', {
     customerContractID: 0,
     customerID: Number(data.customerID),
-    hoardingID: Number(data.hoardingID),
     startDate: data.startDate,
     endDate: data.endDate,
     contractOrigValue: Number(data.contractOrigValue) || 0,
@@ -434,7 +479,6 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
   updateCustomerContract: (data) => api.put('/CustomerContract/Update', {
     customerContractID: Number(data.customerContractID),
     customerID: Number(data.customerID),
-    hoardingID: Number(data.hoardingID),
     startDate: data.startDate,
     endDate: data.endDate,
     contractOrigValue: Number(data.contractOrigValue) || 0,
@@ -492,7 +536,23 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
   },
 
   // HOARDING MERGE (contract-level)
-  getAllHoardingMerges: () => api.get('/HoardingMerge/GetAll'),
+  getAllHoardingMerges: async () => {
+    try {
+      const res = await api.get('/HoardingMerge/GetAll');
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.value) ? res.value : [];
+      return list;
+    } catch (err) {
+      console.warn('[MERGE GetAll failed, trying /HoardingMerge]', err?.response?.status);
+      try {
+        const res2 = await api.get('/HoardingMerge');
+        const list2 = Array.isArray(res2) ? res2 : Array.isArray(res2?.data) ? res2.data : Array.isArray(res2?.value) ? res2.value : [];
+        return list2;
+      } catch (err2) {
+        console.error('[MERGE both endpoints failed]', err2?.response?.status);
+        return [];
+      }
+    }
+  },
   getHoardingMergeById: (id) => api.get(`/HoardingMerge/${id}`),
   createHoardingMerge: (data) => api.post('/HoardingMerge/Create', {
     hoardingMergeID: 0,
@@ -500,7 +560,7 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
     customerContractID: Number(data.customerContractID),
     mergeAlongFlag: data.mergeAlongFlag,
   }),
-  updateHoardingMerge: (id, data) => api.put(`/HoardingMerge/Update/${id}`, {
+  updateHoardingMerge: (id, data) => api.put(`/HoardingMerge/Update`, {
     hoardingMergeID: Number(id),
     hoardingID: Number(data.hoardingID),
     customerContractID: Number(data.customerContractID),
@@ -627,11 +687,34 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
   _exportReport: async (reportType, format, defaultExt) => {
     const token = localStorage.getItem('authToken');
     const today = new Date().toISOString().slice(0, 10);
+    const acceptHeader = format === 'pdf'
+      ? 'application/pdf'
+      : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel';
     const response = await fetch(
-      `https://api.jalaram-ad.ashtamtechnologies.com/api/Report/ExportReport?reportType=${reportType}`,
-      { method: 'GET', headers: { 'Accept': '*/*', ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
+      `${API_ROOT_URL}/api/Report/ExportReport?reportType=${reportType}&format=${format}`,
+      { method: 'GET', headers: { 'Accept': acceptHeader, ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
     );
-    if (!response.ok) throw new Error(`Server error: ${response.status}`);
+    if (!response.ok) {
+      let errMsg = `Server error: ${response.status}`;
+      try {
+        const text = await response.text();
+        try {
+          const errorData = JSON.parse(text);
+          if (errorData && errorData.message) {
+            errMsg = errorData.message;
+          } else if (errorData && errorData.error) {
+            errMsg = errorData.error;
+          }
+        } catch (jsonErr) {
+          if (text && text.trim().length < 200) {
+            errMsg = text.trim();
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+      throw new Error(errMsg);
+    }
     const blob = await response.blob();
     if (blob.size === 0) throw new Error('Server returned an empty file.');
     const disposition = response.headers.get('content-disposition') ?? '';
@@ -649,7 +732,42 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
     window.URL.revokeObjectURL(url);
   },
   exportReportExcel: function (reportType) { return this._exportReport(reportType, 'excel', 'xlsx'); },
-  exportReportPDF:   function (reportType) { return this._exportReport(reportType, 'pdf',   'pdf');  },
+  exportReportPDF: async function () {
+    const token = localStorage.getItem('authToken');
+    const today = new Date().toISOString().slice(0, 10);
+    const response = await fetch(
+      `${API_ROOT_URL}/api/Report/ExportPDF`,
+      { method: 'GET', headers: { 'Accept': 'application/pdf', ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
+    );
+    if (!response.ok) {
+      let errMsg = `Server error: ${response.status}`;
+      try {
+        const text = await response.text();
+        try {
+          const errorData = JSON.parse(text);
+          errMsg = errorData.message || errorData.error || errMsg;
+        } catch {
+          if (text && text.trim().length < 200) errMsg = text.trim();
+        }
+      } catch { /* ignore */ }
+      throw new Error(errMsg);
+    }
+    const blob = await response.blob();
+    if (blob.size === 0) throw new Error('Server returned an empty file.');
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const nameMatch = disposition.match(/filename\*?=(?:UTF-8''|")?([^";\n]+)/i);
+    const filename = nameMatch
+      ? decodeURIComponent(nameMatch[1].replace(/['"]/g, '').trim())
+      : `AvailableHoardings_${today}.pdf`;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
 
   // CUSTOMER TERMS
   getAllCustomerTerms: () => api.get('/CustomerTerms'),
@@ -665,15 +783,15 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
   getQuotationById: (quotationID, revisionNumber, customerID) =>
     api.get(`/Quotation/${quotationID}/${revisionNumber}/${customerID}`),
   createQuotation: (data) => api.post('/Quotation', {
-    quotationID: 0,
+    quotationID: Number(data.quotationID ?? 0),
     quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
     customerID: Number(data.customerID),
     quotationNumber: String(data.quotationNumber),
     quotationDate: data.quotationDate,
     cGSTPercent: Number(data.cGSTPercent ?? 0),
-    cGSTAmount:  Number(data.cGSTAmount  ?? 0),
+    cGSTAmount: Number(data.cGSTAmount ?? 0),
     sGSTPercent: Number(data.sGSTPercent ?? 0),
-    sGSTAmount:  Number(data.sGSTAmount  ?? 0),
+    sGSTAmount: Number(data.sGSTAmount ?? 0),
     totalAmount: Number(data.totalAmount ?? 0),
   }),
   updateQuotation: (data) => api.put('/Quotation', {
@@ -683,34 +801,44 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
     quotationNumber: String(data.quotationNumber),
     quotationDate: data.quotationDate,
     cGSTPercent: Number(data.cGSTPercent ?? 0),
-    cGSTAmount:  Number(data.cGSTAmount  ?? 0),
+    cGSTAmount: Number(data.cGSTAmount ?? 0),
     sGSTPercent: Number(data.sGSTPercent ?? 0),
-    sGSTAmount:  Number(data.sGSTAmount  ?? 0),
+    sGSTAmount: Number(data.sGSTAmount ?? 0),
     totalAmount: Number(data.totalAmount ?? 0),
   }),
+  archiveQuotation: (quotationId) => api.post(`/QuotationArchive/${quotationId}`),
+  deleteQuotation: (quotationId, revisionNo, customerId) =>
+    api.delete(`/Quotation/${Number(quotationId)}/${Number(revisionNo)}/${Number(customerId)}`),
+
 
   // QUOTATION LINES
   getAllQuotationLines: () => api.get('/QuotationLineDTL'),
   getQuotationLineById: (lineID, quotationID, revisionID, hoardingID) =>
     api.get(`/QuotationLineDTL/${lineID}/${quotationID}/${revisionID}/${hoardingID}`),
   createQuotationLine: (data) => api.post('/QuotationLineDTL', {
-    quotationLineNumber:     Number(data.quotationLineNumber     ?? 0),
-    quotationID:             Number(data.quotationID),
+    quotationLineNumber: Number(data.quotationLineNumber ?? 0),
+    quotationID: Number(data.quotationID),
     quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-    hoardingID:              Number(data.hoardingID ?? 0),
-    periodBeginDate:         data.periodBeginDate,
-    periodEndDate:           data.periodEndDate,
-    rentAmount:              Number(data.rentAmount ?? 0),
+    hoardingID: Number(data.hoardingID ?? 0),
+    purpose: String(data.purpose ?? ''),
+    periodBeginDate: data.periodBeginDate,
+    periodEndDate: data.periodEndDate,
+    rentAmount: Number(data.rentAmount ?? 0),
+    mergeFlag: Boolean(data.mergeFlag ?? false),
   }),
   updateQuotationLine: (data) => api.put('/QuotationLineDTL', {
-    quotationLineNumber:     Number(data.quotationLineNumber     ?? 0),
-    quotationID:             Number(data.quotationID),
+    quotationLineNumber: Number(data.quotationLineNumber ?? 0),
+    quotationID: Number(data.quotationID),
     quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-    hoardingID:              Number(data.hoardingID ?? 0),
-    periodBeginDate:         data.periodBeginDate,
-    periodEndDate:           data.periodEndDate,
-    rentAmount:              Number(data.rentAmount ?? 0),
+    hoardingID: Number(data.hoardingID ?? 0),
+    purpose: String(data.purpose ?? ''),
+    periodBeginDate: data.periodBeginDate,
+    periodEndDate: data.periodEndDate,
+    rentAmount: Number(data.rentAmount ?? 0),
+    mergeFlag: Boolean(data.mergeFlag ?? false),
   }),
+  deleteQuotationLine: (lineID, quotationID, revisionID, hoardingID) =>
+    api.delete(`/QuotationLineDTL/${lineID}/${quotationID}/${revisionID}/${hoardingID}`),
 
   // ─────────────────────────────────────────────────────────
   // QUOTATION MERGE DTL
@@ -736,30 +864,31 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
       return Promise.resolve(null);
     }
     return api.post('/QuotationMergeDTL', {
-      quotationMergeID:        0,
-      quotationLineNumber:     Number(data.quotationLineNumber     ?? 0),
-      quotationID:             Number(data.quotationID),
+      quotationMergeID: 0,
+      quotationLineNumber: Number(data.quotationLineNumber ?? 0),
+      quotationID: Number(data.quotationID),
       quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-      hoardingID:              Number(data.hoardingID),
-      mergeAlongFlag:          data.mergeAlongFlag === 'H' ? 'H' : 'V',
+      hoardingID: Number(data.hoardingID),
+      mergeAlongFlag: data.mergeAlongFlag === 'H' ? 'H' : 'V',
     });
   },
 
   updateQuotationMerge: (mergeId, hoardingId, data) =>
     api.put(`/QuotationMergeDTL/${mergeId}/${hoardingId}`, {
-      quotationMergeID:        Number(mergeId),
-      quotationLineNumber:     Number(data.quotationLineNumber     ?? 0),
-      quotationID:             Number(data.quotationID             ?? 0),
+      quotationMergeID: Number(mergeId),
+      quotationLineNumber: Number(data.quotationLineNumber ?? 0),
+      quotationID: Number(data.quotationID ?? 0),
       quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
-      hoardingID:              Number(hoardingId),
-      mergeAlongFlag:          data.mergeAlongFlag === 'H' ? 'H' : 'V',
+      hoardingID: Number(hoardingId),
+      mergeAlongFlag: data.mergeAlongFlag === 'H' ? 'H' : 'V',
     }),
 
   deleteQuotationMerge: (mergeId, hoardingId) =>
     api.delete(`/QuotationMergeDTL/${mergeId}/${hoardingId}`),
-
+  // Add to apiService in api.js
+  getAllCustomerContractHoardingMaps: () => api.get('/CustomerContractHoarding'),
   // JOB REQUESTS
-  getAllJobRequests: () => api.get('/JobRequest/GetAll'),
+  getAllJobRequests: () => api.get('/JobRequest'),
   getJobRequestById: (id) => api.get(`/JobRequest/${id}`),
   createJobRequest: (data) => api.post('/JobRequest', {
     jobRequestID: 0,
@@ -767,34 +896,47 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
     customerContractID: Number(data.customerContractID ?? 0),
     jobType: String(data.jobType ?? ''),
     jobDescription: String(data.jobDescription ?? ''),
-    iD: Number(data.iD ?? 0),
+    iD: String(data.iD ?? ''),                          // ← STRING not number
+    jobCreateDTTM: new Date().toISOString(),             // ← NEW required field
+    supervisorAcceptDttm: new Date().toISOString(),      // ← NEW required field
+    noofHoardings: String(data.noofHoardings ?? '0'),    // ← NEW required field (string)
     rateperSQFT: Number(data.rateperSQFT ?? 0),
     totalAreaSQFT: Number(data.totalAreaSQFT ?? 0),
     targetCompletionDate: data.targetCompletionDate ?? '',
-    actualCompletionDate: data.actualCompletionDate || null,
+    actualCompletionDate: data.actualCompletionDate || data.targetCompletionDate || '',
     jobStatus: String(data.jobStatus ?? 'Open'),
   }),
-  updateJobRequest: (data) => api.put('/JobRequest/Update', {
+  updateJobRequest: (data) => api.put('/JobRequest', {
     jobRequestID: Number(data.jobRequestID ?? 0),
     customerID: Number(data.customerID ?? 0),
     customerContractID: Number(data.customerContractID ?? 0),
     jobType: String(data.jobType ?? ''),
     jobDescription: String(data.jobDescription ?? ''),
-    iD: Number(data.iD ?? 0),
+    iD: String(data.iD ?? ''),                          // ← STRING
+    jobCreateDTTM: new Date().toISOString(),
+    supervisorAcceptDttm: data.supervisorAcceptDttm ?? new Date().toISOString(),
+    noofHoardings: String(data.noofHoardings ?? '0'),
     rateperSQFT: Number(data.rateperSQFT ?? 0),
     totalAreaSQFT: Number(data.totalAreaSQFT ?? 0),
     targetCompletionDate: data.targetCompletionDate ?? '',
-    actualCompletionDate: data.actualCompletionDate || null,
+    actualCompletionDate: data.actualCompletionDate || data.targetCompletionDate || '',
     jobStatus: String(data.jobStatus ?? 'Open'),
   }),
   deleteJobRequest: (id) => api.delete(`/JobRequest/Delete/${id}`),
 
   // JOB TASKS
-  getAllJobTasks: () => api.get('/JobTaskDTL/GetAll'),
-  getJobTasksByJobRequestId: (jobRequestID) => api.get(`/JobTaskDTL/GetByJobRequest/${jobRequestID}`),
+  getAllJobTasks: () => api.get('/JobTask'),
+  // In api.js — replace getJobTasksByJobRequestId
+  getJobTasksByJobRequestId: async (jobRequestID) => {
+    const all = await api.get('/JobTask');
+    const list = Array.isArray(all) ? all : Array.isArray(all?.data) ? all.data : [];
+    return list.filter(t =>
+      Number(t.jobRequestID ?? t.JobRequestID) === Number(jobRequestID)
+    );
+  },
   createJobTask: (data) => {
     const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
-    return api.post('/JobTaskDTL/Create', {
+    return api.post('/JobTask', {
       jobTaskID: 0,
       jobRequestID: Number(data.jobRequestID ?? 0),
       hoardingID: Number(data.hoardingID ?? 0),
@@ -807,7 +949,7 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
   },
   updateJobTask: (data) => {
     const userId = (() => { const n = parseInt(localStorage.getItem('userId'), 10); return isNaN(n) ? 0 : n; })();
-    return api.put('/JobTaskDTL/Update', {
+    return api.put(`/JobTask/${Number(data.jobTaskID ?? 0)}`, {
       jobTaskID: Number(data.jobTaskID ?? 0),
       jobRequestID: Number(data.jobRequestID ?? 0),
       hoardingID: Number(data.hoardingID ?? 0),
@@ -818,40 +960,310 @@ localStorage.setItem('userRole', roleStr ? roleStr : (roleId === 1 || roleId ===
       lastUpdatedBy: Number(data.lastUpdatedBy ?? userId),
     });
   },
-  deleteJobTask: (id) => api.delete(`/JobTaskDTL/Delete/${id}`),
+  deleteJobTask: (id) => api.delete(`/JobTask/${id}`),
 
   // USER REGISTRATION & MANAGEMENT
   getAllUsers: () => api.get('/Login/get-all'),
   registerUser: (data) => api.post('/Login/register', {
-    first_Name:     String(data.firstName    || '').trim(),
-    last_Name:      String(data.lastName     || '').trim(),
-    phone_1:        String(data.phone1       || '').trim(),
-    phone_2:        String(data.phone2       || '').trim(),
-    email:          String(data.email        || '').trim(),
+    first_Name: String(data.firstName || '').trim(),
+    last_Name: String(data.lastName || '').trim(),
+    phone_1: String(data.phone1 || '').trim(),
+    phone_2: String(data.phone2 || '').trim(),
+    email: String(data.email || '').trim(),
     address_Line_1: String(data.addressLine1 || '').trim(),
     address_Line_2: String(data.addressLine2 || '').trim(),
     address_Line_3: String(data.addressLine3 || '').trim(),
-    city:           String(data.city         || '').trim(),
-    district:       String(data.district     || '').trim(),
-    country:        String(data.country      || 'India').trim(),
-    role:           String(data.role         || '').trim(),
+    city: String(data.city || '').trim(),
+    district: String(data.district || '').trim(),
+    country: String(data.country || 'India').trim(),
+    status: String(data.status || 'Active').trim(),
+    role: String(data.role || '').trim(),
   }),
   updateUser: (userId, data) => api.put('/Login/update', {
-    id:             Number(userId),
-    first_Name:     String(data.firstName    || '').trim(),
-    last_Name:      String(data.lastName     || '').trim(),
-    phone_1:        String(data.phone1       || '').trim(),
-    phone_2:        String(data.phone2       || '').trim(),
-    email:          String(data.email        || '').trim(),
+    id: Number(userId),
+    first_Name: String(data.firstName || '').trim(),
+    last_Name: String(data.lastName || '').trim(),
+    phone_1: String(data.phone1 || '').trim(),
+    phone_2: String(data.phone2 || '').trim(),
+    email: String(data.email || '').trim(),
     address_Line_1: String(data.addressLine1 || '').trim(),
     address_Line_2: String(data.addressLine2 || '').trim(),
     address_Line_3: String(data.addressLine3 || '').trim(),
-    city:           String(data.city         || '').trim(),
-    district:       String(data.district     || '').trim(),
-    country:        String(data.country      || 'India').trim(),
-    role:           String(data.role         || '').trim(),
+    city: String(data.city || '').trim(),
+    district: String(data.district || '').trim(),
+    country: String(data.country || 'India').trim(),
+    status: String(data.status || 'Active').trim(),
+    role: String(data.role || '').trim(),
   }),
 
+  // ─────────────────────────────────────────────────────────
+  // ADD THIS INSIDE your apiService object in api.js
+  // Place it right after getAllJobRequests / getJobRequestById
+  // ─────────────────────────────────────────────────────────
+
+  getJobRequestsByUserId: (userId) =>
+    api.get(`/JobRequest/GetByUserId/${userId}`),
+
+  // QUOTATION CUSTOMER
+  getNextQuotationNumber: () => api.get('/SeriesID/NextQuotationNumber'),
+  getNextProformaInvoiceNumber: () => api.get('/SeriesID/NextProformaInvoiceNumber'),
+  getNextProformaNumber: () => api.get('/SeriesID/NextProformaNumber'),
+  getAllQuotationCustomers: () => api.get('/QuotationCustomer'),
+  getQuotationCustomerById: (id) => api.get(`/QuotationCustomer/${id}`),
+  createQuotationCustomer: (data) => api.post('/QuotationCustomer', {
+    quotationCustomer_ID: 0,
+    quotation_ID: Number(data.quotationID),
+    quotation_Revision_Number: Number(data.quotationRevisionNumber ?? 0),
+    customer_ID: Number(data.customerID),
+  }),
+  updateQuotationCustomer: (id, data) => api.put(`/QuotationCustomer/${id}`, {
+    quotationCustomer_ID: Number(id),
+    quotation_ID: Number(data.quotationID),
+    quotation_Revision_Number: Number(data.quotationRevisionNumber ?? 0),
+    customer_ID: Number(data.customerID),
+  }),
+
+
+  // Customer Contract Hoarding Map
+  getCustomerContractHoardingMaps: async (customerContractID) => {
+    try {
+      const all = await api.get('/CustomerContractHoarding');
+      const list = Array.isArray(all) ? all : Array.isArray(all?.data) ? all.data : [];
+      return list.filter(m =>
+        Number(m.customerContractID ?? m.CustomerContractID) === Number(customerContractID)
+      );
+    } catch (err) {
+      if (err?.response?.status === 404) return [];
+      throw err;
+    }
+  },
+  createCustomerContractHoardingMap: (payload) =>
+    api.post('/CustomerContractHoarding', {
+      customerContractLineID: 0,
+      customerContractID: Number(payload.customerContractID),
+      customerID: Number(payload.customerID),
+      hoardingID: Number(payload.hoardingID),
+    }),
+  updateCustomerContractHoardingMap: (customerContractLineID, payload) =>
+    api.put(`/CustomerContractHoarding/${customerContractLineID}`, {
+      customerContractLineID: Number(customerContractLineID),
+      customerContractID: Number(payload.customerContractID),
+      customerID: Number(payload.customerID),
+      hoardingID: Number(payload.hoardingID),
+    }),
+  deleteCustomerContractHoardingMap: (customerContractLineID) =>
+    api.delete(`/CustomerContractHoarding/${customerContractLineID}`),
+
+
+
+  // ── Job Task Attachments ──
+
+  getAllJobTaskAttachments: () => api.get('/JobTaskAttach'),
+  getJobTaskAttachmentById: (id) => api.get(`/JobTaskAttach/${id}`),
+  uploadJobTaskAttachment: (formData) =>
+    api.post('/JobTaskAttach/Upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  updateJobTaskAttachment: (id, data) => api.put(`/JobTaskAttach/${id}`, data),
+  // Inside apiService object, after uploadJobTaskAttachment:
+  deleteJobTaskAttachment: (id) => api.delete(`/JobTaskAttach/${id}`),
+
+  getJobTaskAssignsByUserId: (userId) =>
+    api.get(`/JobTaskAssign/GetByUserId/${userId}`),
+
+  // ── Expense Type ──
+  getAllExpenseTypes: () => api.get('/ExpenseType'),
+  getExpenseTypeById: (id) => api.get(`/ExpenseType/${id}`),
+  createExpenseType: (data) => api.post('/ExpenseType', data),
+  updateExpenseType: (id, data) => api.put(`/ExpenseType/${id}`, data),
+  deleteExpenseType: (id) => api.delete(`/ExpenseType/${id}`),
+
+
+
+  // Workers
+  getWorkers: async () => {
+    try {
+      const res = await api.get('/Login/get-all');
+      const list = Array.isArray(res) ? res
+        : Array.isArray(res?.data) ? res.data
+          : Array.isArray(res?.$values) ? res.$values : [];
+      return list
+        .filter(u => (u.role ?? u.Role ?? '').toLowerCase() === 'worker')
+        .map(u => ({
+          id: u.id ?? u.Id ?? u.userID ?? u.UserID ?? 0,
+          name: [u.first_Name ?? u.firstName ?? '', u.last_Name ?? u.lastName ?? ''].filter(Boolean).join(' ').trim()
+            || u.email || `User #${u.id}`,
+          role: u.role ?? u.Role ?? '',
+          email: u.email ?? u.Email ?? '',
+        }));
+    } catch (err) {
+      console.error('getWorkers failed:', err?.response?.status);
+      return [];
+    }
+  },
+
+  // Job Task Assignments
+  getJobTaskAssignsByTaskId: async (jobTaskID) => {
+    try {
+      const res = await api.get('/JobTaskAssign');
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      return list.filter(a => Number(a.jobTaskID ?? a.JobTaskID) === Number(jobTaskID));
+    } catch {
+      return [];
+    }
+  },
+
+  createJobTaskAssign: async (payload) => {
+    const response = await axios.post(`${API_BASE_URL}/JobTaskAssign`, payload);
+    return response.data;
+  },
+
+  updateJobTaskAssign: async (payload) => {
+    const response = await axios.put(`${API_BASE_URL}/JobTaskAssign/${payload.jobTaskAssignID}`, payload);
+    return response.data;
+  },
+
+  deleteJobTaskAssign: async (jobTaskAssignID) => {
+    const response = await axios.delete(`${API_BASE_URL}/JobTaskAssign/${jobTaskAssignID}`);
+    return response.data;
+  },
+
+  getContractBannerImages: async (customerContractID) => {
+    try {
+      const res = await api.get(`/CustContractAttach/ViewImage/${customerContractID}`);
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      return list
+        .filter(item => item.fileUploadType === 'Banner Design' || item.imageUrl)
+        .map(item => ({
+          custContractAttachID: item.custContractAttachID,
+          contractFilename: item.contractFilename,
+          imageUrl: `${API_ROOT_URL}${item.imageUrl}`,
+        }));
+    } catch { return []; }
+  },
+
+
+
+  // JOB PAYMENTS
+  getAllJobPayments: () => api.get('/JobPayment'),
+  getCompletedJobsWithPendingPayment: () => api.get('/JobPayment/GetCompletedJobsWithPendingPayment'),
+  getJobPaymentById: (id) => api.get(`/JobPayment/${id}`),
+  createJobPayment: (data) => api.post('/JobPayment', {
+    jobPaymentID: 0,
+    jobRequestID: Number(data.jobRequestID ?? 0),
+    paymentDate: data.paymentDate ?? new Date().toISOString().split('T')[0],
+    calculatedAmount: Number(data.calculatedAmount ?? 0),
+    paidAmount: Number(data.paidAmount ?? 0),
+    remainingAmount: Number(data.remainingAmount ?? 0),
+    paidBY: String(data.paidBY ?? ''),
+    receiptPhoto: String(data.receiptPhoto ?? ''),
+    comments: String(data.comments ?? ''),
+    isParicialPayment: Boolean(data.isParicialPayment ?? false),
+    lastUpdateDttm: new Date().toISOString(),
+    lastUpdatedBy: getLoggedInUserID(),
+  }),
+  updateJobPayment: (id, data) => api.put(`/JobPayment/${id}`, {
+    jobPaymentID: Number(id),
+    jobRequestID: Number(data.jobRequestID ?? 0),
+    paymentDate: data.paymentDate ?? new Date().toISOString().split('T')[0],
+    calculatedAmount: Number(data.calculatedAmount ?? 0),
+    paidAmount: Number(data.paidAmount ?? 0),
+    remainingAmount: Number(data.remainingAmount ?? 0),
+    paidBY: String(data.paidBY ?? ''),
+    receiptPhoto: String(data.receiptPhoto ?? ''),
+    comments: String(data.comments ?? ''),
+    isParicialPayment: Boolean(data.isParicialPayment ?? false),
+    lastUpdateDttm: new Date().toISOString(),
+    lastUpdatedBy: getLoggedInUserID(),
+  }),
+
+  // JOB PAYMENT ATTACHMENTS
+  getJobPaymentAttachments: async (jobPaymentID) => {
+    try {
+      const res = await api.get('/JobPaymentAttach');
+      const list = Array.isArray(res) ? res
+        : Array.isArray(res?.$values) ? res.$values
+          : Array.isArray(res?.data) ? res.data : [];
+      return list.filter(item => Number(item.jobPaymentID ?? item.JobPaymentID) === Number(jobPaymentID));
+    } catch (err) {
+      if (err?.response?.status === 404) return [];
+      throw err;
+    }
+  },
+  uploadJobPaymentAttachment: (jobPaymentID, jobRequestID, file) => {
+    const fd = new FormData();
+    fd.append('JobPaymentAttachID', '0');
+    fd.append('JobPaymentID', String(Number(jobPaymentID)));
+    fd.append('JobRequestID', String(Number(jobRequestID)));
+    fd.append('ReceiptFilePath', '');
+    fd.append('ReceiptFilename', file.name);
+    fd.append('file', file);
+    return api.post('/JobPaymentAttach/Upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  // GEO LOCATION UPLOAD
+  uploadGeoLocation: (formData) =>
+    api.post('/GeoLocationUpload/Upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  getGeoLocationByTaskId: (taskId) =>
+    api.get(`/GeoLocationUpload/GetByTaskId?id=${taskId}`),
+
+  // FINANCIAL YEAR SETUP
+  getAllFinancialYears: () => api.get('/FinancialYearSetup'),
+  createFinancialYear: (data) => api.post('/FinancialYearSetup', {
+    financialYearID: 0,
+    financialYearBeginDate: data.financialYearBeginDate,
+    financialYearEndDate: data.financialYearEndDate,
+    financialYearAbbrevation: data.financialYearAbbrevation,
+    currentlyOpen: data.currentlyOpen,
+  }),
+  updateFinancialYear: (data) => api.put('/FinancialYearSetup', {
+    financialYearID: Number(data.financialYearID),
+    financialYearBeginDate: data.financialYearBeginDate,
+    financialYearEndDate: data.financialYearEndDate,
+    financialYearAbbrevation: data.financialYearAbbrevation,
+    currentlyOpen: data.currentlyOpen,
+  }),
+  // SERIES ID SETUP
+  getAllSeriesIDs: () => api.get('/SeriesID'),
+  createSeriesID: (data) => api.post('/SeriesID', {
+    seriesID: 0,
+    seriesType: data.seriesType,
+    initialCharacters: data.initialCharacters,
+    delimiter: data.delimiter,
+    lastNumberUsed: Number(data.lastNumberUsed) || 0,
+    useCurrentFY: data.useCurrentFY,
+    format: data.format,
+    isActive: data.isActive,
+  }),
+  updateSeriesID: (id, data) => api.put('/SeriesID', {
+    seriesID: Number(id),
+    seriesType: data.seriesType,
+    initialCharacters: data.initialCharacters,
+    delimiter: data.delimiter,
+    lastNumberUsed: Number(data.lastNumberUsed) || 0,
+    useCurrentFY: data.useCurrentFY,
+    format: data.format,
+    isActive: data.isActive,
+  }),
+
+  getAllHoardingPhotos: () => api.get('/HoardingPhoto'),
+  getPhotosByHoardingIDAndEffdt: (hoardingID, effdt) =>
+    api.get(`/Hoarding/by-hoarding/${hoardingID}/effdt/${effdt}`),
+
+  createQuotationTerm: (data) => api.post('/QuotationTerm', data),
+  updateQuotationTerm: (data) => api.put('/QuotationTerm', data),
+  getQuotationTerms: (quotationId, quotationRevisionNumber) =>
+    api.get(`/QuotationTerm/GetQuotationTerms?quotationId=${quotationId}&quotationRevisionNumber=${quotationRevisionNumber}`),
+  deleteQuotationTerm: (id) =>
+    api.delete(`/QuotationTerm/${id}`).catch(() => api.delete(`/QuotationTerm?id=${id}`)),
+
+  createPerformaInvoice: (data) => api.post('/PerformaInvoice', data),
+  getAllPerformaInvoices: () => api.get('/PerformaInvoice'),
+  getDashboardOverview: () => api.get('/Dashboard/overview'),
 };
 
 export default api;

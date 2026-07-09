@@ -17,6 +17,14 @@ import Jobs from './Pages/Job.jsx'
 import Terms from './Pages/Terms.jsx';
 import SupervisorDashboard from './Pages/SupervisorDashboard.jsx';
 import WorkersPage from './Pages/Workers.jsx';
+import Supervisorjobs from './Pages/SupervisorJobs.jsx';
+import WorkerTask from './Pages/WorkerTask.jsx';
+import JobPaymentPage from './Pages/JobPaymentPage.jsx';
+import FinancialYear from './Pages/FinancialYear.jsx'
+import SeriesSetup from './Pages/SeriesSetup.jsx';
+import DissloveContract from './Pages/DissloveContract.jsx'
+import RegistrationPage from './Pages/Registration.jsx';
+
 import { CalendarCheck, Users, CreditCard } from 'lucide-react';
 import './App.css';
 
@@ -54,8 +62,13 @@ export default function App() {
 
   /* ── Auth handlers ── */
   const handleLogin = (role = '') => {
+
     localStorage.setItem('isLoggedIn', 'true');
-    const resolvedRole = (role || localStorage.getItem('userRole') || '').toLowerCase();
+
+    const resolvedRole =
+      (role || localStorage.getItem('userRole') || '').toLowerCase();
+
+
     setUserRole(resolvedRole);
     setLoggedIn(true);
   };
@@ -94,8 +107,18 @@ export default function App() {
       case 'reports': return <Reports />;
       case 'quotation': return <Quotation onNavigateToContracts={() => changeTab('customer-contract')} />;
       case 'terms': return <Terms />;
+      case 'FinancialYear': return <FinancialYear />;
       case 'Jobs': return <Jobs />;
       case 'workers': return <WorkersPage />;
+      case 'jobs': return <Supervisorjobs />;
+      case 'WorkersPage': return <Supervisorjobs />;
+      case 'JobPayment': return <JobPaymentPage />;
+      case 'SeriesSetup': return <SeriesSetup />;
+      case 'DissloveContract': return <DissloveContract />;
+      case 'Registration': return <RegistrationPage />;
+
+
+
       default: return <Dashboard changeTab={changeTab} />;
     }
   };
@@ -105,9 +128,19 @@ export default function App() {
     <Login
       onLogin={handleLogin}
       onNavigate={(target) => {
-        if (target === 'admin') handleLogin('admin');
-        else if (target === 'supervisor') handleLogin('supervisor');
-        else handleLogin();
+
+        if (target === 'admin') {
+          handleLogin('admin');
+        }
+        else if (target === 'supervisor') {
+          handleLogin('supervisor');
+        }
+        else if (target === 'workertask') {
+          handleLogin('worker');
+        }
+        else {
+          handleLogin();
+        }
       }}
     />
   );
@@ -115,6 +148,9 @@ export default function App() {
   // ✅ This block must exist — if missing, supervisor goes to admin layout
   if (userRole === 'supervisor') {
     return <SupervisorDashboard onLogout={handleLogout} />;
+  }
+  if (userRole === 'worker') {
+    return <WorkerTask />;
   }
 
   return (
