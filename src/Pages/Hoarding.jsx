@@ -1147,14 +1147,26 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
           : activeVersion?.status;
         const currentStatus = effdtForm.status;
 
-        // Only check availability details if the status is being changed
-        if (originalStatus && currentStatus !== originalStatus) {
+        // Check availability details if it's a new version OR if the status of an existing version is being changed
+        if (isPanelNew || (originalStatus && currentStatus !== originalStatus)) {
           const details = await apiService.getHoardingAvailabilityDetails(checkID);
           const timeline = details?.timeline ?? details?.Timeline ?? [];
           if (timeline.length > 0) {
-            setAvailabilityConflict(details);
-            setSaving(false);
-            return;
+            // Check if the form's effective date is less than or equal to any of the contract/job end dates in the timeline.
+            // If it is greater than all end dates, we allow saving.
+            const formDateStr = effdtForm.effdt ? effdtForm.effdt.split('T')[0] : '';
+            const hasConflict = timeline.some(item => {
+              const itemEndDateRaw = item.endDate || item.EndDate || item.startDate || item.StartDate;
+              if (!itemEndDateRaw) return true;
+              const itemEndDateStr = String(itemEndDateRaw).split('T')[0];
+              return formDateStr <= itemEndDateStr;
+            });
+
+            if (hasConflict) {
+              setAvailabilityConflict(details);
+              setSaving(false);
+              return;
+            }
           }
         }
       }
