@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import "./Common1.css";
+import { useResizableColumns } from '../hooks/useResizableColumns';
 
 /* ═══════════════════════════════════════════
    CONSTANTS
@@ -85,6 +86,7 @@ function normalizePayment(raw) {
     paidAmount: Number(raw.paidAmount ?? raw.PaidAmount ?? 0),
     remainingAmount: Number(raw.remainingAmount ?? raw.RemainingAmount ?? 0),
     paidBY: raw.paidBY ?? raw.PaidBY ?? raw.paidBy ?? raw.PaidBy ?? '',
+    extrapayment: raw.extrapayment ?? raw.ExtraPayment ?? raw.extraPayment ?? '',
     receiptPhoto: raw.receiptPhoto ?? raw.ReceiptPhoto ?? '',
     comments: raw.comments ?? raw.Comments ?? '',
     isParicialPayment: !!(raw.isParicialPayment ?? raw.IsParicialPayment ?? raw.isPartialPayment ?? raw.IsPartialPayment ?? false),
@@ -559,6 +561,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
   const [calculatedAmount, setCalculatedAmount] = useState(String(payment?.calculatedAmount ?? ''));
   const [paidAmount, setPaidAmount] = useState(String(payment?.paidAmount ?? ''));
   const [paidBY, setPaidBY] = useState(payment?.paidBY || '');
+  const [extrapayment, setExtrapayment] = useState(payment?.extrapayment || '');
   const [comments, setComments] = useState(payment?.comments || '');
   const [isParicialPayment, setIsParicialPayment] = useState(payment?.isParicialPayment || false);
   const [saving, setSaving] = useState(false);
@@ -601,6 +604,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
     if (!paymentDate) return 'Payment date is required.';
     if (!calculatedAmount || Number(calculatedAmount) <= 0) return 'Calculated amount must be greater than 0.';
     if (paidAmount === '' || Number(paidAmount) < 0) return 'Paid amount cannot be negative.';
+    if (extrapayment !== '' && Number(extrapayment) < 0) return 'Extra payment cannot be negative.';
     const maxPaid = Math.max(0, Number(calculatedAmount) - totalPaidSoFar);
     if (Number(paidAmount) > maxPaid) return `Paid amount cannot be greater than remaining amount (${fmtCurrency(maxPaid)}).`;
     return '';
@@ -619,6 +623,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
         paidAmount: Number(paidAmount) || 0,
         remainingAmount,
         paidBY: paidBY || '',
+        extrapayment: extrapayment || '',
         receiptPhoto: payment?.receiptPhoto || '',
         comments: comments || '',
         isParicialPayment: Boolean(isParicialPayment),
@@ -782,6 +787,17 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
             </div>
           </div>
 
+          {/* Extra Payment */}
+          <div>
+            <label className="qt-label">Extra Payment</label>
+            <div className="qt-input-wrap">
+              <span style={{ fontSize: 13, color: '#049edf', fontWeight: 800, flexShrink: 0 }}>₹</span>
+              <input className="qt-input" type="number" min="0" step="0.01"
+                value={extrapayment} onChange={e => { setExtrapayment(e.target.value); setError(''); }}
+                placeholder="0.00" />
+            </div>
+          </div>
+
           {/* Comments */}
           <div>
             <label className="qt-label">Comments <span className="qt-label--opt">(optional)</span></label>
@@ -842,6 +858,11 @@ export default function JobPaymentPage() {
   const [sortDir, setSortDir] = useState('desc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  const tableRef = useRef(null);
+  const [tableReady, setTableReady] = useState(false);
+  useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
+  useResizableColumns(tableRef, tableReady, [50, 50, 130, 70, 80, 95, 85, 85, 85, 85, 85, 95, 80, 75]);
 
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type }), []);
 
@@ -936,6 +957,7 @@ export default function JobPaymentPage() {
         cName.includes(q) ||
         jType.includes(q) ||
         (p.paidBY || '').toLowerCase().includes(q) ||
+        (p.extrapayment || '').toLowerCase().includes(q) ||
         getPaymentStatus(p).toLowerCase().includes(q)
       );
     });
@@ -1072,22 +1094,24 @@ export default function JobPaymentPage() {
 
           {/* Table */}
           <div style={{ overflowX: 'auto' }}>
-            <table className="pg-table" style={{ minWidth: 900 }}>
+            <table ref={tableRef} className="pg-table" style={{ minWidth: 900, tableLayout: 'fixed' }}>
               <thead>
                 <tr>
                   {[
-                    { key: 'jobPaymentID', label: 'Pay ID', w: '6%' },
-                    { key: 'jobRequestID', label: 'Job #', w: '6%' },
-                    { key: '_customer', label: 'Customer', w: '12%', noSort: true },
-                    { key: '_jobType', label: 'Type', w: '8%', noSort: true },
-                    { key: 'paymentDate', label: 'Date', w: '9%' },
-                    { key: 'calculatedAmount', label: 'Calculated', w: '10%' },
-                    { key: 'paidAmount', label: 'Paid', w: '9%' },
-                    { key: 'remainingAmount', label: 'Remaining', w: '9%' },
-                    { key: 'penalty', label: 'Penalty', w: '9%', noSort: true },
+                    { key: 'jobPaymentID', label: 'Pay ID', w: '4%' },
+                    { key: 'jobRequestID', label: 'Job #', w: '4%' },
+                    { key: '_customer', label: 'Customer', w: '11%', noSort: true },
+                    { key: '_jobType', label: 'Type', w: '6%', noSort: true },
+                    { key: 'paymentDate', label: 'Date', w: '7%' },
+                    { key: 'calculatedAmount', label: 'Calculated', w: '9%' },
+                    { key: 'paidAmount', label: 'Paid', w: '8%' },
+                    { key: 'remainingAmount', label: 'Remaining', w: '7%' },
+                    { key: 'penalty', label: 'Penalty', w: '7%', noSort: true },
                     { key: 'paidBY', label: 'Paid By', w: '8%' },
-                    { key: '_status', label: 'Status', w: '7%', noSort: true },
-                    { key: '_action', label: 'Actions', w: '7%', noSort: true },
+                    { key: 'extrapayment', label: 'Extra Pay', w: '8%' },
+                    { key: 'totalPaidExtra', label: 'Total (Paid+Extra)', w: '9%', noSort: true },
+                    { key: '_status', label: 'Status', w: '6%', noSort: true },
+                    { key: '_action', label: 'Actions', w: '6%', noSort: true },
                   ].map(col => (
                     <th
                       key={col.key} style={{ width: col.w }}
@@ -1172,6 +1196,16 @@ export default function JobPaymentPage() {
                       <td className="pg-td pg-td--overflow">
                         <span className="pg-td__ellipsis" style={{ color: '#4a5568' }} title={p.paidBY}>
                           {p.paidBY || <span style={{ color: '#c0c0d8' }}>—</span>}
+                        </span>
+                      </td>
+                      <td className="pg-td">
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf' }}>
+                          {p.extrapayment && Number(p.extrapayment) !== 0 ? fmtCurrency(p.extrapayment) : '—'}
+                        </span>
+                      </td>
+                      <td className="pg-td">
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#1a1a2e' }}>
+                          {fmtCurrency(Number(p.paidAmount ?? 0) + (Number(p.extrapayment) || 0))}
                         </span>
                       </td>
                       <td className="pg-td">

@@ -430,42 +430,36 @@ function StatusDropdown({ value, onChange, onBlur, hasError }) {
           : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
       </div>
 
-      {open && ReactDOM.createPortal(
-        <div ref={panelRef} style={(() => {
-          const r = triggerRef.current?.getBoundingClientRect();
-          if (!r) return {};
-          return { position: 'fixed', top: r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 };
-        })()}>
-          <div className="pg-combo-panel pg-combo-panel--sm" style={{ position: 'static' }}>
-            <div className="pg-combo-list" ref={listRef}>
-              {STATUS_OPTIONS.map(opt => {
-                const sc = STATUS_COLORS[opt];
-                return (
-                  <div
-                    key={opt}
-                    className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
-                    onClick={() => select(opt)}
-                    tabIndex={0}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
-                      else nav(e);
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: sc?.color, flexShrink: 0 }} />
-                      <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: sc?.color }}>
-                        {opt}
-                      </span>
+      {/* Portal dropdown panel */}
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel pg-combo-panel--sm" style={{ position: 'static' }}>
+          <div className="pg-combo-list" ref={listRef}>
+            {STATUS_OPTIONS.map(opt => {
+              const sc = STATUS_COLORS[opt];
+              return (
+                <div
+                  key={opt}
+                  className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
+                  onClick={() => select(opt)}
+                  tabIndex={0}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+                    else nav(e);
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: sc?.color, flexShrink: 0 }} />
+                    <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: sc?.color }}>
+                      {opt}
                     </span>
-                    {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
-                  </div>
-                );
-              })}
-            </div>
+                  </span>
+                  {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                </div>
+              );
+            })}
           </div>
-        </div>,
-        document.body
-      )}
+        </div>
+      </PortalDropdown>
     </div>
   );
 }
@@ -528,41 +522,34 @@ function RoleDropdown({ value, onChange, onBlur, hasError }) {
       </div>
 
       {/* Portal dropdown panel */}
-      {open && ReactDOM.createPortal(
-        <div ref={panelRef} style={(() => {
-          const r = triggerRef.current?.getBoundingClientRect();
-          if (!r) return {};
-          return { position: 'fixed', top: r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 };
-        })()}>
-          <div className="pg-combo-panel pg-combo-panel--sm" style={{ position: 'static' }}>
-            <div className="pg-combo-list" ref={listRef}>
-              {ROLE_OPTIONS.map(opt => (
-                <div
-                  key={opt}
-                  className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
-                  onClick={() => select(opt)}
-                  tabIndex={0}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
-                    else nav(e);
-                  }}
-                >
-                  <span style={{
-                    fontFamily: 'Nunito, sans-serif',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: ROLE_COLORS[opt]?.color || '#4a5568',
-                  }}>
-                    {opt}
-                  </span>
-                  {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
-                </div>
-              ))}
-            </div>
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel pg-combo-panel--sm" style={{ position: 'static' }}>
+          <div className="pg-combo-list" ref={listRef}>
+            {ROLE_OPTIONS.map(opt => (
+              <div
+                key={opt}
+                className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
+                onClick={() => select(opt)}
+                tabIndex={0}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+                  else nav(e);
+                }}
+              >
+                <span style={{
+                  fontFamily: 'Nunito, sans-serif',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: ROLE_COLORS[opt]?.color || '#4a5568',
+                }}>
+                  {opt}
+                </span>
+                {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+              </div>
+            ))}
           </div>
-        </div>,
-        document.body
-      )}
+        </div>
+      </PortalDropdown>
     </div>
   );
 }

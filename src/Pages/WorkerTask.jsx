@@ -7,7 +7,7 @@ import {
     Calendar, CheckCircle, Clock, Circle, Hash,
     Briefcase, Layers, Edit3, Save, Camera,
     ZoomIn, ZoomOut, Trash2, Check, AlertTriangle, Info, LogOut,
-    ImagePlus, SendHorizonal, MapPin,
+    ImagePlus, SendHorizonal, MapPin, User,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import { useResizableColumns } from '../hooks/useResizableColumns';
@@ -529,6 +529,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                                 task.siteAddress && <InfoRow icon={MapPin} label="Site Address" value={task.siteAddress} accent="#16a34a" />
                             )}
                             {task.isMerged && <InfoRow icon={Layers} label="Merge Type" value={task.mergeAlongFlag === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'} accent="#7c3aed" />}
+                            <InfoRow icon={User} label="Supervisor" value={task.supervisorName} accent="#6c63ff" />
                             <InfoRow icon={CheckCircle} label="Status" value={task.status} />
                             <InfoRow icon={Calendar} label="Completion Date" value={fmtDate(task.actualCompletionDate)} />
                             <InfoRow icon={Calendar} label="Submitted At" value={fmtDateTime(task.submitDTTM)} />
@@ -751,6 +752,11 @@ function MergedGroupRow({ groupTasks, onView, onEdit }) {
                     ) : null)}
                 </div>
             </td>
+            <td className="pg-td">
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'Nunito,sans-serif', fontWeight: 700, color: '#4a5568', fontSize: 12 }}>
+                    <User size={12} color="#c0c0d8" /> {firstTask.supervisorName || '—'}
+                </span>
+            </td>
             <td className="pg-td pg-tablet-hide">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#4a5568', fontSize: 12 }}>
                     <Calendar size={11} color="#c0c0d8" /> {fmtDate(firstTask.actualCompletionDate)}
@@ -814,6 +820,10 @@ function TaskCard({ task, onView, onEdit }) {
                     </div>
                 )}
                 <div className="pg-card__row">
+                    <User size={12} color="#c0c0d8" className="pg-card__row-icon" />
+                    <span className="pg-card__row-text">{task.supervisorName || '—'}</span>
+                </div>
+                <div className="pg-card__row">
                     <Calendar size={12} color="#c0c0d8" className="pg-card__row-icon" />
                     <span className="pg-card__row-text--ellipsis">{fmtDate(task.actualCompletionDate)}</span>
                 </div>
@@ -872,6 +882,10 @@ function MergedGroupCard({ groupTasks, onView, onEdit }) {
                         <span className="pg-card__row-text" style={{ fontSize: 11, color: '#9090a8' }}>{job.jobDescription}</span>
                     </div>
                 )}
+                <div className="pg-card__row">
+                    <User size={12} color="#c0c0d8" className="pg-card__row-icon" />
+                    <span className="pg-card__row-text">{firstTask.supervisorName || '—'}</span>
+                </div>
                 {groupTasks.some(t => t.siteAddress) && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
                         {groupTasks.map((t, idx) => t.siteAddress ? (
@@ -934,7 +948,7 @@ export default function WorkerTasksPage() {
     const [pageSize, setPageSize] = useState(12);
     const tableRef = useRef(null);
     const [tableReady, setTableReady] = useState(false);
-    useResizableColumns(tableRef, tableReady, [80, 80, 180, 100, 130, 140, 130, 110]);
+    useResizableColumns(tableRef, tableReady, [80, 180, 130, 130, 120, 120, 120, 110]);
 
     const fetchData = useCallback(async () => {
         setLoading(true); setFetchError('');
@@ -944,14 +958,27 @@ export default function WorkerTasksPage() {
             const assigns = Array.isArray(assignRes) ? assignRes : Array.isArray(assignRes?.data) ? assignRes.data : [];
             if (assigns.length === 0) { setTasks([]); setLoading(false); return; }
             const assignedTaskIds = new Set(assigns.map(a => Number(a.jobTaskID ?? a.JobTaskID)));
-            const [tRes, jRes, contractRes, hRaw, sRaw, mergeRaw] = await Promise.all([
+            const [tRes, jRes, contractRes, hRaw, sRaw, mergeRaw, uRaw] = await Promise.all([
                 apiService.getAllJobTasks(),
                 apiService.getAllJobRequests(),
                 apiService.getAllCustomerContracts(),
                 apiService.getAllHoardings(),
                 apiService.getAllSites().catch(() => []),
                 apiService.getAllHoardingMerges().catch(() => []),
+                apiService.getAllUsers().catch(() => []),
             ]);
+            const userList = extractArray(uRaw);
+            const userMap = new Map(userList.map(u => {
+                const firstName = u.first_Name ?? u.First_Name ?? u.firstName ?? u.FirstName ?? '';
+                const lastName = u.last_Name ?? u.Last_Name ?? u.lastName ?? u.LastName ?? '';
+                const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+                const userName = u.userName ?? u.UserName ?? u.fullName ?? u.FullName ??
+                    u.name ?? u.Name ??
+                    (fullName || null) ??
+                    u.email ?? u.Email ?? '';
+                const id = u.userID ?? u.UserID ?? u.id ?? 0;
+                return [Number(id), userName];
+            }));
             const siteList = extractArray(sRaw);
             const siteMap = new Map(siteList.map(s => [Number(s.siteID ?? s.SiteID ?? 0), { addressLine1: s.addressLine1 ?? s.AddressLine1 ?? '', addressLine2: s.addressLine2 ?? s.AddressLine2 ?? '', city: s.city ?? s.City ?? '', district: s.district ?? s.District ?? '', landmark: s.landmark ?? s.Landmark ?? '' }]));
             const rawHoardings = extractArray(hRaw);
@@ -974,7 +1001,9 @@ export default function WorkerTasksPage() {
                     const merge = mergeMap.get(Number(task.hoardingID));
                     const jobObj = jobMap[task.jobRequestID] ?? null;
                     const contractID = jobObj?.customerContractID ?? 0;
-                    return { ...task, hoardingCode: h?.hoardingCode ?? h?.HoardingCode ?? '', siteAddress: getSiteAddress(h), mergeAlongFlag: merge?.mergeAlongFlag ?? null, isMerged: !!merge, job: jobObj, contract: contractMap[contractID] ?? null };
+                    const supervisorId = jobObj ? Number(jobObj.iD) : 0;
+                    const supervisorName = supervisorId ? (userMap.get(supervisorId) || `User #${supervisorId}`) : '—';
+                    return { ...task, hoardingCode: h?.hoardingCode ?? h?.HoardingCode ?? '', siteAddress: getSiteAddress(h), mergeAlongFlag: merge?.mergeAlongFlag ?? null, isMerged: !!merge, job: jobObj, contract: contractMap[contractID] ?? null, supervisorName };
                 });
             const jobMergeFlags = new Map();
             myTasks.forEach(t => { if (t.isMerged && !jobMergeFlags.has(t.jobRequestID)) jobMergeFlags.set(t.jobRequestID, t.mergeAlongFlag); });
@@ -1096,6 +1125,7 @@ export default function WorkerTasksPage() {
         { key: 'jobRequestID', label: 'Job ID', w: '7%' },
         { key: '_jobType', label: 'Job Type', w: '16%', noSort: true },
         { key: 'hoardingID', label: 'Hoarding', w: '14%' },
+        { key: 'supervisorName', label: 'Supervisor', w: '12%' },
         { key: 'actualCompletionDate', label: 'Comp. Date', w: '11%', tabletHide: true },
         { key: 'submitDTTM', label: 'Submitted', w: '11%', tabletHide: true },
         { key: 'status', label: 'Status', w: '13%' },
@@ -1284,6 +1314,11 @@ export default function WorkerTasksPage() {
                                                         </div>
                                                     )}
                                                 </div>
+                                            </td>
+                                            <td className="pg-td">
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'Nunito,sans-serif', fontWeight: 700, color: '#4a5568', fontSize: 12 }}>
+                                                    <User size={12} color="#c0c0d8" /> {task.supervisorName || '—'}
+                                                </span>
                                             </td>
                                             <td className="pg-td pg-tablet-hide">
                                                 <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#4a5568', fontSize: 12 }}>
