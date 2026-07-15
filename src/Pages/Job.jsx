@@ -112,6 +112,30 @@ const fmtDateTime = (d) => {
   } catch { return d; }
 };
 
+const validateTargetDate = (selectedDate, contractStart) => {
+  if (!selectedDate || !contractStart) return { isValid: true };
+  const target = new Date(selectedDate + 'T00:00:00');
+  const start = new Date(contractStart + 'T00:00:00');
+  
+  // If target date is before start date, it is allowed (valid)
+  if (target < start) {
+    return { isValid: true };
+  }
+  
+  // If target date is on or after start date, it must be within 7 days of start date
+  const diffTime = target.getTime() - start.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  if (diffDays > 7) {
+    return {
+      isValid: false,
+      reason: 'greater_than_7_days',
+      message: `Target Completion Date must be within 7 days after the Contract Start Date.`
+    };
+  }
+  
+  return { isValid: true };
+};
+
 
 
 function buildImageUrl(att) {
@@ -647,6 +671,197 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
           </div>
         </div>
       </div>
+    </div>,
+    document.body
+  );
+}
+
+function ValidationAlertModal({ isOpen, onClose, contractStartDate, targetDate, reason }) {
+  if (!isOpen) return null;
+
+  return ReactDOM.createPortal(
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 99999999,
+      background: 'rgba(15, 23, 42, 0.65)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 16,
+    }}>
+      <div style={{
+        background: '#fff',
+        borderRadius: '24px',
+        width: '100%',
+        maxWidth: '460px',
+        overflow: 'hidden',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 40px rgba(4, 158, 223, 0.05)',
+        fontFamily: 'Nunito, sans-serif',
+        animation: 'fadeInScale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        border: '1px solid rgba(226, 232, 240, 0.8)',
+      }}>
+        {/* Header */}
+        <div style={{
+          background: 'linear-gradient(135deg, #ef4444, #f97316)',
+          padding: '30px 24px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 12,
+          textAlign: 'center',
+          color: '#fff',
+        }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            background: 'rgba(255, 255, 255, 0.2)',
+            border: '2px solid rgba(255, 255, 255, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '32px',
+            boxShadow: '0 8px 16px rgba(0, 0, 0, 0.1)',
+            animation: 'pulse 2s infinite',
+          }}>
+            ⚠️
+          </div>
+          <div>
+            <h4 style={{ margin: 0, fontSize: '20px', fontWeight: 900, letterSpacing: '-0.5px' }}>
+              Date Validation Failed
+            </h4>
+            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600 }}>
+              Job cannot be created with selected date
+            </p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '28px 24px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{
+            background: '#fff8f6',
+            border: '1.5px dashed rgba(239, 68, 68, 0.3)',
+            borderRadius: '16px',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Contract Start Date:</span>
+              <span style={{ fontSize: '13.5px', color: '#1e293b', fontWeight: 800 }}>
+                {fmtDate(contractStartDate)}
+              </span>
+            </div>
+            
+            <div style={{ height: '1px', background: 'rgba(239, 68, 68, 0.1)' }} />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Selected Target Date:</span>
+              <span style={{ fontSize: '13.5px', color: '#ef4444', fontWeight: 800 }}>
+                {fmtDate(targetDate)}
+              </span>
+            </div>
+
+            <div style={{ height: '1px', background: 'rgba(239, 68, 68, 0.1)' }} />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Maximum Allowed Date:</span>
+              <span style={{
+                fontSize: '13.5px',
+                color: '#16a34a',
+                fontWeight: 800,
+                background: 'rgba(22, 163, 74, 0.08)',
+                padding: '3px 8px',
+                borderRadius: '6px',
+              }}>
+                {(() => {
+                  if (!contractStartDate) return '—';
+                  const d = new Date(contractStartDate + 'T00:00:00');
+                  d.setDate(d.getDate() + 7);
+                  const year = d.getFullYear();
+                  const month = String(d.getMonth() + 1).padStart(2, '0');
+                  const day = String(d.getDate()).padStart(2, '0');
+                  return fmtDate(`${year}-${month}-${day}`);
+                })()}
+              </span>
+            </div>
+          </div>
+
+          <div style={{
+            fontSize: '13.5px',
+            color: '#475569',
+            lineHeight: '1.6',
+            fontWeight: 600,
+            textAlign: 'center',
+          }}>
+            {reason === 'greater_than_7_days' ? (
+              <span>
+                Target Completion Date can be any date before the contract start date. However, if it is on or after the start date, it must be within <strong style={{ color: '#ef4444' }}>7 days</strong> of the start date.
+              </span>
+            ) : (
+              <span>
+                The Target Completion Date is invalid. Please adjust the target completion date.
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '0 24px 24px', display: 'flex', justifyContent: 'center' }}>
+          <button
+            onClick={onClose}
+            style={{
+              width: '100%',
+              padding: '12px 0',
+              border: 'none',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #ef4444, #f97316)',
+              color: '#fff',
+              fontSize: '14px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 10px 20px -5px rgba(239, 68, 68, 0.4)',
+              transition: 'all 0.2s',
+              outline: 'none',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 12px 22px -5px rgba(239, 68, 68, 0.5)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 10px 20px -5px rgba(239, 68, 68, 0.4)';
+            }}
+          >
+            Adjust Date
+          </button>
+        </div>
+      </div>
+      
+      {/* Styles for animation */}
+      <style>{`
+        @keyframes fadeInScale {
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        @keyframes pulse {
+          0%, 100% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.05);
+          }
+        }
+      `}</style>
     </div>,
     document.body
   );
@@ -1993,6 +2208,8 @@ export default function JobPage() {
   const [jobStatus, setJobStatus] = useState('Open');
   const [contractHoardingMaps, setContractHoardingMaps] = useState([]);
   const [hoardingMerges, setHoardingMerges] = useState([]);
+  const [contractStartDate, setContractStartDate] = useState(null);
+  const [validationAlert, setValidationAlert] = useState(null);
 
   /* ── Inline tasks ── */
   const [tasks, setTasks] = useState([]);
@@ -2272,6 +2489,26 @@ export default function JobPage() {
       .catch(() => setContractBanners([]))
       .finally(() => setBannersLoading(false));
   }, [selectedContract]);
+
+  useEffect(() => {
+    if (!selectedContract) {
+      setContractStartDate(null);
+      return;
+    }
+    apiService.getCustomerContractById(selectedContract.customerContractID)
+      .then(res => {
+        const rawData = res?.data ?? res;
+        const startD = rawData?.startDate ?? rawData?.StartDate ?? null;
+        setContractStartDate(startD ? startD.split('T')[0] : null);
+      })
+      .catch(err => {
+        console.error("Failed to fetch customer contract details:", err);
+        if (selectedContract.startDate) {
+          setContractStartDate(selectedContract.startDate.split('T')[0]);
+        }
+      });
+  }, [selectedContract]);
+
   /* ── Load data ── */
   useEffect(() => {
     (async () => {
@@ -2471,6 +2708,8 @@ export default function JobPage() {
     setStep1Error(''); setStep2Error('');
     setEditingJobID(null);
     setJobStatus('Open');
+    setContractStartDate(null);
+    setValidationAlert(null);
   };
 
   /* ── Start new ── */
@@ -2528,6 +2767,20 @@ export default function JobPage() {
       if (!selectedSupervisor || !selectedSupervisor.userID) { setStep1Error('Please select a supervisor.'); return; }
       if (!targetDate) { setStep1Error('Target completion date is required.'); return; }
       if (!ratePerSQFT || Number(ratePerSQFT) <= 0) { setStep1Error('Rate per SQFT must be greater than 0.'); return; }
+
+      if (selectedContract && contractStartDate) {
+        const res = validateTargetDate(targetDate, contractStartDate);
+        if (!res.isValid) {
+          setValidationAlert({
+            reason: res.reason,
+            contractStartDate: contractStartDate,
+            targetDate: targetDate
+          });
+          setStep1Error(res.message);
+          return;
+        }
+      }
+
       setStep1Error(''); setStep(2);
     }
   };
@@ -2564,6 +2817,20 @@ export default function JobPage() {
   /* ── Save ── */
   const handleSave = async () => {
     if (tasks.length === 0) { setStep2Error('Add at least one hoarding task.'); return; }
+
+    if (selectedContract && contractStartDate) {
+      const res = validateTargetDate(targetDate, contractStartDate);
+      if (!res.isValid) {
+        setValidationAlert({
+          reason: res.reason,
+          contractStartDate: contractStartDate,
+          targetDate: targetDate
+        });
+        setStep2Error(res.message);
+        return;
+      }
+    }
+
     setStep2Error('');
     setSaving(true);
     try {
@@ -2973,7 +3240,21 @@ export default function JobPage() {
                     <div className="qt-input-wrap">
                       <Calendar size={14} color="#c0c0d8" style={{ flexShrink: 0 }} />
                       <input className="qt-input" type="date" value={targetDate}
-                        onChange={e => { setTargetDate(e.target.value); setStep1Error(''); }} />
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTargetDate(val);
+                          setStep1Error('');
+                          if (val && selectedContract && contractStartDate) {
+                            const res = validateTargetDate(val, contractStartDate);
+                            if (!res.isValid) {
+                              setValidationAlert({
+                                reason: res.reason,
+                                contractStartDate: contractStartDate,
+                                targetDate: val
+                              });
+                            }
+                          }
+                        }} />
                     </div>
                   </div>
 
@@ -3951,7 +4232,7 @@ export default function JobPage() {
                 width: 60,
                 height: 60,
                 borderRadius: '50%',
-                background: 'rgba(255,255,255,0.2)',
+                background: 'rgba(255, 255, 255, 0.2)',
                 border: '2px solid rgba(255,255,255,0.3)',
                 display: 'flex',
                 alignItems: 'center',
@@ -4025,6 +4306,15 @@ export default function JobPage() {
             </div>
           </div>
         </div>
+      )}
+      {validationAlert && (
+        <ValidationAlertModal
+          isOpen={!!validationAlert}
+          onClose={() => setValidationAlert(null)}
+          contractStartDate={validationAlert.contractStartDate}
+          targetDate={validationAlert.targetDate}
+          reason={validationAlert.reason}
+        />
       )}
     </>
   );

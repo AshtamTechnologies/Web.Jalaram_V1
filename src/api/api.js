@@ -459,6 +459,7 @@ export const apiService = {
     if (Array.isArray(res?.$values)) return res.$values;
     return [];
   },
+  getCustomerContractById: (id) => api.get(`/CustomerContract/GetById/${id}`),
   createCustomerContract: (data) => api.post('/CustomerContract/Create', {
     customerContractID: 0,
     customerID: Number(data.customerID),
