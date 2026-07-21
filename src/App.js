@@ -83,10 +83,13 @@ export default function App() {
     setUserRole('');   // ← this line is what's new
   };
 
+  const [tabResetIndex, setTabResetIndex] = useState(0);
+
   /* ── Tab/route handler (passed down to Layout + pages) ── */
   const changeTab = (id) => {
     setTab(id);
     sessionStorage.setItem('dashTab', id);
+    setTabResetIndex(prev => prev + 1);
   };
 
   /* ── Page renderer ── */
@@ -156,9 +159,9 @@ export default function App() {
 
   return (
     <Layout tab={tab} changeTab={changeTab} onLogout={handleLogout}>
-      {/* key={tab} forces a full remount on every navigation so each page
+      {/* key={`${tab}-${tabResetIndex}`} forces a full remount on every navigation so each page
           always starts from its default state (e.g. grid view, not form) */}
-      <div key={tab}>
+      <div key={`${tab}-${tabResetIndex}`}>
         {renderPage()}
       </div>
     </Layout>

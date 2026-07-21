@@ -30,28 +30,30 @@ export default function SupervisorDashboard({ onLogout }) {
   const [tab, setTab] = useState(
     () => sessionStorage.getItem('supTab') || 'sup-dashboard'
   );
+  const [tabResetIndex, setTabResetIndex] = useState(0);
 
   const changeTab = (id) => {
     setTab(id);
     sessionStorage.setItem('supTab', id);
+    setTabResetIndex(prev => prev + 1);
   };
 
-const renderPage = () => {
-  switch (tab) {
-    case 'sup-jobs':
-      return <SupervisorJobsPage />;
+  const renderPage = () => {
+    switch (tab) {
+      case 'sup-jobs':
+        return <SupervisorJobsPage />;
 
-    case 'workers':
-      return <WorkersPage />;
+      case 'workers':
+        return <WorkersPage />;
 
-    default:
-      return <SupervisorJobsPage />;
-  }
-};
+      default:
+        return <SupervisorJobsPage />;
+    }
+  };
 
   return (
     <SupervisorLayout tab={tab} changeTab={changeTab} onLogout={onLogout}>
-      <div key={tab}>
+      <div key={`${tab}-${tabResetIndex}`}>
         {renderPage()}
       </div>
     </SupervisorLayout>

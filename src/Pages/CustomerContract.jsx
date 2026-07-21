@@ -345,6 +345,8 @@ function getContractGst(contract, quotations = []) {
 function buildContractPDFHTML({ company, customer, contract,
   hoardingItems, photoUrlMap, photoSelections, terms = [], cgstPct = 9, sgstPct = 9 }) {
 
+  const isSingleHoarding = hoardingItems.length === 1;
+
   const today = new Date().toLocaleDateString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric',
   });
@@ -403,7 +405,7 @@ function buildContractPDFHTML({ company, customer, contract,
  
     /* ══ HOARDING PAIR (2 per page) ══
        pair-wrap fills remaining space after the header.
-       Each .hrd-section gets flex:1 = exactly half that space.
+       Each .hrd-section gets flex:1 when single hoarding, or 50% height when multiple.
        When photo is ON: image fills flex:1, details is fixed.
        When photo is OFF: only details shown, no empty space.      */
     .pair-wrap{
@@ -412,7 +414,8 @@ function buildContractPDFHTML({ company, customer, contract,
       gap:0;
     }
     .hrd-section{
-      flex:1;min-height:0;
+      ${isSingleHoarding ? 'flex:1;' : 'flex:0 0 50%;max-height:50%;'}
+      min-height:0;
       display:flex;flex-direction:column;
     }
     .hrd-section + .hrd-section{

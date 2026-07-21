@@ -300,9 +300,107 @@ function BannerStrip({ contractID }) {
 }
 
 /* ══════════════════════════════════════════
+   HOARDING PHOTO MODAL
+══════════════════════════════════════════ */
+function HoardingPhotoModal({ hoardingInfo, onClose }) {
+    const [loading, setLoading] = useState(true);
+    const [photo, setPhoto] = useState(null);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (!hoardingInfo?.hoardingID) return;
+        setLoading(true);
+        setError('');
+        apiService.getPhotosByHoardingID(hoardingInfo.hoardingID)
+            .then(res => {
+                const list = extractArray(res);
+                if (list.length === 0) {
+                    setPhoto(null);
+                } else {
+                    const sorted = [...list].sort((a, b) => {
+                        const effA = a.effdt || a.Effdt ? new Date(a.effdt || a.Effdt).getTime() : 0;
+                        const effB = b.effdt || b.Effdt ? new Date(b.effdt || b.Effdt).getTime() : 0;
+                        if (effB !== effA) return effB - effA;
+                        const idA = Number(a.hoardingPhotoID ?? a.HoardingPhotoID ?? 0);
+                        const idB = Number(b.hoardingPhotoID ?? b.HoardingPhotoID ?? 0);
+                        return idB - idA;
+                    });
+                    setPhoto(sorted[0]);
+                }
+            })
+            .catch(err => {
+                setError(err?.response?.data?.message || err?.message || 'Failed to load hoarding photo.');
+            })
+            .finally(() => setLoading(false));
+    }, [hoardingInfo?.hoardingID]);
+
+    if (!hoardingInfo) return null;
+
+    const rawPath = photo?.photoPath ?? photo?.PhotoPath ?? photo?.photoFilePath ?? photo?.PhotoFilePath ?? '';
+    const imgUrl = rawPath ? (rawPath.startsWith('http') ? rawPath : `${API_ROOT_URL}${rawPath}`) : '';
+
+    return ReactDOM.createPortal(
+        <div onClick={() => onClose()}
+            style={{ position: 'fixed', inset: 0, zIndex: 999999, background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 540, overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', animation: 'wt-slide-up 0.2s cubic-bezier(0.22,1,0.36,1) both' }}>
+                <div style={{ background: 'linear-gradient(135deg,#049edf 0%,#6c63ff 100%)', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#fff' }}>
+                    <div>
+                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.6px', opacity: 0.85 }}>Hoarding Image</div>
+                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 16, fontWeight: 900 }}>
+                            {hoardingInfo.hoardingCode || `Hoarding #${hoardingInfo.hoardingID}`}
+                        </div>
+                    </div>
+                    <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                        <X size={14} />
+                    </button>
+                </div>
+
+                {hoardingInfo.siteAddress && (
+                    <div style={{ padding: '10px 20px', background: '#f8f8fd', borderBottom: '1px solid #eeeefc', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <MapPin size={13} color="#049edf" style={{ flexShrink: 0, marginTop: 2 }} />
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#4a5568', fontWeight: 700, lineHeight: 1.4 }}>{hoardingInfo.siteAddress}</span>
+                    </div>
+                )}
+
+                <div style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 220 }}>
+                    {loading ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#9090a8', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700 }}>
+                            <Loader2 size={20} color="#049edf" className="pg-spin" /> Loading hoarding image…
+                        </div>
+                    ) : error ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700 }}>
+                            <AlertCircle size={18} /> {error}
+                        </div>
+                    ) : !photo || !imgUrl ? (
+                        <div style={{ textAlign: 'center', color: '#9090a8', padding: '30px 10px' }}>
+                            <Camera size={36} color="#d0d0e8" style={{ marginBottom: 8 }} />
+                            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 800, color: '#4a5568' }}>No Image Available</div>
+                            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 600, color: '#a0a0bc', marginTop: 4 }}>No hoarding photos uploaded for this site yet.</div>
+                        </div>
+                    ) : (
+                        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <div style={{ width: '100%', maxHeight: '60vh', borderRadius: 12, overflow: 'hidden', border: '1.5px solid #e8e8f4', background: '#f8f8fd', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                                <img src={imgUrl} alt={photo.filename || 'Hoarding Photo'} style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', display: 'block', cursor: 'zoom-in' }}
+                                    onClick={() => window.open(imgUrl, '_blank')}
+                                    title="Click to view full size"
+                                    onError={e => {
+                                        e.currentTarget.style.display = 'none';
+                                        e.currentTarget.parentElement.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:#9090a8;font-weight:700">Image failed to load</div>';
+                                    }} />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
+/* ══════════════════════════════════════════
    TASK MODAL  (View + Update tabs)
 ══════════════════════════════════════════ */
-function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
+function TaskModal({ task, initialTab = 'view', onClose, onSave, onOpenHoardingPhoto }) {
     const tabs = [{ id: 'view', label: '📋 Details' }, { id: 'update', label: '✏️ Update Task' }];
     const [tab, setTab] = useState(initialTab);
     const [closeImg, setCloseImg] = useState([]);
@@ -384,7 +482,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
         } finally { setSaving(false); }
     };
 
-    const InfoRow = ({ icon: Icon, label, value, accent = '#049edf' }) => (
+    const InfoRow = ({ icon: Icon, label, value, accent = '#049edf', action }) => (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px', background: '#f8f8fd', borderRadius: 11, border: '1px solid #eeeefc' }}>
             <div style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, background: 'linear-gradient(135deg,#e8f6fd,#ede9ff)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon size={14} color={accent} />
@@ -393,6 +491,11 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, color: '#a0a0bc', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>{label}</div>
                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#1a1a2e', wordBreak: 'break-word' }}>{value || '—'}</div>
             </div>
+            {action && (
+                <div style={{ flexShrink: 0, alignSelf: 'center' }}>
+                    {action}
+                </div>
+            )}
         </div>
     );
 
@@ -522,11 +625,25 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                             {task.groupTasks ? (
                                 <>
                                     {task.groupTasks.map((t, idx) => t.siteAddress ? (
-                                        <InfoRow key={idx} icon={MapPin} label={`Site Address (${t.hoardingCode || `Hoarding #${t.hoardingID}`})`} value={t.siteAddress} accent="#16a34a" />
+                                        <InfoRow key={idx} icon={MapPin} label={`Site Address (${t.hoardingCode || `Hoarding #${t.hoardingID}`})`} value={t.siteAddress} accent="#16a34a"
+                                            action={onOpenHoardingPhoto && (
+                                                <button type="button" onClick={() => onOpenHoardingPhoto({ hoardingID: t.hoardingID, hoardingCode: t.hoardingCode, siteAddress: t.siteAddress })}
+                                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 8, background: 'rgba(4,158,223,0.1)', border: '1px solid rgba(4,158,223,0.3)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
+                                                    <Eye size={12} /> View Image
+                                                </button>
+                                            )}
+                                        />
                                     ) : null)}
                                 </>
                             ) : (
-                                task.siteAddress && <InfoRow icon={MapPin} label="Site Address" value={task.siteAddress} accent="#16a34a" />
+                                task.siteAddress && <InfoRow icon={MapPin} label="Site Address" value={task.siteAddress} accent="#16a34a"
+                                    action={onOpenHoardingPhoto && (
+                                        <button type="button" onClick={() => onOpenHoardingPhoto({ hoardingID: task.hoardingID, hoardingCode: task.hoardingCode, siteAddress: task.siteAddress })}
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 8, background: 'rgba(4,158,223,0.1)', border: '1px solid rgba(4,158,223,0.3)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
+                                            <Eye size={12} /> View Image
+                                        </button>
+                                    )}
+                                />
                             )}
                             {task.isMerged && <InfoRow icon={Layers} label="Merge Type" value={task.mergeAlongFlag === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'} accent="#7c3aed" />}
                             <InfoRow icon={User} label="Supervisor" value={task.supervisorName} accent="#6c63ff" />
@@ -698,7 +815,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
 /* ══════════════════════════════════════════
    MERGED GROUP ROW  (desktop table)
 ══════════════════════════════════════════ */
-function MergedGroupRow({ groupTasks, onView, onEdit }) {
+function MergedGroupRow({ groupTasks, onView, onEdit, onOpenHoardingPhoto }) {
     const flag = groupTasks[0]?.mergeAlongFlag || 'H';
     const firstTask = groupTasks[0];
     const job = firstTask?.job;
@@ -744,10 +861,17 @@ function MergedGroupRow({ groupTasks, onView, onEdit }) {
                     {groupTasks.map((t, idx) => t.siteAddress ? (
                         <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: 2 }}>
                             <MapPin size={10} color="#9090a8" style={{ flexShrink: 0, marginTop: 2 }} />
-                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4 }}>
+                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4, flex: 1 }}>
                                 <strong style={{ color: '#7c3aed', marginRight: 3 }}>{t.hoardingCode || `Hoarding #${t.hoardingID}`}:</strong>
                                 {t.siteAddress}
                             </span>
+                            {onOpenHoardingPhoto && (
+                                <button type="button" onClick={(e) => { e.stopPropagation(); onOpenHoardingPhoto({ hoardingID: t.hoardingID, hoardingCode: t.hoardingCode, siteAddress: t.siteAddress }); }}
+                                    title="View Hoarding Image"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.22)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 9.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+                                    <Eye size={10} /> View
+                                </button>
+                            )}
                         </div>
                     ) : null)}
                 </div>
@@ -784,7 +908,7 @@ function MergedGroupRow({ groupTasks, onView, onEdit }) {
 }
 
 /* ─── Mobile Task Card ─── */
-function TaskCard({ task, onView, onEdit }) {
+function TaskCard({ task, onView, onEdit, onOpenHoardingPhoto }) {
     const st = getStatusStyle(task.status);
     const job = task.job;
     return (
@@ -812,11 +936,17 @@ function TaskCard({ task, onView, onEdit }) {
                     <span className="pg-card__row-text">{task.hoardingCode || `Hoarding #${task.hoardingID}`}</span>
                 </div>
                 {task.siteAddress && (
-                    <div className="pg-card__row">
+                    <div className="pg-card__row" style={{ alignItems: 'flex-start' }}>
                         <MapPin size={12} color="#c0c0d8" className="pg-card__row-icon" style={{ marginTop: 2 }} />
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4, flex: 1 }}>
                             {task.siteAddress}
                         </span>
+                        {onOpenHoardingPhoto && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenHoardingPhoto({ hoardingID: task.hoardingID, hoardingCode: task.hoardingCode, siteAddress: task.siteAddress }); }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.22)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+                                <Eye size={11} /> View Image
+                            </button>
+                        )}
                     </div>
                 )}
                 <div className="pg-card__row">
@@ -842,7 +972,7 @@ function TaskCard({ task, onView, onEdit }) {
 }
 
 /* ─── Mobile merged group card — individual buttons per task ─── */
-function MergedGroupCard({ groupTasks, onView, onEdit }) {
+function MergedGroupCard({ groupTasks, onView, onEdit, onOpenHoardingPhoto }) {
     const flag = groupTasks[0]?.mergeAlongFlag || 'H';
     const firstTask = groupTasks[0];
     const job = firstTask?.job;
@@ -895,6 +1025,12 @@ function MergedGroupCard({ groupTasks, onView, onEdit }) {
                                     <strong style={{ color: '#7c3aed', marginRight: 4 }}>{t.hoardingCode || `Hoarding #${t.hoardingID}`}:</strong>
                                     {t.siteAddress}
                                 </span>
+                                {onOpenHoardingPhoto && (
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); onOpenHoardingPhoto({ hoardingID: t.hoardingID, hoardingCode: t.hoardingCode, siteAddress: t.siteAddress }); }}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.22)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+                                        <Eye size={11} /> View Image
+                                    </button>
+                                )}
                             </div>
                         ) : null)}
                     </div>
@@ -940,6 +1076,7 @@ export default function WorkerTasksPage() {
     const [fetchError, setFetchError] = useState('');
     const [modalTask, setModalTask] = useState(null);
     const [modalTab, setModalTab] = useState('view');
+    const [selectedHoardingPhoto, setSelectedHoardingPhoto] = useState(null);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('Open');
     const [sortKey, setSortKey] = useState('jobTaskID');
@@ -1290,7 +1427,8 @@ export default function WorkerTasksPage() {
                                             <MergedGroupRow key={`merged-${row.groupTasks[0].jobTaskID}`}
                                                 groupTasks={row.groupTasks}
                                                 onView={t => { setModalTask(t); setModalTab('view'); }}
-                                                onEdit={t => { setModalTask(t); setModalTab('update'); }} />
+                                                onEdit={t => { setModalTask(t); setModalTab('update'); }}
+                                                onOpenHoardingPhoto={setSelectedHoardingPhoto} />
                                         );
                                     }
                                     const task = row.task;
@@ -1308,9 +1446,14 @@ export default function WorkerTasksPage() {
                                                         <Layers size={10} /> {task.hoardingCode || `#${task.hoardingID}`}
                                                     </span>
                                                     {task.siteAddress && (
-                                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
                                                             <MapPin size={10} color="#9090a8" style={{ flexShrink: 0, marginTop: 2 }} />
-                                                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4 }}>{task.siteAddress}</span>
+                                                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4, flex: 1 }}>{task.siteAddress}</span>
+                                                            <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedHoardingPhoto({ hoardingID: task.hoardingID, hoardingCode: task.hoardingCode, siteAddress: task.siteAddress }); }}
+                                                                title="View Hoarding Image"
+                                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.22)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 9.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+                                                                <Eye size={10} /> View
+                                                            </button>
                                                         </div>
                                                     )}
                                                 </div>
@@ -1352,13 +1495,15 @@ export default function WorkerTasksPage() {
                                         <MergedGroupCard key={`merged-m-${row.groupTasks[0].jobTaskID}`}
                                             groupTasks={row.groupTasks}
                                             onView={t => { setModalTask(t); setModalTab('view'); }}
-                                            onEdit={t => { setModalTask(t); setModalTab('update'); }} />
+                                            onEdit={t => { setModalTask(t); setModalTab('update'); }}
+                                            onOpenHoardingPhoto={setSelectedHoardingPhoto} />
                                     );
                                 }
                                 return (
                                     <TaskCard key={row.task.jobTaskID} task={row.task}
                                         onView={t => { setModalTask(t); setModalTab('view'); }}
-                                        onEdit={t => { setModalTask(t); setModalTab('update'); }} />
+                                        onEdit={t => { setModalTask(t); setModalTab('update'); }}
+                                        onOpenHoardingPhoto={setSelectedHoardingPhoto} />
                                 );
                             })
                         }
@@ -1389,7 +1534,13 @@ export default function WorkerTasksPage() {
 
             {modalTask && (
                 <TaskModal task={modalTask} initialTab={modalTab}
-                    onClose={() => setModalTask(null)} onSave={handleSave} />
+                    onClose={() => setModalTask(null)} onSave={handleSave}
+                    onOpenHoardingPhoto={setSelectedHoardingPhoto} />
+            )}
+
+            {selectedHoardingPhoto && (
+                <HoardingPhotoModal hoardingInfo={selectedHoardingPhoto}
+                    onClose={() => setSelectedHoardingPhoto(null)} />
             )}
         </>
     );
