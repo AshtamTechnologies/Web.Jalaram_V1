@@ -3,6 +3,7 @@ import SupervisorLayout from '../components/SupervisorLayout.jsx';
 import SupDashboardHome from './SupDashboardHome.jsx';
 import WorkersPage from './Workers.jsx';
 import SupervisorJobsPage from './SupervisorJobs.jsx';
+import SupervisorPaymentPage from './SupervisorPayment.jsx';
 
 import { BarChart3, Layers, MapPin, Briefcase, CheckSquare } from 'lucide-react';
 
@@ -25,7 +26,7 @@ function PlaceholderPage({ title, Icon, color = '#10b981' }) {
 /* ═══════════════════════════════════════════
    SUPERVISOR DASHBOARD  —  entry point
    Called from App.js when role === 'supervisor'
-═══════════════════════════════════════════ */
+ ═══════════════════════════════════════════ */
 export default function SupervisorDashboard({ onLogout }) {
   const [tab, setTab] = useState(
     () => sessionStorage.getItem('supTab') || 'sup-dashboard'
@@ -45,6 +46,9 @@ export default function SupervisorDashboard({ onLogout }) {
 
       case 'workers':
         return <WorkersPage />;
+
+      case 'sup-payment':
+        return <SupervisorPaymentPage />;
 
       default:
         return <SupervisorJobsPage />;
