@@ -74,6 +74,7 @@ const MENU = [
       { id: 'FinancialYear', icon: FileText, label: 'Financial Year' },
       { id: 'SeriesSetup', icon: Hash, label: 'Series Setup' },
       { id: 'ExpenseType', icon: FileText, label: 'Hoarding Expense Type' },
+      { id: 'CompanyDetails', icon: FileText, label: 'Company Details' },
     ],
   },
 ];

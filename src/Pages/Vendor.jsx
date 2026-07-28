@@ -188,13 +188,65 @@ function StatusDropdown({ value, onChange }) {
 }
 
 /* ═══════════════════════════════════════════
+   PORTAL DROPDOWN
+   ═══════════════════════════════════════════ */
+function PortalDropdown({ children, open, triggerRef, panelRef }) {
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+
+  const updateCoords = useCallback(() => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      const scrollY = window.scrollY;
+      const scrollX = window.scrollX;
+      setCoords({
+        top: rect.bottom + scrollY,
+        left: rect.left + scrollX,
+        width: rect.width
+      });
+    }
+  }, [triggerRef]);
+
+  useEffect(() => {
+    if (open) {
+      updateCoords();
+      window.addEventListener('resize', updateCoords);
+      window.addEventListener('scroll', updateCoords, true);
+    }
+    return () => {
+      window.removeEventListener('resize', updateCoords);
+      window.removeEventListener('scroll', updateCoords, true);
+    };
+  }, [open, updateCoords]);
+
+  if (!open) return null;
+
+  return ReactDOM.createPortal(
+    <div
+      ref={panelRef}
+      style={{
+        position: 'absolute',
+        top: coords.top + 4,
+        left: coords.left,
+        width: coords.width,
+        zIndex: 9999,
+      }}
+    >
+      {children}
+    </div>,
+    document.body
+  );
+}
+
+/* ═══════════════════════════════════════════
    STATE COMBO
- ═══════════════════════════════════════════ */
+   ═══════════════════════════════════════════ */
 function StateCombo({ value, onChange, onBlur, hasError }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [wasOpened, setWasOpened] = useState(false);
   const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
@@ -202,17 +254,19 @@ function StateCombo({ value, onChange, onBlur, hasError }) {
     s.toLowerCase().includes(query.toLowerCase())
   );
 
+  const close = useCallback(() => {
+    setOpen(false); setQuery('');
+    if (wasOpened) { onBlur?.(); setWasOpened(false); }
+  }, [wasOpened, onBlur]);
+
   useEffect(() => {
-    function handler(e) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setOpen(false);
-        setQuery('');
-        if (wasOpened) { onBlur?.(); setWasOpened(false); }
-      }
-    }
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [onBlur, wasOpened]);
+    if (!open) return;
+    const h = (e) => {
+      if (!wrapRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) close();
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open, close]);
 
   const openDropdown = () => {
     setOpen(true); setWasOpened(true); setQuery('');
@@ -226,11 +280,45 @@ function StateCombo({ value, onChange, onBlur, hasError }) {
     onChange(''); setOpen(false); setQuery(''); setWasOpened(false); onBlur?.();
   };
 
+  const handleTriggerKeyDown = (e) => {
+    if (!open) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDropdown(); }
+      return;
+    }
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') close();
+  };
+
+  const handleSearchKeyDown = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    if (e.key === 'ArrowDown') { e.preventDefault(); items?.[0]?.focus(); }
+    else if (e.key === 'Escape') close();
+  };
+
+  const handleOptionKeyDown = (e, opt) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+    else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const items = listRef.current?.querySelectorAll('.pg-combo-option');
+      const idx = Array.from(items).indexOf(e.currentTarget);
+      (items[idx + 1] || items[0])?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const items = listRef.current?.querySelectorAll('.pg-combo-option');
+      const idx = Array.from(items).indexOf(e.currentTarget);
+      (items[idx - 1] || items[items.length - 1])?.focus();
+    } else if (e.key === 'Escape') close();
+  };
+
   return (
     <div className="pg-combo-wrap" ref={wrapRef}>
       <div
+        ref={triggerRef}
         className={`pg-field-wrap pg-combo-trigger ${hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
-        onClick={openDropdown} tabIndex={0}
+        onClick={openDropdown} tabIndex={0} onKeyDown={handleTriggerKeyDown}
         style={{ cursor: 'pointer' }}
       >
         <MapPin size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
@@ -242,8 +330,8 @@ function StateCombo({ value, onChange, onBlur, hasError }) {
           : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
       </div>
 
-      {open && (
-        <div className="pg-combo-panel">
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static' }}>
           <div className="pg-combo-search">
             <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
             <input
@@ -252,6 +340,7 @@ function StateCombo({ value, onChange, onBlur, hasError }) {
               placeholder="Search state..."
               value={query}
               onChange={e => setQuery(e.target.value)}
+              onKeyDown={handleSearchKeyDown}
             />
             {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
           </div>
@@ -263,6 +352,7 @@ function StateCombo({ value, onChange, onBlur, hasError }) {
                 key={s}
                 className={`pg-combo-option${s === value ? ' pg-combo-option--active' : ''}`}
                 onClick={() => select(s)} tabIndex={0}
+                onKeyDown={e => handleOptionKeyDown(e, s)}
               >
                 <span className="pg-combo-option__name">{s}</span>
                 {s === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
@@ -270,7 +360,7 @@ function StateCombo({ value, onChange, onBlur, hasError }) {
             ))}
           </div>
         </div>
-      )}
+      </PortalDropdown>
     </div>
   );
 }
