@@ -12,6 +12,8 @@ import {
   Briefcase,
   Image,
   CreditCard,
+  User,
+  Calendar,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import "./Common1.css";
@@ -143,6 +145,113 @@ function PaymentStatusBadge({ payment }) {
     }}>
       {status}
     </span>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   PAYMENT CARD (For mobile view)
+ ═══════════════════════════════════════════ */
+function PaymentCard({ payment, customerName, jobType, onViewReceipts }) {
+  const rawRem = Number(payment.remainingAmount ?? 0);
+  const isPartial = payment.isParicialPayment;
+  const displayRem = isPartial ? rawRem : 0;
+  const displayPenalty = !isPartial ? rawRem : 0;
+  const totalPaidExtra = Number(payment.paidAmount ?? 0) + (Number(payment.extrapayment) || 0);
+
+  const jobTypeBadgeStyle = (type) => {
+    const styles = {
+      'Banner': { bg: 'rgba(4,158,223,0.09)', color: '#049edf', border: 'rgba(4,158,223,0.25)' },
+      'Repair': { bg: 'rgba(245,158,11,0.09)', color: '#d97706', border: 'rgba(245,158,11,0.25)' },
+      'Erection': { bg: 'rgba(124,58,237,0.09)', color: '#7c3aed', border: 'rgba(124,58,237,0.25)' },
+    };
+    return styles[type] || styles['Banner'];
+  };
+  const jts = jobTypeBadgeStyle(jobType);
+
+  return (
+    <div className="pg-card">
+      <div className="pg-card__header">
+        <div className="pg-card__title-wrap">
+          <div className="pg-card__title" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+            Pay #{payment.jobPaymentID} · {customerName}
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 4, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#f0f0f8', color: '#5a5a78' }}>
+              Job #{payment.jobRequestID}
+            </span>
+            {jobType && jobType !== '—' && (
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: jts.bg, color: jts.color, border: `1px solid ${jts.border}` }}>
+                {jobType}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="pg-card__actions">
+          <button className="pg-btn-view" onClick={() => onViewReceipts(payment)} title="View receipts" style={{ width: 32, height: 32 }}>
+            <Image size={13} />
+          </button>
+        </div>
+      </div>
+
+      <div className="pg-card__body">
+        <div className="pg-card__row">
+          <Calendar size={12} className="pg-card__row-icon" />
+          <span className="pg-card__row-text">Date: {fmtDate(payment.paymentDate)}</span>
+        </div>
+
+        {payment.paidBY && (
+          <div className="pg-card__row">
+            <User size={12} className="pg-card__row-icon" />
+            <span className="pg-card__row-text">Paid By: {payment.paidBY}</span>
+          </div>
+        )}
+
+        <div className="pg-card__grid2">
+          <div className="pg-card__grid-cell">
+            <span className="pg-card__grid-text">Calculated: <strong>{fmtCurrency(payment.calculatedAmount)}</strong></span>
+          </div>
+          <div className="pg-card__grid-cell">
+            <span className="pg-card__grid-text">Paid: <strong style={{ color: '#16a34a' }}>{fmtCurrency(payment.paidAmount)}</strong></span>
+          </div>
+        </div>
+
+        <div className="pg-card__grid2">
+          <div className="pg-card__grid-cell">
+            <span className="pg-card__grid-text">
+              Remaining: <strong style={{ color: displayRem > 0 ? '#dc2626' : displayRem < 0 ? '#7c3aed' : '#9090a8' }}>
+                {displayRem !== 0 ? fmtCurrency(displayRem) : '—'}
+              </strong>
+            </span>
+          </div>
+          <div className="pg-card__grid-cell">
+            <span className="pg-card__grid-text">
+              Penalty: <strong style={{ color: displayPenalty > 0 ? '#dc2626' : '#9090a8' }}>
+                {displayPenalty !== 0 ? fmtCurrency(displayPenalty) : '—'}
+              </strong>
+            </span>
+          </div>
+        </div>
+
+        <div className="pg-card__grid2">
+          <div className="pg-card__grid-cell">
+            <span className="pg-card__grid-text">
+              Extra: <strong style={{ color: '#049edf' }}>
+                {payment.extrapayment && Number(payment.extrapayment) !== 0 ? fmtCurrency(payment.extrapayment) : '—'}
+              </strong>
+            </span>
+          </div>
+          <div className="pg-card__grid-cell">
+            <span className="pg-card__grid-text">
+              Total: <strong>{fmtCurrency(totalPaidExtra)}</strong>
+            </span>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4, paddingTop: 8, borderTop: '1px solid #eeeefc' }}>
+          <PaymentStatusBadge payment={payment} />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -360,8 +469,9 @@ export default function SupervisorPayment() {
     (async () => {
       setLoading(true);
       try {
+        const userId = parseInt(localStorage.getItem('userId'), 10) || 0;
         const [pRaw, jRaw, cRaw] = await Promise.all([
-          apiService.getAllJobPayments().catch(() => []),
+          apiService.getJobPaymentsByUserId(userId).catch(() => []),
           apiService.getAllJobRequests().catch(() => []),
           apiService.getAllCustomers().catch(() => []),
         ]);
@@ -379,7 +489,8 @@ export default function SupervisorPayment() {
   /* ── Refresh ── */
   const refresh = useCallback(async () => {
     try {
-      const pRaw = await apiService.getAllJobPayments();
+      const userId = parseInt(localStorage.getItem('userId'), 10) || 0;
+      const pRaw = await apiService.getJobPaymentsByUserId(userId);
       setPayments(normalizeList(pRaw).map(normalizePayment));
       showToast('Refreshed', 'success');
     } catch {
@@ -525,7 +636,7 @@ export default function SupervisorPayment() {
           </div>
 
           {/* Table */}
-          <div style={{ overflowX: 'auto' }}>
+          <div className="pg-desktop-table" style={{ overflowX: 'auto', border: '1px solid #f0f0f8', borderRadius: 12, marginBottom: 12 }}>
             <table ref={tableRef} className="pg-table" style={{ minWidth: 900, tableLayout: 'fixed' }}>
               <thead>
                 <tr>
@@ -655,6 +766,30 @@ export default function SupervisorPayment() {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Cards */}
+          <div className="pg-mobile-cards">
+            {paginated.length === 0 ? (
+              <div className="pg-empty__inner" style={{ padding: '40px 20px' }}>
+                <CreditCard size={36} color="#d0d0e8" />
+                <span className="pg-empty__label">No payments found</span>
+              </div>
+            ) : (
+              paginated.map(p => {
+                const cName = custName(p.jobRequestID);
+                const jType = jobType(p.jobRequestID);
+                return (
+                  <PaymentCard
+                    key={p.jobPaymentID}
+                    payment={p}
+                    customerName={cName}
+                    jobType={jType}
+                    onViewReceipts={setAttachmentPayment}
+                  />
+                );
+              })
+            )}
           </div>
 
           {/* Pagination */}

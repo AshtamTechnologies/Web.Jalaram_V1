@@ -25,6 +25,7 @@ import SeriesSetup from './Pages/SeriesSetup.jsx';
 import DissloveContract from './Pages/DissloveContract.jsx'
 import RegistrationPage from './Pages/Registration.jsx';
 import ExpenseType from './Pages/ExpenseType.jsx';
+import VendorPage from './Pages/Vendor.jsx';
 
 import { CalendarCheck, Users, CreditCard } from 'lucide-react';
 import './App.css';
@@ -121,7 +122,7 @@ export default function App() {
       case 'DissloveContract': return <DissloveContract />;
       case 'Registration': return <RegistrationPage />;
       case 'ExpenseType': return <ExpenseType />;
-
+      case 'vendors': return <VendorPage />;
 
       default: return <Dashboard changeTab={changeTab} />;
     }

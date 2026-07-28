@@ -60,6 +60,7 @@ const MENU = [
     children: [
       { id: 'land-contracts', icon: FileText, label: 'Land Contracts' },
       { id: 'land-payment', icon: Banknote, label: 'Land Payment' },
+      { id: 'vendors', icon: Users, label: 'Vendor' },
     ],
   },
   //  { id: 'Jobs', icon: Briefcase, label: 'Jobs', badge: null },

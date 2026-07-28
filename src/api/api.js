@@ -1148,6 +1148,7 @@ export const apiService = {
 
   // JOB PAYMENTS
   getAllJobPayments: () => api.get('/JobPayment'),
+  getJobPaymentsByUserId: (userId) => api.get(`/JobPayment/GetByUserId/${userId}`),
   getCompletedJobsWithPendingPayment: () => api.get('/JobPayment/GetCompletedJobsWithPendingPayment'),
   getJobPaymentById: (id) => api.get(`/JobPayment/${id}`),
   createJobPayment: (data) => api.post('/JobPayment', {
@@ -1268,6 +1269,12 @@ export const apiService = {
   createPerformaInvoice: (data) => api.post('/PerformaInvoice', data),
   getAllPerformaInvoices: () => api.get('/PerformaInvoice'),
   getDashboardOverview: () => api.get('/Dashboard/overview'),
+
+  // VENDORS
+  getAllVendors: () => api.get('/Vendor'),
+  getVendorById: (vendorId) => api.get(`/Vendor/${vendorId}`),
+  createVendor: (data) => api.post('/Vendor', data),
+  updateVendor: (data) => api.put('/Vendor', data),
 };
 
 export default api;
