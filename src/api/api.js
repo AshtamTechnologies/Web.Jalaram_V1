@@ -1116,18 +1116,18 @@ export const apiService = {
   },
 
   createJobTaskAssign: async (payload) => {
-    const response = await axios.post(`${API_BASE_URL}/JobTaskAssign`, payload);
-    return response.data;
+    const response = await api.post('/JobTaskAssign', payload);
+    return response?.data ?? response;
   },
 
   updateJobTaskAssign: async (payload) => {
-    const response = await axios.put(`${API_BASE_URL}/JobTaskAssign/${payload.jobTaskAssignID}`, payload);
-    return response.data;
+    const response = await api.put(`/JobTaskAssign/${payload.jobTaskAssignID}`, payload);
+    return response?.data ?? response;
   },
 
   deleteJobTaskAssign: async (jobTaskAssignID) => {
-    const response = await axios.delete(`${API_BASE_URL}/JobTaskAssign/${jobTaskAssignID}`);
-    return response.data;
+    const response = await api.delete(`/JobTaskAssign/${jobTaskAssignID}`);
+    return response?.data ?? response;
   },
 
   getContractBannerImages: async (customerContractID) => {
@@ -1278,6 +1278,16 @@ export const apiService = {
 
   // COMPANY DETAILS
   getAllCompanyDetails: () => api.get('/CompanyDetails'),
+  getCompanyDetailsById: (id) => api.get(`/CompanyDetails/${id}`),
+  createCompanyDetails: (data) => api.post('/CompanyDetails', data),
+  updateCompanyDetails: (data) => api.put('/CompanyDetails', data),
+
+  // QUOTATION COMPANY
+  getAllQuotationCompanies: () => api.get('/QuotationCompany'),
+  createQuotationCompany: (data) => api.post('/QuotationCompany', data),
+  updateQuotationCompany: (data) => api.put('/QuotationCompany', data),
+  getQuotationCompanyByQuotation: (quotationId, revisionNumber) =>
+    api.get(`/QuotationCompany/GetByQuotation?quotationId=${quotationId}&quotationRevisionNumber=${revisionNumber}`),
 };
 
 export default api;

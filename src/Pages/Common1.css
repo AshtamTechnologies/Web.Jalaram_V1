@@ -1960,12 +1960,12 @@
   justify-content: space-between;
   padding: 12px 22px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.88);
+  background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(20px);
   border-bottom: 1.5px solid rgba(255, 255, 255, 0.8);
   position: sticky !important;
-  top: 0;
-  z-index: 100;
+  top: 62px;
+  z-index: 15;
   box-shadow: 0 2px 18px rgba(100, 100, 180, 0.07);
   flex-wrap: wrap;
   gap: 12px;

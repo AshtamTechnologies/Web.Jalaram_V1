@@ -138,26 +138,26 @@ function normalizeCompany(raw) {
 
 function serializeCompany(form) {
   return {
-    company_ID: form.companyID,
-    company_Name: form.companyName,
-    address_Line1: form.addressLine1,
-    address_Line2: form.addressLine2,
-    city: form.city,
-    state: form.state,
-    country: form.country,
-    pincode: form.pincode,
-    contact_Person: form.contactPerson,
-    mobile_No: form.mobileNo,
-    email: form.email,
-    website: form.website,
-    gstin: form.gstin,
-    paN_No: form.panNo,
-    bank_Name: form.bankName,
-    branch_Name: form.branchName,
-    account_No: form.accountNo,
-    ifsC_Code: form.ifscCode,
-    account_Holder_Name: form.accountHolderName,
-    is_Active: form.isActive
+    companyID: Number(form.companyID ?? 0),
+    companyName: String(form.companyName || '').trim(),
+    addressLine1: String(form.addressLine1 || '').trim(),
+    addressLine2: String(form.addressLine2 || '').trim(),
+    city: String(form.city || '').trim(),
+    state: String(form.state || '').trim(),
+    country: String(form.country || '').trim(),
+    pincode: String(form.pincode || '').trim(),
+    contactPerson: String(form.contactPerson || '').trim(),
+    mobileNo: String(form.mobileNo || '').trim(),
+    email: String(form.email || '').trim(),
+    website: String(form.website || '').trim(),
+    gstin: String(form.gstin || '').trim().toUpperCase(),
+    panNo: String(form.panNo || '').trim().toUpperCase(),
+    bankName: String(form.bankName || '').trim(),
+    branchName: String(form.branchName || '').trim(),
+    accountNo: String(form.accountNo || '').trim(),
+    ifscCode: String(form.ifscCode || '').trim().toUpperCase(),
+    accountHolderName: String(form.accountHolderName || '').trim(),
+    isActive: !!form.isActive
   };
 }
 
@@ -553,6 +553,7 @@ function CompanyModal({ onClose, onSaved, editData }) {
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [apiError, setApiError] = useState('');
 
   const handleChange = (key, value) => {
     setForm(p => ({ ...p, [key]: value }));
@@ -580,13 +581,30 @@ function CompanyModal({ onClose, onSaved, editData }) {
     }
 
     setSubmitting(true);
+    setApiError('');
     try {
+      const payload = serializeCompany(form);
+      let saved;
+      if (isEdit) {
+        const res = await apiService.updateCompanyDetails(payload);
+        const raw = res?.data ?? res;
+        saved = (raw && typeof raw === 'object' && (raw.company_ID ?? raw.companyID))
+          ? normalizeCompany(raw)
+          : { ...editData, ...form };
+      } else {
+        const res = await apiService.createCompanyDetails(payload);
+        const raw = res?.data ?? res;
+        saved = normalizeCompany(raw);
+      }
+
       setSuccess(true);
       await new Promise(r => setTimeout(r, 600));
-      onSaved(form);
+      onSaved(saved, isEdit);
       onClose();
     } catch (err) {
       console.error(err);
+      const msg = err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Failed to save Company details.';
+      setApiError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -597,13 +615,14 @@ function CompanyModal({ onClose, onSaved, editData }) {
     setErrors({});
     setTouched({});
     setSuccess(false);
+    setApiError('');
   };
 
   return ReactDOM.createPortal(
     <div className="pg-overlay">
       <div className="pg-modal" style={{ maxWidth: 800 }}>
         
-        <div className="pg-modal__head">
+         <div className="pg-modal__head">
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap"><Building2 size={20} color="#049edf" /></div>
             <div>
@@ -617,6 +636,12 @@ function CompanyModal({ onClose, onSaved, editData }) {
         </div>
 
         <div className="pg-modal__body" style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
+          {apiError && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '12px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 12, color: '#dc2626', fontSize: 13, fontWeight: 600, marginBottom: 16, fontFamily: 'Nunito,sans-serif' }}>
+              <AlertCircle size={15} style={{ marginTop: 2, flexShrink: 0 }} />
+              <span>{apiError}</span>
+            </div>
+          )}
           {success && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, marginBottom: 16, fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#16a34a' }}>
               <CheckCircle2 size={16} />
@@ -723,7 +748,8 @@ function CompanyModal({ onClose, onSaved, editData }) {
 /* ═══════════════════════════════════════════
    MOBILE COMPANY CARD
    ═══════════════════════════════════════════ */
-function CompanyCard({ company, onView, onEdit }) {
+function CompanyCard({ company, onView, onEdit, loadingDetailId }) {
+  const isLoading = loadingDetailId === company.companyID;
   return (
     <div className="pg-card">
       <div className="pg-card__header">
@@ -734,8 +760,14 @@ function CompanyCard({ company, onView, onEdit }) {
           </span>
         </div>
         <div className="pg-card__actions">
-          <button className="pg-card__btn-edit" onClick={() => onEdit(company)} title="Edit"><Edit2 size={13} /></button>
-          <button className="pg-card__btn-view" onClick={() => onView(company)} title="View"><Eye size={13} /></button>
+          {isLoading ? (
+            <Loader2 size={13} className="pg-spin" color="#049edf" style={{ margin: '0 8px' }} />
+          ) : (
+            <>
+              <button className="pg-card__btn-edit" onClick={() => onEdit(company)} title="Edit"><Edit2 size={13} /></button>
+              <button className="pg-card__btn-view" onClick={() => onView(company)} title="View"><Eye size={13} /></button>
+            </>
+          )}
         </div>
       </div>
       <div className="pg-card__body">
@@ -777,6 +809,7 @@ export default function CompanyDetailsPage() {
   const [companies, setCompanies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
+  const [loadingDetailId, setLoadingDetailId] = useState(null);
 
   const [showModal, setShowModal] = useState(false);
   const [editCompany, setEditCompany] = useState(null); // null = Add, object = Edit
@@ -813,14 +846,11 @@ export default function CompanyDetailsPage() {
     fetchData();
   }, [fetchData]);
 
-  const handleSaved = (formData) => {
-    if (editCompany) {
-      // Update existing company locally in state
-      setCompanies(prev => prev.map(c => c.companyID === formData.companyID ? formData : c));
+  const handleSaved = (saved, isEdit) => {
+    if (isEdit) {
+      setCompanies(prev => prev.map(c => c.companyID === saved.companyID ? saved : c));
     } else {
-      // Add new company locally in state
-      const nextId = companies.length ? Math.max(...companies.map(c => c.companyID)) + 1 : 1;
-      setCompanies(prev => [...prev, { ...formData, companyID: nextId }]);
+      setCompanies(prev => [saved, ...prev]);
     }
   };
 
@@ -831,7 +861,43 @@ export default function CompanyDetailsPage() {
   useResizableColumns(tableRef, tableReady, [220, 150, 110, 170, 130, 90, 95]);
 
   const handleStartNew = () => { setEditCompany(null); setShowModal(true); };
-  const handleEdit = (c) => { setEditCompany({ ...c }); setShowModal(true); };
+
+  const handleView = async (c) => {
+    if (loadingDetailId) return;
+    setLoadingDetailId(c.companyID);
+    try {
+      const res = await apiService.getCompanyDetailsById(c.companyID);
+      const raw = res?.data ?? res;
+      setViewCompany(normalizeCompany(raw));
+    } catch (err) {
+      console.error(err);
+      alert(err?.response?.data?.message || err?.message || 'Failed to fetch company details.');
+    } finally {
+      setLoadingDetailId(null);
+    }
+  };
+
+  const handleEdit = async (c) => {
+    if (loadingDetailId) return;
+    setLoadingDetailId(c.companyID);
+    try {
+      const res = await apiService.getCompanyDetailsById(c.companyID);
+      const raw = res?.data ?? res;
+      setEditCompany(normalizeCompany(raw));
+      setShowModal(true);
+    } catch (err) {
+      console.error(err);
+      alert(err?.response?.data?.message || err?.message || 'Failed to fetch company details.');
+    } finally {
+      setLoadingDetailId(null);
+    }
+  };
+
+  const handleEditDirect = (c) => {
+    setEditCompany(c);
+    setShowModal(true);
+  };
+
   const closeModal = () => { setShowModal(false); setEditCompany(null); };
 
   /* ── Filter / sort / paginate ── */
@@ -1009,12 +1075,18 @@ export default function CompanyDetailsPage() {
                     {/* Actions */}
                     <td className="pg-td">
                       <div className="pg-action-wrap">
-                        <button className="pg-btn-edit" onClick={() => handleEdit(c)} title="Edit">
-                          <Edit2 size={13} />
-                        </button>
-                        <button className="pg-btn-view" onClick={() => setViewCompany(c)} title="View">
-                          <Eye size={13} />
-                        </button>
+                        {loadingDetailId === c.companyID ? (
+                          <Loader2 size={13} className="pg-spin" color="#049edf" style={{ margin: '0 10px' }} />
+                        ) : (
+                          <>
+                            <button className="pg-btn-edit" onClick={() => handleEdit(c)} title="Edit">
+                              <Edit2 size={13} />
+                            </button>
+                            <button className="pg-btn-view" onClick={() => handleView(c)} title="View">
+                              <Eye size={13} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
 
@@ -1032,7 +1104,13 @@ export default function CompanyDetailsPage() {
                 <span className="pg-empty__label">No company details found</span>
               </div>
             ) : paginated.map((c, idx) => (
-              <CompanyCard key={c.companyID ?? idx} company={c} onView={setViewCompany} onEdit={handleEdit} />
+              <CompanyCard
+                key={c.companyID ?? idx}
+                company={c}
+                onView={handleView}
+                onEdit={handleEdit}
+                loadingDetailId={loadingDetailId}
+              />
             ))}
           </div>
 
@@ -1087,7 +1165,7 @@ export default function CompanyDetailsPage() {
         <ViewModal
           company={viewCompany}
           onClose={() => setViewCompany(null)}
-          onEdit={c => { setViewCompany(null); handleEdit(c); }}
+          onEdit={c => { setViewCompany(null); handleEditDirect(c); }}
         />
       )}
     </>

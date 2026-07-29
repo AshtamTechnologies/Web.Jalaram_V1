@@ -360,6 +360,14 @@ function normalizeCustomer(raw) {
   };
 }
 
+function normalizeCompany(raw) {
+  return {
+    companyID: raw.company_ID ?? raw.companyID ?? raw.CompanyID ?? 0,
+    companyName: raw.company_Name ?? raw.companyName ?? raw.CompanyName ?? '',
+    isActive: raw.is_Active ?? raw.isActive ?? raw.IsActive ?? false,
+  };
+}
+
 function normalizeQuotation(raw) {
   return {
     quotationID: Number(raw.quotationID ?? raw.QuotationID ?? 0),
@@ -751,6 +759,83 @@ function CustomerCombo({ value, onChange, customers }) {
 }
 
 /* ═══════════════════════════════════════════
+   COMPANY COMBO
+═══════════════════════════════════════════ */
+function CompanyCombo({ value, onChange, companies }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef(null); const triggerRef = useRef(null);
+  const panelRef = useRef(null); const inputRef = useRef(null); const listRef = useRef(null);
+  const close = useCallback(() => { setOpen(false); setQuery(''); }, []);
+  useOutsideClick(wrapRef, panelRef, open, close);
+
+  const selected = companies.find(c => String(c.companyID) === String(value));
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return q ? companies.filter(c =>
+      (c.companyName || '').toLowerCase().includes(q)
+    ) : companies;
+  }, [companies, query]);
+
+  const openDD = () => { setOpen(true); setQuery(''); setTimeout(() => inputRef.current?.focus(), 0); };
+  const select = (c) => { onChange(c); setOpen(false); setQuery(''); };
+  const clear = (e) => { e.stopPropagation(); onChange(null); setOpen(false); setQuery(''); };
+  const nav = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') close();
+  };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef}>
+      <div
+        ref={triggerRef}
+        className="pg-field-wrap pg-combo-trigger pg-field-wrap--normal"
+        onClick={openDD} tabIndex={0}
+        onKeyDown={e => { if (!open) { if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDD(); } } else nav(e); }}
+        style={{ background: '#fff' }}
+      >
+        <Building2 size={14} color="#c0c0d8" style={{ flexShrink: 0 }} />
+        <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`}>
+          {selected ? selected.companyName : companies.length === 0 ? 'Loading companies…' : 'Select company…'}
+        </span>
+        {selected ? <X size={13} className="pg-combo-clear" onClick={clear} /> : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+      </div>
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static' }}>
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input ref={inputRef} className="pg-combo-search__input" placeholder="Search company by name…" value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'ArrowDown') { e.preventDefault(); listRef.current?.querySelectorAll('.pg-combo-option')?.[0]?.focus(); } else if (e.key === 'Escape') close(); }}
+            />
+            {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+          </div>
+          <div className="pg-combo-list" ref={listRef}>
+            {filtered.length === 0
+              ? <div className="pg-combo-empty">No companies found</div>
+              : filtered.map(c => (
+                <div key={c.companyID}
+                  className={`pg-combo-option${String(c.companyID) === String(value) ? ' pg-combo-option--active' : ''}`}
+                  onClick={() => select(c)} tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(c); } else nav(e); }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <span className="pg-combo-option__name">{c.companyName}</span>
+                  </div>
+                  {String(c.companyID) === String(value) && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                </div>
+              ))}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
    SORT ICON
 ═══════════════════════════════════════════ */
 function SortIcon({ col, sortKey, sortDir }) {
@@ -766,10 +851,46 @@ function SortIcon({ col, sortKey, sortDir }) {
 /* ═══════════════════════════════════════════
    PDF BUILDER
 ═══════════════════════════════════════════ */
+async function fetchCompanyDetailsForQuotation(quotationId, revisionNumber) {
+  try {
+    const qcRes = await apiService.getQuotationCompanyByQuotation(quotationId, revisionNumber);
+    const qcList = Array.isArray(qcRes) ? qcRes : Array.isArray(qcRes?.data) ? qcRes.data : [];
+    if (!qcList || qcList.length === 0) return null;
+    const companyId = qcList[0].company_ID ?? qcList[0].companyID ?? qcList[0].CompanyID;
+    if (!companyId) return null;
+    const cdRes = await apiService.getCompanyDetailsById(companyId);
+    const cd = cdRes?.data ?? cdRes;
+    if (!cd) return null;
+    return {
+      name:      cd.company_Name  ?? cd.companyName  ?? COMPANY.name,
+      line1:     cd.address_Line1 ?? cd.addressLine1 ?? COMPANY.line1,
+      line2:     [cd.address_Line2 ?? cd.addressLine2, cd.city, cd.state, cd.pincode]
+                   .filter(Boolean).join(', ') || COMPANY.line2,
+      contactPerson: cd.contact_Person ?? cd.contactPerson ?? '',
+      mobile:    cd.mobile_No ?? cd.mobileNo ?? '',
+      gstin:     cd.gstin ?? cd.GSTIN ?? COMPANY.gstin,
+      pan:       cd.paN_No ?? cd.panNo ?? cd.PAN_No ?? COMPANY.pan,
+      bank:      cd.bank_Name ?? cd.bankName ?? COMPANY.bank,
+      branch:    cd.branch_Name ?? cd.branchName ?? COMPANY.branch,
+      account:   cd.account_No ?? cd.accountNo ?? COMPANY.account,
+      ifsc:      cd.ifsC_Code ?? cd.ifscCode ?? COMPANY.ifsc,
+      accountHolder: cd.account_Holder_Name ?? cd.accountHolderName ?? COMPANY.name,
+      signatory: COMPANY.signatory,
+    };
+  } catch (err) {
+    console.warn('[fetchCompanyDetailsForQuotation] Failed:', err?.message);
+    return null;
+  }
+}
+
 function buildPrintHTML({ rows, withPrinting, selectedCustomer, quotNo, quotDate,
   revisionNo, cgstPct, sgstPct, subTotal, cgstAmt, sgstAmt,
   roundOff, finalTotal, selectedTerms, termsTexts,
-  docNoLabel = 'Quotation No.', docNoValue = null, docTitle = null }) {
+  docNoLabel = 'Quotation No.', docNoValue = null, docTitle = null,
+  companyDetails = null }) {
+
+  // Use API-fetched company data when available, falling back to hardcoded COMPANY
+  const co = companyDetails || COMPANY;
 
   const pages = rows.length === 0 ? [[]] : [];
   for (let i = 0; i < rows.length; i += ROWS_PER_PRINT_PAGE) pages.push(rows.slice(i, i + ROWS_PER_PRINT_PAGE));
@@ -781,7 +902,7 @@ function buildPrintHTML({ rows, withPrinting, selectedCustomer, quotNo, quotDate
   const prtCols = 7;
   const nCols = withPrinting ? prtCols : stdCols;
 
-  const upiStr = `upi://pay?pa=${COMPANY.account}@axisbank&pn=JALARAM+AD&cu=INR`;
+  const upiStr = `upi://pay?pa=${co.account}@axisbank&pn=${encodeURIComponent(co.name)}&cu=INR`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(upiStr)}&size=100x100&bgcolor=ffffff&color=000000&ecc=M`;
 
   const css = `
@@ -837,11 +958,14 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
   const renderHdr = (pgIdx) => {
     const first = pgIdx === 0;
     const c = selectedCustomer;
+    const contactStr = (co.contactPerson || co.mobile)
+      ? ` ${[co.contactPerson, co.mobile].filter(Boolean).join(' # ')}`
+      : '';
     return `
 <div class="co-hdr">
-  <div class="co-name">${COMPANY.name}</div>
-  <div class="co-addr">${COMPANY.line1}</div>
-  <div class="co-addr">${COMPANY.line2}</div>
+  <div class="co-name">${co.name}</div>
+  <div class="co-addr">${co.line1}</div>
+  <div class="co-addr">${co.line2}${contactStr}</div>
 </div>
 <div class="doc-row">
   <div class="dleft">Debit Memo</div>
@@ -934,12 +1058,12 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
       : '';
 
     const bankSection = isLast
-      ? `<strong>GSTIN :</strong> ${COMPANY.gstin} &nbsp; <strong>PAN No :</strong> ${COMPANY.pan}<br>
-         <strong>Bank Name &nbsp;&nbsp;</strong>: ${COMPANY.bank}<br>
-         <strong>Branch Name</strong>: ${COMPANY.branch}<br>
-         <strong>Bank A/c No &nbsp;</strong>: ${COMPANY.account}<br>
-         <strong>RTGS/IFSC &nbsp;&nbsp;</strong>: ${COMPANY.ifsc}`
-      : `<strong>GSTIN :</strong> ${COMPANY.gstin} &nbsp; <strong>PAN No :</strong> ${COMPANY.pan}<br>
+      ? `<strong>GSTIN :</strong> ${co.gstin} &nbsp; <strong>PAN No :</strong> ${co.pan}<br>
+         <strong>Bank Name &nbsp;&nbsp;</strong>: ${co.bank}<br>
+         <strong>Branch Name</strong>: ${co.branch}<br>
+         <strong>Bank A/c No &nbsp;</strong>: ${co.account}<br>
+         <strong>RTGS/IFSC &nbsp;&nbsp;</strong>: ${co.ifsc}`
+      : `<strong>GSTIN :</strong> ${co.gstin} &nbsp; <strong>PAN No :</strong> ${co.pan}<br>
          <strong>Bank Name &nbsp;&nbsp;</strong>: ${bv(130)}<br>
          <strong>Branch Name</strong>: ${bv(120)}<br>
          <strong>Bank A/c No &nbsp;</strong>: ${bv(130)}<br>
@@ -972,11 +1096,11 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
       <img src="${qrUrl}" width="98" height="98" style="display:block;" alt="UPI QR"/>
     </div>
     <div class="f-sig">
-      <div class="f-sig-company">For, JALARAM AD</div>
+      <div class="f-sig-company">For, ${co.name}</div>
       <div style="height:45px; display:flex; align-items:center; justify-content:center; margin-bottom:5px;">
         <img src="${paragSign}" style="max-height:45px; max-width:140px; object-fit:contain;" alt="Signature"/>
       </div>
-      <div class="f-sig-name">${COMPANY.signatory}</div>
+      <div class="f-sig-name">${co.signatory ?? ''}</div>
       <div class="f-sig-name">(Authorised Signatory)</div>
       <div class="f-grand-box">
         <span class="f-grand-lbl">Grand Total &#8377;</span>
@@ -3649,6 +3773,10 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [seriesAlertModal, setSeriesAlertModal] = useState(null); // { type, reason } where reason = 'notFound' | 'inactive'
   const [showProformaTermsModal, setShowProformaTermsModal] = useState(false);
   const [selectedProformaTerms, setSelectedProformaTerms] = useState([]);
+  const [companyDetailsList, setCompanyDetailsList] = useState([]);
+  const [quotationCompanies, setQuotationCompanies] = useState([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [quotationCompanyRecId, setQuotationCompanyRecId] = useState(0);
   /* ── Step 2 resizable table ── */
   const step2TableRef = useRef(null);
   const printTypeBtnRef = useRef(null);
@@ -4145,6 +4273,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
     // ── Save selected Terms & Conditions to Database ──
     await saveQuotationTerms(quot.quotationID, quot.quotationRevisionNumber, terms);
 
+    const companyDetails = await fetchCompanyDetailsForQuotation(quot.quotationID, quot.quotationRevisionNumber);
+
     const html = buildProformaHTML({
       rows: pdfRows,
       withPrinting: pdfRows.some(r => r.rowType === 'printing') || pdfRows.some(r => Number(r.printingCost || 0) > 0),
@@ -4166,6 +4296,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
       }),
       invoiceID,
       invoiceNumber,
+      companyDetails,
     });
 
     const win = window.open('', '_blank');
@@ -4233,6 +4364,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
       console.warn('Failed to fetch terms:', err);
     }
 
+    const companyDetails = await fetchCompanyDetailsForQuotation(quot.quotationID, quot.quotationRevisionNumber);
+
     /* ── Open Proforma print window ── */
     const html = buildProformaHTML({
       rows: pdfRows,
@@ -4255,6 +4388,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
       }),
       invoiceID,
       invoiceNumber,
+      companyDetails,
     });
 
     const win = window.open('', '_blank');
@@ -4265,7 +4399,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw, quotCustRaw, invoicesRaw] = await Promise.all([
+        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw, quotCustRaw, invoicesRaw, companyDetailsRaw, quotationCompRaw] = await Promise.all([
           apiService.getAllCustomers(),
           apiService.getAllHoardings(),
           apiService.getAllSites().catch(() => []),
@@ -4277,6 +4411,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
           apiService.getAllCustomerContractHoardingMaps().catch(() => []),       // ← NEW
           apiService.getAllQuotationCustomers().catch(() => []),
           apiService.getAllPerformaInvoices().catch(() => []),
+          apiService.getAllCompanyDetails().catch(() => []),
+          apiService.getAllQuotationCompanies().catch(() => []),
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
@@ -4299,6 +4435,13 @@ export default function QuotationPage({ onNavigateToContracts }) {
         setQuotations(normalizeList(qRaw).map(normalizeQuotation));
         setQuotLines(normalizeList(qlRaw).map(normalizeQuotLine));
         setProformaInvoices(normalizeList(invoicesRaw));
+        setCompanyDetailsList(normalizeList(companyDetailsRaw).map(normalizeCompany));
+        setQuotationCompanies(normalizeList(quotationCompRaw).map(qc => ({
+          quotationCompanyID: qc.quotationCompanyID ?? qc.QuotationCompanyID ?? 0,
+          companyID: qc.companyID ?? qc.CompanyID ?? 0,
+          quotationID: qc.quotationID ?? qc.QuotationID ?? 0,
+          quotationRevisionNumber: qc.quotationRevisionNumber ?? qc.QuotationRevisionNumber ?? 0,
+        })));
         const freqList = normalizeList(pRaw);
         setPaymentFreqs(freqList.map(f => ({
           value: f.paymentFreqID ?? f.PaymentFreqID,
@@ -4377,6 +4520,19 @@ export default function QuotationPage({ onNavigateToContracts }) {
           mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
         })));
       } catch { /* silent — merged rows just won't show if this fails */ }
+
+      // ← Also reload quotation companies
+      try {
+        const qcRaw = await apiService.getAllQuotationCompanies();
+        setQuotationCompanies(normalizeList(qcRaw).map(qc => ({
+          quotationCompanyID: qc.quotationCompanyID ?? qc.QuotationCompanyID ?? 0,
+          companyID: qc.companyID ?? qc.CompanyID ?? 0,
+          quotationID: qc.quotationID ?? qc.QuotationID ?? 0,
+          quotationRevisionNumber: qc.quotationRevisionNumber ?? qc.QuotationRevisionNumber ?? 0,
+        })));
+      } catch (err) {
+        console.warn('Failed to refresh quotation companies:', err);
+      }
 
       setDeleteMode(false);
       setSelectedQuotIds(new Set());
@@ -4699,6 +4855,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setOriginalQuotID(0);   // ← NEW
     setGlobalStart(''); setGlobalEnd('');
     setGlobalDays('');
+    setSelectedCompanyId('');
+    setQuotationCompanyRecId(0);
   };
 
   const handleStartNew = async () => {
@@ -4737,6 +4895,21 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setQuotDate(quot.quotationDate ? quot.quotationDate.split('T')[0] : todayISO());
     setRevisionNo(quot.quotationRevisionNumber || 1);
     setEditingQuotID(quot.quotationID);
+
+    setSelectedCompanyId('');
+    setQuotationCompanyRecId(0);
+    apiService.getQuotationCompanyByQuotation(quot.quotationID, quot.quotationRevisionNumber)
+      .then(res => {
+        const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+        if (list && list.length > 0) {
+          const qc = list[0];
+          setSelectedCompanyId(qc.company_ID ?? qc.companyID ?? qc.CompanyID ?? 0);
+          setQuotationCompanyRecId(qc.quotationCompany_ID ?? qc.quotationCompanyID ?? qc.QuotationCompanyID ?? 0);
+        }
+      })
+      .catch(err => {
+        console.error("Error fetching linked company details:", err);
+      });
 
     const regularRows = myLines
       .filter(l => !l.mergeFlag)
@@ -4928,6 +5101,19 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setQuotNo(quot.quotationNumber);
     setQuotDate(todayISO());
     setRevisionNo((quot.quotationRevisionNumber || 1) + 1);
+
+    setSelectedCompanyId('');
+    setQuotationCompanyRecId(0);
+    try {
+      const res = await apiService.getQuotationCompanyByQuotation(quot.quotationID, quot.quotationRevisionNumber);
+      const list = Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : [];
+      if (list && list.length > 0) {
+        const qc = list[0];
+        setSelectedCompanyId(qc.company_ID ?? qc.companyID ?? qc.CompanyID ?? 0);
+      }
+    } catch (err) {
+      console.error("Error fetching linked company details for revision:", err);
+    }
 
     const regularRows = myLines
       .filter(l => !l.mergeFlag)
@@ -5290,6 +5476,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
       console.warn('Failed to fetch terms:', err);
     }
 
+    const companyDetails = await fetchCompanyDetailsForQuotation(quot.quotationID, quot.quotationRevisionNumber);
+
     const html = buildPrintHTML({
       rows: pdfRows,
       withPrinting: pdfRows.some(r => r.rowType === 'printing') || pdfRows.some(r => Number(r.printingCost || 0) > 0),
@@ -5309,6 +5497,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const t = termsList.find(t => t.termID === id);
         return t?.description || '';
       }),
+      companyDetails,
     });
     const win = window.open('', '_blank');
     if (win) { win.document.write(html); win.document.close(); }
@@ -5376,6 +5565,10 @@ export default function QuotationPage({ onNavigateToContracts }) {
     // ── Input Validation ──
     if (!selectedCustomer?.customerID) {
       showToast('Please select a customer before saving.', 'error');
+      return;
+    }
+    if (!selectedCompanyId) {
+      showToast('Please select a company before saving.', 'error');
       return;
     }
     if (rows.length === 0) {
@@ -5572,6 +5765,25 @@ export default function QuotationPage({ onNavigateToContracts }) {
       // ── Save selected Terms & Conditions ──
       await saveQuotationTerms(savedQuotID, savedRevNo, selectedTerms);
 
+      // ── Save selected Company Details ──
+      const qcPayload = {
+        quotationCompanyID: Number(quotationCompanyRecId || 0),
+        companyID: Number(selectedCompanyId),
+        quotationID: Number(savedQuotID),
+        quotationRevisionNumber: Number(savedRevNo)
+      };
+
+      if (editingQuotID) {
+        await apiService.updateQuotationCompany(qcPayload);
+      } else {
+        const qcRes = await apiService.createQuotationCompany({ ...qcPayload, quotationCompanyID: 0 });
+        const qcRaw = qcRes?.data ?? qcRes;
+        const newQcId = qcRaw?.quotationCompanyID ?? qcRaw?.QuotationCompanyID ?? 0;
+        if (newQcId > 0) {
+          setQuotationCompanyRecId(newQcId);
+        }
+      }
+
       // ── Fetch saved data from Database to Print ──
       const [allQuotsRaw, printLinesRaw, printMergesRaw] = await Promise.all([
         apiService.getAllQuotations(),
@@ -5751,6 +5963,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
       const storedGross = storedSub + storedCgst + storedSgst;
       const storedFinal = Math.round(storedGross);
 
+      const companyDetails = await fetchCompanyDetailsForQuotation(savedQuotID, savedRevNo);
+
       const html = buildPrintHTML({
         rows: pdfRows,
         withPrinting: withPrinting || pdfRows.some(r => r.rowType === 'printing') || pdfRows.some(r => Number(r.printingCost || 0) > 0),
@@ -5770,6 +5984,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           const t = termsList.find(t => t.termID === id);
           return t?.description || '';
         }),
+        companyDetails,
       });
 
       const win = window.open('', '_blank');
@@ -6675,6 +6890,16 @@ export default function QuotationPage({ onNavigateToContracts }) {
                           <input className="qt-input" type="number" min="0" max="28" value={sgstPct} onChange={e => setSgstPct(e.target.value)} />
                         </div>
                       </div>
+                    </div>
+
+                    <div className="qt-section-head" style={{ marginTop: 24 }}>Company Details</div>
+                    <div className="qt-company-row" style={{ marginBottom: 20 }}>
+                      <label className="qt-label" style={{ marginBottom: 6, display: 'block' }}>Select Company <span style={{ color: '#ef4444' }}>*</span></label>
+                      <CompanyCombo
+                        value={selectedCompanyId}
+                        onChange={(comp) => { setSelectedCompanyId(comp ? comp.companyID : ''); }}
+                        companies={companyDetailsList.filter(c => c.isActive)}
+                      />
                     </div>
 
                     <div className="qt-terms-head">
