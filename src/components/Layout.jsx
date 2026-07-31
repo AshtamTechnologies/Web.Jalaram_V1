@@ -46,6 +46,7 @@ const MENU = [
     badge: null,
     children: [
       { id: 'new-hoarding', icon: PlusSquare, label: 'Maintain Hoarding' },
+      { id: 'external-hoarding', icon: PlusSquare, label: 'External Hoardings' },
       { id: 'hoarding-expense', icon: IndianRupee, label: 'Hoarding Expense' },
       // { id: 'hoarding-merge', icon: Layers, label: 'Hoarding Merge' },
     ],

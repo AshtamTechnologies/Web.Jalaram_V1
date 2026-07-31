@@ -1188,7 +1188,12 @@ function HoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteCo
         const res = await apiService.getAvailableHoardings(startDate, endDate);
         const list = normalizeList(res);
         if (active) {
-          const mapped = list.map(item => {
+          const filteredInternal = list.filter(item => {
+            const full = allHoardings.find(h => h.hoardingID === (item.hoardingId ?? item.hoardingID));
+            const isExt = item.isExternal ?? item.isexternal ?? item.IsExternal ?? full?.isExternal ?? full?.isexternal ?? full?.IsExternal ?? false;
+            return isExt !== true && String(isExt).toLowerCase() !== 'true';
+          });
+          const mapped = filteredInternal.map(item => {
             const full = allHoardings.find(h => h.hoardingID === (item.hoardingId ?? item.hoardingID));
             return {
               hoardingID: item.hoardingId ?? item.hoardingID,
@@ -1379,7 +1384,12 @@ function ManualHoardingModal({ allHoardings, existingIds, onAdd, onClose, siteCo
         const res = await apiService.getAvailableHoardings(startDate, endDate);
         const list = normalizeList(res);
         if (active) {
-          const mapped = list.map(item => {
+          const filteredInternal = list.filter(item => {
+            const full = allHoardings.find(h => h.hoardingID === (item.hoardingId ?? item.hoardingID));
+            const isExt = item.isExternal ?? item.isexternal ?? item.IsExternal ?? full?.isExternal ?? full?.isexternal ?? full?.IsExternal ?? false;
+            return isExt !== true && String(isExt).toLowerCase() !== 'true';
+          });
+          const mapped = filteredInternal.map(item => {
             const full = allHoardings.find(h => h.hoardingID === (item.hoardingId ?? item.hoardingID));
             return {
               hoardingID: item.hoardingId ?? item.hoardingID,
@@ -1583,6 +1593,272 @@ function ManualHoardingModal({ allHoardings, existingIds, onAdd, onClose, siteCo
               className="pg-btn-save"
               onClick={() => onAdd(selected)}
               disabled={selected.size === 0 || loading || !!error}
+            >
+              <Plus size={14} /> Add {selected.size > 0 ? `(${selected.size})` : ''}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ═══════════════════════════════════════════
+   EXTERNAL HOARDING SELECT MODAL
+═══════════════════════════════════════════ */
+function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteColorMap, siteMap, startDate, endDate }) {
+  const [hoardingsList, setHoardingsList] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(new Set());
+
+  useEffect(() => {
+    let active = true;
+    const fetchExternal = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const res = await apiService.getAvailableHoardings(startDate, endDate);
+        const list = normalizeList(res);
+        if (active) {
+          // Sort by effdt descending first to keep the latest version
+          const sortedList = [...list].sort((a, b) => new Date(b.effdt || b.Effdt) - new Date(a.effdt || a.Effdt));
+          
+          // Deduplicate by hoardingID
+          const seen = new Set();
+          const uniqueList = [];
+          for (const item of sortedList) {
+            const hid = item.hoardingID ?? item.HoardingID ?? item.hoardingId;
+            if (hid && !seen.has(hid)) {
+              seen.add(hid);
+              uniqueList.push(item);
+            }
+          }
+
+          // Filter: only keep items where isExternal is true
+          const filteredExternal = uniqueList.filter(item => {
+            const full = allHoardings.find(h => h.hoardingID === (item.hoardingId ?? item.hoardingID));
+            const isExt = item.isExternal ?? item.isexternal ?? item.IsExternal ?? full?.isExternal ?? full?.isexternal ?? full?.IsExternal ?? false;
+            return isExt === true || String(isExt).toLowerCase() === 'true';
+          });
+
+          const mapped = filteredExternal.map(item => {
+            const hid = item.hoardingID ?? item.HoardingID ?? item.hoardingId;
+            const full = allHoardings.find(h => h.hoardingID === hid);
+            const sid = item.siteID ?? item.SiteID ?? item.siteId ?? full?.siteID;
+            const siteObj = sid != null ? siteMap.get(sid) : null;
+            return {
+              hoardingID: hid,
+              hoardingCode: item.hoardingCode ?? full?.hoardingCode ?? item.HoardingCode ?? '',
+              monthlyRent: item.monthlyRent ?? full?.monthlyRent ?? item.MonthlyRent ?? 0,
+              width: item.width ?? full?.width ?? item.Width ?? 0,
+              height: item.height ?? full?.height ?? item.Height ?? 0,
+              status: 'Available',
+              siteID: sid ?? null,
+              site: siteObj || full?.site || {
+                addressLine1: item.addressLine1 || '',
+                city: item.city || '',
+                district: item.district || '',
+                siteType: item.material || '',
+              }
+            };
+          });
+          setHoardingsList(mapped);
+        }
+      } catch (err) {
+        if (active) {
+          setError(err?.response?.data?.message || err?.message || 'Failed to load external hoardings.');
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+
+    if (startDate && endDate) {
+      fetchExternal();
+    } else {
+      setLoading(false);
+      setError('Global period dates are not set.');
+    }
+
+    return () => {
+      active = false;
+    };
+  }, [startDate, endDate, siteMap, allHoardings]);
+
+  const filtered = useMemo(() => {
+    const s = search.toLowerCase();
+    return s ? hoardingsList.filter(h =>
+      (h.hoardingCode || '').toLowerCase().includes(s) ||
+      (h.site?.addressLine1 || '').toLowerCase().includes(s) ||
+      (h.site?.city || '').toLowerCase().includes(s)
+    ) : hoardingsList;
+  }, [hoardingsList, search]);
+
+  const selectable = filtered.filter(h => !existingIds.has(h.hoardingID));
+  const tyrannicalSelectable = selectable;
+  const allSelected = tyrannicalSelectable.length > 0 && tyrannicalSelectable.every(h => selected.has(h.hoardingID));
+  const someSelected = tyrannicalSelectable.some(h => selected.has(h.hoardingID));
+
+  const toggle = (id) => setSelected(p => {
+    const n = new Set(p);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelected(p => { const n = new Set(p); tyrannicalSelectable.forEach(h => n.delete(h.hoardingID)); return n; });
+    } else {
+      setSelected(p => { const n = new Set(p); tyrannicalSelectable.forEach(h => n.add(h.hoardingID)); return n; });
+    }
+  };
+
+  return ReactDOM.createPortal(
+    <div className="pg-overlay">
+      <div className="pg-modal" style={{ maxWidth: 660, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+        <div className="pg-modal__head" style={{ flexShrink: 0 }}>
+          <div className="pg-modal__head-left">
+            <div className="pg-modal__icon-wrap" style={{ background: 'rgba(22,163,74,0.10)' }}><Building2 size={20} color="#16a34a" /></div>
+            <div>
+              <h5 className="pg-modal__title">Select External Hoardings</h5>
+              <p className="pg-modal__subtitle">{loading ? 'Loading...' : `${hoardingsList.length} external hoardings`} · Colour-coded by site</p>
+            </div>
+          </div>
+          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+        </div>
+
+        <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0f0f8', flexShrink: 0 }}>
+          <div className="pg-search-box">
+            <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              placeholder="Search by code, site address…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              disabled={loading || !!error}
+            />
+            {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
+          </div>
+        </div>
+
+        {!loading && !error && tyrannicalSelectable.length > 0 && (
+          <div className="qt-select-all-row" style={{ flexShrink: 0 }} onClick={toggleAll}>
+            <div className={`qt-modal-check ${allSelected ? 'qt-modal-check--all' : someSelected ? 'qt-modal-check--on' : ''}`}>
+              {allSelected ? <Check size={12} color="#fff" /> : someSelected ? <div style={{ width: 8, height: 2, background: '#16a34a', borderRadius: 2 }} /> : null}
+            </div>
+            <span>{allSelected ? 'Deselect All' : `Select All (${tyrannicalSelectable.length})`}</span>
+          </div>
+        )}
+
+        <div style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 360, minHeight: 0 }}>
+          {loading ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px', gap: 8 }}>
+              <Loader2 size={24} className="pg-spin" color="#16a34a" />
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#9090a8' }}>Loading external hoardings…</span>
+            </div>
+          ) : error ? (
+            <div style={{ padding: '40px 20px', textAlign: 'center', color: '#dc2626', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600 }}>
+              {error}
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="pg-empty__inner" style={{ padding: '32px 20px' }}>
+              <Building2 size={32} color="#d0d0e8" />
+              <span className="pg-empty__label">No external hoardings found</span>
+            </div>
+          ) : (
+            filtered.map(h => {
+              const checked = selected.has(h.hoardingID);
+              const alreadyIn = existingIds.has(h.hoardingID);
+              const sid = h.siteID ?? h.site?.siteID;
+              const siteColor = toSID(sid) != null ? siteColorMap.get(toSID(sid)) : null;
+              const site = h.site ? normalizeSite(h.site) : null;
+              const resolvedSite = site ?? (toSID(sid) != null ? siteMap?.get(toSID(sid)) ?? null : null);
+              const { line1, line2 } = getSiteDisplayLines(resolvedSite, h.hoardingCode);
+
+              return (
+                <div
+                  key={h.hoardingID}
+                  onClick={() => !alreadyIn && toggle(h.hoardingID)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    padding: '10px 24px',
+                    borderBottom: '1px solid #f8f8f8',
+                    borderLeft: siteColor ? `4px solid ${siteColor.border}` : '4px solid transparent',
+                    cursor: alreadyIn ? 'not-allowed' : 'pointer',
+                    background: checked ? 'rgba(22,163,74,0.05)' : siteColor ? siteColor.bg : '#fff',
+                    opacity: alreadyIn ? 0.55 : 1,
+                  }}
+                >
+                  <div className={`qt-modal-check ${checked ? 'qt-modal-check--on' : ''}`}>
+                    {checked && <Check size={12} color="#fff" />}
+                  </div>
+
+                  {siteColor && (
+                    <div style={{
+                      width: 8, height: 8, borderRadius: '50%',
+                      background: siteColor.dot, flexShrink: 0,
+                    }} />
+                  )}
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="pg-td__primary" style={{ display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                      <MapPin size={11} color="#9090a8" style={{ flexShrink: 0, marginTop: 4 }} />
+                      <span style={{ flex: 1, minWidth: 0, wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                        {line1 || h.hoardingCode}
+                        {alreadyIn && <span style={{ color: '#9090a8', fontSize: 11, marginLeft: 6, fontWeight: 500, whiteSpace: 'nowrap' }}>· Already added</span>}
+                      </span>
+                    </div>
+                    {line2 && (
+                      <div style={{
+                        fontFamily: 'Nunito,sans-serif', fontSize: 11,
+                        color: '#7a8499', marginTop: 1,
+                        wordBreak: 'break-word', whiteSpace: 'normal'
+                      }}>
+                        {line2}
+                      </div>
+                    )}
+                    <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
+                      Code: {h.hoardingCode} · {h.width}×{h.height} ft · ₹{Number(h.monthlyRent || 0).toLocaleString('en-IN')}/mo
+                    </div>
+                  </div>
+
+                  <span style={{
+                    fontSize: 10.5, fontWeight: 700, padding: '2px 8px',
+                    borderRadius: 5, flexShrink: 0,
+                    background: 'rgba(22,163,74,0.10)',
+                    color: '#16a34a',
+                    border: '1px solid rgba(22,163,74,0.2)',
+                  }}>
+                    {h.status}
+                  </span>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <span style={{
+            fontFamily: 'Nunito,sans-serif', fontSize: 12.5,
+            color: '#9090a8', fontWeight: 600,
+          }}>
+            {selected.size} selected
+          </span>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
+            <button
+              className="pg-btn-save"
+              onClick={() => {
+                const selectedObjects = hoardingsList.filter(h => selected.has(h.hoardingID));
+                onAdd(selectedObjects);
+              }}
+              disabled={selected.size === 0 || loading || !!error}
+              style={{
+                background: 'linear-gradient(135deg,#16a34a,#10b981)',
+                boxShadow: '0 2px 10px rgba(22,163,74,0.25)',
+              }}
             >
               <Plus size={14} /> Add {selected.size > 0 ? `(${selected.size})` : ''}
             </button>
@@ -3754,6 +4030,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   /* ── Modals ── */
   const [showHoardModal, setShowHoardModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
+  const [showExternalModal, setShowExternalModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showCustomerEditModal, setShowCustomerEditModal] = useState(false);  // ← NEW
@@ -4399,9 +4676,10 @@ export default function QuotationPage({ onNavigateToContracts }) {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, hRaw, sRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw, quotCustRaw, invoicesRaw, companyDetailsRaw, quotationCompRaw] = await Promise.all([
+        const [cRaw, hRaw, extRaw, sRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw, quotCustRaw, invoicesRaw, companyDetailsRaw, quotationCompRaw] = await Promise.all([
           apiService.getAllCustomers(),
           apiService.getAllHoardings(),
+          apiService.getAllExternalHoardings().catch(() => []),
           apiService.getAllSites().catch(() => []),
           apiService.getAllCustomerTerms().catch(() => []),
           apiService.getAllQuotations().catch(() => []),
@@ -4417,7 +4695,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
 
-        const rawHoardings = normalizeList(hRaw);
+        const rawHoardings = [...normalizeList(hRaw), ...normalizeList(extRaw)];
         const seenHoardings = new Set();
         const uniqueHoardings = [];
         for (const h of rawHoardings) {
@@ -4730,6 +5008,24 @@ export default function QuotationPage({ onNavigateToContracts }) {
     const nextRows = [...rows, ...toAdd];
     setRows(nextRows);
     setShowManualModal(false);
+    // ── conflict check ──
+    const conflicts = checkHoardingDateConflicts(nextRows, allContracts, allContractMaps, customers);
+    if (conflicts.length > 0) { setConflictWarnings(conflicts); setShowConflictModal(true); }
+  };
+
+  const handleAddExternal = (selectedExternalHoardings) => {
+    setHoardings(prev => {
+      const existingIds = new Set(prev.map(h => h.hoardingID));
+      const newItems = selectedExternalHoardings.filter(h => !existingIds.has(h.hoardingID));
+      return [...prev, ...newItems];
+    });
+
+    const toAdd = selectedExternalHoardings
+      .filter(h => !rows.find(r => r.hoardingID === h.hoardingID))
+      .map(h => newHoardingRow(h, globalStart, globalEnd, siteMap));
+    const nextRows = [...rows, ...toAdd];
+    setRows(nextRows);
+    setShowExternalModal(false);
     // ── conflict check ──
     const conflicts = checkHoardingDateConflicts(nextRows, allContracts, allContractMaps, customers);
     if (conflicts.length > 0) { setConflictWarnings(conflicts); setShowConflictModal(true); }
@@ -6435,6 +6731,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
                     <button className="pg-btn-cancel" onClick={() => setShowManualModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Building2 size={13} /> Add Manual
                     </button>
+                    <button
+                      className="pg-btn-cancel"
+                      onClick={() => setShowExternalModal(true)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 6, borderColor: 'rgba(22,163,74,0.35)', color: '#16a34a', background: 'rgba(22,163,74,0.05)' }}
+                      title="Add external hoardings"
+                    >
+                      <Building2 size={13} /> Add External Hoarding
+                    </button>
                     <button className="pg-btn-save" onClick={() => setShowHoardModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <Plus size={13} /> Add Hoardings
                     </button>
@@ -7487,6 +7791,18 @@ export default function QuotationPage({ onNavigateToContracts }) {
           existingIds={existingHoardingIds}
           onAdd={handleAddManual}
           onClose={() => setShowManualModal(false)}
+          siteColorMap={siteColorMap}
+          siteMap={siteMap}
+          startDate={globalStart}
+          endDate={globalEnd}
+        />
+      )}
+      {showExternalModal && (
+        <ExternalHoardingSelectModal
+          allHoardings={hoardings}
+          existingIds={existingHoardingIds}
+          onAdd={handleAddExternal}
+          onClose={() => setShowExternalModal(false)}
           siteColorMap={siteColorMap}
           siteMap={siteMap}
           startDate={globalStart}

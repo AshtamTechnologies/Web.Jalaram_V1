@@ -5,6 +5,7 @@ import Dashboard from './Pages/Dashboard';
 import OwnerPage from './Pages/Owner';
 import SitePage from './Pages/Site.jsx';
 import Hoarding from './Pages/Hoarding.jsx';
+import ExternalHoarding from './Pages/ExternalHoarding.jsx';
 import Hoardingexpense from './Pages/Hoardingexpense.jsx';
 import LandContract from './Pages/LandContract.jsx';
 import LandPayment from './Pages/LandPayment.jsx';
@@ -99,6 +100,7 @@ export default function App() {
     switch (tab) {
       case 'dashboard': return <Dashboard changeTab={changeTab} />;
       case 'new-hoarding': return <Hoarding />;
+      case 'external-hoarding': return <ExternalHoarding />;
       case 'hoarding-expense': return <Hoardingexpense />;
       case 'hoarding-merge': return <HoardingMerge />;
       case 'land-contracts': return <LandContract />;

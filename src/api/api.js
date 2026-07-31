@@ -207,6 +207,7 @@ export const apiService = {
 
   // HOARDINGS
   getAllHoardings: () => api.get('/Hoarding'),
+  getAllExternalHoardings: () => api.get('/Hoarding/GetAllExternal'),
   getAvailableHoardings: (startDate, endDate) => api.get(`/Hoarding/available?startDate=${startDate}&endDate=${endDate}`),
   getAllavailableforJob: () => api.get('/Hoarding/availableforJob'), //Show the hoarding available
   getHoardingById: (hoardingID) => api.get(`/Hoarding/${hoardingID}`),
@@ -222,6 +223,7 @@ export const apiService = {
     width: Number(data.width),
     height: Number(data.height),
     siteID: Number(data.siteID),
+    isExternal: data.isExternal,
   }),
   addHoardingEffdt: (hoardingCode, data) => api.post('/Hoarding', {
     hoardingID: 0,
@@ -234,6 +236,7 @@ export const apiService = {
     width: Number(data.width),
     height: Number(data.height),
     siteID: Number(data.siteID),
+    isExternal: data.isExternal,
   }),
   saveHoardingLinkWithPhotos: (data) => api.post('/Hoarding/SaveHoardingLinkWithPhotos', {
     hoardingID: Number(data.hoardingID),
@@ -246,6 +249,7 @@ export const apiService = {
     width: Number(data.width),
     height: Number(data.height),
     siteID: Number(data.siteID),
+    isExternal: data.isExternal,
   }),
   updateHoarding: (hoardingID, data) => api.put(`/Hoarding/${hoardingID}`, {
     hoardingID: Number(hoardingID),
@@ -258,6 +262,7 @@ export const apiService = {
     width: Number(data.width),
     height: Number(data.height),
     siteID: Number(data.siteID),
+    isExternal: data.isExternal,
   }),
   deleteHoarding: (hoardingID) => api.delete(`/Hoarding/${hoardingID}`),
 
