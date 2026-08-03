@@ -28,6 +28,7 @@ import RegistrationPage from './Pages/Registration.jsx';
 import ExpenseType from './Pages/ExpenseType.jsx';
 import VendorPage from './Pages/Vendor.jsx';
 import CompanyDetailsPage from './Pages/CompanyDetails.jsx';
+import OpportunityPage from './Pages/Opportunity.jsx';
 
 import { CalendarCheck, Users, CreditCard } from 'lucide-react';
 import './App.css';
@@ -127,6 +128,7 @@ export default function App() {
       case 'ExpenseType': return <ExpenseType />;
       case 'vendors': return <VendorPage />;
       case 'CompanyDetails': return <CompanyDetailsPage />;
+      case 'opportunity': return <OpportunityPage />;
 
       default: return <Dashboard changeTab={changeTab} />;
     }

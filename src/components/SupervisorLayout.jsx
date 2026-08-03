@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     LogOut, Menu, X, ChevronDown, ChevronRight,
-    Layers, MapPin, Briefcase, BarChart3, CheckSquare, HardHat, CreditCard
+    Layers, MapPin, Briefcase, BarChart3, CheckSquare, HardHat, CreditCard, Lightbulb
 } from 'lucide-react';
 import './SupervisorLayout.css';
 
@@ -10,9 +10,10 @@ import './SupervisorLayout.css';
 ───────────────────────────────────── */
 const SUP_MENU = [
     // { id: 'sup-dashboard', icon: BarChart3,  label: 'Dashboard' },
-    { id: 'sup-jobs',      icon: Briefcase,  label: 'Jobs'      },  // ← fixed: was 'sup-hoardings'
-    { id: 'workers',       icon: HardHat,    label: 'Workers'   },
-    { id: 'sup-payment',   icon: CreditCard, label: 'Payments'  },
+    { id: 'sup-jobs', icon: Briefcase, label: 'Jobs' },  // ← fixed: was 'sup-hoardings'
+    { id: 'workers', icon: HardHat, label: 'Workers' },
+    { id: 'sup-payment', icon: CreditCard, label: 'Payments' },
+    { id: 'opportunity', icon: Lightbulb, label: 'Opportunity' },
 ];
 
 /* ── Lookup maps ── */

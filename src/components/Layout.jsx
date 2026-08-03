@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   LogOut, Menu, X, ChevronDown, ChevronRight,
   IndianRupee, Users, MapPin, Layers, UserCircle, Hash, FileX,
-  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard, UserRoundPlus
+  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard, UserRoundPlus, Lightbulb
 } from 'lucide-react';
 // import Chatbot from './Chatbot';
 import Notification from './Notification';
@@ -62,6 +62,7 @@ const MENU = [
       { id: 'land-contracts', icon: FileText, label: 'Land Contracts' },
       { id: 'land-payment', icon: Banknote, label: 'Land Payment' },
       { id: 'vendors', icon: Users, label: 'Vendor' },
+      { id: 'opportunity', icon: Lightbulb, label: 'Opportunity' },
     ],
   },
   //  { id: 'Jobs', icon: Briefcase, label: 'Jobs', badge: null },

@@ -4,6 +4,7 @@ import SupDashboardHome from './SupDashboardHome.jsx';
 import WorkersPage from './Workers.jsx';
 import SupervisorJobsPage from './SupervisorJobs.jsx';
 import SupervisorPaymentPage from './SupervisorPayment.jsx';
+import OpportunityPage from './Opportunity.jsx';
 
 import { BarChart3, Layers, MapPin, Briefcase, CheckSquare } from 'lucide-react';
 
@@ -49,6 +50,9 @@ export default function SupervisorDashboard({ onLogout }) {
 
       case 'sup-payment':
         return <SupervisorPaymentPage />;
+
+      case 'opportunity':
+        return <OpportunityPage />;
 
       default:
         return <SupervisorJobsPage />;

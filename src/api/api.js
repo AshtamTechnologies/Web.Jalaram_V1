@@ -1293,6 +1293,25 @@ export const apiService = {
   updateQuotationCompany: (data) => api.put('/QuotationCompany', data),
   getQuotationCompanyByQuotation: (quotationId, revisionNumber) =>
     api.get(`/QuotationCompany/GetByQuotation?quotationId=${quotationId}&quotationRevisionNumber=${revisionNumber}`),
+
+  // OPPORTUNITIES
+  getAllOpportunities: () => api.get('/Opportunity'),
+  getOpportunityById: (id) => api.get(`/Opportunity/${id}`),
+  createOpportunity: (data) => api.post('/Opportunity', data),
+  updateOpportunity: (data) => api.put('/Opportunity', data),
+
+  // OPPORTUNITY PHOTOS
+  getOpportunityPhotos: async (opportunityID) => {
+    try {
+      return await api.get(`/OpportunityPhoto/Opportunity/${opportunityID}`);
+    } catch (err) {
+      if (err?.response?.status === 404) return [];
+      throw err;
+    }
+  },
+  uploadOpportunityPhoto: (formData) =>
+    api.post('/OpportunityPhoto', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  deleteOpportunityPhoto: (id) => api.delete(`/OpportunityPhoto/${id}`),
 };
 
 export default api;
