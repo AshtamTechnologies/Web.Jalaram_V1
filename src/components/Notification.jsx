@@ -3,48 +3,47 @@ import { createPortal } from 'react-dom';
 import {
   Bell, Trash2, CheckCheck, Info, AlertTriangle, CheckCircle, XCircle, X
 } from 'lucide-react';
+import { apiService } from '../api/api';
 
-/* Default sample notifications if localstorage is empty */
-const DEFAULT_NOTIFICATIONS = [
-  {
-    id: '1',
-    title: 'Welcome to JalaramAD',
-    message: 'Manage your hoardings, sites, contracts, and clients efficiently.',
-    timestamp: 'Just now',
-    type: 'info',
-    read: false
-  },
-  {
-    id: '2',
-    title: 'Payment Pending',
-    message: 'Landlord contract payment for Site A is due tomorrow.',
-    timestamp: '1 hour ago',
-    type: 'warning',
-    read: false
-  },
-  {
-    id: '3',
-    title: 'Job Successfully Created',
-    message: 'New hoarding maintenance task assigned to worker Raju.',
-    timestamp: 'Yesterday',
-    type: 'success',
-    read: true
+const formatTimestamp = (dateStr) => {
+  if (!dateStr) return '';
+  try {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins} min${diffMins !== 1 ? 's' : ''} ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays === 1) return 'Yesterday';
+    if (diffDays < 7) return `${diffDays} day${diffDays !== 1 ? 's' : ''} ago`;
+    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return dateStr;
   }
-];
+};
+
+const getNotificationType = (title = '', message = '') => {
+  const text = (title + ' ' + message).toLowerCase();
+  if (text.includes('error') || text.includes('failed') || text.includes('danger')) return 'danger';
+  if (text.includes('warn') || text.includes('due') || text.includes('pending')) return 'warning';
+  if (text.includes('create') || text.includes('success') || text.includes('added')) return 'success';
+  return 'info';
+};
 
 export default function Notification({ handleTabChange }) {
-  const [notifications, setNotifications] = useState(() => {
-    const saved = localStorage.getItem('jalaram_notifications');
-    return saved ? JSON.parse(saved) : DEFAULT_NOTIFICATIONS;
-  });
-
+  const [notifications, setNotifications] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
   const notifRef = useRef(null);
 
   // Sync notifications to localStorage
   useEffect(() => {
-    localStorage.setItem('jalaram_notifications', JSON.stringify(notifications));
+    if (notifications.length > 0) {
+      localStorage.setItem('jalaram_notifications', JSON.stringify(notifications));
+    }
   }, [notifications]);
 
   // Click outside listener to close notifications dropdown
@@ -56,6 +55,34 @@ export default function Notification({ handleTabChange }) {
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Fetch notifications from API on load and periodically
+  useEffect(() => {
+    const userId = localStorage.getItem('userId');
+    if (!userId) return;
+
+    const fetchNotifications = async () => {
+      try {
+        const res = await apiService.getNotificationsByUser(userId);
+        const list = Array.isArray(res) ? res : res?.data ?? res?.$values ?? [];
+        const normalized = list.map(n => ({
+          id: n.notificationId ?? n.NotificationId ?? String(Math.random()),
+          title: n.title ?? n.Title ?? 'Notification',
+          message: n.message ?? n.Message ?? '',
+          timestamp: formatTimestamp(n.createdDate ?? n.CreatedDate),
+          type: getNotificationType(n.title ?? n.Title, n.message ?? n.Message),
+          read: n.isRead ?? n.IsRead ?? false,
+        }));
+        setNotifications(normalized);
+      } catch (err) {
+        console.error('Failed to fetch notifications:', err);
+      }
+    };
+
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 20000); // Poll every 20s
+    return () => clearInterval(interval);
   }, []);
 
   const dismissToast = (id) => {

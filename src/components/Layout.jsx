@@ -359,7 +359,7 @@ export default function Layout({ tab, changeTab, onLogout, children }) {
 
           <div className="topbar-right">
             {/* Notification Bell Dropdown & Toasts */}
-            {/* <Notification handleTabChange={handleTabChange} />*/}
+            <Notification handleTabChange={handleTabChange} />
 
             <div ref={dropRef} style={{ position: 'relative' }}>
               <button className="profile-btn" onClick={() => setDropOpen(v => !v)}>

@@ -410,6 +410,7 @@ function normalizeHoarding(raw) {
     material: raw.material ?? raw.Material ?? '',
     hoardingType: raw.hoardingType ?? raw.HoardingType ?? '',
     site: raw.site ? normalizeSite(raw.site) : null,
+    isExternal: raw.isExternal ?? raw.IsExternal ?? raw.is_External ?? raw.Is_External ?? false,
   };
 }
 // Normalize siteID to number for consistent Map keys
@@ -3345,10 +3346,23 @@ function CreateContractFromQuotModal({
 
     // Step 2: Create CustomerContract
     let savedContractID = 0;
+    let targetCompanyID = null;
     try {
+      const qcRes = await apiService.getQuotationCompanyByQuotationId(quot.quotationID);
+      const qcList = Array.isArray(qcRes) ? qcRes : qcRes?.data ?? [];
+      if (qcList.length > 0) {
+        targetCompanyID = qcList[0].companyID ?? qcList[0].CompanyID ?? null;
+      }
+    } catch (qcErr) {
+      console.warn('[QuotationCompany] Fetch failed:', qcErr?.message);
+    }
+
+    try {
+      const commentsText = `From Quotation ${quot.quotationNumber || quot.quotationID} Rev.${quot.quotationRevisionNumber || 1}` + (targetCompanyID ? `\n[CompanyID: ${targetCompanyID}]` : '');
       const rawRes = await apiService.createCustomerContract({
         customerContractID: 0,
         customerID: Number(quot.customerID),
+        companyID: targetCompanyID,
         startDate,
         endDate,
         contractOrigValue: totalValue,
@@ -3359,7 +3373,7 @@ function CreateContractFromQuotModal({
         discountAmount: 0,
         adjustmentAmount: 0,
         contractFinalValue: totalValue,
-        comments: `From Quotation ${quot.quotationNumber || quot.quotationID} Rev.${quot.quotationRevisionNumber || 1}`,
+        comments: commentsText,
       });
       savedContractID = Number(
         rawRes?.data?.customerContractID
@@ -3472,6 +3486,7 @@ function CreateContractFromQuotModal({
             width: Number(h.width ?? h.Width ?? 0),
             height: Number(h.height ?? h.Height ?? 0),
             siteID: Number(h.siteID ?? h.SiteID ?? h.site?.siteID ?? 0),
+            isExternal: h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' || h.is_External === true || String(h.is_External).toLowerCase() === 'true',
           };
 
           await apiService.saveHoardingLinkWithPhotos(payload);

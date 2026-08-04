@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import axios from 'axios';
 import {
@@ -144,6 +144,7 @@ const EMPTY_FORM = {
   adjustmentAmount: '',
   contractFinalValue: '',
   comments: '',
+  companyID: '',
 };
 
 /* ─────────────────────────────────────────
@@ -192,6 +193,11 @@ function hoardingLabel(h) {
   return parts.filter(Boolean).join(' - ');
 }
 function normalizeContract(raw) {
+  const rawComments = raw.comments ?? raw.Comments ?? '';
+  const matchCompany = rawComments.match(/\[CompanyID:\s*(\d+)\]/i);
+  const commentsCompanyID = matchCompany ? Number(matchCompany[1]) : '';
+  const comments = rawComments.replace(/\[CompanyID:\s*\d+\]/gi, '').trim();
+
   return {
     customerContractID: raw.customerContractID ?? raw.CustomerContractID,
     customerID: raw.customerID ?? raw.CustomerID,
@@ -206,7 +212,8 @@ function normalizeContract(raw) {
     discountAmount: raw.discountAmount ?? raw.DiscountAmount ?? '',
     adjustmentAmount: raw.adjustmentAmount ?? raw.AdjustmentAmount ?? '',
     contractFinalValue: raw.contractFinalValue ?? raw.ContractFinalValue ?? '',
-    comments: raw.comments ?? raw.Comments ?? '',
+    comments: comments,
+    companyID: raw.companyID ?? raw.CompanyID ?? commentsCompanyID ?? '',
     lastUpdatedBy: raw.lastUpdatedBy ?? raw.LastUpdatedBy ?? '',
     lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
   };
@@ -258,6 +265,7 @@ function detectHoardingConflict(form, contracts, currentContractID) {
 
 function validateForm(form, contracts = [], currentContractID = null, skipHoarding = false) {
   const e = {};
+  if (!form.companyID) e.companyID = 'Company is required';
   if (!form.customerID) e.customerID = 'Customer is required';
   // if (!skipHoarding && !form.hoardingID) e.hoardingID = 'Hoarding is required';
   if (!form.startDate) e.startDate = 'Start date is required';
@@ -781,6 +789,131 @@ function ComboDropdown({ value, onChange, onBlur, hasError, placeholder, icon: I
       )}
     </div>
   );
+}
+
+/* ═══════════════════════════════════════════
+   PORTAL DROPDOWN & COMPANY COMBO
+   (Copied from Quotation.jsx)
+   ═══════════════════════════════════════════ */
+function PortalDropdown({ open, triggerRef, panelRef, children }) {
+  const [style, setStyle] = useState({ position: 'fixed', top: 0, left: 0, width: 0, zIndex: 99999 });
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const upd = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const ph = panelRef.current?.offsetHeight || 260;
+      const flipUp = (window.innerHeight - r.bottom) < ph + 8 && r.top > ph + 8;
+      setStyle({ position: 'fixed', top: flipUp ? r.top - ph - 4 : r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 });
+    };
+    upd();
+    window.addEventListener('scroll', upd, true);
+    window.addEventListener('resize', upd);
+    return () => { window.removeEventListener('scroll', upd, true); window.removeEventListener('resize', upd); };
+  }, [open, triggerRef, panelRef]);
+  if (!open) return null;
+  return ReactDOM.createPortal(<div ref={panelRef} style={style}>{children}</div>, document.body);
+}
+
+function useOutsideClick(wrapRef, panelRef, open, onClose) {
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (!wrapRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) onClose();
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open, wrapRef, panelRef, onClose]);
+}
+
+function CompanyCombo({ value, onChange, companies, disabled }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef(null); const triggerRef = useRef(null);
+  const panelRef = useRef(null); const inputRef = useRef(null); const listRef = useRef(null);
+  const close = useCallback(() => { setOpen(false); setQuery(''); }, []);
+  useOutsideClick(wrapRef, panelRef, open, close);
+
+  const selected = companies.find(c => String(c.companyID) === String(value));
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    const pool = companies.filter(c => c.isActive === true || String(c.companyID) === String(value));
+    return q ? pool.filter(c =>
+      (c.companyName || '').toLowerCase().includes(q)
+    ) : pool;
+  }, [companies, query, value]);
+
+  const openDD = () => { setOpen(true); setQuery(''); setTimeout(() => inputRef.current?.focus(), 0); };
+  const select = (c) => { onChange(c); setOpen(false); setQuery(''); };
+  const clear = (e) => { e.stopPropagation(); onChange(null); setOpen(false); setQuery(''); };
+  const nav = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') { e.preventDefault(); (items[idx + 1] || items[0])?.focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); (items[idx - 1] || items[items.length - 1])?.focus(); }
+    else if (e.key === 'Escape') close();
+  };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef}>
+      <div
+        ref={triggerRef}
+        className={`pg-field-wrap pg-combo-trigger ${disabled ? 'pg-field-wrap--disabled' : 'pg-field-wrap--normal'}`}
+        onClick={() => { if (!disabled) openDD(); }} tabIndex={disabled ? -1 : 0}
+        onKeyDown={e => { if (!open) { if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (!disabled) openDD(); } } else nav(e); }}
+        style={{ background: disabled ? '#f8f8fd' : '#fff', cursor: disabled ? 'not-allowed' : 'pointer' }}
+      >
+        <Building2 size={14} color="#c0c0d8" style={{ flexShrink: 0 }} />
+        <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`} style={disabled ? { color: '#4a5568' } : {}}>
+          {selected ? selected.companyName : companies.length === 0 ? 'Loading companies…' : 'Select company…'}
+        </span>
+        {selected && !disabled ? <X size={13} className="pg-combo-clear" onClick={clear} /> : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+      </div>
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static' }}>
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input ref={inputRef} className="pg-combo-search__input" placeholder="Search company by name…" value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'ArrowDown') { e.preventDefault(); listRef.current?.querySelectorAll('.pg-combo-option')?.[0]?.focus(); } else if (e.key === 'Escape') close(); }}
+            />
+            {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+          </div>
+          <div className="pg-combo-list" ref={listRef}>
+            {filtered.length === 0
+              ? <div className="pg-combo-empty">No companies found</div>
+              : filtered.map(c => (
+                <div key={c.companyID}
+                  className={`pg-combo-option${String(c.companyID) === String(value) ? ' pg-combo-option--active' : ''}`}
+                  onClick={() => select(c)} tabIndex={0}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(c); } else nav(e); }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <span className="pg-combo-option__name">{c.companyName}</span>
+                  </div>
+                  {String(c.companyID) === String(value) && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                </div>
+              ))}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
+
+function normalizeCompany(raw) {
+  return {
+    companyID: raw.company_ID ?? raw.companyID ?? raw.CompanyID ?? 0,
+    companyName: raw.company_Name ?? raw.companyName ?? raw.CompanyName ?? '',
+    addressLine1: raw.address_Line1 ?? raw.addressLine1 ?? raw.AddressLine1 ?? '',
+    addressLine2: raw.address_Line2 ?? raw.addressLine2 ?? raw.AddressLine2 ?? '',
+    city: raw.city ?? raw.City ?? '',
+    state: raw.state ?? raw.State ?? '',
+    pincode: raw.pincode ?? raw.Pincode ?? '',
+    mobileNo: raw.mobile_No ?? raw.mobileNo ?? raw.MobileNo ?? '',
+    gstin: raw.gstin ?? raw.GSTIN ?? '',
+    isActive: raw.is_Active ?? raw.isActive ?? raw.IsActive ?? false,
+  };
 }
 
 /* ═══════════════════════════════════════════
@@ -3047,7 +3180,7 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
     </div>
   );
 }
-function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [], onClose }) {
+function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [], companies = [], onClose }) {
   const [maps, setMaps] = useState([]);
   const [attachments, setAttachments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -3071,8 +3204,9 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
   useEffect(() => {
     (async () => {
       try {
-        const [res, rawTypes] = await Promise.all([
+        const [res, extRes, rawTypes] = await Promise.all([
           apiService.getAllHoardings(),
+          apiService.getAllExternalHoardings().catch(() => []),
           apiService.getAllHoardingTypes(),
         ]);
         const extractArray = (r) => {
@@ -3081,7 +3215,9 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
           if (Array.isArray(r?.data)) return r?.data;
           return [];
         };
-        setAllHoardingsRaw(extractArray(res));
+        const internalList = extractArray(res);
+        const externalList = extractArray(extRes);
+        setAllHoardingsRaw([...internalList, ...externalList]);
         setHoardingTypes(extractArray(rawTypes));
       } catch { /* silent */ }
     })();
@@ -3242,8 +3378,17 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
         .map(t => t.description);
 
       const { cgstPct, sgstPct } = getContractGst(contract, quotations);
+
+      const selectedCompany = companies.find(c => Number(c.companyID) === Number(contract.companyID));
+      const companyInfo = selectedCompany ? {
+        name: selectedCompany.companyName,
+        line1: selectedCompany.addressLine1 || '',
+        line2: [selectedCompany.addressLine2, selectedCompany.city, selectedCompany.state, selectedCompany.pincode].filter(Boolean).join(', ') || '',
+        phone: selectedCompany.mobileNo || CONTRACT_COMPANY.phone,
+      } : CONTRACT_COMPANY;
+
       const html = buildContractPDFHTML({
-        company: CONTRACT_COMPANY,
+        company: companyInfo,
         customer,
         contract,
         hoardingItems,
@@ -3690,8 +3835,10 @@ async function addHoardingEffdtRows(hoardingIDs, allHoardings, effdt, status) {
     })
   );
 }
-async function saveHoardingLinkWithPhotosRows(hoardingIDs, allHoardings, effdt, status) {
+async function saveHoardingLinkWithPhotosRows(hoardingIDs, allHoardings, effdt, status, externalHoardingIDs = []) {
   if (!hoardingIDs.length || !effdt) return;
+
+  const extSet = new Set(externalHoardingIDs.map(Number));
 
   await Promise.allSettled(
     hoardingIDs.map(async (hid) => {
@@ -3702,6 +3849,10 @@ async function saveHoardingLinkWithPhotosRows(hoardingIDs, allHoardings, effdt, 
         console.warn('[saveHoardingLinkWithPhotosRows] hoarding not found:', hid);
         return;
       }
+
+      const isExternal = extSet.has(Number(hid)) || 
+        h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' ||
+        h.is_External === true || String(h.is_External).toLowerCase() === 'true';
 
       const payload = {
         hoardingID: Number(hid),
@@ -3714,6 +3865,7 @@ async function saveHoardingLinkWithPhotosRows(hoardingIDs, allHoardings, effdt, 
         width: Number(h.width ?? h.Width ?? 0),
         height: Number(h.height ?? h.Height ?? 0),
         siteID: Number(h.siteID ?? h.SiteID ?? h.site?.siteID ?? 0),
+        isExternal: isExternal,
       };
 
       console.log('[saveHoardingLinkWithPhotosRows]', h.hoardingCode, '→', payload);
@@ -3724,7 +3876,7 @@ async function saveHoardingLinkWithPhotosRows(hoardingIDs, allHoardings, effdt, 
 /* ═══════════════════════════════════════════
    CONTRACT FORM
 ═══════════════════════════════════════════ */
-function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = [], sites, paymentFreqs, contracts, landContracts = [], hoardingMaps = [], quotations = [], onBack, onSave }) {
+function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = [], sites, paymentFreqs, contracts, landContracts = [], hoardingMaps = [], quotations = [], companies = [], onBack, onSave }) {
   const isAdd = mode === 'add';
   const viewOnly = !isAdd; // edit mode = view-only (attachments still editable)
   const currentContractID = isAdd ? null : (contract?.customerContractID ?? null);
@@ -3732,6 +3884,10 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
   // ── Multi-hoarding pre-selection (add mode only) ──
   const [selectedHoardings, setSelectedHoardings] = useState([]);
   const [hoardingModalOpen, setHoardingModalOpen] = useState(false);
+
+  // ── External Multi-hoarding pre-selection (add mode only) ──
+  const [selectedExternalHoardings, setSelectedExternalHoardings] = useState([]);
+  const [externalHoardingModalOpen, setExternalHoardingModalOpen] = useState(false);
 
   // ── Available hoardings (date-filtered from API) ──
   const [availableHoardings, setAvailableHoardings] = useState([]);
@@ -3769,6 +3925,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
       ? {
         ...EMPTY_FORM,
         customerID: contract?.customerID ?? '',
+        companyID: contract?.companyID ?? '',
       }
       : {
         customerID: contract?.customerID ?? '',
@@ -3784,6 +3941,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         adjustmentAmount: contract?.adjustmentAmount ?? '',
         contractFinalValue: contract?.contractFinalValue ?? '',
         comments: contract?.comments ?? '',
+        companyID: contract?.companyID ?? '',
       }
   );
 
@@ -3882,6 +4040,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
       setAvailableErr('');
       // Clear selected hoardings that may no longer be available
       setSelectedHoardings([]);
+      setSelectedExternalHoardings([]);
       return;
     }
     let cancelled = false;
@@ -3903,6 +4062,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         // Remove previously selected hoardings that are no longer available
         const availableIds = new Set(list.map(h => Number(h.hoardingID)));
         setSelectedHoardings(prev => prev.filter(h => availableIds.has(Number(h.hoardingID))));
+        setSelectedExternalHoardings(prev => prev.filter(h => availableIds.has(Number(h.hoardingID))));
       })
       .catch(err => {
         if (cancelled) return;
@@ -4045,9 +4205,13 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true); setApiErr('');
     try {
+      const cleanComments = (form.comments || '').replace(/\[CompanyID:\s*\d+\]/gi, '').trim();
+      const payloadComments = cleanComments + (form.companyID ? `\n[CompanyID: ${form.companyID}]` : '');
+
       const payload = {
         customerContractID: isAdd ? 0 : contract.customerContractID,
         customerID: Number(form.customerID),
+        companyID: form.companyID ? Number(form.companyID) : null,
         startDate: form.startDate,
         endDate: form.endDate,
         contractOrigValue: Number(String(form.contractOrigValue).replace(/,/g, '')) || 0,
@@ -4058,7 +4222,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         discountAmount: Number(String(form.discountAmount).replace(/,/g, '')) || 0,
         adjustmentAmount: Number(String(form.adjustmentAmount).replace(/,/g, '')) || 0,
         contractFinalValue: Number(String(form.contractFinalValue).replace(/,/g, '')) || 0,
-        comments: form.comments || '',
+        comments: payloadComments,
       };
 
       let saved;
@@ -4068,9 +4232,13 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         const res = await apiService.createCustomerContract(payload);
         saved = normalizeContract(res?.data ?? res ?? payload);
 
-        const hoardingsToMap = selectedHoardings.length > 0
-          ? selectedHoardings
-          : form.hoardingID ? [{ hoardingID: form.hoardingID }] : [];
+        const hoardingsToMap = [
+          ...selectedHoardings,
+          ...selectedExternalHoardings
+        ];
+        if (hoardingsToMap.length === 0 && form.hoardingID) {
+          hoardingsToMap.push({ hoardingID: form.hoardingID });
+        }
 
         if (saved.customerContractID && hoardingsToMap.length > 0) {
           /* Map hoardings to contract */
@@ -4097,7 +4265,8 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
             hoardingsToMap.map(h => Number(h.hoardingID)),
             hoardings,          // the hoardings prop passed to ContractForm
             form.startDate,     // effdt = contract start date
-            'Occupied'          // hoarding is now occupied
+            'Occupied',         // hoarding is now occupied
+            selectedExternalHoardings.map(h => Number(h.hoardingID))
           );
         }
 
@@ -4415,7 +4584,8 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                 </div>
                 <div className="hd-section-body">
                   <div className="row g-3">
-                    <div className="col-12 col-md-6">
+                    {/* Row 1: Customer */}
+                    <div className="col-12">
                       <FieldLabel label="Customer" required />
                       <CustomerSearchWidget
                         customers={customers}
@@ -4451,23 +4621,22 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                           customer={selectedCustomerObj}
                           onSave={(updated) => {
                             setEditedCustomer(updated);
-                            // Also update the customers list so the form reflects the change
-                            // (if you have a setCustomers callback, call it here)
                           }}
                           onClose={() => setShowEditCustomer(false)}
                         />
                       )}
                     </div>
 
-                    <div className="col-12 col-md-6">
-                      <FieldLabel label={isAdd ? 'Hoardings' : 'Hoarding'} required={!isAdd} optional={isAdd} />
-
-                      {isAdd ? (
-                        <>
-                          {/* Multi-select trigger button — requires start+end dates */}
+                    {/* Row 2: Hoardings & External Hoardings */}
+                    {isAdd ? (
+                      <>
+                        {/* Regular Hoardings Selector */}
+                        <div className="col-12 col-md-6">
+                          <FieldLabel label="Hoardings" optional />
                           {(() => {
                             const datesReady = !!(form.startDate && form.endDate);
                             const canOpen = datesReady && !loadingAvailable && !!form.customerID;
+                            const internalAvailableCount = availableHoardings.filter(h => h.isExternal !== true && String(h.isExternal).toLowerCase() !== 'true').length;
                             return (
                               <button
                                 type="button"
@@ -4497,7 +4666,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                                         ? 'Select start & end dates first…'
                                         : selectedHoardings.length > 0
                                           ? `${selectedHoardings.length} hoarding${selectedHoardings.length !== 1 ? 's' : ''} selected`
-                                          : `Browse available hoardings (${availableHoardings.length})…`}
+                                          : `Browse available hoardings (${internalAvailableCount})…`}
                                 </span>
                                 {loadingAvailable
                                   ? <Loader2 size={13} className="pg-spin" color="#c0c0d8" style={{ flexShrink: 0 }} />
@@ -4551,6 +4720,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                                           </td>
                                           <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8', textAlign: 'right' }}>
                                             <button
+                                              type="button"
                                               onClick={() => setSelectedHoardings(prev => prev.filter(x => x.hoardingID !== h.hoardingID))}
                                               title="Remove"
                                               style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}
@@ -4584,14 +4754,124 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                               Select a customer above to browse hoardings
                             </div>
                           ) : null}
-                        </>
-                      ) : (
-                        /* Edit mode: show the original single picker (locked) */
-                        <HoardingPickerField hoardings={allHoardingsRaw} sites={sites} value={form.hoardingID} onChange={val => set('hoardingID', val)} error={errors.hoardingID} disabled={true} />
-                      )}
+                          <FieldError msg={errors.hoardingID} />
+                        </div>
 
-                      <FieldError msg={errors.hoardingID} />
-                    </div>
+                        {/* External Hoardings Selector */}
+                        <div className="col-12 col-md-6">
+                          <FieldLabel label="External Hoardings" optional />
+                          {(() => {
+                            const datesReady = !!(form.startDate && form.endDate);
+                            const canOpen = datesReady && !loadingAvailable && !!form.customerID;
+                            const externalAvailableCount = availableHoardings.filter(h => h.isExternal === true || String(h.isExternal).toLowerCase() === 'true').length;
+                            return (
+                              <button
+                                type="button"
+                                disabled={!canOpen}
+                                onClick={() => canOpen && setExternalHoardingModalOpen(true)}
+                                style={{
+                                  width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+                                  padding: '10px 14px', borderRadius: 10,
+                                  border: `1.5px solid ${!datesReady ? '#fde68a' : '#e8e8f4'}`,
+                                  background: !canOpen ? '#f8f8fd' : '#fff',
+                                  cursor: !canOpen ? 'not-allowed' : 'pointer',
+                                  fontFamily: 'Nunito, sans-serif', fontSize: 13,
+                                  color: !canOpen ? '#b0b0c8' : '#1a1a2e', fontWeight: 600,
+                                  transition: 'border-color 0.15s',
+                                }}
+                                onMouseEnter={e => { if (canOpen) e.currentTarget.style.borderColor = '#049edf'; }}
+                                onMouseLeave={e => { if (canOpen) e.currentTarget.style.borderColor = '#e8e8f4'; }}
+                              >
+                                <Building2 size={14} color={!canOpen ? '#d0d0e0' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+                                <span style={{ flex: 1, textAlign: 'left' }}>
+                                  {loadingAvailable
+                                    ? 'Loading available external hoardings…'
+                                    : !form.customerID
+                                      ? 'Select a customer first…'
+                                      : !datesReady
+                                        ? 'Select start & end dates first…'
+                                        : selectedExternalHoardings.length > 0
+                                          ? `${selectedExternalHoardings.length} external hoarding${selectedExternalHoardings.length !== 1 ? 's' : ''} selected`
+                                          : `Browse available external hoardings (${externalAvailableCount})…`}
+                                </span>
+                                {loadingAvailable
+                                  ? <Loader2 size={13} className="pg-spin" color="#c0c0d8" style={{ flexShrink: 0 }} />
+                                  : selectedExternalHoardings.length > 0
+                                    ? <RefreshCw size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
+                                    : <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
+                              </button>
+                            );
+                          })()}
+
+                          {/* Selected external hoardings table */}
+                          {selectedExternalHoardings.length > 0 && (() => {
+                            const hSt = (status) => {
+                              switch (status) {
+                                case 'Active': return { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+                                case 'Inactive': return { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+                                case 'Under Maintenance': return { bg: '#fffbeb', color: '#d97706', border: '#fde68a' };
+                                default: return { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
+                              }
+                            };
+                            return (
+                              <div style={{ marginTop: 10, border: '1.5px solid #e8e8f4', borderRadius: 12, overflow: 'hidden' }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                  <thead>
+                                    <tr style={{ background: '#f8f8fd' }}>
+                                      {['Code', 'Material', 'Size', 'Status', ''].map((h, i) => (
+                                        <th key={i} style={{ padding: '8px 11px', textAlign: 'left', fontSize: 10.5, fontFamily: 'Nunito, sans-serif', fontWeight: 800, color: '#9090a8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1.5px solid #e8e8f4' }}>{h}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {selectedExternalHoardings.map((h, idx) => {
+                                      const st = hSt(h.status);
+                                      return (
+                                        <tr key={h.hoardingID} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafe' }}>
+                                          <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8' }}>
+                                            <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 12.5, color: '#6c63ff' }}>{h.hoardingCode}</div>
+                                          </td>
+                                          <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8' }}>
+                                            <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 700, color: '#4a5568' }}>{h.material || '—'}</span>
+                                          </td>
+                                          <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8', whiteSpace: 'nowrap' }}>
+                                            <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 700, color: '#4a5568' }}>
+                                              {h.width && h.height ? `${h.width}×${h.height} ft` : '—'}
+                                            </span>
+                                          </td>
+                                          <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8' }}>
+                                            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.color, border: `1px solid ${st.border}`, fontSize: 10.5, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
+                                              {h.status || '—'}
+                                            </span>
+                                          </td>
+                                          <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8', textAlign: 'right' }}>
+                                            <button
+                                              type="button"
+                                              onClick={() => setSelectedExternalHoardings(prev => prev.filter(x => x.hoardingID !== h.hoardingID))}
+                                              title="Remove"
+                                              style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}
+                                            >
+                                              <X size={11} />
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </>
+                    ) : (
+                      /* Edit mode: show the original single picker (locked) */
+                      <div className="col-12 col-md-6">
+                        <FieldLabel label="Hoarding" required />
+                        <HoardingPickerField hoardings={allHoardingsRaw} sites={sites} value={form.hoardingID} onChange={val => set('hoardingID', val)} error={errors.hoardingID} disabled={true} />
+                        <FieldError msg={errors.hoardingID} />
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -4779,6 +5059,33 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
               </div>
             )} */}
 
+            {/* ── Select Company Card (above Attachments section) ── */}
+            <div className="col-12">
+              <div className="hd-section-card">
+                <div className="hd-section-head">
+                  <div className="hd-section-icon-wrap"><Building2 size={14} color="#049edf" /></div>
+                  <div>
+                    <div className="hd-section-title">Select Company</div>
+                    <div className="hd-section-sub">Choose the advertising company for this contract</div>
+                  </div>
+                </div>
+                <div className="hd-section-body">
+                  <div className="row">
+                    <div className="col-12 col-md-6">
+                      <FieldLabel label="Company" required />
+                      <CompanyCombo
+                        value={form.companyID}
+                        onChange={comp => set('companyID', comp ? comp.companyID : '')}
+                        companies={companies}
+                        disabled={!isAdd}
+                      />
+                      <FieldError msg={errors.companyID} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* ── Attachments + Hoarding Map (add mode, after save) ── */}
             <div className="col-12 hd-attach-section">
               {/* Hoarding map — add mode only, shown after contract is saved */}
@@ -4851,13 +5158,24 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
       {/* Multi-hoarding selection modal (add mode) - only available hoardings for the selected date range */}
       {hoardingModalOpen && (
         <MultiHoardingLookupModal
-          hoardings={availableHoardings.length > 0 ? availableHoardings : []}
+          hoardings={availableHoardings.length > 0 ? availableHoardings.filter(h => h.isExternal !== true && String(h.isExternal).toLowerCase() !== 'true') : []}
           sites={sites}
           selectedIds={selectedHoardings.map(h => h.hoardingID)}
           onSelectMultiple={(picked) => {
             setSelectedHoardings(picked);
           }}
           onClose={() => setHoardingModalOpen(false)}
+        />
+      )}
+      {externalHoardingModalOpen && (
+        <MultiHoardingLookupModal
+          hoardings={availableHoardings.length > 0 ? availableHoardings.filter(h => h.isExternal === true || String(h.isExternal).toLowerCase() === 'true') : []}
+          sites={sites}
+          selectedIds={selectedExternalHoardings.map(h => h.hoardingID)}
+          onSelectMultiple={(picked) => {
+            setSelectedExternalHoardings(picked);
+          }}
+          onClose={() => setExternalHoardingModalOpen(false)}
         />
       )}
       {showContractPDF && savedContractID && (
@@ -4867,6 +5185,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
           hoardings={hoardings}
           sites={sites}
           quotations={quotations}
+          companies={companies}
           onClose={() => setShowContractPDF(false)}
         />
       )}
@@ -4955,6 +5274,7 @@ export default function CustomerContractPage() {
   const [landContracts, setLandContracts] = useState([]);      // ← add
   const [hoardingMaps, setHoardingMaps] = useState([]);         // ← add
   const [quotations, setQuotations] = useState([]);             // ← add
+  const [companyDetailsList, setCompanyDetailsList] = useState([]); // ← add company details list state
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -4979,18 +5299,22 @@ export default function CustomerContractPage() {
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
     try {
-      const [rawCustomers, rawHoardings, rawSites, rawContracts, rawFreqs, rawLandContracts, rawMaps, rawQuotations] = await Promise.all([
+      const [rawCustomers, rawHoardings, rawExternalHoardings, rawSites, rawContracts, rawFreqs, rawLandContracts, rawMaps, rawQuotations, rawCompanies] = await Promise.all([
         apiService.getAllCustomers(),
         apiService.getAllHoardings(),
+        apiService.getAllExternalHoardings().catch(() => []),
         apiService.getAllSites(),
         apiService.getAllCustomerContracts(),
         apiService.getAllPaymentFreqs(),
         apiService.getAllLandContracts(),
         apiService.getAllLandContractHoardingMaps(),
         apiService.getAllQuotations().catch(() => []),
+        apiService.getAllCompanyDetails().catch(() => []),
       ]);
       setCustomers(Array.isArray(rawCustomers) ? rawCustomers : rawCustomers?.data ?? []);
-      const rawHList = Array.isArray(rawHoardings) ? rawHoardings : rawHoardings?.data ?? [];
+      const internalList = Array.isArray(rawHoardings) ? rawHoardings : rawHoardings?.data ?? [];
+      const externalList = Array.isArray(rawExternalHoardings) ? rawExternalHoardings : rawExternalHoardings?.data ?? [];
+      const rawHList = [...internalList, ...externalList];
       setAllHoardingsRaw(rawHList);
       setHoardings(deduplicateHoardings(rawHList));
       setSites(Array.isArray(rawSites) ? rawSites : rawSites?.data ?? []);
@@ -5013,6 +5337,8 @@ export default function CustomerContractPage() {
       setHoardingMaps(mapList);
       const quots = Array.isArray(rawQuotations) ? rawQuotations : rawQuotations?.data ?? [];
       setQuotations(quots.map(normalizeQuotation));
+      const compList = Array.isArray(rawCompanies) ? rawCompanies : rawCompanies?.data ?? [];
+      setCompanyDetailsList(compList.map(normalizeCompany));
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally { setLoadingMeta(false); }
@@ -5127,6 +5453,7 @@ export default function CustomerContractPage() {
         landContracts={landContracts}
         hoardingMaps={hoardingMaps}
         quotations={quotations}
+        companies={companyDetailsList}
         onBack={() => { setView('grid'); setEditTarget(null); }}
         onSave={handleSave}
       />

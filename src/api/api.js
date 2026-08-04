@@ -469,6 +469,7 @@ export const apiService = {
   createCustomerContract: (data) => api.post('/CustomerContract/Create', {
     customerContractID: 0,
     customerID: Number(data.customerID),
+    companyID: data.companyID ? Number(data.companyID) : null,
     startDate: data.startDate,
     endDate: data.endDate,
     contractOrigValue: Number(data.contractOrigValue) || 0,
@@ -486,6 +487,7 @@ export const apiService = {
   updateCustomerContract: (data) => api.put('/CustomerContract/Update', {
     customerContractID: Number(data.customerContractID),
     customerID: Number(data.customerID),
+    companyID: data.companyID ? Number(data.companyID) : null,
     startDate: data.startDate,
     endDate: data.endDate,
     contractOrigValue: Number(data.contractOrigValue) || 0,
@@ -1293,6 +1295,8 @@ export const apiService = {
   updateQuotationCompany: (data) => api.put('/QuotationCompany', data),
   getQuotationCompanyByQuotation: (quotationId, revisionNumber) =>
     api.get(`/QuotationCompany/GetByQuotation?quotationId=${quotationId}&quotationRevisionNumber=${revisionNumber}`),
+  getQuotationCompanyByQuotationId: (quotationID) =>
+    api.get(`/QuotationCompany/GetByQuotationId/${quotationID}`),
 
   // OPPORTUNITIES
   getAllOpportunities: () => api.get('/Opportunity'),
@@ -1312,6 +1316,9 @@ export const apiService = {
   uploadOpportunityPhoto: (formData) =>
     api.post('/OpportunityPhoto', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
   deleteOpportunityPhoto: (id) => api.delete(`/OpportunityPhoto/${id}`),
+
+  // NOTIFICATIONS
+  getNotificationsByUser: (userId) => api.get(`/Notification/User/${userId}`),
 };
 
 export default api;
