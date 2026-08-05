@@ -698,7 +698,7 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selectedIds, setSelectedIds] = useState([]);
-  const [primaryId, setPrimaryId] = useState(null);
+  // const [primaryId, setPrimaryId] = useState(null);
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
   const isJobCompleted = (jobStatus || '').toLowerCase() === 'completed';
   const isTaskCompleted = groupTasks.some(t => t.status === 'Completed') || isJobCompleted;
@@ -758,11 +758,13 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
             jobRequestID,
             hoardingID: task.hoardingID,
             id: wid,
-            isPrimary: primaryId === wid,
+            isPrimary: false, // was: primaryId === wid
           });
         }
       }
-      setSelectedIds([]); setPrimaryId(null); setPickerOpen(false); setQuery('');
+      setSelectedIds([]); // setPrimaryId(null);
+      setPickerOpen(false);
+      setQuery('');
       await fetchAllAssignments();
       showToast('Worker(s) assigned to all merged tasks!', 'success');
     } catch (err) {
@@ -770,6 +772,7 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
     } finally { setSaving(false); }
   };
 
+  /*
   const handleTogglePrimary = async (asgn) => {
     try {
       const allForWorker = Object.values(assignmentsByTask)
@@ -781,6 +784,7 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
       await fetchAllAssignments();
     } catch { }
   };
+  */
 
   const handleDelete = async (workerID) => {
     setDeleting(workerID);
@@ -899,14 +903,18 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
                       <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: txtC, whiteSpace: 'nowrap' }}>{name}</div>
                       {w?.role && <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, color: `${txtC}90`, fontWeight: 600 }}>{w.role}</div>}
                     </div>
-                    {asgn.isPrimary && (
+                    {/* 
+                    asgn.isPrimary && (
                       <span style={{ background: `${txtC}18`, color: txtC, borderRadius: 20, padding: '1px 7px', fontSize: 9.5, fontWeight: 900, fontFamily: 'Nunito,sans-serif', whiteSpace: 'nowrap' }}>PRIMARY</span>
-                    )}
+                    )
+                    */}
+                    {/* 
                     <button onClick={() => !isLocked && handleTogglePrimary(asgn)} title={asgn.isPrimary ? 'Remove primary' : 'Set as primary'}
                       disabled={isLocked}
                       style={{ background: 'none', border: 'none', padding: 2, cursor: isLocked ? 'not-allowed' : 'pointer', lineHeight: 1, flexShrink: 0, opacity: isLocked ? 0.6 : 1 }}>
                       <Star size={13} color={asgn.isPrimary ? '#f59e0b' : `${txtC}50`} fill={asgn.isPrimary ? '#f59e0b' : 'none'} />
                     </button>
+                    */}
                     {!isLocked && (
                       <button onClick={() => setDeleteConfirmTarget({ id: asgn.id, name })} disabled={isDel}
                         style={{ width: 22, height: 22, borderRadius: 6, background: 'rgba(220,38,38,0.09)', border: '1px solid rgba(220,38,38,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: isDel ? 'not-allowed' : 'pointer', flexShrink: 0 }}>
@@ -986,22 +994,22 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
 
           {/* ── Worker Picker ── */}
           {pickerOpen && (
-            <div style={{ marginTop: 4, border: '1.5px solid #e0e8f8', borderRadius: 12, overflow: 'hidden', background: '#fafcff' }}>
+            <div className="merged-worker-picker">
 
               {/* Picker header */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', background: 'linear-gradient(135deg,#eff6ff,#f5f0ff)', borderBottom: '1px solid #e0e8f8' }}>
+              <div className="merged-worker-picker-header">
                 <UserPlus size={15} color="#049edf" />
-                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e', flex: 1 }}>
+                <span className="merged-worker-picker-header-title">
                   Assign Workers to All {groupTasks.length} Merged Hoardings
                 </span>
                 {selectedIds.length > 0 && (
-                  <span style={{ background: '#049edf', color: '#fff', borderRadius: 20, padding: '2px 10px', fontSize: 11, fontWeight: 900, fontFamily: 'Nunito,sans-serif' }}>
+                  <span className="merged-worker-picker-header-badge">
                     {selectedIds.length} selected
                   </span>
                 )}
                 <button
                   onClick={() => { setPickerOpen(false); setSelectedIds([]); setQuery(''); }}
-                  style={{ width: 28, height: 28, borderRadius: 8, border: '1px solid #e0e8f8', background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#7878a0' }}
+                  className="merged-worker-picker-header-close"
                 >
                   <X size={14} />
                 </button>
@@ -1030,7 +1038,7 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
                   </div>
                 ) : filteredWorkers.map(w => {
                   const isSel = selectedIds.includes(w.id);
-                  const isPrim = primaryId === w.id;
+                  // const isPrim = primaryId === w.id;
                   const [bgC, txtC] = avatarColor(w.name);
                   return (
                     <div
@@ -1050,7 +1058,8 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
                         <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>{w.name}</div>
                         {w.role && <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600, marginTop: 1 }}>{w.role}</div>}
                       </div>
-                      {isSel && (
+                      {/* 
+                      isSel && (
                         <button
                           onClick={e => { e.stopPropagation(); setPrimaryId(isPrim ? null : w.id); }}
                           title={isPrim ? 'Remove primary' : 'Set as primary'}
@@ -1059,20 +1068,21 @@ function MergedTaskWorkerCard({ groupTasks, workers, jobRequestID, jobStatus, sh
                           <Star size={11} color={isPrim ? '#f59e0b' : '#c0c0d8'} fill={isPrim ? '#f59e0b' : 'none'} />
                           {isPrim ? 'Primary' : 'Set Primary'}
                         </button>
-                      )}
+                      )
+                      */}
                     </div>
                   );
                 })}
               </div>
 
               {/* Picker footer */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderTop: '1px solid #e8edf8', background: '#f4f8ff' }}>
-                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#7878a0', fontWeight: 600 }}>
+              <div className="merged-worker-picker-footer">
+                <span className="merged-worker-picker-footer-text">
                   {selectedIds.length === 0
                     ? `Will assign to all ${groupTasks.length} hoardings`
                     : `${selectedIds.length} worker${selectedIds.length !== 1 ? 's' : ''} → ${groupTasks.length} hoardings`}
                 </span>
-                <div style={{ display: 'flex', gap: 9 }}>
+                <div className="merged-worker-picker-footer-actions">
                   <button className="pg-btn-cancel" onClick={() => { setPickerOpen(false); setSelectedIds([]); setQuery(''); }}>
                     Cancel
                   </button>
@@ -1303,7 +1313,7 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
             <div className="hd-topbar-sub">{job.jobDescription || 'View tasks and manage worker assignments'}</div>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div className="hd-topbar-right">
           <JobStatusBadge status={getDerivedJobStatus(job)} />
           {canAccept && (
             <button onClick={() => onAccept(job)} disabled={accepting}

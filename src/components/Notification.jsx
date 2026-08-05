@@ -37,6 +37,7 @@ export default function Notification({ handleTabChange }) {
   const [notifications, setNotifications] = useState([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
+  const [viewAllOpen, setViewAllOpen] = useState(false);
   const notifRef = useRef(null);
 
   // Sync notifications to localStorage
@@ -126,14 +127,33 @@ export default function Notification({ handleTabChange }) {
     return () => window.removeEventListener('new-notification', handleNewNotification);
   }, []);
 
-  const markAsRead = (id) => {
+  const markAsRead = async (id) => {
     setNotifications((prev) =>
       prev.map((n) => (n.id === id ? { ...n, read: true } : n))
     );
+    const parsedId = Number(id);
+    const isDbId = !isNaN(parsedId) && Number.isInteger(parsedId) && parsedId < 10000000000;
+    if (isDbId) {
+      try {
+        await apiService.readNotification(parsedId);
+      } catch (err) {
+        console.error('Failed to mark notification as read:', err);
+      }
+    }
   };
 
-  const markAllAsRead = () => {
+  const markAllAsRead = async () => {
+    const unreadIds = notifications.filter((n) => !n.read).map((n) => n.id);
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    for (const id of unreadIds) {
+      const parsedId = Number(id);
+      const isDbId = !isNaN(parsedId) && Number.isInteger(parsedId) && parsedId < 10000000000;
+      if (isDbId) {
+        apiService.readNotification(parsedId).catch((err) => {
+          console.error('Failed to mark notification as read:', err);
+        });
+      }
+    }
   };
 
   const clearAll = () => {
@@ -196,7 +216,7 @@ export default function Notification({ handleTabChange }) {
                   <div className="notif-empty-desc">No new notifications.</div>
                 </div>
               ) : (
-                notifications.map((n) => (
+                notifications.slice(0, 10).map((n) => (
                   <div
                     key={n.id}
                     className={`notif-item ${n.read ? 'read' : 'unread'} notif-type-${n.type}`}
@@ -219,16 +239,6 @@ export default function Notification({ handleTabChange }) {
                       <div className="notif-item-message">{n.message}</div>
                       <div className="notif-item-time">{n.timestamp}</div>
                     </div>
-                    <button
-                      className="notif-item-delete"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeNotification(n.id);
-                      }}
-                      title="Delete notification"
-                    >
-                      <Trash2 size={13} />
-                    </button>
                   </div>
                 ))
               )}
@@ -236,8 +246,14 @@ export default function Notification({ handleTabChange }) {
 
             {notifications.length > 0 && (
               <div className="notif-footer">
-                <button className="notif-clear-btn" onClick={clearAll}>
-                  <Trash2 size={13} /> Clear all
+                <button
+                  className="notif-view-all-btn"
+                  onClick={() => {
+                    setViewAllOpen(true);
+                    setNotifOpen(false);
+                  }}
+                >
+                  View All ({notifications.length})
                 </button>
               </div>
             )}
@@ -279,6 +295,76 @@ export default function Notification({ handleTabChange }) {
               </button>
             </div>
           ))}
+        </div>,
+        document.body
+      )}
+
+      {viewAllOpen && createPortal(
+        <div 
+          className="notif-modal-overlay" 
+          /* onClick={() => setViewAllOpen(false)} */
+        >
+          <div 
+            className="notif-modal" 
+            /* onClick={(e) => e.stopPropagation()} */
+          >
+            <div className="notif-modal-header">
+              <div className="notif-modal-title-wrap">
+                <Bell size={20} color="#049edf" />
+                <div>
+                  <h3 className="notif-modal-title">All Notifications</h3>
+                  <p className="notif-modal-subtitle">You have {unreadCount} unread notifications</p>
+                </div>
+              </div>
+              <div className="notif-modal-actions">
+                {unreadCount > 0 && (
+                  <button className="notif-modal-mark-all" onClick={markAllAsRead}>
+                    <CheckCheck size={14} /> Mark all read
+                  </button>
+                )}
+                <button className="notif-modal-close" onClick={() => setViewAllOpen(false)}>
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+            <div className="notif-modal-body">
+              {notifications.length === 0 ? (
+                <div className="notif-empty">
+                  <Bell size={48} className="notif-empty-icon" />
+                  <div className="notif-empty-title">All caught up!</div>
+                  <div className="notif-empty-desc">No notifications to show.</div>
+                </div>
+              ) : (
+                <div className="notif-modal-list">
+                  {notifications.map((n) => (
+                    <div
+                      key={n.id}
+                      className={`notif-modal-item ${n.read ? 'read' : 'unread'} notif-type-${n.type}`}
+                      onClick={() => {
+                        markAsRead(n.id);
+                        if (n.actionTab) {
+                          handleTabChange(n.actionTab);
+                          setViewAllOpen(false);
+                        }
+                      }}
+                    >
+                      <div className="notif-modal-item-left">
+                        <span className="notif-indicator" />
+                        <div className="notif-icon-wrap">
+                          {getNotifIcon(n.type)}
+                        </div>
+                      </div>
+                      <div className="notif-modal-item-content">
+                        <div className="notif-modal-item-title">{n.title}</div>
+                        <div className="notif-modal-item-message">{n.message}</div>
+                        <div className="notif-modal-item-time">{n.timestamp}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>,
         document.body
       )}

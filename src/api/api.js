@@ -1319,6 +1319,7 @@ export const apiService = {
 
   // NOTIFICATIONS
   getNotificationsByUser: (userId) => api.get(`/Notification/User/${userId}`),
+  readNotification: (id) => api.put(`/Notification/Read/${id}`),
 };
 
 export default api;

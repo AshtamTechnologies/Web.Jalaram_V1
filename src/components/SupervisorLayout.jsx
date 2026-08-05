@@ -3,6 +3,7 @@ import {
     LogOut, Menu, X, ChevronDown, ChevronRight,
     Layers, MapPin, Briefcase, BarChart3, CheckSquare, HardHat, CreditCard, Lightbulb
 } from 'lucide-react';
+import Notification from './Notification';
 import './SupervisorLayout.css';
 
 /* ─────────────────────────────────────
@@ -271,6 +272,7 @@ export default function SupervisorLayout({ tab, changeTab, onLogout, children })
                     </div>
 
                     <div className="sup-topbar-right">
+                        <Notification handleTabChange={handleTabChange} />
                         <div ref={dropRef} style={{ position: 'relative' }}>
                             <button className="sup-profile-btn" onClick={() => setDropOpen(v => !v)}>
                                 <div className="sup-profile-avatar">

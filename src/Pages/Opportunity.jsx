@@ -58,7 +58,7 @@ function validateField(key, value, type, required) {
   const v = stringVal.trim();
   if (required && !v && typeof value !== 'boolean' && value !== 0) return 'This field is required';
   if (!v && typeof value !== 'boolean' && value !== 0) return '';
-  
+
   if (type === 'phone') return validatePhone(v);
   if (type === 'number') {
     if (isNaN(Number(v)) || Number(v) < 0) return 'Must be a valid positive number';
@@ -456,6 +456,63 @@ function OpportunityCard({ opportunity, onViewDetail, onEdit }) {
 }
 
 /* ─────────────────────────────────────────
+   PHOTO THUMB (with hover effect)
+ ───────────────────────────────────────── */
+function PhotoThumb({ src, onClick }) {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        position: 'relative',
+        height: 90,
+        borderRadius: 10,
+        overflow: 'hidden',
+        cursor: 'pointer',
+        border: `1.5px solid ${hovered ? '#049edf' : '#ececf8'}`,
+        background: '#fff',
+        boxShadow: hovered ? '0 6px 18px rgba(4,158,223,0.18)' : '0 1px 4px rgba(0,0,0,0.05)',
+        transform: hovered ? 'scale(1.04)' : 'scale(1)',
+        transition: 'transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease',
+      }}
+    >
+      <img
+        src={src}
+        alt="Opportunity"
+        style={{
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover',
+          filter: hovered ? 'brightness(1.08)' : 'brightness(1)',
+          transition: 'filter 0.22s ease',
+        }}
+      />
+      {hovered && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'linear-gradient(135deg, rgba(4,158,223,0.15), rgba(108,99,255,0.1))',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'rgba(255,255,255,0.92)',
+            borderRadius: 20,
+            padding: '3px 10px',
+            fontSize: 10,
+            fontFamily: 'Nunito, sans-serif',
+            fontWeight: 800,
+            color: '#049edf',
+            letterSpacing: 0.3,
+          }}>View</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────────────────────────
    VIEW DETAILS MODAL
  ───────────────────────────────────────── */
 function ViewModal({ opportunity, onClose, onEdit }) {
@@ -497,7 +554,7 @@ function ViewModal({ opportunity, onClose, onEdit }) {
 
   return (
     <>
-      <div className="pg-overlay pg-overlay--view" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="pg-overlay pg-overlay--view">
         <div className="pg-modal pg-modal--view" style={{ maxWidth: 580 }}>
           <div className="pg-view__banner">
             <button className="pg-view__close" onClick={onClose}><X size={15} /></button>
@@ -547,13 +604,11 @@ function ViewModal({ opportunity, onClose, onEdit }) {
                   <div className="pg-view__section-label pg-view__section-label--mt">Attached Photos ({photos.length})</div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 12, marginTop: 10 }}>
                     {photos.map((p, idx) => (
-                      <div
+                      <PhotoThumb
                         key={p.opportunityPhotoID || idx}
+                        src={resolvePhotoSrc(p)}
                         onClick={() => setLightbox(resolvePhotoSrc(p))}
-                        style={{ position: 'relative', height: 80, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', border: '1px solid #ececf8', background: '#fff' }}
-                      >
-                        <img src={resolvePhotoSrc(p)} alt="Opportunity" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      </div>
+                      />
                     ))}
                   </div>
                 </>
@@ -779,7 +834,7 @@ function OpportunityFormModal({ onClose, onSaved, editData }) {
               return (
                 <div key={f.key} className={`col-12 col-md-${f.col}`}>
                   <FieldLabel label={f.label} required={f.required} optional={!f.required} />
-                  
+
                   {f.type === 'combo-status' ? (
                     <StatusDropdown
                       value={form.isActive}
@@ -888,7 +943,7 @@ export default function OpportunityPage() {
 
   /* -- Modals -- */
   const [detailOpportunity, setDetailOpportunity] = useState(null);
-  const [formOpportunity, setFormOpportunity] = useState(null); 
+  const [formOpportunity, setFormOpportunity] = useState(null);
   const [modalLoading, setModalLoading] = useState(false);
 
   const tableRef = useRef(null);
