@@ -31,6 +31,7 @@ const EMPTY_FORM = {
   accountNo: '',
   ifscCode: '',
   isActive: true,
+  hoardingId: [],
 };
 
 const INDIA_STATES = [
@@ -69,6 +70,7 @@ const FIELDS = [
   { key: 'branchName', label: 'Branch Name', icon: Building2, placeholder: 'e.g. Naroda Branch', col: 6, required: false, type: 'text' },
   { key: 'accountNo', label: 'Account Number', icon: CreditCard, placeholder: 'e.g. 123456789012', col: 6, required: false, type: 'text' },
   { key: 'ifscCode', label: 'IFSC Code', icon: Hash, placeholder: 'e.g. SBIN0001234', col: 6, required: false, type: 'ifsc' },
+  { key: 'hoardingId', label: 'External Hoardings', icon: Building2, placeholder: '', col: 12, required: true, type: 'combo-hoarding' },
   { key: 'isActive', label: 'Status', icon: ShieldCheck, placeholder: '', col: 6, required: true, type: 'combo-status' },
 ];
 
@@ -85,9 +87,18 @@ function validatePhone(value) {
 }
 
 function validateField(key, value, type, required) {
+  if (required) {
+    if (Array.isArray(value)) {
+      if (value.length === 0) return 'This field is required';
+    } else {
+      const stringVal = (value === undefined || value === null) ? '' : String(value);
+      const v = stringVal.trim();
+      if (!v && typeof value !== 'boolean') return 'This field is required';
+    }
+  }
+
   const stringVal = (value === undefined || value === null) ? '' : String(value);
   const v = stringVal.trim();
-  if (required && !v && typeof value !== 'boolean') return 'This field is required';
   if (!v && typeof value !== 'boolean') return '';
   if (type === 'name') { if (!NAME_REGEX.test(v)) return "Only letters, numbers, spaces, and . ' - are allowed"; }
   if (type === 'phone') return validatePhone(v);
@@ -96,6 +107,31 @@ function validateField(key, value, type, required) {
   if (type === 'pan') { if (!PAN_REGEX.test(v.toUpperCase())) return 'Enter a valid 10-character PAN number'; }
   if (type === 'ifsc') { if (!IFSC_REGEX.test(v.toUpperCase())) return 'Enter a valid 11-character IFSC (e.g. SBIN0001234)'; }
   return '';
+}
+
+function parseArray(val) {
+  if (!val) return [];
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'object' && Array.isArray(val.$values)) return val.$values;
+  return [];
+}
+
+function getLatestActiveExternalHoardings(hoardings) {
+  const activeHoardings = hoardings.filter(h => h.status?.toLowerCase() === 'active');
+  const latestMap = {};
+  activeHoardings.forEach(h => {
+    const id = h.hoardingID;
+    if (!latestMap[id]) {
+      latestMap[id] = h;
+    } else {
+      const currentEffdt = new Date(latestMap[id].effdt || 0).getTime();
+      const newEffdt = new Date(h.effdt || 0).getTime();
+      if (newEffdt > currentEffdt) {
+        latestMap[id] = h;
+      }
+    }
+  });
+  return Object.values(latestMap);
 }
 
 function normalizeVendor(raw) {
@@ -116,6 +152,7 @@ function normalizeVendor(raw) {
     accountNo: raw.account_No ?? raw.accountNo ?? '',
     ifscCode: raw.ifsC_Code ?? raw.ifscCode ?? '',
     isActive: raw.is_Active ?? raw.isActive ?? true,
+    hoardingId: parseArray(raw.hoardingId ?? raw.hoardingID ?? raw.hoarding_Id),
   };
 }
 
@@ -137,6 +174,7 @@ function toPayload(form) {
     accountNo: String(form.accountNo || '').trim(),
     ifscCode: String(form.ifscCode || '').trim().toUpperCase(),
     isActive: !!form.isActive,
+    hoardingId: (form.hoardingId || []).map(Number),
   };
 }
 
@@ -456,7 +494,196 @@ function VendorCard({ vendor, onViewDetail, onEdit }) {
 /* ═══════════════════════════════════════════
    VIEW DETAILS MODAL
  ═══════════════════════════════════════════ */
+/* ═══════════════════════════════════════════
+   HOARDING MULTI SELECT COMBO
+ ═══════════════════════════════════════════ */
+function HoardingMultiSelectCombo({ value, options, onChange, loading, hasError }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const selectedIds = Array.isArray(value) ? value : [];
+
+  const filtered = options.filter(opt => {
+    const q = query.toLowerCase();
+    return (
+      (opt.hoardingCode || '').toLowerCase().includes(q) ||
+      (opt.material || '').toLowerCase().includes(q)
+    );
+  });
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery('');
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleClickOutside = (e) => {
+      if (!wrapRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) {
+        close();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [open, close]);
+
+  const toggleOpen = () => {
+    setOpen(!open);
+    if (!open) {
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  };
+
+  const handleToggleOption = (id) => {
+    let next;
+    if (selectedIds.includes(id)) {
+      next = selectedIds.filter(x => x !== id);
+    } else {
+      next = [...selectedIds, id];
+    }
+    onChange(next);
+  };
+
+  const selectedOptions = options.filter(opt => selectedIds.includes(opt.hoardingID));
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef}>
+      <div
+        ref={triggerRef}
+        className={`pg-field-wrap pg-combo-trigger ${hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
+        onClick={toggleOpen}
+        style={{ cursor: 'pointer', minHeight: '38px', height: 'auto', padding: '6px 12px' }}
+      >
+        <Building2 size={14} color="#c0c0d8" style={{ flexShrink: 0, marginTop: selectedOptions.length > 0 ? 4 : 0 }} />
+        
+        <div style={{ flex: 1, display: 'flex', flexWrap: 'wrap', gap: 4, minWidth: 0 }}>
+          {selectedOptions.length === 0 ? (
+            <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 500, color: '#b0b0c8' }}>
+              {loading ? 'Loading external hoardings...' : 'Select external hoardings…'}
+            </span>
+          ) : (
+            selectedOptions.map(opt => (
+              <div
+                key={opt.hoardingID}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  background: 'rgba(4,158,223,0.08)',
+                  border: '1px solid rgba(4,158,223,0.2)',
+                  borderRadius: 6,
+                  padding: '2px 6px',
+                  gap: 4,
+                  fontSize: 12,
+                  fontFamily: 'Nunito, sans-serif',
+                  fontWeight: 700,
+                  color: '#049edf',
+                  maxWidth: '100%',
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {opt.hoardingCode} ({opt.material})
+                </span>
+                <X
+                  size={12}
+                  style={{ cursor: 'pointer', flexShrink: 0, color: '#80c8eb' }}
+                  onClick={() => handleToggleOption(opt.hoardingID)}
+                />
+              </div>
+            ))
+          )}
+        </div>
+
+        <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0, marginLeft: 'auto' }} />
+      </div>
+
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static', maxHeight: '300px', display: 'flex', flexDirection: 'column' }}>
+          <div className="pg-combo-search" style={{ flexShrink: 0 }}>
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              className="pg-combo-search__input"
+              placeholder="Search hoardings..."
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
+            {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+          </div>
+          <div className="pg-combo-list" style={{ overflowY: 'auto', flex: 1, maxHeight: '200px' }}>
+            {loading ? (
+              <div className="pg-combo-empty" style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center' }}>
+                <Loader2 size={12} className="pg-spin" color="#049edf" /> Loading...
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="pg-combo-empty">No hoardings match</div>
+            ) : (
+              filtered.map(opt => {
+                const isSelected = selectedIds.includes(opt.hoardingID);
+                return (
+                  <div
+                    key={opt.hoardingID}
+                    className={`pg-combo-option${isSelected ? ' pg-combo-option--active' : ''}`}
+                    onClick={() => handleToggleOption(opt.hoardingID)}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      readOnly
+                      style={{ cursor: 'pointer', accentColor: '#049edf' }}
+                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0 }}>
+                      <span className="pg-combo-option__name" style={{ fontWeight: 700, fontSize: '12.5px' }}>
+                        {opt.hoardingCode}
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#9090a8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {opt.material} · Rent: ₹{opt.monthlyRent || '0'} · {opt.width}x{opt.height} ft
+                      </span>
+                    </div>
+                    {isSelected && <Check size={12} color="#049edf" style={{ flexShrink: 0 }} />}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   VIEW DETAILS MODAL
+ ═══════════════════════════════════════════ */
 function ViewModal({ vendor, onClose, onEdit }) {
+  const [hoardingDetails, setHoardingDetails] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchHoardingDetails = async () => {
+      const ids = vendor.hoardingId || [];
+      if (ids.length === 0) return;
+      setLoading(true);
+      try {
+        const data = await apiService.getAllExternalHoardings();
+        const list = Array.isArray(data) ? data : data?.$values ?? data?.data ?? [];
+        const latest = getLatestActiveExternalHoardings(list);
+        const filtered = latest.filter(h => ids.map(Number).includes(Number(h.hoardingID)));
+        setHoardingDetails(filtered);
+      } catch (err) {
+        console.error("Failed to load hoarding details for view:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchHoardingDetails();
+  }, [vendor.hoardingId]);
+
   if (!vendor) return null;
 
   const InfoRow = ({ icon: Icon, label, value, highlight }) =>
@@ -513,6 +740,37 @@ function ViewModal({ vendor, onClose, onEdit }) {
           <InfoRow icon={Building2} label="Branch Name" value={vendor.branchName} />
           <InfoRow icon={CreditCard} label="Account Number" value={vendor.accountNo} />
           <InfoRow icon={Hash} label="IFSC Code" value={vendor.ifscCode} highlight />
+
+          {loading ? (
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 16 }}>
+              <Loader2 size={14} className="pg-spin" color="#049edf" />
+              <span style={{ fontSize: 13, color: '#9090a8', fontFamily: 'Nunito,sans-serif' }}>Loading associated hoardings...</span>
+            </div>
+          ) : hoardingDetails.length > 0 && (
+            <>
+              <div className="pg-view__section-label pg-view__section-label--mt">Associated External Hoardings</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                {hoardingDetails.map(h => (
+                  <div
+                    key={h.hoardingID}
+                    style={{
+                      background: 'rgba(4,158,223,0.08)',
+                      border: '1px solid rgba(4,158,223,0.2)',
+                      borderRadius: 8,
+                      padding: '6px 12px',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      minWidth: 120,
+                    }}
+                  >
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>{h.hoardingCode}</span>
+                    <span style={{ fontSize: 11, color: '#7878a0', marginTop: 2 }}>{h.material}</span>
+                    <span style={{ fontSize: 11, color: '#9090a8', marginTop: 1 }}>{h.width}x{h.height} ft</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="pg-view__foot">
@@ -537,6 +795,43 @@ function VendorFormModal({ onClose, onSaved, editData }) {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [apiError, setApiError] = useState('');
+
+  const [externalHoardings, setExternalHoardings] = useState([]);
+  const [loadingHoardings, setLoadingHoardings] = useState(false);
+
+  useEffect(() => {
+    const fetchHoardings = async () => {
+      setLoadingHoardings(true);
+      try {
+        const data = await apiService.getAllExternalHoardings();
+        const list = Array.isArray(data) ? data : data?.$values ?? data?.data ?? [];
+        const filteredList = getLatestActiveExternalHoardings(list);
+        setExternalHoardings(filteredList);
+      } catch (err) {
+        console.error('Failed to load external hoardings:', err);
+      } finally {
+        setLoadingHoardings(false);
+      }
+    };
+    fetchHoardings();
+  }, []);
+
+  useEffect(() => {
+    if (isEdit && editData?.vendorID) {
+      const fetchDetail = async () => {
+        try {
+          const res = await apiService.getVendorById(editData.vendorID);
+          const raw = res?.data ?? res;
+          if (raw) {
+            setForm(normalizeVendor(raw));
+          }
+        } catch (err) {
+          console.error('Failed to load vendor details by ID:', err);
+        }
+      };
+      fetchDetail();
+    }
+  }, [isEdit, editData]);
 
   const runValidate = (f) => {
     const e = {};
@@ -651,6 +946,14 @@ function VendorFormModal({ onClose, onSaved, editData }) {
                       value={form.isActive}
                       onChange={val => handleChange('isActive', val)}
                     />
+                  ) : f.type === 'combo-hoarding' ? (
+                    <HoardingMultiSelectCombo
+                      value={form.hoardingId}
+                      options={externalHoardings}
+                      onChange={val => handleChange('hoardingId', val)}
+                      loading={loadingHoardings}
+                      hasError={isFieldTouched && !!fieldError}
+                    />
                   ) : (
                     <InputWrap error={isFieldTouched && !!fieldError} icon={f.icon}>
                       <input
@@ -749,6 +1052,7 @@ export default function VendorPage() {
     } else {
       setVendors(prev => [saved, ...prev]);
     }
+    loadVendors();
   };
 
   const handleSort = (key) => {

@@ -3475,18 +3475,20 @@ function CreateContractFromQuotModal({
             r.hoardingID === hID || (r.isMerged && r.mergedHoardingIDs?.includes(hID))
           ) || {};
 
+          const isExternal = h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' || h.is_External === true || String(h.is_External).toLowerCase() === 'true';
+
           const payload = {
             hoardingID: Number(hID),
             effdt: row.startDate || startDate || quot.quotationDate?.split('T')[0] || new Date().toISOString().split('T')[0],
             hoardingCode: h.hoardingCode ?? h.HoardingCode ?? '',
             material: h.material ?? h.Material ?? '',
             hoardingType: Number(h.hoardingType ?? h.HoardingType ?? 0),
-            status: 'Occupied',
+            status: isExternal ? 'Active' : 'Occupied',
             monthlyRent: Number(row.isMerged ? (h.monthlyRent ?? 0) : (row.contractOrigValue || h.monthlyRent || 0)),
             width: Number(h.width ?? h.Width ?? 0),
             height: Number(h.height ?? h.Height ?? 0),
             siteID: Number(h.siteID ?? h.SiteID ?? h.site?.siteID ?? 0),
-            isExternal: h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' || h.is_External === true || String(h.is_External).toLowerCase() === 'true',
+            isExternal: isExternal,
           };
 
           await apiService.saveHoardingLinkWithPhotos(payload);

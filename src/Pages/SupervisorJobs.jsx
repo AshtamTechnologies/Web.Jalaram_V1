@@ -2244,13 +2244,14 @@ export default function SupervisorJobsPage() {
     try {
       const userId = parseInt(localStorage.getItem('userId') || '0', 10);
 
-      const [res, hRaw, mergeRaw, sRaw, attRaw, cRaw] = await Promise.all([
+      const [res, hRaw, mergeRaw, sRaw, attRaw, cRaw, extRaw] = await Promise.all([
         apiService.getJobRequestsByUserId(userId),
         apiService.getAllHoardings(),
         apiService.getAllHoardingMerges(),
         apiService.getAllSites().catch(() => []),
         apiService.getAllJobTaskAttachments().catch(() => []),
         apiService.getAllCustomers().catch(() => []),
+        apiService.getAllExternalHoardings().catch(() => []),
       ]);
 
       // Build site lookup map
@@ -2272,7 +2273,10 @@ export default function SupervisorJobsPage() {
       );
 
       // Enrich hoardings with site data
-      const rawHoardingList = extractArray(hRaw);
+      const rawHoardingList = [
+        ...extractArray(hRaw),
+        ...extractArray(extRaw)
+      ];
       const enrichedHoardings = rawHoardingList.map(h => {
         const siteID = Number(h.siteID ?? h.SiteID ?? h.siteId ?? 0);
         const foundSite = siteMap.get(siteID) || null;

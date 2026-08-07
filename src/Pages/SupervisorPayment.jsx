@@ -471,12 +471,17 @@ export default function SupervisorPayment() {
       try {
         const userId = parseInt(localStorage.getItem('userId'), 10) || 0;
         const [pRaw, jRaw, cRaw] = await Promise.all([
-          apiService.getJobPaymentsByUserId(userId).catch(() => []),
-          apiService.getAllJobRequests().catch(() => []),
+          apiService.getAllJobPayments().catch(() => []),
+          apiService.getJobRequestsByUserId(userId).catch(() => []),
           apiService.getAllCustomers().catch(() => []),
         ]);
-        setPayments(normalizeList(pRaw).map(normalizePayment));
-        setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
+        const reqs = normalizeList(jRaw).map(normalizeJobRequest);
+        const reqIds = new Set(reqs.map(r => r.jobRequestID));
+        const allPayments = normalizeList(pRaw).map(normalizePayment);
+        const filteredPayments = allPayments.filter(p => reqIds.has(p.jobRequestID));
+
+        setPayments(filteredPayments);
+        setJobRequests(reqs);
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
       } catch (err) {
         setApiError(err?.message || 'Failed to load data.');
@@ -490,8 +495,17 @@ export default function SupervisorPayment() {
   const refresh = useCallback(async () => {
     try {
       const userId = parseInt(localStorage.getItem('userId'), 10) || 0;
-      const pRaw = await apiService.getJobPaymentsByUserId(userId);
-      setPayments(normalizeList(pRaw).map(normalizePayment));
+      const [pRaw, jRaw] = await Promise.all([
+        apiService.getAllJobPayments().catch(() => []),
+        apiService.getJobRequestsByUserId(userId).catch(() => []),
+      ]);
+      const reqs = normalizeList(jRaw).map(normalizeJobRequest);
+      const reqIds = new Set(reqs.map(r => r.jobRequestID));
+      const allPayments = normalizeList(pRaw).map(normalizePayment);
+      const filteredPayments = allPayments.filter(p => reqIds.has(p.jobRequestID));
+
+      setPayments(filteredPayments);
+      setJobRequests(reqs);
       showToast('Refreshed', 'success');
     } catch {
       showToast('Refresh failed', 'error');

@@ -1714,45 +1714,23 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
             }}>
               Select Hoarding from this Job:
             </label>
-            <div style={{ position: 'relative' }}>
-              <select
-                value={selectedTaskID}
-                onChange={e => setSelectedTaskID(e.target.value)}
-                style={{
-                  width: '100%', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700,
-                  padding: '11px 36px 11px 16px', borderRadius: 10,
-                  border: '1.5px solid #e2e8f0', background: '#fff', color: '#1f2937',
-                  outline: 'none', cursor: 'pointer',
-                  appearance: 'none', WebkitAppearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234b5563' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 14px center',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-                  transition: 'border-color 0.15s, box-shadow 0.15s',
-                }}
-                onFocus={e => {
-                  e.target.style.borderColor = '#049edf';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(4,158,223,0.12)';
-                }}
-                onBlur={e => {
-                  e.target.style.borderColor = '#e2e8f0';
-                  e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)';
-                }}
-              >
-                {tasks.map(t => {
-                  const h = hoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
-                  const label = [
-                    t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`,
-                    getSiteAddress(h)
-                  ].filter(Boolean).join(' - ');
-                  return (
-                    <option key={t.jobTaskID} value={t.jobTaskID}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
+            <ComboField
+              value={selectedTaskID}
+              onChange={t => setSelectedTaskID(t ? String(t.jobTaskID) : '')}
+              options={tasks}
+              placeholder="Select hoarding…"
+              icon={Building2}
+              getLabel={t => {
+                const h = hoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
+                return t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`;
+              }}
+              getValue={t => t.jobTaskID}
+              getSecondary={t => {
+                const h = hoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
+                return getSiteAddress(h);
+              }}
+              searchPlaceholder="Search hoardings…"
+            />
           </div>
 
           {/* Photo Display Grid */}
@@ -2514,7 +2492,7 @@ export default function JobPage() {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, conRaw, hRaw, avhRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw] = await Promise.all([
+        const [cRaw, conRaw, hRaw, avhRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw, extRaw] = await Promise.all([
           apiService.getAllCustomers().catch(() => []),
           apiService.getAllCustomerContracts().catch(() => []),
           apiService.getAllHoardings().catch(() => []), // All Hoardings for info/other
@@ -2526,6 +2504,7 @@ export default function JobPage() {
           apiService.getAllSites().catch(() => []),
           apiService.getAllCustomerContractHoardingMaps().catch(() => []),
           apiService.getAllHoardingMerges().catch(() => []),   // ← ADD
+          apiService.getAllExternalHoardings().catch(() => []), // ← NEW
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
@@ -2538,7 +2517,10 @@ export default function JobPage() {
             normalizeSite(s)
           ])
         );
-        const rawHoardings = normalizeList(hRaw);
+        const rawHoardings = [
+          ...normalizeList(hRaw),
+          ...normalizeList(extRaw),
+        ];
 
         // ── 1. Build code → latest hoarding
         const latestByCode = new Map();
@@ -2794,7 +2776,7 @@ export default function JobPage() {
   /* ── Task operations ── */
   const handleAddHoardings = (selectedIds) => {
     const existingHoardingIDs = new Set(tasks.map(t => t.hoardingID));
-    const toAdd = hoardings
+    const toAdd = availableHoardings
       .filter(h => selectedIds.has(h.hoardingID) && !existingHoardingIDs.has(h.hoardingID))
       .map(h => newTaskRow(h));
     setTasks(p => [...p, ...toAdd]);

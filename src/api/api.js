@@ -1282,6 +1282,7 @@ export const apiService = {
   getVendorById: (vendorId) => api.get(`/Vendor/${vendorId}`),
   createVendor: (data) => api.post('/Vendor', data),
   updateVendor: (data) => api.put('/Vendor', data),
+  getAllExternalHoardings: () => api.get('/Hoarding/GetAllExternal'),
 
   // COMPANY DETAILS
   getAllCompanyDetails: () => api.get('/CompanyDetails'),

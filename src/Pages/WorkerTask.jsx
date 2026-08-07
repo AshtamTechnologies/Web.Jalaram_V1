@@ -1095,7 +1095,7 @@ export default function WorkerTasksPage() {
             const assigns = Array.isArray(assignRes) ? assignRes : Array.isArray(assignRes?.data) ? assignRes.data : [];
             if (assigns.length === 0) { setTasks([]); setLoading(false); return; }
             const assignedTaskIds = new Set(assigns.map(a => Number(a.jobTaskID ?? a.JobTaskID)));
-            const [tRes, jRes, contractRes, hRaw, sRaw, mergeRaw, uRaw] = await Promise.all([
+            const [tRes, jRes, contractRes, hRaw, sRaw, mergeRaw, uRaw, extRaw] = await Promise.all([
                 apiService.getAllJobTasks(),
                 apiService.getAllJobRequests(),
                 apiService.getAllCustomerContracts(),
@@ -1103,6 +1103,7 @@ export default function WorkerTasksPage() {
                 apiService.getAllSites().catch(() => []),
                 apiService.getAllHoardingMerges().catch(() => []),
                 apiService.getAllUsers().catch(() => []),
+                apiService.getAllExternalHoardings().catch(() => []),
             ]);
             const userList = extractArray(uRaw);
             const userMap = new Map(userList.map(u => {
@@ -1118,7 +1119,10 @@ export default function WorkerTasksPage() {
             }));
             const siteList = extractArray(sRaw);
             const siteMap = new Map(siteList.map(s => [Number(s.siteID ?? s.SiteID ?? 0), { addressLine1: s.addressLine1 ?? s.AddressLine1 ?? '', addressLine2: s.addressLine2 ?? s.AddressLine2 ?? '', city: s.city ?? s.City ?? '', district: s.district ?? s.District ?? '', landmark: s.landmark ?? s.Landmark ?? '' }]));
-            const rawHoardings = extractArray(hRaw);
+            const rawHoardings = [
+                ...extractArray(hRaw),
+                ...extractArray(extRaw)
+            ];
             const enrichedHoardings = rawHoardings.map(h => { const siteID = Number(h.siteID ?? h.SiteID ?? h.siteId ?? 0); return { ...h, site: siteMap.get(siteID) || h.site || null }; });
             const hoardingMap = new Map(enrichedHoardings.map(h => [Number(h.hoardingID ?? h.HoardingID ?? 0), h]));
             const mergeList = extractArray(mergeRaw);

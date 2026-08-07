@@ -554,6 +554,7 @@ function ViewModal({ opportunity, onClose, onEdit }) {
 
   return (
     <>
+      {/* <div className="pg-overlay pg-overlay--view" onClick={e => e.target === e.currentTarget && onClose()}> */}
       <div className="pg-overlay pg-overlay--view">
         <div className="pg-modal pg-modal--view" style={{ maxWidth: 580 }}>
           <div className="pg-view__banner">
