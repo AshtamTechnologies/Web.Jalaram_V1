@@ -208,6 +208,7 @@ export const apiService = {
   // HOARDINGS
   getAllHoardings: () => api.get('/Hoarding'),
   getAllExternalHoardings: () => api.get('/Hoarding/GetAllExternal'),
+  getAllExternalAvailableForVendor: () => api.get('/Hoarding/GetAllExternalavailableforVendor'),
   getAvailableHoardings: (startDate, endDate) => api.get(`/Hoarding/available?startDate=${startDate}&endDate=${endDate}`),
   getAllavailableforJob: () => api.get('/Hoarding/availableforJob'), //Show the hoarding available
   getHoardingById: (hoardingID) => api.get(`/Hoarding/${hoardingID}`),
@@ -1283,6 +1284,7 @@ export const apiService = {
   createVendor: (data) => api.post('/Vendor', data),
   updateVendor: (data) => api.put('/Vendor', data),
   getAllExternalHoardings: () => api.get('/Hoarding/GetAllExternal'),
+  getAllExternalAvailableForVendor: () => api.get('/Hoarding/GetAllExternalavailableforVendor'),
 
   // COMPANY DETAILS
   getAllCompanyDetails: () => api.get('/CompanyDetails'),

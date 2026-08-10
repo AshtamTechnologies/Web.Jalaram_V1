@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import {
   UserCircle, Plus, Phone, Home, Globe,
@@ -700,7 +700,7 @@ function ViewModal({ vendor, onClose, onEdit }) {
     ) : null;
 
   return (
-    <div className="pg-overlay pg-overlay--view" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay pg-overlay--view" /* onClick={e => e.target === e.currentTarget && onClose()} */>
       <div className="pg-modal pg-modal--view" style={{ maxWidth: 580 }}>
         <div className="pg-view__banner">
           <button className="pg-view__close" onClick={onClose}><X size={15} /></button>
@@ -796,17 +796,22 @@ function VendorFormModal({ onClose, onSaved, editData }) {
   const [success, setSuccess] = useState(false);
   const [apiError, setApiError] = useState('');
 
-  const [externalHoardings, setExternalHoardings] = useState([]);
+  const [availableHoardings, setAvailableHoardings] = useState([]);
+  const [allExternalHoardings, setAllExternalHoardings] = useState([]);
   const [loadingHoardings, setLoadingHoardings] = useState(false);
 
   useEffect(() => {
     const fetchHoardings = async () => {
       setLoadingHoardings(true);
       try {
-        const data = await apiService.getAllExternalHoardings();
-        const list = Array.isArray(data) ? data : data?.$values ?? data?.data ?? [];
-        const filteredList = getLatestActiveExternalHoardings(list);
-        setExternalHoardings(filteredList);
+        const [availRes, allRes] = await Promise.all([
+          apiService.getAllExternalAvailableForVendor().catch(() => []),
+          apiService.getAllExternalHoardings().catch(() => []),
+        ]);
+        const availList = Array.isArray(availRes) ? availRes : availRes?.$values ?? availRes?.data ?? [];
+        const allList = Array.isArray(allRes) ? allRes : allRes?.$values ?? allRes?.data ?? [];
+        setAvailableHoardings(availList);
+        setAllExternalHoardings(allList);
       } catch (err) {
         console.error('Failed to load external hoardings:', err);
       } finally {
@@ -815,6 +820,19 @@ function VendorFormModal({ onClose, onSaved, editData }) {
     };
     fetchHoardings();
   }, []);
+
+  const dropdownOptions = useMemo(() => {
+    const availFiltered = getLatestActiveExternalHoardings(availableHoardings);
+    const allFiltered = getLatestActiveExternalHoardings(allExternalHoardings);
+    const availIds = new Set(availFiltered.map(h => h.hoardingID));
+
+    const currentAssignedIds = (form.hoardingId || []).map(Number);
+    const extraAssigned = allFiltered.filter(h =>
+      currentAssignedIds.includes(Number(h.hoardingID)) && !availIds.has(h.hoardingID)
+    );
+
+    return [...availFiltered, ...extraAssigned];
+  }, [availableHoardings, allExternalHoardings, form.hoardingId]);
 
   useEffect(() => {
     if (isEdit && editData?.vendorID) {
@@ -949,7 +967,7 @@ function VendorFormModal({ onClose, onSaved, editData }) {
                   ) : f.type === 'combo-hoarding' ? (
                     <HoardingMultiSelectCombo
                       value={form.hoardingId}
-                      options={externalHoardings}
+                      options={dropdownOptions}
                       onChange={val => handleChange('hoardingId', val)}
                       loading={loadingHoardings}
                       hasError={isFieldTouched && !!fieldError}
