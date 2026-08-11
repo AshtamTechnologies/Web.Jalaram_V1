@@ -986,7 +986,7 @@ function AttachmentDeleteConfirmModal({ fileName, onConfirm, onClose }) {
 /* ═══════════════════════════════════════════════════════════
    CONTRACT HOARDING MAP SECTION — multi-select add
 ═══════════════════════════════════════════════════════════ */
-function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites, selectedHoardings = [], onAddHoardings, onRemoveHoarding, loading = false }) {
+function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites, selectedHoardings = [], onAddHoardings, onRemoveHoarding, loading = false, excludedHoardingIds = new Set() }) {
   const [pickOpen, setPickOpen] = useState(false);
   const [mapToDelete, setMapToDelete] = useState(null);
 
@@ -1009,8 +1009,8 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites, sel
   );
 
   const availableHoardings = ownerID
-    ? hoardings.filter(h => ownerSiteIds.has(h.siteID) && !mappedHoardingIds.has(Number(h.hoardingID)))
-    : hoardings.filter(h => !mappedHoardingIds.has(Number(h.hoardingID)));
+    ? hoardings.filter(h => ownerSiteIds.has(h.siteID) && !mappedHoardingIds.has(Number(h.hoardingID)) && !excludedHoardingIds.has(Number(h.hoardingID)))
+    : hoardings.filter(h => !mappedHoardingIds.has(Number(h.hoardingID)) && !excludedHoardingIds.has(Number(h.hoardingID)));
 
   const siteMap = Object.fromEntries(sites.map((s) => [s.siteID, s]));
 
@@ -1055,11 +1055,13 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites, sel
                         }
                       })() : { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' };
 
+                      const isConflicting = excludedHoardingIds.has(Number(h.hoardingID));
+
                       return (
-                        <tr key={h.hoardingID} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafe' }}>
+                        <tr key={h.hoardingID} style={{ background: isConflicting ? '#fef2f2' : (idx % 2 === 0 ? '#fff' : '#fafafe'), borderLeft: isConflicting ? '3px solid #ef4444' : '3px solid transparent' }}>
                           {/* Code */}
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8' }}>
-                            <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 12.5, color: '#6c63ff' }}>
+                            <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 12.5, color: isConflicting ? '#dc2626' : '#6c63ff' }}>
                               {h.hoardingCode}
                             </div>
                           </td>
@@ -1077,9 +1079,15 @@ function ContractHoardingMapSection({ contractId, ownerID, hoardings, sites, sel
                           </td>
                           {/* Status */}
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8' }}>
-                            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 20, background: hSt.bg, color: hSt.color, border: `1px solid ${hSt.border}`, fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
-                              {h.status || '—'}
-                            </span>
+                            {isConflicting ? (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 20, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
+                                <AlertTriangle size={11} /> Conflicting Dates
+                              </span>
+                            ) : (
+                              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', borderRadius: 20, background: hSt.bg, color: hSt.color, border: `1px solid ${hSt.border}`, fontSize: 11, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
+                                {h.status || '—'}
+                              </span>
+                            )}
                           </td>
                           {/* Delete */}
                           <td style={{ padding: '10px 13px', borderBottom: '1px solid #f0f0f8', textAlign: 'right' }}>
@@ -1564,6 +1572,79 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
 
   const [loadingStagedData, setLoadingStagedData] = useState(false);
 
+  const [ownerContracts, setOwnerContracts] = useState([]);
+  const [ownerHoardingMaps, setOwnerHoardingMaps] = useState([]);
+  const [loadingOwnerData, setLoadingOwnerData] = useState(false);
+
+  useEffect(() => {
+    if (!form.ownerID) {
+      setOwnerContracts([]);
+      setOwnerHoardingMaps([]);
+      return;
+    }
+    let active = true;
+    const fetchOwnerData = async () => {
+      setLoadingOwnerData(true);
+      try {
+        const [contractsRes, mapsRes] = await Promise.all([
+          apiService.getLandContractsBySiteId(form.ownerID),
+          apiService.getLandContractHoardingMapsByOwnerId(form.ownerID)
+        ]);
+        if (active) {
+          setOwnerContracts(Array.isArray(contractsRes) ? contractsRes : Array.isArray(contractsRes?.data) ? contractsRes.data : []);
+          setOwnerHoardingMaps(Array.isArray(mapsRes) ? mapsRes : Array.isArray(mapsRes?.data) ? mapsRes.data : []);
+        }
+      } catch (err) {
+        console.error('Failed to fetch owner land contracts and hoarding maps:', err);
+      } finally {
+        if (active) setLoadingOwnerData(false);
+      }
+    };
+    fetchOwnerData();
+    return () => { active = false; };
+  }, [form.ownerID]);
+
+  const excludedHoardingIds = React.useMemo(() => {
+    if (!form.startDate || !form.endDate || !ownerContracts.length || !ownerHoardingMaps.length) {
+      return new Set();
+    }
+
+    const parseDateStr = (str) => {
+      if (!str) return '';
+      return str.split('T')[0];
+    };
+
+    const overlaps = (cStart, cEnd, fStart, fEnd) => {
+      const cs = parseDateStr(cStart);
+      const ce = parseDateStr(cEnd);
+      const fs = parseDateStr(fStart);
+      const fe = parseDateStr(fEnd);
+      if (!cs || !ce || !fs || !fe) return false;
+      return fs <= ce && fe >= cs;
+    };
+
+    const targetContractId = isAdd ? 0 : contract?.landContractID;
+
+    const overlappingActiveContractIds = new Set(
+      ownerContracts
+        .filter(c => {
+          if (targetContractId && Number(c.landContractID) === Number(targetContractId)) {
+            return false;
+          }
+          const isContractActive = c.status?.toLowerCase() === 'active';
+          const isOverlapping = overlaps(c.startDate, c.endDate, form.startDate, form.endDate);
+          return isContractActive && isOverlapping;
+        })
+        .map(c => Number(c.landContractID))
+    );
+
+    return new Set(
+      ownerHoardingMaps
+        .filter(m => overlappingActiveContractIds.has(Number(m.landContractID)))
+        .map(m => Number(m.hoardingID))
+    );
+  }, [form.startDate, form.endDate, ownerContracts, ownerHoardingMaps, isAdd, contract?.landContractID]);
+
   useEffect(() => {
     if (isAdd || !contract?.landContractID) return;
 
@@ -1612,6 +1693,11 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
         setStagedNewHoardingIds(prev => [...prev, h.hoardingID]);
       }
     });
+    setErrors(p => {
+      const next = { ...p };
+      delete next.datesConflict;
+      return next;
+    });
   };
 
   const handleRemoveHoarding = (hoardingID) => {
@@ -1621,6 +1707,11 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
     }
     setStagedNewHoardingIds(prev => prev.filter(id => Number(id) !== Number(hoardingID)));
     setStagedHoardingMaps(prev => prev.filter(x => Number(x.hoardingID) !== Number(hoardingID)));
+    setErrors(p => {
+      const next = { ...p };
+      delete next.datesConflict;
+      return next;
+    });
   };
 
   const handleAddAttachment = (file) => {
@@ -1663,11 +1754,56 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
 
   const set = (key, val) => {
     setForm(p => ({ ...p, [key]: val }));
-    if (errors[key]) setErrors(p => ({ ...p, [key]: '' }));
+    setErrors(p => {
+      const next = { ...p };
+      delete next[key];
+      delete next.datesConflict;
+      return next;
+    });
+  };
+
+  const handleStartDateChange = (val) => {
+    setForm(p => {
+      const next = { ...p, startDate: val };
+      if (next.endDate && next.endDate <= val) {
+        next.endDate = '';
+      }
+      return next;
+    });
+    setErrors(p => {
+      const next = { ...p };
+      delete next.startDate;
+      delete next.endDate;
+      delete next.datesConflict;
+      return next;
+    });
+  };
+
+  const handleEndDateChange = (val) => {
+    setForm(p => {
+      const next = { ...p, endDate: val };
+      if (next.startDate && val && val <= next.startDate) {
+        next.endDate = '';
+      }
+      return next;
+    });
+    setErrors(p => {
+      const next = { ...p };
+      delete next.endDate;
+      delete next.datesConflict;
+      return next;
+    });
   };
 
   const handleSave = async () => {
     const errs = validateForm(form, isAdd);
+
+    const currentHoardings = isAdd ? selectedHoardings : stagedHoardingMaps;
+    const conflicting = currentHoardings.filter(h => excludedHoardingIds.has(Number(h.hoardingID)));
+    if (conflicting.length > 0) {
+      errs.datesConflict = `The following selected hoardings conflict with other active contracts during these dates: ${conflicting.map(h => h.hoardingCode).join(', ')}`;
+    }
+
     if (Object.keys(errs).length) { setErrors(errs); return; }
     setSaving(true); setApiErr('');
     try {
@@ -1863,6 +1999,7 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
               ownerID={savedContract.ownerID}
               hoardings={hoardings}
               sites={sites}
+              excludedHoardingIds={excludedHoardingIds}
             />
 
             <div style={{ height: 16 }} />
@@ -1886,6 +2023,8 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
       </div>
     );
   }
+
+  const isHoardingDisabled = !form.ownerID || !form.startDate || !form.endDate;
 
   /* ═══════════════════════════════
      STEP 1 / EDIT: Details form
@@ -1912,6 +2051,11 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
           {apiErr && (
             <div className="pg-field-error hd-api-error mb-3">
               <AlertCircle size={14} /><span>{apiErr}</span>
+            </div>
+          )}
+          {errors.datesConflict && (
+            <div className="pg-field-error hd-api-error mb-3" style={{ background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626' }}>
+              <AlertTriangle size={14} color="#dc2626" /><span>{errors.datesConflict}</span>
             </div>
           )}
 
@@ -1952,28 +2096,30 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                         {/* Trigger button */}
                         <button
                           type="button"
-                          disabled={!form.ownerID}
-                          onClick={() => form.ownerID && setHoardingModalOpen(true)}
+                          disabled={isHoardingDisabled}
+                          onClick={() => !isHoardingDisabled && setHoardingModalOpen(true)}
                           style={{
                             width: '100%', display: 'flex', alignItems: 'center', gap: 10,
                             padding: '10px 14px', borderRadius: 10,
-                            border: `1.5px solid ${!form.ownerID ? '#e8e8f4' : '#e8e8f4'}`,
-                            background: !form.ownerID ? '#f8f8fd' : '#fff',
-                            cursor: !form.ownerID ? 'not-allowed' : 'pointer',
+                            border: `1.5px solid ${isHoardingDisabled ? '#e8e8f4' : '#e8e8f4'}`,
+                            background: isHoardingDisabled ? '#f8f8fd' : '#fff',
+                            cursor: isHoardingDisabled ? 'not-allowed' : 'pointer',
                             fontFamily: 'Nunito, sans-serif', fontSize: 13,
-                            color: !form.ownerID ? '#b0b0c8' : '#1a1a2e', fontWeight: 600,
+                            color: isHoardingDisabled ? '#b0b0c8' : '#1a1a2e', fontWeight: 600,
                             transition: 'border-color 0.15s',
                           }}
-                          onMouseEnter={e => { if (form.ownerID) e.currentTarget.style.borderColor = '#049edf'; }}
-                          onMouseLeave={e => { if (form.ownerID) e.currentTarget.style.borderColor = '#e8e8f4'; }}
+                          onMouseEnter={e => { if (!isHoardingDisabled) e.currentTarget.style.borderColor = '#049edf'; }}
+                          onMouseLeave={e => { if (!isHoardingDisabled) e.currentTarget.style.borderColor = '#e8e8f4'; }}
                         >
-                          <Building2 size={14} color={!form.ownerID ? '#d0d0e0' : '#c0c0d8'} style={{ flexShrink: 0 }} />
+                          <Building2 size={14} color={isHoardingDisabled ? '#d0d0e0' : '#c0c0d8'} style={{ flexShrink: 0 }} />
                           <span style={{ flex: 1, textAlign: 'left' }}>
                             {!form.ownerID
                               ? 'Select an owner first…'
-                              : selectedHoardings.length > 0
-                                ? `${selectedHoardings.length} hoarding${selectedHoardings.length !== 1 ? 's' : ''} selected`
-                                : 'Browse & select hoardings…'}
+                              : (!form.startDate || !form.endDate)
+                                ? 'Select start and end dates first…'
+                                : selectedHoardings.length > 0
+                                  ? `${selectedHoardings.length} hoarding${selectedHoardings.length !== 1 ? 's' : ''} selected`
+                                  : 'Browse & select hoardings…'}
                           </span>
                           {selectedHoardings.length > 0
                             ? <RefreshCw size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
@@ -1994,10 +2140,11 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                               <tbody>
                                 {selectedHoardings.map((h, idx) => {
                                   const st = hSt(h.status);
+                                  const isConflicting = excludedHoardingIds.has(Number(h.hoardingID));
                                   return (
-                                    <tr key={h.hoardingID} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafe' }}>
+                                    <tr key={h.hoardingID} style={{ background: isConflicting ? '#fef2f2' : (idx % 2 === 0 ? '#fff' : '#fafafe'), borderLeft: isConflicting ? '3px solid #ef4444' : '3px solid transparent' }}>
                                       <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8' }}>
-                                        <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 12.5, color: '#6c63ff' }}>{h.hoardingCode}</div>
+                                        <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 12.5, color: isConflicting ? '#dc2626' : '#6c63ff' }}>{h.hoardingCode}</div>
                                       </td>
                                       <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8' }}>
                                         <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 700, color: '#4a5568' }}>{h.material || '—'}</span>
@@ -2008,13 +2155,26 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                                         </span>
                                       </td>
                                       <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8' }}>
-                                        <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.color, border: `1px solid ${st.border}`, fontSize: 10.5, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
-                                          {h.status || '—'}
-                                        </span>
+                                        {isConflicting ? (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', fontSize: 10.5, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
+                                            <AlertTriangle size={10} /> Conflicting Dates
+                                          </span>
+                                        ) : (
+                                          <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.color, border: `1px solid ${st.border}`, fontSize: 10.5, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
+                                            {h.status || '—'}
+                                          </span>
+                                        )}
                                       </td>
                                       <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8', textAlign: 'right' }}>
                                         <button
-                                          onClick={() => setSelectedHoardings(prev => prev.filter(x => x.hoardingID !== h.hoardingID))}
+                                          onClick={() => {
+                                            setSelectedHoardings(prev => prev.filter(x => x.hoardingID !== h.hoardingID));
+                                            setErrors(p => {
+                                              const next = { ...p };
+                                              delete next.datesConflict;
+                                              return next;
+                                            });
+                                          }}
                                           title="Remove"
                                           style={{ width: 24, height: 24, borderRadius: 6, border: '1px solid rgba(220,38,38,0.2)', background: 'rgba(220,38,38,0.06)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#dc2626' }}
                                         >
@@ -2029,12 +2189,17 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                           </div>
                         )}
 
-                        {!form.ownerID && (
-                          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: '#f0f8ff', border: '1px solid #bae6fd', borderRadius: 8, fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#0369a1' }}>
+                        {!form.ownerID ? (
+                          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: '#f0f8ff', border: '1.5px solid #bae6fd', borderRadius: 8, fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#0369a1' }}>
                             <Building2 size={12} color="#0369a1" style={{ flexShrink: 0 }} />
                             Select an owner above to browse hoardings
                           </div>
-                        )}
+                        ) : (!form.startDate || !form.endDate) ? (
+                          <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 7, padding: '8px 12px', background: '#fef2f2', border: '1.5px solid #fecaca', borderRadius: 8, fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 600, color: '#dc2626' }}>
+                            <Calendar size={12} color="#dc2626" style={{ flexShrink: 0 }} />
+                            Select start and end dates to browse hoardings
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -2057,14 +2222,14 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Start Date" required />
                       <InputWrap error={errors.startDate} icon={Calendar}>
-                        <input className="pg-field-input" type="date" value={form.startDate} onChange={e => set('startDate', e.target.value)} />
+                        <input className="pg-field-input" type="date" value={form.startDate} onChange={e => handleStartDateChange(e.target.value)} />
                       </InputWrap>
                       <FieldError msg={errors.startDate} />
                     </div>
                     <div className="col-12 col-md-6">
                       <FieldLabel label="End Date" required />
                       <InputWrap error={errors.endDate} icon={Calendar}>
-                        <input className="pg-field-input" type="date" value={form.endDate} min={form.startDate || undefined} onChange={e => set('endDate', e.target.value)} />
+                        <input className="pg-field-input" type="date" value={form.endDate} min={form.startDate || undefined} onChange={e => handleEndDateChange(e.target.value)} />
                       </InputWrap>
                       <FieldError msg={errors.endDate} />
                     </div>
@@ -2173,6 +2338,7 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
                   onAddHoardings={handleAddHoardings}
                   onRemoveHoarding={handleRemoveHoarding}
                   loading={loadingStagedData}
+                  excludedHoardingIds={excludedHoardingIds}
                 />
               </div>
             )}
@@ -2228,7 +2394,7 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
       {/* Multi-hoarding selection modal */}
       {hoardingModalOpen && (
         <HoardingLookupModal
-          hoardings={hoardings}
+          hoardings={hoardings.filter(h => !excludedHoardingIds.has(Number(h.hoardingID)))}
           sites={sites} DeleteConfirmModal
           ownerID={form.ownerID}
           alreadyMappedIds={new Set(selectedHoardings.map(h => Number(h.hoardingID)))}
@@ -2236,6 +2402,11 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
             setSelectedHoardings(prev => {
               const existingIds = new Set(prev.map(h => h.hoardingID));
               return [...prev, ...picked.filter(h => !existingIds.has(h.hoardingID))];
+            });
+            setErrors(p => {
+              const next = { ...p };
+              delete next.datesConflict;
+              return next;
             });
           }}
           onClose={() => setHoardingModalOpen(false)}

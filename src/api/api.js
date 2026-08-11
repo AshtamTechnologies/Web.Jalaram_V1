@@ -346,6 +346,7 @@ export const apiService = {
     lastUpdatedBy: getLoggedInUserID(),
   }),
   deleteLandContract: (landContractID) => api.delete(`/LandContract/Delete/${landContractID}`),
+  getLandContractsBySiteId: (ownerId) => api.get(`/LandContract/GetBySiteId/${ownerId}`),
 
   // LAND CONTRACT ATTACHMENTS
   getLandContractAttachments: async (contractId) => {
@@ -650,6 +651,7 @@ export const apiService = {
     hoardingID: Number(data.hoardingID),
   }),
   deleteLandContractHoardingMap: (mapId) => api.delete(`/LandContractHoardingMap/Delete/${mapId}`),
+  getLandContractHoardingMapsByOwnerId: (ownerId) => api.get(`/LandContractHoardingMap/GetByOwnerId/${ownerId}`),
 
   // CUSTOMER CONTRACT ATTACHMENTS
   getCustContractAttachments: async (customerContractID) => {
