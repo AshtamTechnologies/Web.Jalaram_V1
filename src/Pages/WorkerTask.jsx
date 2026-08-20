@@ -1144,12 +1144,9 @@ export default function WorkerTasksPage() {
                     const contractID = jobObj?.customerContractID ?? 0;
                     const supervisorId = jobObj ? Number(jobObj.iD) : 0;
                     const supervisorName = supervisorId ? (userMap.get(supervisorId) || `User #${supervisorId}`) : '—';
-                    return { ...task, hoardingCode: h?.hoardingCode ?? h?.HoardingCode ?? '', siteAddress: getSiteAddress(h), mergeAlongFlag: merge?.mergeAlongFlag ?? null, isMerged: !!merge, job: jobObj, contract: contractMap[contractID] ?? null, supervisorName };
+                    return { ...task, hoardingCode: h?.hoardingCode ?? h?.HoardingCode ?? '', siteAddress: getSiteAddress(h), siteID: h ? Number(h.siteID ?? h.SiteID ?? 0) : 0, mergeAlongFlag: merge?.mergeAlongFlag ?? null, isMerged: !!merge, job: jobObj, contract: contractMap[contractID] ?? null, supervisorName };
                 });
-            const jobMergeFlags = new Map();
-            myTasks.forEach(t => { if (t.isMerged && !jobMergeFlags.has(t.jobRequestID)) jobMergeFlags.set(t.jobRequestID, t.mergeAlongFlag); });
-            const finalTasks = myTasks.map(t => jobMergeFlags.has(t.jobRequestID) ? { ...t, isMerged: true, mergeAlongFlag: t.mergeAlongFlag ?? jobMergeFlags.get(t.jobRequestID) } : t);
-            setTasks(finalTasks);
+            setTasks(myTasks);
         } catch (err) {
             setFetchError(err?.response?.data?.message || err?.message || 'Failed to load tasks.');
         } finally { setLoading(false); }
@@ -1238,7 +1235,9 @@ export default function WorkerTasksPage() {
         const mergedGroupMap = new Map();
         sorted.forEach(task => {
             if (task.isMerged) {
-                const key = `merged__${task.jobRequestID}`;
+                const siteID = task.siteID ?? 0;
+                const flag = task.mergeAlongFlag || 'H';
+                const key = `merged__${task.jobRequestID}_${siteID}_${flag}`;
                 if (mergedGroupMap.has(key)) { rows[mergedGroupMap.get(key)].groupTasks.push(task); }
                 else { mergedGroupMap.set(key, rows.length); rows.push({ type: 'merged', groupTasks: [task] }); }
             } else {

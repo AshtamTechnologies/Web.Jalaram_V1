@@ -2306,10 +2306,32 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
     }
   };
 
-  const hMerges = merges.filter(m => m.mergeAlongFlag === 'H');
-  const vMerges = merges.filter(m => m.mergeAlongFlag === 'V');
+  const displayMergeGroups = useMemo(() => {
+    const groups = {}; // key: "siteID_direction" -> array of merges
+    merges.forEach(m => {
+      const mapEntry = maps.find(mp => Number(mp.hoardingID) === Number(m.hoardingID));
+      const siteID = mapEntry ? Number(mapEntry.siteID ?? 0) : 0;
+      const direction = m.mergeAlongFlag ?? 'V';
+      const key = `${siteID}_${direction}`;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(m);
+    });
 
-  const renderMergeGroup = (groupMerges, direction) => {
+    return Object.entries(groups)
+      .map(([key, groupMerges]) => {
+        const [siteIDStr, direction] = key.split('_');
+        return {
+          siteID: Number(siteIDStr),
+          direction,
+          merges: groupMerges,
+        };
+      })
+      .filter(g => g.merges.length > 0);
+  }, [merges, maps]);
+
+  const renderMergeGroup = (groupMerges, direction, groupKey) => {
     if (!groupMerges.length) return null;
 
     // Calculate total sq.ft for this merge group
@@ -2323,7 +2345,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
       const mp = maps.find(mp => Number(mp.hoardingID) === Number(m.hoardingID));
       return { w: mp?.width || 0, h: mp?.height || 0 };
     });
-    const gaps = Math.max(groupMerges.length - 1, 1);
+    const gaps = Math.max(groupMerges.length - 1, 0);
     let mw, mh;
     if (direction === 'H') {
       mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
@@ -2336,7 +2358,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
     const mergeID = groupMerges[0]?.hoardingMergeID; // for direction toggle
 
     return (
-      <div style={{ border: '1.5px solid rgba(124,58,237,0.20)', borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
+      <div key={groupKey} style={{ border: '1.5px solid rgba(124,58,237,0.20)', borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
         {/* Group header */}
         <div style={{ padding: '8px 13px', background: 'rgba(124,58,237,0.06)', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {direction === 'H' ? <ArrowLeftRight size={12} color="#7c3aed" /> : <ArrowUpDown size={12} color="#7c3aed" />}
@@ -2579,8 +2601,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
                     No merges yet — click below to merge hoardings
                   </div>
                 )}
-                {renderMergeGroup(hMerges, 'H')}
-                {renderMergeGroup(vMerges, 'V')}
+                {displayMergeGroups.map((g) => renderMergeGroup(g.merges, g.direction, `${g.siteID}_${g.direction}`))}
 
                 {/* ── Merge button — hidden in readOnly mode ── */}
                 {!readOnly && (

@@ -1283,13 +1283,15 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
   const pct = job.tasks.length > 0 ? Math.round((done / job.tasks.length) * 100) : 0;
   const canAccept = job.jobStatus !== 'Accepted' && job.jobStatus !== 'Completed';
 
-  // ── Group merged tasks together, keep singles separate ──
+  // ── Group merged tasks together by site and direction, keep singles separate ──
   const { mergedGroups, singleTasks } = useMemo(() => {
-    const mergedMap = new Map(); // mergeAlongFlag → [tasks]
+    const mergedMap = new Map(); // "siteID_direction" → [tasks]
     const singles = [];
     job.tasks.forEach(task => {
       if (task.isMerged) {
-        const key = task.mergeAlongFlag || 'H';
+        const siteID = task.siteID ?? 0;
+        const flag = task.mergeAlongFlag || 'H';
+        const key = `${siteID}_${flag}`;
         if (!mergedMap.has(key)) mergedMap.set(key, []);
         mergedMap.get(key).push(task);
       } else {
@@ -1413,8 +1415,10 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                   ) : (
                     <>
                       {/* ── Merged group cards ── */}
-                      {mergedGroups.map(([flag, groupTasks]) => (
-                        <div key={flag} style={{ marginBottom: 16, border: '1.5px solid rgba(124,58,237,0.3)', borderRadius: 14, overflow: 'hidden' }}>
+                      {mergedGroups.map(([key, groupTasks]) => {
+                        const [siteIDStr, flag] = key.split('_');
+                        return (
+                          <div key={key} style={{ marginBottom: 16, border: '1.5px solid rgba(124,58,237,0.3)', borderRadius: 14, overflow: 'hidden' }}>
 
                           {/* Group header */}
                           <div style={{ padding: '12px 18px', background: 'linear-gradient(135deg, rgba(124,58,237,0.07), rgba(124,58,237,0.03))', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
@@ -1519,7 +1523,8 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                           />
 
                         </div>
-                      ))}
+                      );
+                    })}
 
                       {/* ── Single (unmerged) task cards ── */}
                       {singleTasks.map(task => (
@@ -2317,6 +2322,7 @@ export default function SupervisorJobsPage() {
                 width: h?.width || h?.Width || 0,
                 height: h?.height || h?.Height || 0,
                 siteAddress: getSiteAddress(h),         // ← now uses enriched h
+                siteID: h ? Number(h.siteID ?? h.SiteID ?? 0) : 0,
                 mergeAlongFlag: merge?.mergeAlongFlag || null,
                 isMerged: !!merge,
               };

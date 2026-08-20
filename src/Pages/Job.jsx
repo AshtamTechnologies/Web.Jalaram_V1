@@ -500,34 +500,65 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
     );
   }, [base, search]);
 
-  const selectable = display.filter(h => !existingIds.has(h.hoardingID));
-  const allSelected = selectable.length > 0 && selectable.every(h => selected.has(h.hoardingID));
-  const someSel = selectable.some(h => selected.has(h.hoardingID));
-
-  const toggle = (id) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const toggleAll = () => {
-    if (allSelected) setSelected(p => { const n = new Set(p); selectable.forEach(h => n.delete(h.hoardingID)); return n; });
-    else setSelected(p => { const n = new Set(p); selectable.forEach(h => n.add(h.hoardingID)); return n; });
-  };
-
-  // Group display: merged hoardings shown together, unmerged shown individually
+  // Group display: merged hoardings shown together by site & flag, unmerged shown individually
   const { mergeGroups, unmerged } = useMemo(() => {
-    const groups = new Map(); // flag → [hoardings]
+    const groups = new Map(); // "siteID_flag" -> { siteID, flag, hoardings: [] }
     const ungrouped = [];
 
     display.forEach(h => {
       const flag = mergedFlagMap.get(Number(h.hoardingID));
       if (flag) {
-        const key = flag; // 'H' or 'V' — groups all same-direction merges together
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(h);
+        const siteID = Number(h.siteID ?? h.SiteID ?? h.site?.siteID ?? 0);
+        const key = `${siteID}_${flag}`;
+        if (!groups.has(key)) {
+          groups.set(key, { siteID, flag, hoardings: [] });
+        }
+        groups.get(key).hoardings.push(h);
       } else {
         ungrouped.push(h);
       }
     });
 
-    return { mergeGroups: [...groups.entries()], unmerged: ungrouped };
+    return { mergeGroups: [...groups.values()], unmerged: ungrouped };
   }, [display, mergedFlagMap]);
+
+  // Build a lookup map: hoardingID -> array of other hoardingIDs in the same merge group
+  const hoardingIdToGroupIds = useMemo(() => {
+    const map = new Map();
+    mergeGroups.forEach(g => {
+      const ids = g.hoardings.map(h => h.hoardingID);
+      ids.forEach(id => {
+        map.set(id, ids);
+      });
+    });
+    return map;
+  }, [mergeGroups]);
+
+  const selectable = display.filter(h => !existingIds.has(h.hoardingID));
+  const allSelected = selectable.length > 0 && selectable.every(h => selected.has(h.hoardingID));
+  const someSel = selectable.some(h => selected.has(h.hoardingID));
+
+  const toggle = (id) => setSelected(p => {
+    const n = new Set(p);
+    const groupIds = hoardingIdToGroupIds.get(id);
+    if (groupIds) {
+      const turningOn = !n.has(id);
+      groupIds.forEach(gid => {
+        if (!existingIds.has(gid)) {
+          if (turningOn) n.add(gid);
+          else n.delete(gid);
+        }
+      });
+    } else {
+      n.has(id) ? n.delete(id) : n.add(id);
+    }
+    return n;
+  });
+
+  const toggleAll = () => {
+    if (allSelected) setSelected(p => { const n = new Set(p); selectable.forEach(h => n.delete(h.hoardingID)); return n; });
+    else setSelected(p => { const n = new Set(p); selectable.forEach(h => n.add(h.hoardingID)); return n; });
+  };
 
   const renderRow = (h, isMerged = false, mergeFlag = null) => {
     const checked = selected.has(h.hoardingID);
@@ -617,25 +648,26 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
           ) : (
             <>
               {/* ── Merged groups ── */}
-              {mergeGroups.map(([flag, groupHoardings]) => {
+              {mergeGroups.map(({ siteID, flag, hoardings: groupHoardings }) => {
                 // Compute combined size
                 const sizes = groupHoardings.map(h => ({ w: Number(h.width) || 0, h: Number(h.height) || 0 }));
-                const gaps = Math.max(groupHoardings.length - 1, 1);
-                const mw = flag === 'H' ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps : Math.max(...sizes.map(s => s.w));
-                const mh = flag === 'H' ? Math.max(...sizes.map(s => s.h)) : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+                const gaps = Math.max(groupHoardings.length - 1, 0);
+                const isHorizontalMerge = flag === 'H';
+                const mw = isHorizontalMerge ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps : Math.max(...sizes.map(s => s.w), 0);
+                const mh = isHorizontalMerge ? Math.max(...sizes.map(s => s.h), 0) : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
                 const mergedSqFt = mw * mh;
 
                 return (
-                  <div key={flag} style={{ margin: '8px 12px', border: '1.5px solid rgba(124,58,237,0.25)', borderRadius: 10, overflow: 'hidden' }}>
+                  <div key={`${siteID}_${flag}`} style={{ margin: '8px 12px', border: '1.5px solid rgba(124,58,237,0.25)', borderRadius: 10, overflow: 'hidden' }}>
                     {/* Merge group header */}
                     <div style={{
                       padding: '8px 14px', background: 'rgba(124,58,237,0.06)',
                       borderBottom: '1px solid rgba(124,58,237,0.15)',
                       display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
                     }}>
-                      <span style={{ fontSize: 13 }}>{flag === 'H' ? '↔' : '↕'}</span>
+                      <span style={{ fontSize: 13 }}>{isHorizontalMerge ? '↔' : '↕'}</span>
                       <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>
-                        {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge · {groupHoardings.length} hoardings
+                        {isHorizontalMerge ? 'Horizontal' : 'Vertical'} Merge · {groupHoardings.length} hoardings
                       </span>
                       <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#5a5a78' }}>
                         {mw} × {mh} ft
@@ -1861,14 +1893,17 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
 
   // Find tasks without photos
   const tasksWithNoPhotos = useMemo(() => {
-    // Group task IDs by mergeFlag
-    const mergeFlagToTaskIDs = {};
+    // Group task IDs by siteID and mergeFlag
+    const mergeGroupToTaskIDs = {};
     tasks.forEach(t => {
       const m = (hoardingMerges || []).find(x => Number(x.hoardingID ?? x.HoardingID ?? 0) === Number(t.hoardingID));
       const flag = m ? (m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H') : null;
       if (flag) {
-        if (!mergeFlagToTaskIDs[flag]) mergeFlagToTaskIDs[flag] = [];
-        mergeFlagToTaskIDs[flag].push(Number(t.jobTaskID));
+        const h = allHoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? 0) === Number(t.hoardingID));
+        const siteID = h ? Number(h.siteID ?? h.SiteID ?? 0) : 0;
+        const key = `${siteID}_${flag}`;
+        if (!mergeGroupToTaskIDs[key]) mergeGroupToTaskIDs[key] = [];
+        mergeGroupToTaskIDs[key].push(Number(t.jobTaskID));
       }
     });
 
@@ -1877,8 +1912,13 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
       const flag = m ? (m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H') : null;
 
       let targetTaskIDs = [Number(t.jobTaskID)];
-      if (flag && mergeFlagToTaskIDs[flag]) {
-        targetTaskIDs = mergeFlagToTaskIDs[flag];
+      if (flag) {
+        const h = allHoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? 0) === Number(t.hoardingID));
+        const siteID = h ? Number(h.siteID ?? h.SiteID ?? 0) : 0;
+        const key = `${siteID}_${flag}`;
+        if (mergeGroupToTaskIDs[key]) {
+          targetTaskIDs = mergeGroupToTaskIDs[key];
+        }
       }
 
       const hasPhoto = (attachments || []).some(a => {
@@ -1888,7 +1928,7 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
 
       return !hasPhoto;
     });
-  }, [tasks, attachments, hoardingMerges]);
+  }, [tasks, attachments, hoardingMerges, allHoardings]);
 
   const hasMissingPhotos = tasksWithNoPhotos.length > 0;
 
@@ -2221,16 +2261,29 @@ export default function JobPage() {
   useResizableColumns(taskTableRef, taskTableReady, [40, 240, 90, 90, 70, 148, 140, 170, 80, 60]);
   // Group tasks: merged ones collapse into a single display row
   const displayTaskRows = useMemo(() => {
-    const mergedIds = new Set(
-      hoardingMerges.map(m => Number(m.hoardingID ?? m.HoardingID ?? 0)).filter(Boolean)
-    );
+    const mergeMap = new Map();
+    hoardingMerges.forEach(m => {
+      const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+      if (hid) {
+        mergeMap.set(hid, m);
+      }
+    });
 
-    const mergedGroup = [];
+    const mergedGroups = {}; // key: siteID_flag -> array of tasks
     const unmergedRows = [];
 
     tasks.forEach(task => {
-      if (mergedIds.has(Number(task.hoardingID))) {
-        mergedGroup.push(task);
+      const hid = Number(task.hoardingID);
+      const mergeInfo = mergeMap.get(hid);
+      if (mergeInfo) {
+        const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+        const hoarding = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
+        const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
+        const key = `${siteID}_${flag}`;
+        if (!mergedGroups[key]) {
+          mergedGroups[key] = [];
+        }
+        mergedGroups[key].push(task);
       } else {
         unmergedRows.push(task);
       }
@@ -2238,36 +2291,43 @@ export default function JobPage() {
 
     const result = [];
 
-    // One grouped row for all merged hoardings
-    if (mergedGroup.length > 0) {
-      const flag = hoardingMerges.find(
-        m => Number(m.hoardingID ?? m.HoardingID) === Number(mergedGroup[0].hoardingID)
-      )?.mergeAlongFlag ?? 'H';
+    // Process merged groups
+    Object.entries(mergedGroups).forEach(([key, groupTasks]) => {
+      if (groupTasks.length === 0) return;
 
-      const sizes = mergedGroup.map(t => {
-        const h = hoardings.find(hh => hh.hoardingID === t.hoardingID);
-        return { w: Number(h?.width) || 0, h: Number(h?.height) || 0 };
+      const [siteIDStr, flag] = key.split('_');
+      const siteID = Number(siteIDStr);
+
+      const sizes = groupTasks.map(t => {
+        const h = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === Number(t.hoardingID));
+        return { w: Number(h?.width ?? h?.Width ?? 0), h: Number(h?.height ?? h?.Height ?? 0) };
       });
-      const gaps = Math.max(mergedGroup.length - 1, 1);
-      const mw = flag === 'H' ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps : Math.max(...sizes.map(s => s.w));
-      const mh = flag === 'H' ? Math.max(...sizes.map(s => s.h)) : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+
+      const gaps = Math.max(groupTasks.length - 1, 0);
+      const isHorizontalMerge = flag === 'H';
+      const mw = isHorizontalMerge 
+        ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps 
+        : Math.max(...sizes.map(s => s.w), 0);
+      const mh = isHorizontalMerge 
+        ? Math.max(...sizes.map(s => s.h), 0) 
+        : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
 
       result.push({
         _type: 'merged',
-        _id: '__merged__',
-        tasks: mergedGroup,
+        _id: `__merged__${siteID}_${flag}`,
+        tasks: groupTasks,
         mergeFlag: flag,
         mergedWidth: mw,
         mergedHeight: mh,
         mergedSqFt: mw * mh,
         // Use first task's fields for status/date editing (or aggregate)
-        status: mergedGroup[0].status,
-        actualCompletionDate: mergedGroup[0].actualCompletionDate,
-        submitDttm: mergedGroup[0].submitDttm,
-        saved: mergedGroup.every(t => t.saved),
-        jobTaskID: mergedGroup[0].jobTaskID,
+        status: groupTasks[0].status,
+        actualCompletionDate: groupTasks[0].actualCompletionDate,
+        submitDttm: groupTasks[0].submitDttm,
+        saved: groupTasks.every(t => t.saved),
+        jobTaskID: groupTasks[0].jobTaskID,
       });
-    }
+    });
 
     // Individual rows for unmerged
     unmergedRows.forEach(task => result.push({ _type: 'single', ...task }));
@@ -3388,7 +3448,7 @@ export default function JobPage() {
                             const anySubmitted = row.tasks.some(t => t.status === 'Submitted');
 
                             return (
-                              <tr key="__merged__" className="pg-tr" style={{
+                              <tr key={row._id} className="pg-tr" style={{
                                 background: allSubmitted ? 'rgba(22,163,74,0.04)' : 'rgba(124,58,237,0.03)',
                                 borderLeft: '3px solid rgba(124,58,237,0.35)',
                               }}>

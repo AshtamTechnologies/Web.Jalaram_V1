@@ -753,11 +753,12 @@ function ContractDropdown({ contracts, hoardings, hoardingMaps = [], ownerID, va
                   <div className="lc-dropdown-option__name" style={{
                     color: String(c.landContractID) === String(value) ? '#049edf' : '#1a1a2e',
                     flex: 1,
+                    fontWeight: 700,
                   }}>
                     <Building2 size={12} style={{ marginRight: 4, flexShrink: 0 }} />
-                    {c.hoardingInfo}
-                    <span style={{ color: '#b0b0c8', fontWeight: 600, fontSize: 11, marginLeft: 8 }}>
-                      #{c.landContractID}
+                    <span>Contract #{c.landContractID} ({c.dateRange})</span>
+                    <span style={{ color: '#049edf', fontWeight: 800, marginLeft: 8 }}>
+                      {fmtCurrency(c.totalContractValue)}
                     </span>
                   </div>
                   <span style={{
@@ -770,10 +771,6 @@ function ContractDropdown({ contracts, hoardings, hoardingMaps = [], ownerID, va
                     <Check size={12} color="#049edf" style={{ flexShrink: 0 }} />
                   )}
                 </div>
-                <div className="lc-dropdown-option__sub" style={{ marginTop: 3 }}>
-                  <Calendar size={10} style={{ marginRight: 4 }} />
-                  {c.dateRange}
-                </div>
               </div>
             );
           })}
@@ -784,16 +781,15 @@ function ContractDropdown({ contracts, hoardings, hoardingMaps = [], ownerID, va
         <div className="lc-selected-card">
           <div className="lc-selected-card__icon"><FileText size={15} color="#049edf" /></div>
           <div className="lc-selected-card__info">
-            <div className="lc-selected-card__name">{selected.hoardingInfo}
-              <span style={{ color: '#b0b0c8', fontWeight: 600, fontSize: 11, marginLeft: 8 }}>
-                #{selected.landContractID}
+            <div className="lc-selected-card__name" style={{ fontWeight: 800 }}>
+              Contract #{selected.landContractID} ({selected.dateRange})
+              <span style={{ color: '#049edf', fontWeight: 800, marginLeft: 8 }}>
+                {fmtCurrency(selected.totalContractValue)}
               </span>
             </div>
-            <div className="lc-selected-card__sub">
-              <Calendar size={10} style={{ marginRight: 3 }} />
-              {selected.dateRange}
+            <div className="lc-selected-card__sub" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{
-                marginLeft: 8, fontSize: 10, fontWeight: 700, padding: '1px 6px',
+                fontSize: 10, fontWeight: 700, padding: '1px 6px',
                 borderRadius: 20, ...statusStyle(selected.statusLabel),
               }}>
                 {selected.statusLabel}
@@ -1313,6 +1309,22 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   const [ownerError, setOwnerError] = useState('');
   const [contractError, setContractError] = useState('');
 
+  // Filter out contracts that are already fully paid
+  const filteredContractsForAdd = React.useMemo(() => {
+    return contracts.filter(c => {
+      // If we are editing, we don't filter out the current contract
+      if (!isAdd && String(c.landContractID) === String(landContractID)) return true;
+
+      // Sum all payments for this contract
+      const paid = allPayments
+        .filter(p => Number(p.landContractID) === Number(c.landContractID))
+        .reduce((sum, p) => sum + (Number(p.amountPaid) || 0), 0);
+
+      // If contract value is 0, we can still allow payment? Or if paid >= value, don't show
+      return Number(c.totalContractValue) === 0 || paid < Number(c.totalContractValue);
+    });
+  }, [contracts, allPayments, isAdd, landContractID]);
+
   // Build initial rows from existing payments for this group
   const [rows, setRows] = useState(() => {
     if (isAdd) return [];
@@ -1375,6 +1387,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   const [stagedDeletedPaymentIds, setStagedDeletedPaymentIds] = useState([]);
 
   const errorRef = useRef(null);
+  const isSavingRef = useRef(false);
 
   useEffect(() => {
     if (apiErr) {
@@ -1443,6 +1456,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   };
 
   const handleSave = () => {
+    if (isSavingRef.current) return;
     let hasHeaderErr = false;
     if (!ownerID) { setOwnerError('Owner is required'); hasHeaderErr = true; }
     else setOwnerError('');
@@ -1521,6 +1535,8 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   };
 
   const _doSave = async (allRows) => {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     setSaving(true); setApiErr('');
     const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
     const hoardingID = Number(contract?.hoardingID || 0);
@@ -1593,6 +1609,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
       setApiErr(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Save failed.');
     } finally {
       setSaving(false);
+      isSavingRef.current = false;
     }
   };
 
@@ -1691,43 +1708,93 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                     <div className="col-12 col-md-6">
                       <FieldLabel label="Land Contract" required />
                       <ContractDropdown
-                        contracts={contracts}
+                        contracts={filteredContractsForAdd}
                         hoardings={hoardings}
                         hoardingMaps={hoardingMaps}
                         ownerID={ownerID}
                         value={landContractID}
                         onChange={val => {
                           setLandContractID(val);
-                          if (val) setContractError('');
+                          if (val) {
+                            setContractError('');
+                            // Load existing payments for this contract
+                            const existing = allPayments
+                              .filter(p => Number(p.landContractID) === Number(val))
+                              .map(p => ({
+                                ...EMPTY_ROW,
+                                _rowId: makeRowId(),
+                                _paymentID: p.landPaymentID,
+                                paymentDate: p.paymentDate || '',
+                                paymentPurpose: p.paymentPurpose || '',
+                                amountPaid: p.amountPaid ?? '',
+                                paymentMode: p.paymentMode || '',
+                                nextDueDate: p.nextDueDate || '',
+                                bankName: p.bankName || '',
+                                referenceNumber: p.referenceNumber || '',
+                                paidBy: p.paidBy || '',
+                                comments: p.comments || '',
+                              }));
+                            setRows(existing);
+                          } else {
+                            setRows([]);
+                          }
                         }}
                         error={contractError}
                         disabled={!isAdd}
                       />
                       <FieldError msg={contractError} />
                     </div>
-                    {contract && (
-                      <div className="col-12 mt-2">
-                        <div style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 8,
-                          padding: '10px 14px',
-                          borderRadius: 10,
-                          background: 'rgba(4, 158, 223, 0.05)',
-                          border: '1.5px solid rgba(4, 158, 223, 0.15)',
-                          fontFamily: 'Nunito, sans-serif',
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: '#1a1a2e',
-                        }}>
-                          <IndianRupee size={15} color="#049edf" />
-                          <span>Land Contract Amount: </span>
-                          <strong style={{ color: '#049edf', fontSize: 14 }}>
-                            {fmtCurrency(contract.totalContractValue)}
-                          </strong>
+                    {contract && (() => {
+                      const contractVal = Number(contract.totalContractValue) || 0;
+                      const paidVal = rows.reduce((sum, r) => sum + (Number(r.amountPaid) || 0), 0);
+                      const pendingVal = Math.max(contractVal - paidVal, 0);
+
+                      return (
+                        <div className="col-12 mt-2" style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                          {/* Contract Value */}
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '8px 12px', borderRadius: 8,
+                            background: 'rgba(4, 158, 223, 0.05)',
+                            border: '1px solid rgba(4, 158, 223, 0.15)',
+                            fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700,
+                            color: '#1a1a2e',
+                          }}>
+                            <IndianRupee size={13} color="#049edf" />
+                            <span>Contract Value: </span>
+                            <strong style={{ color: '#049edf' }}>{fmtCurrency(contractVal)}</strong>
+                          </div>
+
+                          {/* Total Paid */}
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '8px 12px', borderRadius: 8,
+                            background: 'rgba(22, 163, 74, 0.05)',
+                            border: '1px solid rgba(22, 163, 74, 0.15)',
+                            fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700,
+                            color: '#1a1a2e',
+                          }}>
+                            <CheckCircle2 size={13} color="#16a34a" />
+                            <span>Total Paid: </span>
+                            <strong style={{ color: '#16a34a' }}>{fmtCurrency(paidVal)}</strong>
+                          </div>
+
+                          {/* Total Pending */}
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 6,
+                            padding: '8px 12px', borderRadius: 8,
+                            background: pendingVal > 0 ? 'rgba(220, 38, 38, 0.05)' : 'rgba(22, 163, 74, 0.05)',
+                            border: pendingVal > 0 ? '1px solid rgba(220, 38, 38, 0.15)' : '1px solid rgba(22, 163, 74, 0.15)',
+                            fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700,
+                            color: '#1a1a2e',
+                          }}>
+                            <Clock size={13} color={pendingVal > 0 ? '#dc2626' : '#16a34a'} />
+                            <span>Pending Amount: </span>
+                            <strong style={{ color: pendingVal > 0 ? '#dc2626' : '#16a34a' }}>{fmtCurrency(pendingVal)}</strong>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -1811,7 +1878,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
       <div className="hd-form-footer hd-form-footer--sticky">
         <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
         <button className="pg-btn-save" onClick={handleSave}
-          disabled={saving || !!deletingRowId || uploadingRowIds.size > 0}>
+          disabled={saving || saveOk || !!deletingRowId || uploadingRowIds.size > 0}>
           {saveOk
             ? <><Check size={13} /> Saved!</>
             : saving
@@ -1878,6 +1945,10 @@ export default function LandPaymentPage() {
         endDate: (c.endDate ?? c.EndDate ?? '').split('T')[0],
         status: c.status ?? c.Status ?? '',
         totalContractValue: c.totalContractValue ?? c.TotalContractValue ?? 0,
+        paymentFreqID: c.paymentFreqID ?? c.PaymentFreqID ?? 0,
+        amountPerFreq: c.amountPerFreq ?? c.AmountPerFreq ?? 0,
+        advancePaid: c.advancePaid ?? c.AdvancePaid ?? 0,
+        comments: c.comments ?? c.Comments ?? '',
       })));
 
       const list = Array.isArray(rawPayments)
@@ -1931,6 +2002,13 @@ export default function LandPaymentPage() {
           ownerName: owner?.ownerName || `Owner ID ${p.ownerID}`,
           hoardingLabel: hoarding ? hoardingLabel(hoarding) : `Hoarding ID ${p.hoardingID}`,
           contractStatus: contract?.status || '',
+          contractDetails: contract ? {
+            startDate: contract.startDate,
+            endDate: contract.endDate,
+            totalValue: contract.totalContractValue,
+            status: contract.status,
+            dateRange: `${fmtDate(contract.startDate)} → ${fmtDate(contract.endDate)}`,
+          } : null,
           totalAmount: 0,
           count: 0,
           modes: new Set(),
@@ -1993,7 +2071,7 @@ export default function LandPaymentPage() {
 
   const COLS = [
     { key: 'ownerName', label: 'Owner' },
-    { key: 'hoardingLabel', label: 'Hoarding', tabletHide: true },
+    { key: 'hoardingLabel', label: 'Contract Details', tabletHide: true },
     { key: 'totalAmount', label: 'Total Paid' },
     { key: 'count', label: 'Payments', tabletHide: true },
     { key: '_action', label: 'Actions', noSort: true },
@@ -2187,12 +2265,23 @@ export default function LandPaymentPage() {
                         </div>
                       </td>
 
-                      {/* Hoarding */}
+                      {/* Contract Details */}
                       <td className="pg-td pg-tablet-hide">
-                        <span className="pg-td__ellipsis" title={r.hoardingLabel}>{r.hoardingLabel}</span>
+                        {r.contractDetails ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 700, color: '#1a1a2e' }}>
+                              {r.contractDetails.dateRange}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#5a5a7a', fontWeight: 600 }}>
+                              Value: <strong style={{ color: '#049edf' }}>{fmtCurrency(r.contractDetails.totalValue)}</strong>
+                            </div>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#c0c0d8' }}>—</span>
+                        )}
                         {r.lastPaymentDate && (
-                          <div style={{ fontSize: 11, color: '#9090a8', marginTop: 1 }}>
-                            Last: {fmtDate(r.lastPaymentDate)}
+                          <div style={{ fontSize: 10.5, color: '#9090a8', marginTop: 3 }}>
+                            Last Payment: {fmtDate(r.lastPaymentDate)}
                           </div>
                         )}
                       </td>
@@ -2263,7 +2352,9 @@ export default function LandPaymentPage() {
                   <div className="pg-card__header">
                     <div className="pg-card__title-wrap">
                       <div className="pg-card__title">{r.ownerName}</div>
-                      <div className="pg-card__subtitle">{r.hoardingLabel}</div>
+                      <div className="pg-card__subtitle">
+                        {r.contractDetails ? `${r.contractDetails.dateRange} (Value: ${fmtCurrency(r.contractDetails.totalValue)})` : '—'}
+                      </div>
                     </div>
                     <div className="pg-card__actions">
                       <button
