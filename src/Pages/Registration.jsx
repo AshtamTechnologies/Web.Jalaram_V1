@@ -561,7 +561,28 @@ function RoleDropdown({ value, onChange, onBlur, hasError }) {
 function UserModal({ onClose, onSaved, editData }) {
   const isEdit = !!editData;
 
-  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  // ── START: Restore unsaved form data support ──
+  // const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  const [form, setForm] = useState(() => {
+    if (isEdit) return { ...editData };
+    const saved = sessionStorage.getItem('unsaved_registration_form');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { ...EMPTY_FORM };
+  });
+
+  useEffect(() => {
+    if (!isEdit) {
+      sessionStorage.setItem('unsaved_registration_form', JSON.stringify(form));
+    }
+  }, [form, isEdit]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_registration_form');
+    onClose();
+  };
+  // ── END: Restore unsaved form data support ──
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -607,6 +628,9 @@ function UserModal({ onClose, onSaved, editData }) {
       }
       setSuccess(true);
       await new Promise(r => setTimeout(r, 600));
+      // ── START: Clear unsaved form on submit success ──
+      sessionStorage.removeItem('unsaved_registration_form');
+      // ── END: Clear unsaved form on submit success ──
       onSaved();
       onClose();
     } catch (err) {
@@ -642,7 +666,7 @@ function UserModal({ onClose, onSaved, editData }) {
               </p>
             </div>
           </div>
-          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
         </div>
 
         <div className="pg-modal__body">
@@ -975,7 +999,12 @@ export default function RegistrationPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
 
-  const [showModal, setShowModal] = useState(false);
+  // ── START: Restore showModal if unsaved registration form exists ──
+  // const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(() => {
+    return sessionStorage.getItem('unsaved_registration_form') !== null;
+  });
+  // ── END: Restore showModal if unsaved registration form exists ──
   const [editUser, setEditUser] = useState(null);   // null = Add, object = Edit
   const [viewUser, setViewUser] = useState(null);
   const [resetPasswordUser, setResetPasswordUser] = useState(null);

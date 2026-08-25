@@ -556,14 +556,107 @@ function AttachmentModal({ payment, onClose, showToast }) {
 function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, showToast }) {
   const isEdit = !!payment?.jobPaymentID;
 
-  const [jobRequestID, setJobRequestID] = useState(payment?.jobRequestID || 0);
-  const [paymentDate, setPaymentDate] = useState(payment?.paymentDate || todayISO());
-  const [calculatedAmount, setCalculatedAmount] = useState(String(payment?.calculatedAmount ?? ''));
-  const [paidAmount, setPaidAmount] = useState(String(payment?.paidAmount ?? ''));
-  const [paidBY, setPaidBY] = useState(payment?.paidBY || '');
-  const [extrapayment, setExtrapayment] = useState(payment?.extrapayment || '');
-  const [comments, setComments] = useState(payment?.comments || '');
-  const [isParicialPayment, setIsParicialPayment] = useState(payment?.isParicialPayment || false);
+  const [jobRequestID, setJobRequestID] = useState(() => {
+    if (isEdit) return payment?.jobRequestID || 0;
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.jobRequestID) return parsed.jobRequestID;
+      } catch (e) {}
+    }
+    return 0;
+  });
+  const [paymentDate, setPaymentDate] = useState(() => {
+    if (isEdit) return payment?.paymentDate || todayISO();
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.paymentDate) return parsed.paymentDate;
+      } catch (e) {}
+    }
+    return todayISO();
+  });
+  const [calculatedAmount, setCalculatedAmount] = useState(() => {
+    if (isEdit) return String(payment?.calculatedAmount ?? '');
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.calculatedAmount) return parsed.calculatedAmount;
+      } catch (e) {}
+    }
+    return '';
+  });
+  const [paidAmount, setPaidAmount] = useState(() => {
+    if (isEdit) return String(payment?.paidAmount ?? '');
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.paidAmount) return parsed.paidAmount;
+      } catch (e) {}
+    }
+    return '';
+  });
+  const [paidBY, setPaidBY] = useState(() => {
+    if (isEdit) return payment?.paidBY || '';
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.paidBY) return parsed.paidBY;
+      } catch (e) {}
+    }
+    return '';
+  });
+  const [extrapayment, setExtrapayment] = useState(() => {
+    if (isEdit) return payment?.extrapayment || '';
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.extrapayment) return parsed.extrapayment;
+      } catch (e) {}
+    }
+    return '';
+  });
+  const [comments, setComments] = useState(() => {
+    if (isEdit) return payment?.comments || '';
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.comments) return parsed.comments;
+      } catch (e) {}
+    }
+    return '';
+  });
+  const [isParicialPayment, setIsParicialPayment] = useState(() => {
+    if (isEdit) return payment?.isParicialPayment || false;
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.isParicialPayment !== undefined) return parsed.isParicialPayment;
+      } catch (e) {}
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (!isEdit) {
+      sessionStorage.setItem('unsaved_job_payment_form', JSON.stringify({
+        jobRequestID, paymentDate, calculatedAmount, paidAmount, paidBY, extrapayment, comments, isParicialPayment
+      }));
+    }
+  }, [jobRequestID, paymentDate, calculatedAmount, paidAmount, paidBY, extrapayment, comments, isParicialPayment, isEdit]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_job_payment_form');
+    onClose();
+  };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -635,6 +728,9 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
         await apiService.createJobPayment(body);
       }
 
+      // ── START: Clear unsaved draft on save success ──
+      sessionStorage.removeItem('unsaved_job_payment_form');
+      // ── END: Clear unsaved draft on save success ──
       showToast(isEdit ? 'Payment updated!' : 'Payment created!', 'success');
       onSave();
     } catch (err) {
@@ -662,7 +758,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
               </p>
             </div>
           </div>
-          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
         </div>
 
         {/* Body */}
@@ -819,7 +915,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
 
         {/* Footer */}
         <div className="pg-modal__foot">
-          <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
+          <button className="pg-btn-cancel" onClick={handleCancel}>Cancel</button>
           <button className="pg-btn-save" onClick={handleSave} disabled={saving}>
             {saving
               ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
@@ -848,8 +944,13 @@ export default function JobPaymentPage() {
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState('');
   const [toast, setToast] = useState(null);
-  const [showForm, setShowForm] = useState(false);
+  // ── START: Restore showForm if unsaved job payment form exists ──
+  // const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(() => {
+    return sessionStorage.getItem('unsaved_job_payment_form') !== null;
+  });
   const [editingPayment, setEditingPayment] = useState(null);
+  // ── END: Restore showForm if unsaved job payment form exists ──
   const [attachmentPayment, setAttachmentPayment] = useState(null);
 
   /* ── Table ── */

@@ -7,7 +7,8 @@ import {
   ZoomIn, ArrowLeft, Hash, Clock, Info, ShieldCheck,
   ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight,
   ChevronLeft, ChevronRight, MapPin, Layers,
-  CheckCircle, Wrench, Eye, Replace, Loader2, AlertTriangle
+  CheckCircle, Wrench, Eye, Replace, Loader2, AlertTriangle,
+  User
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
@@ -935,10 +936,41 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     ? [...hoarding.versions].sort((a, b) => new Date(b.effdt) - new Date(a.effdt))
     : [];
 
-  const [hoardingCode, setHoardingCode] = useState(hoarding?.hoardingCode || '');
+  const [hoardingCode, setHoardingCode] = useState(() => {
+    if (hoarding?.hoardingCode) return hoarding.hoardingCode;
+    const saved = sessionStorage.getItem('unsaved_hoarding_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.hoardingCode) return parsed.hoardingCode;
+      } catch (e) {}
+    }
+    return '';
+  });
   const [hcError, setHcError] = useState('');
-  const [addForm, setAddForm] = useState({ ...EMPTY_VERSION });
+  const [addForm, setAddForm] = useState(() => {
+    if (isEdit) return { ...EMPTY_VERSION };
+    const saved = sessionStorage.getItem('unsaved_hoarding_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.addForm) return parsed.addForm;
+      } catch (e) {}
+    }
+    return { ...EMPTY_VERSION };
+  });
   const [addErrors, setAddErrors] = useState({});
+
+  useEffect(() => {
+    if (isAdd) {
+      sessionStorage.setItem('unsaved_hoarding_form', JSON.stringify({ hoardingCode, addForm }));
+    }
+  }, [hoardingCode, addForm, isAdd]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_hoarding_form');
+    onBack();
+  };
   const [newlySavedHoardingID, setNewlySavedHoardingID] = useState(null);
   const [newlySavedEffdtRaw, setNewlySavedEffdtRaw] = useState('');
   const [activePanel, setActivePanel] = useState(null);
@@ -1127,6 +1159,9 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
 
       setSaveOk(true);
       await onRefresh();
+      // ── START: Clear unsaved draft on save success ──
+      sessionStorage.removeItem('unsaved_hoarding_form');
+      // ── END: Clear unsaved draft on save success ──
       setTimeout(() => onBack(), 1200);
     } catch (err) {
       setApiErr(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Save failed. Please try again.');
@@ -1234,7 +1269,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     <div className="hd-form-page">
       <div className="hd-topbar">
         <div className="hd-topbar-left">
-          <button className="hd-back-btn" onClick={onBack}>
+          <button className="hd-back-btn" onClick={handleCancel}>
             <ArrowLeft size={14} />
             <span className="d-none d-sm-inline">Back to Hoardings</span>
             <span className="d-inline d-sm-none">Back</span>
@@ -1500,7 +1535,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
 
       {isAdd && (
         <div className="hd-form-footer hd-form-footer--sticky">
-          <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
+          <button className="pg-btn-cancel" onClick={handleCancel} disabled={saving}>Cancel</button>
           <button className="pg-btn-save" onClick={saveNewHoarding} disabled={saving}>
             {saveOk ? <><Check size={13} /> Saved!</> : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Save Hoarding</>}
           </button>
@@ -1605,6 +1640,7 @@ export default function HoardingPage() {
   const [hoardings, setHoardings] = useState([]);
   const [sites, setSites] = useState([]);
   const [hoardingTypes, setHoardingTypes] = useState([]);
+  const [owners, setOwners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const tableRef = useRef(null);
@@ -1616,8 +1652,16 @@ export default function HoardingPage() {
 
   useResizableColumns(tableRef, tableReady);
 
-  const [view, setView] = useState('grid');
-  const [formMode, setFormMode] = useState(null);
+  // ── START: Restore view and formMode if unsaved hoarding form exists ──
+  // const [view, setView] = useState('grid');
+  // const [formMode, setFormMode] = useState(null);
+  const [view, setView] = useState(() => {
+    return sessionStorage.getItem('unsaved_hoarding_form') !== null ? 'form' : 'grid';
+  });
+  const [formMode, setFormMode] = useState(() => {
+    return sessionStorage.getItem('unsaved_hoarding_form') !== null ? 'add' : null;
+  });
+  // ── END: Restore view and formMode if unsaved hoarding form exists ──
   const [editTarget, setEditTarget] = useState(null);
 
   const [search, setSearch] = useState('');
@@ -1638,10 +1682,11 @@ export default function HoardingPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true); setLoadError('');
     try {
-      const [rawHoardings, rawSites, rawTypes] = await Promise.all([
+      const [rawHoardings, rawSites, rawTypes, rawOwners] = await Promise.all([
         apiService.getAllHoardings(),
         apiService.getAllSites(),
         apiService.getAllHoardingTypes(),
+        apiService.getAllOwners(),
       ]);
 
       const extractArray = (res) => {
@@ -1654,6 +1699,7 @@ export default function HoardingPage() {
       setHoardings(groupHoardingsByCode(extractArray(rawHoardings)));
       setSites(extractArray(rawSites));
       setHoardingTypes(extractArray(rawTypes));
+      setOwners(extractArray(rawOwners));
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load hoardings.');
     } finally { setLoading(false); }
@@ -1674,10 +1720,12 @@ export default function HoardingPage() {
   const rows = hoardings.map(h => {
     const latest = latestVersion(h);
     const site = sites.find(s => s.siteID === latest?.siteID);
+    const owner = site ? owners.find(o => Number(o.ownerID ?? o.OwnerID ?? o._id ?? 0) === Number(site.ownerID ?? site.OwnerID ?? 0)) : null;
     return {
       hoardingCode: h.hoardingCode,
       siteLabel: site ? `${site.addressLine1}${site.city ? ', ' + site.city : ''}` : latest?.siteID ? `Site ${latest.siteID}` : '—',
-      material: latest?.material || '',
+      // material: latest?.material || '',
+      landlordName: owner ? (owner.ownerName ?? owner.OwnerName ?? '—') : '—', // show the land load name in the list
       typeLabel: hoardingTypeMap[latest?.hoardingType] || '',
       status: latest?.status || '',
       monthlyRent: latest?.monthlyRent ?? 0,
@@ -1691,7 +1739,9 @@ export default function HoardingPage() {
     const q = search.toLowerCase();
     return (
       (r.hoardingCode.toLowerCase().includes(q) || r.siteLabel.toLowerCase().includes(q) ||
-        r.material.toLowerCase().includes(q) || r.typeLabel.toLowerCase().includes(q) ||
+        // r.material.toLowerCase().includes(q) ||
+        r.landlordName.toLowerCase().includes(q) || // show the land load name in the list
+        r.typeLabel.toLowerCase().includes(q) ||
         r.status.toLowerCase().includes(q))
       && (statusFilter ? r.status === statusFilter : true)
     );
@@ -1744,7 +1794,8 @@ export default function HoardingPage() {
     { key: 'hoardingCode', label: 'Hoarding Code' },
     { key: 'siteLabel', label: 'Site' },
     { key: 'typeLabel', label: 'Type' },
-    { key: 'material', label: 'Material', tabletHide: true },
+    // { key: 'material', label: 'Material', tabletHide: true },
+    { key: 'landlordName', label: 'Landlord', tabletHide: true }, // show the land load name in the list
     { key: 'status', label: 'Status' },
     { key: 'monthlyRent', label: 'Monthly Rent', tabletHide: true },
     { key: 'size', label: 'Size (W×H)', tabletHide: true, noSort: true },
@@ -1828,7 +1879,9 @@ export default function HoardingPage() {
                     <td className="pg-td"><div className="pg-td__primary hd-code-cell">{r.hoardingCode}</div></td>
                     <td className="pg-td pg-td--overflow"><span className="pg-td__ellipsis" title={r.siteLabel}>{r.siteLabel}</span></td>
                     <td className="pg-td"><span className="hd-type-pill">{r.typeLabel || '—'}</span></td>
-                    <td className="pg-td pg-tablet-hide"><span className="pg-td__ellipsis">{r.material || '—'}</span></td>
+                    {/* <td className="pg-td pg-tablet-hide"><span className="pg-td__ellipsis">{r.material || '—'}</span></td> */}
+                    {/* show the land load name in the list */}
+                    <td className="pg-td pg-tablet-hide"><span className="pg-td__ellipsis">{r.landlordName || '—'}</span></td>
                     <td className="pg-td"><StatusBadge status={r.status} /></td>
                     <td className="pg-td pg-tablet-hide"><span className="pg-td__primary">{fmtCurrency(r.monthlyRent)}</span></td>
                     <td className="pg-td pg-tablet-hide"><span className="pg-td__ellipsis">{r.width && r.height ? `${r.width} × ${r.height} ft` : '—'}</span></td>
@@ -1860,7 +1913,9 @@ export default function HoardingPage() {
                   </div>
                 </div>
                 <div className="pg-card__body">
-                  <div className="pg-card__row"><Layers size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.material}</span></div>
+                  {/* <div className="pg-card__row"><Layers size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.material}</span></div> */}
+                  {/* show the land load name in the list */}
+                  <div className="pg-card__row"><User size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.landlordName}</span></div>
                   <div className="pg-card__row"><IndianRupee size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{fmtCurrency(r.monthlyRent)} / month</span></div>
                   <div className="pg-card__row"><Maximize2 size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.width && r.height ? `${r.width} × ${r.height} ft (${r.width * r.height} sq ft)` : '—'}</span></div>
                   <div className="pg-card__row"><StatusBadge status={r.status} /></div>

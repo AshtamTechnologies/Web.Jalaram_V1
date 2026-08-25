@@ -1299,12 +1299,26 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   const [attachLoadDone, setAttachLoadDone] = useState(isAdd);
   // ownerID + landContractID selection (only changeable in add mode)
   const [ownerID, setOwnerID] = useState(() => {
-    if (isAdd) return '';
-    return String(allPayments.find(p => `${p.ownerID}_${p.landContractID}` === groupKey)?.ownerID || '');
+    if (!isAdd) return String(allPayments.find(p => `${p.ownerID}_${p.landContractID}` === groupKey)?.ownerID || '');
+    const saved = sessionStorage.getItem('unsaved_land_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.ownerID) return parsed.ownerID;
+      } catch (e) {}
+    }
+    return '';
   });
   const [landContractID, setLandContractID] = useState(() => {
-    if (isAdd) return '';
-    return String(allPayments.find(p => `${p.ownerID}_${p.landContractID}` === groupKey)?.landContractID || '');
+    if (!isAdd) return String(allPayments.find(p => `${p.ownerID}_${p.landContractID}` === groupKey)?.landContractID || '');
+    const saved = sessionStorage.getItem('unsaved_land_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.landContractID) return parsed.landContractID;
+      } catch (e) {}
+    }
+    return '';
   });
   const [ownerError, setOwnerError] = useState('');
   const [contractError, setContractError] = useState('');
@@ -1327,23 +1341,32 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
 
   // Build initial rows from existing payments for this group
   const [rows, setRows] = useState(() => {
-    if (isAdd) return [];
-    return allPayments
-      .filter(p => `${p.ownerID}_${p.landContractID}` === groupKey)
-      .map(p => ({
-        ...EMPTY_ROW,
-        _rowId: makeRowId(),
-        _paymentID: p.landPaymentID,
-        paymentDate: p.paymentDate || '',
-        paymentPurpose: p.paymentPurpose || '',
-        amountPaid: p.amountPaid ?? '',
-        paymentMode: p.paymentMode || '',
-        nextDueDate: p.nextDueDate || '',
-        bankName: p.bankName || '',
-        referenceNumber: p.referenceNumber || '',
-        paidBy: p.paidBy || '',
-        comments: p.comments || '',
-      }));
+    if (!isAdd) {
+      return allPayments
+        .filter(p => `${p.ownerID}_${p.landContractID}` === groupKey)
+        .map(p => ({
+          ...EMPTY_ROW,
+          _rowId: makeRowId(),
+          _paymentID: p.landPaymentID,
+          paymentDate: p.paymentDate || '',
+          paymentPurpose: p.paymentPurpose || '',
+          amountPaid: p.amountPaid ?? '',
+          paymentMode: p.paymentMode || '',
+          nextDueDate: p.nextDueDate || '',
+          bankName: p.bankName || '',
+          referenceNumber: p.referenceNumber || '',
+          paidBy: p.paidBy || '',
+          comments: p.comments || '',
+        }));
+    }
+    const saved = sessionStorage.getItem('unsaved_land_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.rows) return parsed.rows;
+      } catch (e) {}
+    }
+    return [];
   });
   /* ── Load attachments on edit mount ── */
   useEffect(() => {
@@ -1375,9 +1398,41 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   }, []);
   const [rowErrors, setRowErrors] = useState({});
   const emptyCurrentRow = () => ({ ...EMPTY_ROW, _rowId: makeRowId() });
-  const [currentRow, setCurrentRow] = useState(emptyCurrentRow);
+  const [currentRow, setCurrentRow] = useState(() => {
+    const saved = sessionStorage.getItem('unsaved_land_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.currentRow) return parsed.currentRow;
+      } catch (e) {}
+    }
+    return emptyCurrentRow();
+  });
   const [currentErrors, setCurrentErrors] = useState({});
-  const [showEntryForm, setShowEntryForm] = useState(isAdd);
+  const [showEntryForm, setShowEntryForm] = useState(() => {
+    if (!isAdd) return false;
+    const saved = sessionStorage.getItem('unsaved_land_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.showEntryForm !== undefined) return parsed.showEntryForm;
+      } catch (e) {}
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (isAdd) {
+      sessionStorage.setItem('unsaved_land_payment_form', JSON.stringify({
+        ownerID, landContractID, rows, currentRow, showEntryForm
+      }));
+    }
+  }, [ownerID, landContractID, rows, currentRow, showEntryForm, isAdd]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_land_payment_form');
+    onBack();
+  };
 
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
@@ -1600,9 +1655,15 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
       if (attachErrors.length) {
         setApiErr(`Payments saved, but ${attachErrors.length} attachment(s) failed: ${attachErrors[0]}`);
         setSaveOk(true);
+        // ── START: Clear unsaved draft on save success ──
+        sessionStorage.removeItem('unsaved_land_payment_form');
+        // ── END: Clear unsaved draft on save success ──
         setTimeout(() => { onRefresh(); onBack(); }, 2500);
       } else {
         setSaveOk(true);
+        // ── START: Clear unsaved draft on save success ──
+        sessionStorage.removeItem('unsaved_land_payment_form');
+        // ── END: Clear unsaved draft on save success ──
         setTimeout(() => { onRefresh(); onBack(); }, 700);
       }
     } catch (err) {
@@ -1637,7 +1698,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
 
       <div className="hd-topbar">
         <div className="hd-topbar-left">
-          <button className="hd-back-btn" onClick={onBack} disabled={saving}>
+          <button className="hd-back-btn" onClick={handleCancel} disabled={saving}>
             <ArrowLeft size={14} />
             <span className="d-none d-sm-inline">Back to Payments</span>
             <span className="d-inline d-sm-none">Back</span>
@@ -1876,7 +1937,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
       </div>
 
       <div className="hd-form-footer hd-form-footer--sticky">
-        <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
+        <button className="pg-btn-cancel" onClick={handleCancel} disabled={saving}>Cancel</button>
         <button className="pg-btn-save" onClick={handleSave}
           disabled={saving || saveOk || !!deletingRowId || uploadingRowIds.size > 0}>
           {saveOk
@@ -1904,8 +1965,16 @@ export default function LandPaymentPage() {
   const [loadingMeta, setLoadingMeta] = useState(true);
   const [loadError, setLoadError] = useState('');
 
-  const [view, setView] = useState('grid');
-  const [formMode, setFormMode] = useState(null);
+  // ── START: Restore view and formMode if unsaved land payment form exists ──
+  // const [view, setView] = useState('grid');
+  // const [formMode, setFormMode] = useState(null);
+  const [view, setView] = useState(() => {
+    return sessionStorage.getItem('unsaved_land_payment_form') !== null ? 'form' : 'grid';
+  });
+  const [formMode, setFormMode] = useState(() => {
+    return sessionStorage.getItem('unsaved_land_payment_form') !== null ? 'add' : null;
+  });
+  // ── END: Restore view and formMode if unsaved land payment form exists ──
   const [editGroupKey, setEditGroupKey] = useState(null); // "ownerID_contractID"
 
   const [search, setSearch] = useState('');

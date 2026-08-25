@@ -548,7 +548,25 @@ function ViewModal({ company, onClose, onEdit }) {
 function CompanyModal({ onClose, onSaved, editData }) {
   const isEdit = !!editData;
 
-  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  const [form, setForm] = useState(() => {
+    if (isEdit) return { ...editData };
+    const saved = sessionStorage.getItem('unsaved_company_details_form');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { ...EMPTY_FORM };
+  });
+
+  useEffect(() => {
+    if (!isEdit) {
+      sessionStorage.setItem('unsaved_company_details_form', JSON.stringify(form));
+    }
+  }, [form, isEdit]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_company_details_form');
+    onClose();
+  };
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -599,6 +617,9 @@ function CompanyModal({ onClose, onSaved, editData }) {
 
       setSuccess(true);
       await new Promise(r => setTimeout(r, 600));
+      // ── START: Clear unsaved draft on save success ──
+      sessionStorage.removeItem('unsaved_company_details_form');
+      // ── END: Clear unsaved draft on save success ──
       onSaved(saved, isEdit);
       onClose();
     } catch (err) {
@@ -632,7 +653,7 @@ function CompanyModal({ onClose, onSaved, editData }) {
               </p>
             </div>
           </div>
-          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
         </div>
 
         <div className="pg-modal__body" style={{ maxHeight: 'calc(100vh - 220px)', overflowY: 'auto' }}>
@@ -729,7 +750,7 @@ function CompanyModal({ onClose, onSaved, editData }) {
         </div>
 
         <div className="pg-modal__foot">
-          <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Close</button>
+          <button className="pg-btn-cancel" onClick={handleCancel} disabled={submitting}>Close</button>
           <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
             {success
               ? <><Check size={14} /> Saved!</>
@@ -811,7 +832,12 @@ export default function CompanyDetailsPage() {
   const [fetchError, setFetchError] = useState('');
   const [loadingDetailId, setLoadingDetailId] = useState(null);
 
-  const [showModal, setShowModal] = useState(false);
+  // ── START: Restore showModal if unsaved company details form exists ──
+  // const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(() => {
+    return sessionStorage.getItem('unsaved_company_details_form') !== null;
+  });
+  // ── END: Restore showModal if unsaved company details form exists ──
   const [editCompany, setEditCompany] = useState(null); // null = Add, object = Edit
   const [viewCompany, setViewCompany] = useState(null);
 

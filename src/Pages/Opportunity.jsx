@@ -5,7 +5,7 @@ import {
   X, AlertCircle, Check, Edit2, Eye, ChevronDown,
   ChevronUp, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
   Loader2, ShieldCheck, FileText, IndianRupee, MapPin, Users,
-  Upload, Trash2, Image, AlertTriangle
+  Upload, Trash2, Image, AlertTriangle, UserRoundPlus
 } from 'lucide-react';
 import './Common1.css';
 import { apiService, API_ROOT_URL } from '../api/api';
@@ -405,7 +405,7 @@ function StatusBadge({ isActive }) {
 /* ─────────────────────────────────────────
    OPPORTUNITY CARD (For mobile view)
  ───────────────────────────────────────── */
-function OpportunityCard({ opportunity, onViewDetail, onEdit }) {
+function OpportunityCard({ opportunity, onViewDetail, onEdit, onConvert }) {
   return (
     <div className="pg-card">
       <div className="pg-card__header">
@@ -421,6 +421,22 @@ function OpportunityCard({ opportunity, onViewDetail, onEdit }) {
           <button className="pg-btn-edit" onClick={() => onEdit(opportunity)} title="Edit">
             <Edit2 size={13} />
           </button>
+          {/* ── START: Convert to Landlord Button (mobile) ── */}
+          {opportunity.isActive && (
+            <button
+              onClick={() => onConvert(opportunity)}
+              title="Convert to Land Lord"
+              style={{
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                gap: 4, padding: '4px 9px', borderRadius: 7, border: '1.5px solid #049edf',
+                background: '#f0f9ff', color: '#049edf', fontSize: 11, fontWeight: 700,
+                cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Nunito, sans-serif',
+              }}
+            >
+              <UserRoundPlus size={11} /> Convert
+            </button>
+          )}
+          {/* ── END: Convert to Landlord Button (mobile) ── */}
           <button className="pg-btn-view" onClick={() => onViewDetail(opportunity)} title="View detail">
             <Eye size={13} />
           </button>
@@ -655,7 +671,25 @@ function ViewModal({ opportunity, onClose, onEdit }) {
  ───────────────────────────────────────── */
 function OpportunityFormModal({ onClose, onSaved, editData }) {
   const isEdit = !!editData;
-  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  const [form, setForm] = useState(() => {
+    if (isEdit) return { ...editData };
+    const saved = sessionStorage.getItem('unsaved_opportunity_form');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { ...EMPTY_FORM };
+  });
+
+  useEffect(() => {
+    if (!isEdit) {
+      sessionStorage.setItem('unsaved_opportunity_form', JSON.stringify(form));
+    }
+  }, [form, isEdit]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_opportunity_form');
+    onClose();
+  };
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -791,6 +825,9 @@ function OpportunityFormModal({ onClose, onSaved, editData }) {
 
       setSuccess(true);
       await new Promise(r => setTimeout(r, 600));
+      // ── START: Clear unsaved draft on save success ──
+      sessionStorage.removeItem('unsaved_opportunity_form');
+      // ── END: Clear unsaved draft on save success ──
       onSaved(saved, isEdit);
       onClose();
     } catch (err) {
@@ -814,7 +851,7 @@ function OpportunityFormModal({ onClose, onSaved, editData }) {
               <p className="pg-modal__subtitle">{isEdit ? `Editing ID: #${editData.opportunityID}` : 'Provide details for the land hoarding opportunity'}</p>
             </div>
           </div>
-          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
         </div>
 
         {/* API error banner */}
@@ -899,7 +936,7 @@ function OpportunityFormModal({ onClose, onSaved, editData }) {
 
         {/* Footer */}
         <div className="pg-modal__foot" style={{ padding: '16px 24px 20px', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-          <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className="pg-btn-cancel" onClick={handleCancel} disabled={submitting}>Cancel</button>
           <button
             className="pg-btn-add"
             onClick={handleSubmit}
@@ -927,10 +964,92 @@ function OpportunityFormModal({ onClose, onSaved, editData }) {
   );
 }
 
-/* ─────────────────────────────────────────
-   MAIN OPPORTUNITY PAGE
- ───────────────────────────────────────── */
-export default function OpportunityPage() {
+// ── START: Convert to Land Lord Confirmation Modal ──
+function ConvertConfirmModal({ opportunity, onConfirm, onCancel }) {
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 99999,
+        background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onCancel}
+    >
+      <div
+        style={{
+          background: '#fff', borderRadius: 20, width: '100%', maxWidth: 400,
+          boxShadow: '0 24px 64px rgba(0,0,0,0.2)',
+          animation: 'modalIn 0.24s cubic-bezier(0.22,1,0.36,1) both',
+          overflow: 'hidden',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Blue header strip */}
+        <div style={{ background: 'linear-gradient(135deg,#049edf,#6c63ff)', padding: '22px 24px 18px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 14,
+              background: 'rgba(255,255,255,0.22)', border: '2px solid rgba(255,255,255,0.38)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <UserRoundPlus size={22} color="#fff" />
+            </div>
+            <div>
+              <div style={{ fontFamily: 'Nunito,sans-serif', fontWeight: 900, fontSize: 18, color: '#fff', marginBottom: 2 }}>
+                Convert to Land Lord?
+              </div>
+              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.78)' }}>
+                This will transfer data to Owner creation
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '20px 24px' }}>
+          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 600, color: '#4a5568', lineHeight: 1.7, marginBottom: 14 }}>
+            Are you sure you want to convert opportunity <strong style={{ color: '#049edf' }}>{opportunity.name}</strong> to a Land Lord?
+          </div>
+          <div style={{
+            display: 'flex', alignItems: 'flex-start', gap: 9, padding: '11px 14px',
+            background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 11,
+            fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#166534', lineHeight: 1.5,
+          }}>
+            <Check size={14} color="#16a34a" style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>You will be redirected to the Land Lords page with pre-filled details.</span>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, padding: '0 24px 22px' }}>
+          <button
+            onClick={onCancel}
+            style={{ padding: '10px 22px', borderRadius: 11, background: '#f5f5fb', border: '1.5px solid #e8e8f0', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontWeight: 700, fontSize: 13, color: '#7878a0' }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '10px 22px', borderRadius: 11,
+              background: 'linear-gradient(135deg,#049edf,#6c63ff)', color: '#fff', border: 'none',
+              cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontWeight: 800, fontSize: 13,
+              boxShadow: '0 4px 14px rgba(4,158,223,0.35)',
+            }}
+          >
+            Confirm
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+// ── END: Convert to Land Lord Confirmation Modal ──
+
+// ── START: Pass changeTab and add convertTarget state ──
+// export default function OpportunityPage() {
+export default function OpportunityPage({ changeTab }) {
   const [opportunities, setOpportunities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState('');
@@ -944,13 +1063,26 @@ export default function OpportunityPage() {
 
   /* -- Modals -- */
   const [detailOpportunity, setDetailOpportunity] = useState(null);
-  const [formOpportunity, setFormOpportunity] = useState(null);
+  // ── START: Restore formOpportunity if unsaved opportunity form exists ──
+  // const [formOpportunity, setFormOpportunity] = useState(null);
+  const [formOpportunity, setFormOpportunity] = useState(() => {
+    const saved = sessionStorage.getItem('unsaved_opportunity_form');
+    if (saved) return EMPTY_FORM;
+    return null;
+  });
+  // ── END: Restore formOpportunity if unsaved opportunity form exists ──
   const [modalLoading, setModalLoading] = useState(false);
+
+  // ── START: Convert to Land Lord State ──
+  const [convertTarget, setConvertTarget] = useState(null);
+  // ── END: Convert to Land Lord State ──
 
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
-  useResizableColumns(tableRef, tableReady, [60, 150, 120, 120, 110, 110, 90, 80]);
+  // useResizableColumns(tableRef, tableReady, [60, 150, 120, 120, 110, 110, 90, 80]);
+  useResizableColumns(tableRef, tableReady, [60, 130, 120, 120, 110, 110, 90, 100]);
+  // ── END: Pass changeTab and add convertTarget state ──
 
   const loadOpportunities = useCallback(async () => {
     setLoading(true);
@@ -993,6 +1125,26 @@ export default function OpportunityPage() {
       setModalLoading(false);
     }
   };
+
+  // ── START: Convert to Land Lord Confirmation Handler ──
+  const handleConvertConfirm = () => {
+    if (!convertTarget) return;
+    const dataToPass = {
+      ownerName: convertTarget.name || '',
+      phone1: convertTarget.phoneNo1 || '',
+      phone2: convertTarget.phoneNo2 || '',
+      ownerAddress: convertTarget.address || '',
+    };
+    sessionStorage.setItem('pending_convert_opportunity', JSON.stringify(dataToPass));
+    sessionStorage.setItem('dashTab', 'owners');
+    if (typeof changeTab === 'function') {
+      changeTab('owners');
+    } else {
+      window.location.reload();
+    }
+    setConvertTarget(null);
+  };
+  // ── END: Convert to Land Lord Confirmation Handler ──
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -1122,14 +1274,24 @@ export default function OpportunityPage() {
               <thead>
                 <tr>
                   {[
+                    // ── START: Custom column widths for Convert action ──
+                    // { key: 'opportunityID', label: 'ID', w: '6%' },
+                    // { key: 'name', label: 'Owner Name', w: '24%' },
+                    // { key: 'location', label: 'Location', w: '14%' },
+                    // { key: 'phoneNo1', label: 'Phone No', w: '14%' },
+                    // { key: 'rentOffered', label: 'Rent Offered', w: '12%' },
+                    // { key: 'rentExpected', label: 'Rent Expected', w: '12%' },
+                    // { key: 'isActive', label: 'Status', w: '12%' },
+                    // { key: null, label: 'Actions', w: '6%' }
                     { key: 'opportunityID', label: 'ID', w: '6%' },
-                    { key: 'name', label: 'Owner Name', w: '24%' },
+                    { key: 'name', label: 'Owner Name', w: '20%' },
                     { key: 'location', label: 'Location', w: '14%' },
                     { key: 'phoneNo1', label: 'Phone No', w: '14%' },
                     { key: 'rentOffered', label: 'Rent Offered', w: '12%' },
                     { key: 'rentExpected', label: 'Rent Expected', w: '12%' },
                     { key: 'isActive', label: 'Status', w: '12%' },
-                    { key: null, label: 'Actions', w: '6%' }
+                    { key: null, label: 'Actions', w: '10%' }
+                    // ── END: Custom column widths for Convert action ──
                   ].map((col, idx) => (
                     <th
                       key={idx} style={{ width: col.w }}
@@ -1183,6 +1345,21 @@ export default function OpportunityPage() {
                           <button className="pg-btn-edit" onClick={() => handleEditClick(o)} title="Edit" style={{ width: 28, height: 28 }}>
                             <Edit2 size={12} />
                           </button>
+                          {/* ── START: Convert to Landlord Button (desktop) ── */}
+                          {o.isActive && (
+                            <button
+                              onClick={() => setConvertTarget(o)}
+                              title="Convert to Land Lord"
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                                width: 28, height: 28, borderRadius: 7, border: '1.5px solid #049edf',
+                                background: '#f0f9ff', color: '#049edf', cursor: 'pointer',
+                              }}
+                            >
+                              <UserRoundPlus size={12} />
+                            </button>
+                          )}
+                          {/* ── END: Convert to Landlord Button (desktop) ── */}
                           <button className="pg-btn-view" onClick={() => setDetailOpportunity(o)} title="View detail" style={{ width: 28, height: 28 }}>
                             <Eye size={12} />
                           </button>
@@ -1209,6 +1386,7 @@ export default function OpportunityPage() {
                   opportunity={o}
                   onViewDetail={setDetailOpportunity}
                   onEdit={handleEditClick}
+                  onConvert={setConvertTarget}
                 />
               ))
             )}
@@ -1238,6 +1416,16 @@ export default function OpportunityPage() {
           )}
         </div>
       </div>
+
+      {/* ── START: Render Convert to Land Lord Confirmation Modal ── */}
+      {convertTarget && (
+        <ConvertConfirmModal
+          opportunity={convertTarget}
+          onConfirm={handleConvertConfirm}
+          onCancel={() => setConvertTarget(null)}
+        />
+      )}
+      {/* ── END: Render Convert to Land Lord Confirmation Modal ── */}
 
       {/* Modal API loading backdrop */}
       {modalLoading && (

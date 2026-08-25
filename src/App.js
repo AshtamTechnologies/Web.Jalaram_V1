@@ -128,7 +128,10 @@ export default function App() {
       case 'ExpenseType': return <ExpenseType />;
       case 'vendors': return <VendorPage />;
       case 'CompanyDetails': return <CompanyDetailsPage />;
-      case 'opportunity': return <OpportunityPage />;
+      // ── START: Pass changeTab to OpportunityPage ──
+      // case 'opportunity': return <OpportunityPage />;
+      case 'opportunity': return <OpportunityPage changeTab={changeTab} />;
+      // ── END: Pass changeTab to OpportunityPage ──
 
       default: return <Dashboard changeTab={changeTab} />;
     }

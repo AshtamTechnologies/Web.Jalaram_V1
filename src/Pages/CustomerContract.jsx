@@ -3903,11 +3903,23 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
   const currentContractID = isAdd ? null : (contract?.customerContractID ?? null);
 
   // ── Multi-hoarding pre-selection (add mode only) ──
-  const [selectedHoardings, setSelectedHoardings] = useState([]);
+  const [selectedHoardings, setSelectedHoardings] = useState(() => {
+    const saved = sessionStorage.getItem('unsaved_cust_contract_sel_hoardings');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [];
+  });
   const [hoardingModalOpen, setHoardingModalOpen] = useState(false);
 
   // ── External Multi-hoarding pre-selection (add mode only) ──
-  const [selectedExternalHoardings, setSelectedExternalHoardings] = useState([]);
+  const [selectedExternalHoardings, setSelectedExternalHoardings] = useState(() => {
+    const saved = sessionStorage.getItem('unsaved_cust_contract_sel_ext_hoardings');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [];
+  });
   const [externalHoardingModalOpen, setExternalHoardingModalOpen] = useState(false);
 
   // ── Available hoardings (date-filtered from API) ──
@@ -3941,16 +3953,10 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
 
     setLandContractWarning(null);
   };
-  const [form, setForm] = useState(() =>
-    isAdd
-      ? {
-        ...EMPTY_FORM,
+  const [form, setForm] = useState(() => {
+    if (!isAdd) {
+      return {
         customerID: contract?.customerID ?? '',
-        companyID: contract?.companyID ?? '',
-      }
-      : {
-        customerID: contract?.customerID ?? '',
-        // hoardingID: contract?.hoardingID ?? '',
         startDate: contract?.startDate ?? '',
         endDate: contract?.endDate ?? '',
         contractOrigValue: contract?.contractOrigValue ?? '',
@@ -3963,8 +3969,20 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         contractFinalValue: contract?.contractFinalValue ?? '',
         comments: contract?.comments ?? '',
         companyID: contract?.companyID ?? '',
-      }
-  );
+      };
+    }
+    const saved = sessionStorage.getItem('unsaved_customer_contract_form');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return {
+      ...EMPTY_FORM,
+      customerID: contract?.customerID ?? '',
+      companyID: contract?.companyID ?? '',
+    };
+  });
+
+
 
   const [savedContractID, setSavedContractID] = useState(
     isAdd ? null : (contract?.customerContractID ?? null)
@@ -3983,6 +4001,33 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
   const [contractSaved, setContractSaved] = useState(!isAdd); // true immediately in edit mode
   const [attachmentList, setAttachmentList] = useState([]);
   const [bannerErr, setBannerErr] = useState('');
+
+  // ── START: Unsaved Form Draft Persistence Effects ──
+  useEffect(() => {
+    if (isAdd && !contractSaved) {
+      sessionStorage.setItem('unsaved_customer_contract_form', JSON.stringify(form));
+    }
+  }, [form, isAdd, contractSaved]);
+
+  useEffect(() => {
+    if (isAdd && !contractSaved) {
+      sessionStorage.setItem('unsaved_cust_contract_sel_hoardings', JSON.stringify(selectedHoardings));
+    }
+  }, [selectedHoardings, isAdd, contractSaved]);
+
+  useEffect(() => {
+    if (isAdd && !contractSaved) {
+      sessionStorage.setItem('unsaved_cust_contract_sel_ext_hoardings', JSON.stringify(selectedExternalHoardings));
+    }
+  }, [selectedExternalHoardings, isAdd, contractSaved]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_customer_contract_form');
+    sessionStorage.removeItem('unsaved_cust_contract_sel_hoardings');
+    sessionStorage.removeItem('unsaved_cust_contract_sel_ext_hoardings');
+    onBack();
+  };
+  // ── END: Unsaved Form Draft Persistence Effects ──
 
   // Stable callback — avoids infinite re-render in AttachmentSection
   const handleAttachmentsChange = useCallback((list) => {
@@ -4343,6 +4388,11 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
 
       if (isAdd) {
         setContractSaved(true);
+        // ── START: Clear unsaved form draft on save success ──
+        sessionStorage.removeItem('unsaved_customer_contract_form');
+        sessionStorage.removeItem('unsaved_cust_contract_sel_hoardings');
+        sessionStorage.removeItem('unsaved_cust_contract_sel_ext_hoardings');
+        // ── END: Clear unsaved form draft on save success ──
         setTimeout(() => setSaveOk(false), 2500);
       } else {
         setTimeout(() => onBack(), 900);
@@ -5213,7 +5263,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
 
       {/* ── Footer ── */}
       <div className="hd-form-footer hd-form-footer--sticky">
-        <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>
+        <button className="pg-btn-cancel" onClick={handleCancel} disabled={saving}>
           {isAdd && contractSaved ? 'Back to Contracts' : 'Cancel'}
         </button>
 
@@ -5300,8 +5350,16 @@ export default function CustomerContractPage() {
   const [loadError, setLoadError] = useState('');
 
 
-  const [view, setView] = useState('grid');
-  const [formMode, setFormMode] = useState(null);
+  // ── START: Restore view and formMode if unsaved customer contract form exists ──
+  // const [view, setView] = useState('grid');
+  // const [formMode, setFormMode] = useState(null);
+  const [view, setView] = useState(() => {
+    return sessionStorage.getItem('unsaved_customer_contract_form') !== null ? 'form' : 'grid';
+  });
+  const [formMode, setFormMode] = useState(() => {
+    return sessionStorage.getItem('unsaved_customer_contract_form') !== null ? 'add' : null;
+  });
+  // ── END: Restore view and formMode if unsaved customer contract form exists ──
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
 

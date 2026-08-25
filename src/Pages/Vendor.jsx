@@ -789,7 +789,25 @@ function ViewModal({ vendor, onClose, onEdit }) {
  ═══════════════════════════════════════════ */
 function VendorFormModal({ onClose, onSaved, editData }) {
   const isEdit = !!editData;
-  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  const [form, setForm] = useState(() => {
+    if (isEdit) return { ...editData };
+    const saved = sessionStorage.getItem('unsaved_vendor_form');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { ...EMPTY_FORM };
+  });
+
+  useEffect(() => {
+    if (!isEdit) {
+      sessionStorage.setItem('unsaved_vendor_form', JSON.stringify(form));
+    }
+  }, [form, isEdit]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_vendor_form');
+    onClose();
+  };
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -907,6 +925,9 @@ function VendorFormModal({ onClose, onSaved, editData }) {
 
       setSuccess(true);
       await new Promise(r => setTimeout(r, 600));
+      // ── START: Clear unsaved draft on save success ──
+      sessionStorage.removeItem('unsaved_vendor_form');
+      // ── END: Clear unsaved draft on save success ──
       onSaved(saved, isEdit);
       onClose();
     } catch (err) {
@@ -930,7 +951,7 @@ function VendorFormModal({ onClose, onSaved, editData }) {
               <p className="pg-modal__subtitle">{isEdit ? `Editing: ${editData.vendorName}` : 'Provide details for the new vendor'}</p>
             </div>
           </div>
-          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
         </div>
 
         {/* API error banner */}
@@ -993,7 +1014,7 @@ function VendorFormModal({ onClose, onSaved, editData }) {
 
         {/* Footer */}
         <div className="pg-modal__foot" style={{ padding: '16px 24px 20px', display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
-          <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
+          <button className="pg-btn-cancel" onClick={handleCancel} disabled={submitting}>Cancel</button>
           <button
             className="pg-btn-add"
             onClick={handleSubmit}
@@ -1038,7 +1059,14 @@ export default function VendorPage() {
 
   /* -- Modals -- */
   const [detailVendor, setDetailVendor] = useState(null);
-  const [formVendor, setFormVendor] = useState(null); // EMPTY_FORM triggers Add, existing triggers Edit
+  // ── START: Restore formVendor if unsaved vendor form exists ──
+  // const [formVendor, setFormVendor] = useState(null);
+  const [formVendor, setFormVendor] = useState(() => {
+    const saved = sessionStorage.getItem('unsaved_vendor_form');
+    if (saved) return EMPTY_FORM;
+    return null;
+  });
+  // ── END: Restore formVendor if unsaved vendor form exists ──
 
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);

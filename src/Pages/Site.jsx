@@ -435,7 +435,28 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
   const isEdit = !!editData;
   const originalStatus = isEdit ? (editData?.status || '') : '';
 
-  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  // ── START: Restore unsaved form data support ──
+  // const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  const [form, setForm] = useState(() => {
+    if (isEdit) return { ...editData };
+    const saved = sessionStorage.getItem('unsaved_site_form');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { ...EMPTY_FORM };
+  });
+
+  useEffect(() => {
+    if (!isEdit) {
+      sessionStorage.setItem('unsaved_site_form', JSON.stringify(form));
+    }
+  }, [form, isEdit]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_site_form');
+    onClose();
+  };
+  // ── END: Restore unsaved form data support ──
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -532,6 +553,9 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
 
       setSuccess(true);
       await new Promise(r => setTimeout(r, 600));
+      // ── START: Clear unsaved form on submit success ──
+      sessionStorage.removeItem('unsaved_site_form');
+      // ── END: Clear unsaved form on submit success ──
       onSaved();
       onClose();
     } catch (err) {
@@ -561,7 +585,7 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
                 <p className="pg-modal__subtitle">{isEdit ? `Editing: ${editData.addressLine1}` : 'Fill in the site details below'}</p>
               </div>
             </div>
-            <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+            <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
           </div>
 
           {apiError && (
@@ -686,7 +710,7 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
           </div>
 
           <div className="pg-modal__foot">
-            <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
+            <button className="pg-btn-cancel" onClick={handleCancel} disabled={submitting}>Cancel</button>
             <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
               {success
                 ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Added!'}</>
@@ -738,7 +762,12 @@ export default function SitePage() {
   const [owners, setOwners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  // ── START: Restore showModal if unsaved site form exists ──
+  // const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(() => {
+    return sessionStorage.getItem('unsaved_site_form') !== null;
+  });
+  // ── END: Restore showModal if unsaved site form exists ──
   const [editSite, setEditSite] = useState(null);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('addressLine1');

@@ -1535,22 +1535,35 @@ function ContractViewModal({ contract, owners, hoardings, paymentFreqs, onClose,
 function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, onBack, onSave }) {
   const isAdd = mode === 'add';
 
-  const [form, setForm] = useState(() =>
-    isAdd ? { ...EMPTY_FORM } : {
-      ownerID: contract?.ownerID ?? '',
-      startDate: contract?.startDate ?? '',
-      endDate: contract?.endDate ?? '',
-      totalContractValue: contract?.totalContractValue ?? '',
-      paymentFreqID: contract?.paymentFreqID ?? '',
-      amountPerFreq: contract?.amountPerFreq ?? '',
-      advancePaid: contract?.advancePaid ?? '',
-      status: contract?.status ?? 'Active',
-      comments: contract?.comments ?? '',
+  const [form, setForm] = useState(() => {
+    if (!isAdd) {
+      return {
+        ownerID: contract?.ownerID ?? '',
+        startDate: contract?.startDate ?? '',
+        endDate: contract?.endDate ?? '',
+        totalContractValue: contract?.totalContractValue ?? '',
+        paymentFreqID: contract?.paymentFreqID ?? '',
+        amountPerFreq: contract?.amountPerFreq ?? '',
+        advancePaid: contract?.advancePaid ?? '',
+        status: contract?.status ?? 'Active',
+        comments: contract?.comments ?? '',
+      };
     }
-  );
+    const saved = sessionStorage.getItem('unsaved_land_contract_form');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { ...EMPTY_FORM };
+  });
 
   /* selectedHoardings: array of hoarding objects chosen in the multi-select modal (ADD mode) */
-  const [selectedHoardings, setSelectedHoardings] = useState([]);
+  const [selectedHoardings, setSelectedHoardings] = useState(() => {
+    const saved = sessionStorage.getItem('unsaved_land_contract_selected_hoardings');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return [];
+  });
   const [hoardingModalOpen, setHoardingModalOpen] = useState(false);
 
   const [errors, setErrors] = useState({});
@@ -1560,6 +1573,24 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
   const [apiErr, setApiErr] = useState('');
   const [formStep, setFormStep] = useState('details');
   const [savedContract, setSavedContract] = useState(null);
+
+  useEffect(() => {
+    if (isAdd && formStep === 'details') {
+      sessionStorage.setItem('unsaved_land_contract_form', JSON.stringify(form));
+    }
+  }, [form, isAdd, formStep]);
+
+  useEffect(() => {
+    if (isAdd && formStep === 'details') {
+      sessionStorage.setItem('unsaved_land_contract_selected_hoardings', JSON.stringify(selectedHoardings));
+    }
+  }, [selectedHoardings, isAdd, formStep]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_land_contract_form');
+    sessionStorage.removeItem('unsaved_land_contract_selected_hoardings');
+    onBack();
+  };
 
   // Staged states for EDIT mode
   const [stagedAttachments, setStagedAttachments] = useState([]);
@@ -1921,6 +1952,10 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
       if (isAdd) {
         setSavedContract(saved);
         setFormStep('attachments');
+        // ── START: Clear unsaved draft on save success ──
+        sessionStorage.removeItem('unsaved_land_contract_form');
+        sessionStorage.removeItem('unsaved_land_contract_selected_hoardings');
+        // ── END: Clear unsaved draft on save success ──
         setSaveOk(false);
       } else {
         onBack();
@@ -2033,7 +2068,7 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
     <div className="hd-form-page">
       <div className="hd-topbar">
         <div className="hd-topbar-left">
-          <button className="hd-back-btn" onClick={onBack}>
+          <button className="hd-back-btn" onClick={handleCancel}>
             <ArrowLeft size={14} />
             <span className="d-none d-sm-inline">Back to Contracts</span>
             <span className="d-inline d-sm-none">Back</span>
@@ -2381,7 +2416,7 @@ function ContractForm({ mode, contract, owners, hoardings, sites, paymentFreqs, 
       </div>
 
       <div className="hd-form-footer hd-form-footer--sticky">
-        <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
+        <button className="pg-btn-cancel" onClick={handleCancel} disabled={saving}>Cancel</button>
         <button className="pg-btn-save" onClick={handleSave} disabled={saving}>
           {saveOk
             ? <><Check size={13} /> Saved!</>
@@ -2434,8 +2469,16 @@ export default function LandContractPage() {
   const [loadError, setLoadError] = useState('');
   const [contracts, setContracts] = useState([]);
 
-  const [view, setView] = useState('grid');
-  const [formMode, setFormMode] = useState(null);
+  // ── START: Restore view and formMode if unsaved land contract form exists ──
+  // const [view, setView] = useState('grid');
+  // const [formMode, setFormMode] = useState(null);
+  const [view, setView] = useState(() => {
+    return sessionStorage.getItem('unsaved_land_contract_form') !== null ? 'form' : 'grid';
+  });
+  const [formMode, setFormMode] = useState(() => {
+    return sessionStorage.getItem('unsaved_land_contract_form') !== null ? 'add' : null;
+  });
+  // ── END: Restore view and formMode if unsaved land contract form exists ──
   const [editTarget, setEditTarget] = useState(null);
   const [viewTarget, setViewTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);

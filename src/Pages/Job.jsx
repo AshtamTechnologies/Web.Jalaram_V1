@@ -1954,7 +1954,7 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
   return ReactDOM.createPortal(
     // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && !completing && onCancel()}>
     <div className="pg-overlay">
-      <div className="pg-modal" style={{ maxWidth: 480, position: 'relative', overflow: 'hidden' }}>
+      <div className="pg-modal" style={{ maxWidth: 480, position: 'relative', overflowY: 'auto', maxHeight: '90vh' }}>
 
         {/* Confirmation Screen */}
         {showConfirm && (
@@ -1967,12 +1967,16 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
             flexDirection: 'column',
             fontFamily: 'Nunito,sans-serif',
             animation: 'fadeIn 0.2s',
+            borderRadius: '20px',
+            overflow: 'hidden',
           }}>
             {/* Header */}
             <div style={{
               background: 'linear-gradient(135deg,#16a34a,#15803d)',
               padding: '24px 26px 18px',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+              borderTopLeftRadius: '20px',
+              borderTopRightRadius: '20px',
             }}>
               <div style={{
                 width: 56, height: 56, borderRadius: '50%',
@@ -2034,6 +2038,8 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
           background: 'linear-gradient(135deg,#16a34a,#15803d)',
           padding: '24px 26px 18px',
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+          borderTopLeftRadius: '20px',
+          borderTopRightRadius: '20px',
         }}>
           <div style={{
             width: 56, height: 56, borderRadius: '50%',
@@ -2091,7 +2097,7 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
                 {hoardingPreviews.length} New Effdt Row{hoardingPreviews.length !== 1 ? 's' : ''} Will Be Added
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
                 {hoardingPreviews.map((h, i) => (
                   <div key={i} style={{
                     display: 'flex', alignItems: 'center', gap: 8,

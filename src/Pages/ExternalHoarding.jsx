@@ -935,10 +935,41 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     ? [...hoarding.versions].sort((a, b) => new Date(b.effdt) - new Date(a.effdt))
     : [];
 
-  const [hoardingCode, setHoardingCode] = useState(hoarding?.hoardingCode || '');
+  const [hoardingCode, setHoardingCode] = useState(() => {
+    if (hoarding?.hoardingCode) return hoarding.hoardingCode;
+    const saved = sessionStorage.getItem('unsaved_external_hoarding_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.hoardingCode) return parsed.hoardingCode;
+      } catch (e) {}
+    }
+    return '';
+  });
   const [hcError, setHcError] = useState('');
-  const [addForm, setAddForm] = useState({ ...EMPTY_VERSION });
+  const [addForm, setAddForm] = useState(() => {
+    if (isEdit) return { ...EMPTY_VERSION };
+    const saved = sessionStorage.getItem('unsaved_external_hoarding_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.addForm) return parsed.addForm;
+      } catch (e) {}
+    }
+    return { ...EMPTY_VERSION };
+  });
   const [addErrors, setAddErrors] = useState({});
+
+  useEffect(() => {
+    if (isAdd) {
+      sessionStorage.setItem('unsaved_external_hoarding_form', JSON.stringify({ hoardingCode, addForm }));
+    }
+  }, [hoardingCode, addForm, isAdd]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_external_hoarding_form');
+    onBack();
+  };
   const [newlySavedHoardingID, setNewlySavedHoardingID] = useState(null);
   const [newlySavedEffdtRaw, setNewlySavedEffdtRaw] = useState('');
   const [activePanel, setActivePanel] = useState(null);
@@ -1128,6 +1159,9 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
 
       setSaveOk(true);
       await onRefresh();
+      // ── START: Clear unsaved draft on save success ──
+      sessionStorage.removeItem('unsaved_external_hoarding_form');
+      // ── END: Clear unsaved draft on save success ──
       setTimeout(() => onBack(), 1200);
     } catch (err) {
       setApiErr(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Save failed. Please try again.');
@@ -1237,7 +1271,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     <div className="hd-form-page">
       <div className="hd-topbar">
         <div className="hd-topbar-left">
-          <button className="hd-back-btn" onClick={onBack}>
+          <button className="hd-back-btn" onClick={handleCancel}>
             <ArrowLeft size={14} />
             <span className="d-none d-sm-inline">Back to Hoardings</span>
             <span className="d-inline d-sm-none">Back</span>
@@ -1503,7 +1537,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
 
       {isAdd && (
         <div className="hd-form-footer hd-form-footer--sticky">
-          <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
+          <button className="pg-btn-cancel" onClick={handleCancel} disabled={saving}>Cancel</button>
           <button className="pg-btn-save" onClick={saveNewHoarding} disabled={saving}>
             {saveOk ? <><Check size={13} /> Saved!</> : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Save Hoarding</>}
           </button>
@@ -1619,8 +1653,16 @@ export default function HoardingPage() {
 
   useResizableColumns(tableRef, tableReady);
 
-  const [view, setView] = useState('grid');
-  const [formMode, setFormMode] = useState(null);
+  // ── START: Restore view and formMode if unsaved external hoarding form exists ──
+  // const [view, setView] = useState('grid');
+  // const [formMode, setFormMode] = useState(null);
+  const [view, setView] = useState(() => {
+    return sessionStorage.getItem('unsaved_external_hoarding_form') !== null ? 'form' : 'grid';
+  });
+  const [formMode, setFormMode] = useState(() => {
+    return sessionStorage.getItem('unsaved_external_hoarding_form') !== null ? 'add' : null;
+  });
+  // ── END: Restore view and formMode if unsaved external hoarding form exists ──
   const [editTarget, setEditTarget] = useState(null);
 
   const [search, setSearch] = useState('');
