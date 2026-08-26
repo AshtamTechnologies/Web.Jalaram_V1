@@ -3972,10 +3972,22 @@ function CreateContractFromQuotModal({
   );
 }
 
+const getQuotationDraft = () => {
+  try {
+    const draft = sessionStorage.getItem('quotation_form_draft');
+    return draft ? JSON.parse(draft) : null;
+  } catch (e) {
+    console.error("Failed to parse quotation draft", e);
+    return null;
+  }
+};
+
 /* ═══════════════════════════════════════════
    MAIN PAGE
 ═══════════════════════════════════════════ */
 export default function QuotationPage({ onNavigateToContracts }) {
+
+  const quotationDraft = useMemo(() => getQuotationDraft(), []);
 
   /* ── API Data ── */
   const [customers, setCustomers] = useState([]);
@@ -3999,7 +4011,9 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [expandedGroups, setExpandedGroups] = useState(new Set());
 
   /* ── Creator state ── */
-  const [isCreating, setIsCreating] = useState(false);
+  // Original code:
+  // const [isCreating, setIsCreating] = useState(false);
+  const [isCreating, setIsCreating] = useState(() => quotationDraft?.isCreating ?? false);
 
   /* ── Delete Selection Mode ── */
   const [deleteMode, setDeleteMode] = useState(false);
@@ -4024,25 +4038,55 @@ export default function QuotationPage({ onNavigateToContracts }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isCreating]);
 
-  const [step, setStep] = useState(1);
+  // Original code:
+  // const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => quotationDraft?.step ?? 1);
   const [step1Error, setStep1Error] = useState('');
   const [step2Error, setStep2Error] = useState('');
-  const [editingQuotID, setEditingQuotID] = useState(null);
-  const [originalQuotID, setOriginalQuotID] = useState(0);
+  // Original code:
+  // const [editingQuotID, setEditingQuotID] = useState(null);
+  const [editingQuotID, setEditingQuotID] = useState(() => quotationDraft?.editingQuotID ?? null);
+  // Original code:
+  // const [originalQuotID, setOriginalQuotID] = useState(0);
+  const [originalQuotID, setOriginalQuotID] = useState(() => quotationDraft?.originalQuotID ?? 0);
   const [customerContracts, setCustomerContracts] = useState([]);
   /* ── Form fields ── */
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [withPrinting, setWithPrinting] = useState(false);
-  const [quotNo, setQuotNo] = useState('');
-  const [quotDate, setQuotDate] = useState(todayISO());
-  const [revisionNo, setRevisionNo] = useState(0);
-  const [rows, setRows] = useState([]);
-  const [cgstPct, setCgstPct] = useState(9);
-  const [sgstPct, setSgstPct] = useState(9);
-  const [selectedTerms, setSelectedTerms] = useState([]);
-  const [globalStart, setGlobalStart] = useState('');
-  const [globalEnd, setGlobalEnd] = useState('');
-  const [globalDays, setGlobalDays] = useState('');
+  // Original code:
+  // const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(() => quotationDraft?.selectedCustomer ?? null);
+  // Original code:
+  // const [withPrinting, setWithPrinting] = useState(false);
+  const [withPrinting, setWithPrinting] = useState(() => quotationDraft?.withPrinting ?? false);
+  // Original code:
+  // const [quotNo, setQuotNo] = useState('');
+  const [quotNo, setQuotNo] = useState(() => quotationDraft?.quotNo ?? '');
+  // Original code:
+  // const [quotDate, setQuotDate] = useState(todayISO());
+  const [quotDate, setQuotDate] = useState(() => quotationDraft?.quotDate ?? todayISO());
+  // Original code:
+  // const [revisionNo, setRevisionNo] = useState(0);
+  const [revisionNo, setRevisionNo] = useState(() => quotationDraft?.revisionNo ?? 0);
+  // Original code:
+  // const [rows, setRows] = useState([]);
+  const [rows, setRows] = useState(() => quotationDraft?.rows ?? []);
+  // Original code:
+  // const [cgstPct, setCgstPct] = useState(9);
+  const [cgstPct, setCgstPct] = useState(() => quotationDraft?.cgstPct ?? 9);
+  // Original code:
+  // const [sgstPct, setSgstPct] = useState(9);
+  const [sgstPct, setSgstPct] = useState(() => quotationDraft?.sgstPct ?? 9);
+  // Original code:
+  // const [selectedTerms, setSelectedTerms] = useState([]);
+  const [selectedTerms, setSelectedTerms] = useState(() => quotationDraft?.selectedTerms ?? []);
+  // Original code:
+  // const [globalStart, setGlobalStart] = useState('');
+  const [globalStart, setGlobalStart] = useState(() => quotationDraft?.globalStart ?? '');
+  // Original code:
+  // const [globalEnd, setGlobalEnd] = useState('');
+  const [globalEnd, setGlobalEnd] = useState(() => quotationDraft?.globalEnd ?? '');
+  // Original code:
+  // const [globalDays, setGlobalDays] = useState('');
+  const [globalDays, setGlobalDays] = useState(() => quotationDraft?.globalDays ?? '');
 
   /* ── Modals ── */
   const [showHoardModal, setShowHoardModal] = useState(false);
@@ -4069,8 +4113,57 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [selectedProformaTerms, setSelectedProformaTerms] = useState([]);
   const [companyDetailsList, setCompanyDetailsList] = useState([]);
   const [quotationCompanies, setQuotationCompanies] = useState([]);
-  const [selectedCompanyId, setSelectedCompanyId] = useState('');
-  const [quotationCompanyRecId, setQuotationCompanyRecId] = useState(0);
+  // Original code:
+  // const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [selectedCompanyId, setSelectedCompanyId] = useState(() => quotationDraft?.selectedCompanyId ?? '');
+  // Original code:
+  // const [quotationCompanyRecId, setQuotationCompanyRecId] = useState(0);
+  const [quotationCompanyRecId, setQuotationCompanyRecId] = useState(() => quotationDraft?.quotationCompanyRecId ?? 0);
+
+  useEffect(() => {
+    if (isCreating) {
+      const draftData = {
+        isCreating,
+        step,
+        selectedCustomer,
+        withPrinting,
+        quotNo,
+        quotDate,
+        revisionNo,
+        rows,
+        cgstPct,
+        sgstPct,
+        selectedTerms,
+        editingQuotID,
+        originalQuotID,
+        globalStart,
+        globalEnd,
+        globalDays,
+        selectedCompanyId,
+        quotationCompanyRecId,
+      };
+      sessionStorage.setItem('quotation_form_draft', JSON.stringify(draftData));
+    }
+  }, [
+    isCreating,
+    step,
+    selectedCustomer,
+    withPrinting,
+    quotNo,
+    quotDate,
+    revisionNo,
+    rows,
+    cgstPct,
+    sgstPct,
+    selectedTerms,
+    editingQuotID,
+    originalQuotID,
+    globalStart,
+    globalEnd,
+    globalDays,
+    selectedCompanyId,
+    quotationCompanyRecId,
+  ]);
   /* ── Step 2 resizable table ── */
   const step2TableRef = useRef(null);
   const printTypeBtnRef = useRef(null);
@@ -4976,7 +5069,25 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const deleteRow = useCallback((id) => {
     setRows(p => p.filter(r => r._id !== id));
   }, []);
-  const existingHoardingIds = useMemo(() => new Set(rows.map(r => r.hoardingID).filter(Boolean)), [rows]);
+  // Original code:
+  // const existingHoardingIds = useMemo(() => new Set(rows.map(r => r.hoardingID).filter(Boolean)), [rows]);
+  // Changed to also include mergedHoardingIDs of merged rows so they show as disabled in the Add Hoarding popup:
+  const existingHoardingIds = useMemo(() => {
+    const ids = new Set();
+    rows.forEach(r => {
+      if (r.hoardingID) {
+        ids.add(Number(r.hoardingID));
+      }
+      if (Array.isArray(r.mergedHoardingIDs)) {
+        r.mergedHoardingIDs.forEach(id => {
+          if (id) {
+            ids.add(Number(id));
+          }
+        });
+      }
+    });
+    return ids;
+  }, [rows]);
 
   const applyGlobalDates = useCallback(() => {
     if (!globalStart) return;
@@ -5872,7 +5983,15 @@ export default function QuotationPage({ onNavigateToContracts }) {
     }
   };
   const goBack = () => setStep(s => Math.max(1, s - 1));
-  const handleBackToList = () => { setIsCreating(false); setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80); };
+  const handleBackToList = () => {
+    // Original code:
+    // setIsCreating(false); setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
+    sessionStorage.removeItem('quotation_form_draft');
+    setStep(1);
+    resetForm();
+    setIsCreating(false);
+    setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
+  };
 
   const generatePDF = async () => {
     // ── Input Validation ──
@@ -6303,6 +6422,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
       const win = window.open('', '_blank');
       if (win) { win.document.write(html); win.document.close(); }
       showToast('Quotation saved successfully!', 'success');
+      // Original code:
+      // await refreshQuotations();
+      // setEditingQuotID(null);
+      // setOriginalQuotID(0);
+      // setIsCreating(false);
+      sessionStorage.removeItem('quotation_form_draft');
+      setStep(1);
+      resetForm();
       await refreshQuotations();
       setEditingQuotID(null);
       setOriginalQuotID(0);

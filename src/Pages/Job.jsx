@@ -2184,10 +2184,22 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
     document.body
   );
 }
+const getJobDraft = () => {
+  try {
+    const draft = sessionStorage.getItem('job_form_draft');
+    return draft ? JSON.parse(draft) : null;
+  } catch (e) {
+    console.error("Failed to parse job draft", e);
+    return null;
+  }
+};
+
 /* ═══════════════════════════════════════════
    MAIN JOB PAGE
 ═══════════════════════════════════════════ */
 export default function JobPage() {
+
+  const jobDraft = useMemo(() => getJobDraft(), []);
 
   /* ── API data ── */
   const [customers, setCustomers] = useState([]);
@@ -2210,33 +2222,98 @@ export default function JobPage() {
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState('');
   const [toast, setToast] = useState(null);
-  const [isCreating, setIsCreating] = useState(false);
-  const [step, setStep] = useState(1);
+  // Original code:
+  // const [isCreating, setIsCreating] = useState(false);
+  const [isCreating, setIsCreating] = useState(() => jobDraft?.isCreating ?? false);
+  // Original code:
+  // const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => jobDraft?.step ?? 1);
   const [step1Error, setStep1Error] = useState('');
   const [step2Error, setStep2Error] = useState('');
-  const [editingJobID, setEditingJobID] = useState(null);
+  // Original code:
+  // const [editingJobID, setEditingJobID] = useState(null);
+  const [editingJobID, setEditingJobID] = useState(() => jobDraft?.editingJobID ?? null);
   const [showHoardModal, setShowHoardModal] = useState(false);
 
 
   /* ── Form ── */
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [selectedContract, setSelectedContract] = useState(null);
+  // Original code:
+  // const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(() => jobDraft?.selectedCustomer ?? null);
+  // Original code:
+  // const [selectedContract, setSelectedContract] = useState(null);
+  const [selectedContract, setSelectedContract] = useState(() => jobDraft?.selectedContract ?? null);
   const [pendingContract, setPendingContract] = useState(null);
-  const [jobType, setJobType] = useState('');
-  const [selectedSupervisor, setSelectedSupervisor] = useState(null);
-  const [jobDescription, setJobDescription] = useState('');
-  const [ratePerSQFT, setRatePerSQFT] = useState('');
-  const [targetDate, setTargetDate] = useState('');
-  const [supervisorAcceptDttm, setSupervisorAcceptDttm] = useState('');
-  const [actualCompletionDate, setActualCompletionDate] = useState('');
-  const [jobStatus, setJobStatus] = useState('Open');
+  // Original code:
+  // const [jobType, setJobType] = useState('');
+  const [jobType, setJobType] = useState(() => jobDraft?.jobType ?? '');
+  // Original code:
+  // const [selectedSupervisor, setSelectedSupervisor] = useState(null);
+  const [selectedSupervisor, setSelectedSupervisor] = useState(() => jobDraft?.selectedSupervisor ?? null);
+  // Original code:
+  // const [jobDescription, setJobDescription] = useState('');
+  const [jobDescription, setJobDescription] = useState(() => jobDraft?.jobDescription ?? '');
+  // Original code:
+  // const [ratePerSQFT, setRatePerSQFT] = useState('');
+  const [ratePerSQFT, setRatePerSQFT] = useState(() => jobDraft?.ratePerSQFT ?? '');
+  // Original code:
+  // const [targetDate, setTargetDate] = useState('');
+  const [targetDate, setTargetDate] = useState(() => jobDraft?.targetDate ?? '');
+  // Original code:
+  // const [supervisorAcceptDttm, setSupervisorAcceptDttm] = useState('');
+  const [supervisorAcceptDttm, setSupervisorAcceptDttm] = useState(() => jobDraft?.supervisorAcceptDttm ?? '');
+  // Original code:
+  // const [actualCompletionDate, setActualCompletionDate] = useState('');
+  const [actualCompletionDate, setActualCompletionDate] = useState(() => jobDraft?.actualCompletionDate ?? '');
+  // Original code:
+  // const [jobStatus, setJobStatus] = useState('Open');
+  const [jobStatus, setJobStatus] = useState(() => jobDraft?.jobStatus ?? 'Open');
   const [contractHoardingMaps, setContractHoardingMaps] = useState([]);
   const [hoardingMerges, setHoardingMerges] = useState([]);
   const [contractStartDate, setContractStartDate] = useState(null);
   const [validationAlert, setValidationAlert] = useState(null);
 
   /* ── Inline tasks ── */
-  const [tasks, setTasks] = useState([]);
+  // Original code:
+  // const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState(() => jobDraft?.tasks ?? []);
+
+  useEffect(() => {
+    if (isCreating) {
+      const draftData = {
+        isCreating,
+        step,
+        selectedCustomer,
+        selectedContract,
+        jobType,
+        selectedSupervisor,
+        jobDescription,
+        ratePerSQFT,
+        targetDate,
+        supervisorAcceptDttm,
+        actualCompletionDate,
+        jobStatus,
+        tasks,
+        editingJobID,
+      };
+      sessionStorage.setItem('job_form_draft', JSON.stringify(draftData));
+    }
+  }, [
+    isCreating,
+    step,
+    selectedCustomer,
+    selectedContract,
+    jobType,
+    selectedSupervisor,
+    jobDescription,
+    ratePerSQFT,
+    targetDate,
+    supervisorAcceptDttm,
+    actualCompletionDate,
+    jobStatus,
+    tasks,
+    editingJobID,
+  ]);
   const [contractBanners, setContractBanners] = useState([]);
   const [bannersLoading, setBannersLoading] = useState(false);
   /* ── History table ── */
@@ -2834,6 +2911,13 @@ export default function JobPage() {
   };
   const goBack = () => setStep(s => Math.max(1, s - 1));
   const handleBackToList = () => {
+    // Original code:
+    // setIsCreating(false);
+    // setStep1Error(''); setStep2Error('');
+    // setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
+    sessionStorage.removeItem('job_form_draft');
+    setStep(1);
+    resetForm();
     setIsCreating(false);
     setStep1Error(''); setStep2Error('');
     setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
@@ -2936,6 +3020,9 @@ export default function JobPage() {
       setTasks(updatedTasks); // ← update tasks with real server IDs
 
       showToast(editingJobID ? 'Job updated successfully!' : 'Job created successfully!', 'success');
+      // Original code:
+      // await refreshJobs();
+      sessionStorage.removeItem('job_form_draft');
       await refreshJobs();
       // ← removed: setIsCreating(false)  so form stays open for photos
 
@@ -3898,7 +3985,14 @@ export default function JobPage() {
                     {editingJobID && (
                       <button
                         className="pg-btn-cancel"
-                        onClick={() => setIsCreating(false)}
+                        onClick={() => {
+                          // Original code:
+                          // setIsCreating(false);
+                          sessionStorage.removeItem('job_form_draft');
+                          setStep(1);
+                          resetForm();
+                          setIsCreating(false);
+                        }}
                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                       >
                         <LayoutGrid size={13} /> Done
