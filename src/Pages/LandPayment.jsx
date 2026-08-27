@@ -64,11 +64,11 @@ const PAYMENT_MODE_OPTIONS = [
 const PAYMENT_PURPOSE_OPTIONS = [
   { value: 'Monthly Rent', label: 'Monthly Rent' },
   { value: 'Quarterly Rent', label: 'Quarterly Rent' },
-  { value: 'Advance Payment', label: 'Advance Payment' },
-  { value: 'Security Deposit', label: 'Security Deposit' },
+  // { value: 'Advance Payment', label: 'Advance Payment' },
+  // { value: 'Security Deposit', label: 'Security Deposit' },
   { value: 'Half-Yearly Rent', label: 'Half-Yearly Rent' },
   { value: 'Yearly Rent', label: 'Yearly Rent' },
-  { value: 'Other', label: 'Other' },
+  // { value: 'Other', label: 'Other' },
 ];
 
 const EMPTY_ROW = {
@@ -119,6 +119,16 @@ function paymentModeStyle(mode) {
   }
 }
 
+function sanitizeDate(d) {
+  if (!d) return '';
+  const parts = d.split('-');
+  if (parts.length > 0 && parts[0].length > 4) {
+    parts[0] = parts[0].slice(0, 4);
+    return parts.join('-');
+  }
+  return d;
+}
+
 function normalizePayment(raw) {
   const cleanDate = (d) => {
     if (!d) return '';
@@ -146,7 +156,14 @@ function normalizePayment(raw) {
 
 function validateRow(row, maxVal) {
   const e = {};
-  if (!row.paymentDate) e.paymentDate = 'Required';
+  if (!row.paymentDate) {
+    e.paymentDate = 'Required';
+  } else {
+    const y = row.paymentDate.split('-')[0];
+    if (y && y.length > 4) {
+      e.paymentDate = 'Year cannot exceed 4 digits';
+    }
+  }
   if (!row.paymentPurpose) e.paymentPurpose = 'Required';
   if (row.amountPaid === '' || row.amountPaid == null) e.amountPaid = 'Required';
   else if (isNaN(Number(row.amountPaid)) || Number(row.amountPaid) <= 0) e.amountPaid = 'Must be positive';
@@ -155,8 +172,14 @@ function validateRow(row, maxVal) {
   }
   if (!row.paymentMode) e.paymentMode = 'Required';
   if (!row.paidBy) e.paidBy = 'Required';
-  if (row.nextDueDate && row.paymentDate && row.nextDueDate < row.paymentDate)
-    e.nextDueDate = 'Must be after payment date';
+  if (row.nextDueDate) {
+    const y = row.nextDueDate.split('-')[0];
+    if (y && y.length > 4) {
+      e.nextDueDate = 'Year cannot exceed 4 digits';
+    } else if (row.paymentDate && row.nextDueDate < row.paymentDate) {
+      e.nextDueDate = 'Must be after payment date';
+    }
+  }
   if (row.referenceNumber && row.referenceNumber.length > 30)
     e.referenceNumber = 'Max 30 characters';
   return e;
@@ -928,6 +951,7 @@ function PaymentRowsTable({
                       <input type="date"
                         className={`exp-cell-input${errs.paymentDate ? ' exp-cell-input--err' : ''}`}
                         value={row.paymentDate}
+                        max="9999-12-31"
                         onChange={e => onChangeRow(row._rowId, 'paymentDate', e.target.value)} />
                       {errs.paymentDate && <div className="exp-cell-err">{errs.paymentDate}</div>}
                     </td>
@@ -981,6 +1005,7 @@ function PaymentRowsTable({
                       <input type="date"
                         className={`exp-cell-input${errs.nextDueDate ? ' exp-cell-input--err' : ''}`}
                         value={row.nextDueDate} min={row.paymentDate || undefined}
+                        max="9999-12-31"
                         onChange={e => onChangeRow(row._rowId, 'nextDueDate', e.target.value)} />
                       {errs.nextDueDate && <div className="exp-cell-err">{errs.nextDueDate}</div>}
                     </td>
@@ -1065,6 +1090,7 @@ function PaymentRowsTable({
                   <input type="date"
                     className={`exp-cell-input${errs.paymentDate ? ' exp-cell-input--err' : ''}`}
                     value={row.paymentDate}
+                    max="9999-12-31"
                     onChange={e => onChangeRow(row._rowId, 'paymentDate', e.target.value)} />
                 </div>
                 <div className="col-6">
@@ -1104,6 +1130,7 @@ function PaymentRowsTable({
                   <div className="exp-mob-label">Next Due</div>
                   <input type="date" className="exp-cell-input"
                     value={row.nextDueDate} min={row.paymentDate || undefined}
+                    max="9999-12-31"
                     onChange={e => onChangeRow(row._rowId, 'nextDueDate', e.target.value)} />
                 </div>
                 {showBank && (<>
@@ -1162,6 +1189,7 @@ function QuickAddPanel({ row, errors, onChange, attachFile, onFileSelect, onFile
           <FieldLabel label="Payment Date" required />
           <InputWrap error={errors.paymentDate} icon={Calendar}>
             <input className="pg-field-input" type="date" value={row.paymentDate}
+              max="9999-12-31"
               onChange={e => onChange('paymentDate', e.target.value)} />
           </InputWrap>
           <FieldError msg={errors.paymentDate} />
@@ -1171,6 +1199,7 @@ function QuickAddPanel({ row, errors, onChange, attachFile, onFileSelect, onFile
           <InputWrap error={errors.nextDueDate} icon={Calendar}>
             <input className="pg-field-input" type="date" value={row.nextDueDate}
               min={row.paymentDate || undefined}
+              max="9999-12-31"
               onChange={e => onChange('nextDueDate', e.target.value)} />
           </InputWrap>
           <FieldError msg={errors.nextDueDate} />
@@ -1461,7 +1490,8 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   };
 
   const handleCurrentChange = (key, val) => {
-    setCurrentRow(p => ({ ...p, [key]: val }));
+    const finalVal = (key === 'paymentDate' || key === 'nextDueDate') ? sanitizeDate(val) : val;
+    setCurrentRow(p => ({ ...p, [key]: finalVal }));
     if (currentErrors[key]) setCurrentErrors(p => ({ ...p, [key]: '' }));
   };
 
@@ -1488,7 +1518,8 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   };
 
   const handleChangeRow = (rowId, key, val) => {
-    setRows(prev => prev.map(r => r._rowId === rowId ? { ...r, [key]: val } : r));
+    const finalVal = (key === 'paymentDate' || key === 'nextDueDate') ? sanitizeDate(val) : val;
+    setRows(prev => prev.map(r => r._rowId === rowId ? { ...r, [key]: finalVal } : r));
     if (rowErrors[rowId]?.[key]) setRowErrors(prev => ({ ...prev, [rowId]: { ...prev[rowId], [key]: '' } }));
   };
 

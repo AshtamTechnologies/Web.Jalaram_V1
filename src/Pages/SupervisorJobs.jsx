@@ -1420,111 +1420,114 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                         return (
                           <div key={key} style={{ marginBottom: 16, border: '1.5px solid rgba(124,58,237,0.3)', borderRadius: 14, overflow: 'hidden' }}>
 
-                          {/* Group header */}
-                          <div style={{ padding: '12px 18px', background: 'linear-gradient(135deg, rgba(124,58,237,0.07), rgba(124,58,237,0.03))', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
-                            <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{flag === 'H' ? '↔' : '↕'}</div>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#7c3aed' }}>
-                                  {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
-                                </span>
-                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#9090a8' }}>
-                                  · {groupTasks.length} hoardings combined
-                                </span>
-                                {groupTasks.map(t => {
-                                  const specs = [t.material, t.width && t.height ? `${t.width}×${t.height} ft` : ''].filter(Boolean).join(' · ');
-                                  const label = specs ? `${t.hoardingCode} (${specs})` : t.hoardingCode;
-                                  return (
-                                    <span key={t.jobTaskID} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)' }}>
-                                      {label}
-                                    </span>
-                                  );
-                                })}
-                              </div>
-                              {[...new Set(groupTasks.map(t => t.siteAddress).filter(Boolean))].map((addr, i) => (
-                                <div key={i} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: i > 0 ? 3 : 0 }}>
-                                  <MapPin size={11} color="#9090a8" style={{ flexShrink: 0, marginTop: 2 }} />
-                                  <span>{addr}</span>
-                                </div>
-                              ))}
-                              {/* Task IDs row */}
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                                {groupTasks.map(t => {
-                                  const displayStatus = job.jobStatus?.toLowerCase() === 'completed' ? 'Completed' : t.status;
-                                  const showSubBadge = (displayStatus?.toLowerCase() === 'submitted' || displayStatus?.toLowerCase() === 'completed');
-                                  const submitTime = getTaskSubmitTimeFromAttachments(t.jobTaskID, allAttachments);
-                                  const finalTime = submitTime || t.submitDTTM;
-                                  return (
-                                    <div key={t.jobTaskID} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                                      <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.07)', color: '#049edf', border: '1px solid rgba(4,158,223,0.18)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                        Task #{t.jobTaskID} <TaskStatusBadge status={displayStatus} />
+                            {/* Group header */}
+                            <div style={{ padding: '12px 18px', background: 'linear-gradient(135deg, rgba(124,58,237,0.07), rgba(124,58,237,0.03))', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+                              <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{flag === 'H' ? '↔' : '↕'}</div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+                                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#7c3aed' }}>
+                                    {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                                  </span>
+                                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#9090a8' }}>
+                                    · {groupTasks.length} hoardings combined
+                                  </span>
+                                  {groupTasks.map(t => {
+                                    const specs = [t.material, t.width && t.height ? `${t.width}×${t.height} ft` : ''].filter(Boolean).join(' · ');
+                                    const label = specs ? `${t.hoardingCode} (${specs})` : t.hoardingCode;
+                                    return (
+                                      <span key={t.jobTaskID}
+                                        onClick={() => setSelectedHoardingPhoto({ hoardingID: t.hoardingID, hoardingCode: t.hoardingCode, siteAddress: t.siteAddress })}
+                                        title="View Hoarding Image"
+                                        style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 6, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                        {label} <Eye size={10} style={{ opacity: 0.8 }} />
                                       </span>
-                                      {showSubBadge && (
-                                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 600, color: '#52525b', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                          <Clock size={11} color="#71717a" />
-                                          <span>Submitted: {finalTime ? fmtDateTime(finalTime) : fmtDateTime(new Date().toISOString())}</span>
+                                    );
+                                  })}
+                                </div>
+                                {[...new Set(groupTasks.map(t => t.siteAddress).filter(Boolean))].map((addr, i) => (
+                                  <div key={i} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 600, color: '#6b7280', display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: i > 0 ? 3 : 0 }}>
+                                    <MapPin size={11} color="#9090a8" style={{ flexShrink: 0, marginTop: 2 }} />
+                                    <span>{addr}</span>
+                                  </div>
+                                ))}
+                                {/* Task IDs row */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                                  {groupTasks.map(t => {
+                                    const displayStatus = job.jobStatus?.toLowerCase() === 'completed' ? 'Completed' : t.status;
+                                    const showSubBadge = (displayStatus?.toLowerCase() === 'submitted' || displayStatus?.toLowerCase() === 'completed');
+                                    const submitTime = getTaskSubmitTimeFromAttachments(t.jobTaskID, allAttachments);
+                                    const finalTime = submitTime || t.submitDTTM;
+                                    return (
+                                      <div key={t.jobTaskID} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.07)', color: '#049edf', border: '1px solid rgba(4,158,223,0.18)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                          Task #{t.jobTaskID} <TaskStatusBadge status={displayStatus} />
                                         </span>
-                                      )}
-                                    </div>
+                                        {showSubBadge && (
+                                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 600, color: '#52525b', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                            <Clock size={11} color="#71717a" />
+                                            <span>Submitted: {finalTime ? fmtDateTime(finalTime) : fmtDateTime(new Date().toISOString())}</span>
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                              <div style={{ flexShrink: 0, alignSelf: 'center' }}>
+                                {(() => {
+                                  const isSubmittedOrDone = groupTasks.every(t => t.status === 'Submitted' || t.status === 'Completed');
+                                  if (isSubmittedOrDone) return null;
+                                  return (
+                                    <button
+                                      onClick={() => {
+                                        if (canAccept) {
+                                          showToast('Please accept the job request first before submitting tasks.', 'error');
+                                          return;
+                                        }
+                                        setModalTask({
+                                          ...groupTasks[0],
+                                          mergedTaskIDs: groupTasks.map(x => x.jobTaskID),
+                                          groupTasks,
+                                          job
+                                        });
+                                      }}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: 6,
+                                        padding: '6px 14px',
+                                        borderRadius: 8,
+                                        background: canAccept ? '#e2e8f0' : 'linear-gradient(135deg,#049edf,#6c63ff)',
+                                        border: 'none',
+                                        color: canAccept ? '#94a3b8' : '#fff',
+                                        fontFamily: 'Nunito,sans-serif',
+                                        fontSize: 12,
+                                        fontWeight: 800,
+                                        cursor: canAccept ? 'not-allowed' : 'pointer',
+                                        boxShadow: canAccept ? 'none' : '0 2px 8px rgba(4,158,223,0.25)',
+                                      }}
+                                    >
+                                      Submit Task
+                                    </button>
                                   );
-                                })}
+                                })()}
                               </div>
                             </div>
-                            <div style={{ flexShrink: 0, alignSelf: 'center' }}>
-                              {(() => {
-                                const isSubmittedOrDone = groupTasks.every(t => t.status === 'Submitted' || t.status === 'Completed');
-                                if (isSubmittedOrDone) return null;
-                                return (
-                                  <button
-                                    onClick={() => {
-                                      if (canAccept) {
-                                        showToast('Please accept the job request first before submitting tasks.', 'error');
-                                        return;
-                                      }
-                                      setModalTask({
-                                        ...groupTasks[0],
-                                        mergedTaskIDs: groupTasks.map(x => x.jobTaskID),
-                                        groupTasks,
-                                        job
-                                      });
-                                    }}
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: 6,
-                                      padding: '6px 14px',
-                                      borderRadius: 8,
-                                      background: canAccept ? '#e2e8f0' : 'linear-gradient(135deg,#049edf,#6c63ff)',
-                                      border: 'none',
-                                      color: canAccept ? '#94a3b8' : '#fff',
-                                      fontFamily: 'Nunito,sans-serif',
-                                      fontSize: 12,
-                                      fontWeight: 800,
-                                      cursor: canAccept ? 'not-allowed' : 'pointer',
-                                      boxShadow: canAccept ? 'none' : '0 2px 8px rgba(4,158,223,0.25)',
-                                    }}
-                                  >
-                                    Submit Task
-                                  </button>
-                                );
-                              })()}
-                            </div>
+
+                            {/* ── ONE shared worker assignment for all merged tasks ── */}
+                            <MergedTaskWorkerCard
+                              groupTasks={groupTasks}
+                              workers={workers}
+                              jobRequestID={job.jobRequestID}
+                              jobStatus={job.jobStatus}
+                              showToast={showToast}
+                              flag={flag}
+                              allAttachments={allAttachments}
+                            />
+
                           </div>
-
-                          {/* ── ONE shared worker assignment for all merged tasks ── */}
-                          <MergedTaskWorkerCard
-                            groupTasks={groupTasks}
-                            workers={workers}
-                            jobRequestID={job.jobRequestID}
-                            jobStatus={job.jobStatus}
-                            showToast={showToast}
-                            flag={flag}
-                            allAttachments={allAttachments}
-                          />
-
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
 
                       {/* ── Single (unmerged) task cards ── */}
                       {singleTasks.map(task => (
@@ -1534,8 +1537,11 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                           <div style={{ padding: '12px 18px', background: 'linear-gradient(135deg, rgba(4,158,223,0.06), rgba(4,158,223,0.02))', borderBottom: '1px solid rgba(4,158,223,0.12)', display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                                <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#049edf' }}>
-                                  Hoarding {task.hoardingCode || `ID #${task.hoardingID}`}
+                                <span
+                                  onClick={() => setSelectedHoardingPhoto({ hoardingID: task.hoardingID, hoardingCode: task.hoardingCode, siteAddress: task.siteAddress })}
+                                  title="View Hoarding Image"
+                                  style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#049edf', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                                  Hoarding {task.hoardingCode || `ID #${task.hoardingID}`} <Eye size={11} />
                                 </span>
                                 {task.material && (
                                   <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#7878a0' }}>

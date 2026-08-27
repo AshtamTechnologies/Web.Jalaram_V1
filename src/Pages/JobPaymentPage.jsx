@@ -563,7 +563,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.jobRequestID) return parsed.jobRequestID;
-      } catch (e) {}
+      } catch (e) { }
     }
     return 0;
   });
@@ -574,7 +574,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.paymentDate) return parsed.paymentDate;
-      } catch (e) {}
+      } catch (e) { }
     }
     return todayISO();
   });
@@ -585,7 +585,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.calculatedAmount) return parsed.calculatedAmount;
-      } catch (e) {}
+      } catch (e) { }
     }
     return '';
   });
@@ -596,7 +596,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.paidAmount) return parsed.paidAmount;
-      } catch (e) {}
+      } catch (e) { }
     }
     return '';
   });
@@ -607,7 +607,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.paidBY) return parsed.paidBY;
-      } catch (e) {}
+      } catch (e) { }
     }
     return '';
   });
@@ -618,7 +618,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.extrapayment) return parsed.extrapayment;
-      } catch (e) {}
+      } catch (e) { }
     }
     return '';
   });
@@ -629,7 +629,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.comments) return parsed.comments;
-      } catch (e) {}
+      } catch (e) { }
     }
     return '';
   });
@@ -640,7 +640,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
       try {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.isParicialPayment !== undefined) return parsed.isParicialPayment;
-      } catch (e) {}
+      } catch (e) { }
     }
     return false;
   });

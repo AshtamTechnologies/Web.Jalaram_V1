@@ -1014,6 +1014,7 @@ export default function RegistrationPage() {
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
+  const [statusFilter, setStatusFilter] = useState(''); // ✅ MODIFIED: State for status filter
 
   /* ── Resizable columns ── */
   const tableRef = useRef(null);
@@ -1054,6 +1055,9 @@ export default function RegistrationPage() {
 
   /* ── Filter / sort / paginate ── */
   const filtered = users.filter(u => {
+    // ✅ MODIFIED: Apply status filter
+    if (statusFilter && u.status !== statusFilter) return false;
+
     const q = search.toLowerCase();
     return (
       fullName(u).toLowerCase().includes(q) ||
@@ -1153,6 +1157,17 @@ export default function RegistrationPage() {
                 />
                 {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
               </div>
+              
+              {/* ✅ MODIFIED: Dropdown for status filter */}
+              <select
+                className="hd-filter-select"
+                value={statusFilter}
+                onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+              >
+                <option value="">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
               <button className="pg-pg-btn" onClick={fetchData} title="Refresh list" style={{ marginLeft: 'auto' }}>
                 <RefreshCw size={13} />
               </button>

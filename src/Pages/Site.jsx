@@ -774,6 +774,7 @@ export default function SitePage() {
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
+  const [statusFilter, setStatusFilter] = useState(''); // ✅ MODIFIED: State for status filter
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
@@ -796,6 +797,9 @@ export default function SitePage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const filtered = sites.filter(s => {
+    // ✅ MODIFIED: Apply status filter
+    if (statusFilter && s.status !== statusFilter) return false;
+
     const q = search.toLowerCase();
     const owner = owners.find(o => o._id === s.ownerID || o._id === Number(s.ownerID));
     return (
@@ -871,6 +875,17 @@ export default function SitePage() {
                 <input placeholder="Search by address, city, district, owner, type, status…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
                 {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
               </div>
+              
+              {/* ✅ MODIFIED: Dropdown for status filter */}
+              <select
+                className="hd-filter-select"
+                value={statusFilter}
+                onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+              >
+                <option value="">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
               <button className="pg-pg-btn" onClick={fetchData} title="Refresh" style={{ marginLeft: 'auto' }}><RefreshCw size={13} /></button>
             </div>
           </div>

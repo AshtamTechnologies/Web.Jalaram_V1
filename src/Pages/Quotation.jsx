@@ -201,6 +201,7 @@ function calcAmountByDates(startDate, endDate, monthlyRent) {
  * calcNOSFromDates
  * Returns whole months for full-month spans, decimal months otherwise.
  */
+// ✅ MODIFIED: Round to exactly 12 months for 365/366 day cycles (and multiples of 12 for multi-year)
 function calcNOSFromDates(startDate, endDate) {
   if (!startDate || !endDate) return 1;
   const start = new Date(startDate + 'T00:00:00');
@@ -217,6 +218,16 @@ function calcNOSFromDates(startDate, endDate) {
   }
 
   const days = Math.round((end - start) / 86400000) + 1;
+
+  // Check if days corresponds to a full year count (e.g. 365 or 366 days)
+  for (let years = 1; years <= 10; years++) {
+    const minDays = years * 365;
+    const maxDays = years * 365 + Math.floor(years / 4) + 1;
+    if (days >= minDays - 1 && days <= maxDays) {
+      return years * 12;
+    }
+  }
+
   return Math.round((days / 30) * 100) / 100;
 }
 function calculateEndDate(startDateStr, days) {
@@ -238,10 +249,21 @@ function calculateDays(startDateStr, endDateStr) {
   return diffDays;
 }
 
+// ✅ MODIFIED: Round to exactly 12 months for 365/366 day cycles (and multiples of 12 for multi-year)
 function calcNOSFromDays(days) {
   const d = Number(days);
   if (isNaN(d) || d <= 0) return 0;
   if (d >= 28 && d <= 31) return 1;
+  
+  // If it's a multiple of a full year (approx 365 or 366 days per year)
+  for (let years = 1; years <= 10; years++) {
+    const minDays = years * 365;
+    const maxDays = years * 365 + Math.floor(years / 4) + 1; // account for leap years
+    if (d >= minDays - 1 && d <= maxDays) {
+      return years * 12;
+    }
+  }
+
   return Math.round((d / 30) * 100) / 100;
 }
 function parsePurposeMeta(purpose, defaultRate = 0) {
@@ -672,11 +694,12 @@ function useOutsideClick(wrapRef, panelRef, open, onClose) {
 ═══════════════════════════════════════════ */
 function Toast({ msg, type, onDone }) {
   useEffect(() => { const t = setTimeout(onDone, 3200); return () => clearTimeout(t); }, [onDone]);
-  return (
-    <div className={`qt-toast qt-toast--${type}`}>
+  return ReactDOM.createPortal(
+    <div className={`qt-toast qt-toast--${type}`} style={{ zIndex: 9999999 }}>
       {type === 'success' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
       {msg}
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -1339,8 +1362,15 @@ function HoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteCo
                     {line2 && (
                       <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#7a8499', marginTop: 1, wordBreak: 'break-word', whiteSpace: 'normal' }}>{line2}</div>
                     )}
-                    <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                      Code: {h.hoardingCode} · {h.width}×{h.height} ft · ₹{Number(h.monthlyRent || 0).toLocaleString('en-IN')}/mo
+                    {/* ✅ MODIFIED: Elevated hoarding size styling to make it larger and more visible */}
+                    <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                      <span>Code: {h.hoardingCode}</span>
+                      <span>·</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#049edf', background: 'rgba(4,158,223,0.08)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(4,158,223,0.18)' }}>
+                        {h.width}×{h.height} ft
+                      </span>
+                      <span>·</span>
+                      <span>₹{Number(h.monthlyRent || 0).toLocaleString('en-IN')}/mo</span>
                     </div>
                   </div>
                   <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 8px', borderRadius: 5, background: 'rgba(22,163,74,0.10)', color: '#16a34a', border: '1px solid rgba(22,163,74,0.2)', flexShrink: 0 }}>Available</span>
@@ -1561,8 +1591,15 @@ function ManualHoardingModal({ allHoardings, existingIds, onAdd, onClose, siteCo
                         {line2}
                       </div>
                     )}
-                    <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                      Code: {h.hoardingCode} · {h.width}×{h.height} ft · ₹{Number(h.monthlyRent || 0).toLocaleString('en-IN')}/mo
+                    {/* ✅ MODIFIED: Elevated hoarding size styling to make it larger and more visible */}
+                    <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                      <span>Code: {h.hoardingCode}</span>
+                      <span>·</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#049edf', background: 'rgba(4,158,223,0.08)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(4,158,223,0.18)' }}>
+                        {h.width}×{h.height} ft
+                      </span>
+                      <span>·</span>
+                      <span>₹{Number(h.monthlyRent || 0).toLocaleString('en-IN')}/mo</span>
                     </div>
                   </div>
 
@@ -1608,12 +1645,13 @@ function ManualHoardingModal({ allHoardings, existingIds, onAdd, onClose, siteCo
 /* ═══════════════════════════════════════════
    EXTERNAL HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
-function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteColorMap, siteMap, startDate, endDate }) {
+function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteColorMap, siteMap, startDate, endDate, showToast }) {
   const [hoardingsList, setHoardingsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
+  const [mappedHoardingIDs, setMappedHoardingIDs] = useState(new Set()); // ✅ MODIFIED: Track mapped external hoardings
 
   useEffect(() => {
     let active = true;
@@ -1621,9 +1659,26 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
       setLoading(true);
       setError(null);
       try {
-        const res = await apiService.getAvailableHoardings(startDate, endDate);
+        // ✅ MODIFIED: Fetch available hoardings and vendor details in parallel
+        const [res, vendorsRes] = await Promise.all([
+          apiService.getAvailableHoardings(startDate, endDate),
+          apiService.getAllVendors().catch(err => {
+            console.error('Failed to load vendors:', err);
+            return [];
+          })
+        ]);
         const list = normalizeList(res);
+        const vendors = Array.isArray(vendorsRes) ? vendorsRes
+          : Array.isArray(vendorsRes?.data) ? vendorsRes.data
+            : Array.isArray(vendorsRes?.$values) ? vendorsRes.$values : [];
+
+        const tempMapped = new Set();
+        vendors.forEach(v => {
+          (v.hoardingId || v.HoardingId || []).forEach(id => tempMapped.add(Number(id)));
+        });
+
         if (active) {
+          setMappedHoardingIDs(tempMapped);
           // Sort by effdt descending first to keep the latest version
           const sortedList = [...list].sort((a, b) => new Date(b.effdt || b.Effdt) - new Date(a.effdt || a.Effdt));
           
@@ -1820,8 +1875,15 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
                         {line2}
                       </div>
                     )}
-                    <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal' }}>
-                      Code: {h.hoardingCode} · {h.width}×{h.height} ft · ₹{Number(h.monthlyRent || 0).toLocaleString('en-IN')}/mo
+                    {/* ✅ MODIFIED: Elevated hoarding size styling to make it larger and more visible */}
+                    <div className="pg-td__secondary" style={{ wordBreak: 'break-word', whiteSpace: 'normal', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                      <span>Code: {h.hoardingCode}</span>
+                      <span>·</span>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#049edf', background: 'rgba(4,158,223,0.08)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(4,158,223,0.18)' }}>
+                        {h.width}×{h.height} ft
+                      </span>
+                      <span>·</span>
+                      <span>₹{Number(h.monthlyRent || 0).toLocaleString('en-IN')}/mo</span>
                     </div>
                   </div>
 
@@ -1853,6 +1915,19 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
               className="pg-btn-save"
               onClick={() => {
                 const selectedObjects = hoardingsList.filter(h => selected.has(h.hoardingID));
+                
+                // ✅ MODIFIED: Check if each selected hoarding is mapped to a vendor
+                for (const h of selectedObjects) {
+                  if (!mappedHoardingIDs.has(Number(h.hoardingID))) {
+                    if (showToast) {
+                      showToast(`The selected hoarding "${h.hoardingCode || h.hoardingID}" is not mapped with any vendor. Please map first.`, 'error');
+                    } else {
+                      alert(`The selected hoarding "${h.hoardingCode || h.hoardingID}" is not mapped with any vendor. Please map first.`);
+                    }
+                    return;
+                  }
+                }
+                
                 onAdd(selectedObjects);
               }}
               disabled={selected.size === 0 || loading || !!error}
@@ -1939,6 +2014,82 @@ function TermsModal({ selected, onSelect, onSelectAll, termsList, onClose }) {
         <div className="pg-modal__foot" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#9090a8', fontWeight: 600 }}>{selected.length} selected</span>
           <button className="pg-btn-save" onClick={onClose}><Check size={14} /> Done</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+function TermsConfirmModal({ onConfirm, onCancel }) {
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 99998,
+        background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(6px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 22, width: '100%', maxWidth: 440,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden',
+          fontFamily: 'Nunito,sans-serif',
+        }}
+      >
+        {/* Header — Warning / Yellow theme */}
+        <div style={{
+          background: 'linear-gradient(135deg,#f59e0b,#d97706)',
+          padding: '24px 26px 18px',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+          color: '#fff',
+        }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: '50%',
+            background: 'rgba(255,255,255,0.20)', border: '2px solid rgba(255,255,255,0.35)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26,
+          }}>⚠️</div>
+          <div style={{ fontWeight: 900, fontSize: 18 }}>
+            Warning
+          </div>
+          <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>
+            Terms &amp; Conditions Not Selected
+          </div>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '24px 24px 20px', textAlign: 'center' }}>
+          <p style={{ margin: 0, fontSize: 14.5, color: '#374151', lineHeight: 1.6, fontWeight: 700 }}>
+            Terms and Conditions are not selected.
+          </p>
+          <p style={{ margin: '8px 0 0 0', fontSize: 13, color: '#6b7280', lineHeight: 1.5, fontWeight: 600 }}>
+            Are you sure you want to proceed without terms?
+          </p>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '16px 24px 20px', borderTop: '1px solid #f0f0f8', display: 'flex', gap: 12 }}>
+          <button
+            className="pg-btn-cancel"
+            onClick={onCancel}
+            style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              flex: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '10px 0', borderRadius: 10, border: 'none',
+              background: 'linear-gradient(135deg,#f59e0b,#d97706)',
+              color: '#fff',
+              fontSize: 13.5, fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(245,158,11,0.25)',
+            }}
+          >
+            Yes, Proceed
+          </button>
         </div>
       </div>
     </div>,
@@ -4088,11 +4239,19 @@ export default function QuotationPage({ onNavigateToContracts }) {
   // const [globalDays, setGlobalDays] = useState('');
   const [globalDays, setGlobalDays] = useState(() => quotationDraft?.globalDays ?? '');
 
+  const [highlightTerms, setHighlightTerms] = useState(false); // ✅ MODIFIED: Highlight Terms & Conditions block if submit occurs without terms selected
+  useEffect(() => {
+    if (selectedTerms.length > 0) {
+      setHighlightTerms(false);
+    }
+  }, [selectedTerms]);
+
   /* ── Modals ── */
   const [showHoardModal, setShowHoardModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [showExternalModal, setShowExternalModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const [showTermsConfirmModal, setShowTermsConfirmModal] = useState(false); // ✅ MODIFIED: Show Terms & Conditions confirmation modal if terms are missing
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [showCustomerEditModal, setShowCustomerEditModal] = useState(false);  // ← NEW
   const [showContractModal, setShowContractModal] = useState(false);  // ← NEW
@@ -5281,6 +5440,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setGlobalDays('');
     setSelectedCompanyId('');
     setQuotationCompanyRecId(0);
+    setHighlightTerms(false);
+    setShowTermsConfirmModal(false);
   };
 
   const handleStartNew = async () => {
@@ -5993,7 +6154,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
   };
 
-  const generatePDF = async () => {
+  const generatePDF = async (bypassTermsCheck = false) => {
     // ── Input Validation ──
     if (!selectedCustomer?.customerID) {
       showToast('Please select a customer before saving.', 'error');
@@ -6055,6 +6216,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
         showToast('Negative amount detected in rows.', 'error');
         return;
       }
+    }
+
+    // ✅ MODIFIED: If Terms & Conditions are not selected, prompt user via custom TermsConfirmModal.
+    // Ensure we only skip check if bypassTermsCheck is explicitly boolean true (avoiding React event objects)
+    const skipCheck = bypassTermsCheck === true;
+    if (!skipCheck && selectedTerms.length === 0) {
+      setShowTermsConfirmModal(true);
+      return;
     }
 
     setSaving(true);
@@ -7350,25 +7519,38 @@ export default function QuotationPage({ onNavigateToContracts }) {
                       />
                     </div>
 
-                    <div className="qt-terms-head">
-                      <div className="qt-section-head" style={{ margin: 0 }}>
-                        Terms &amp; Conditions
+                    {/* ✅ MODIFIED: Wrap terms section in a container that highlights (with dashed red border and background tint) if user proceeds without selecting terms and cancels confirmation */}
+                    <div 
+                      id="terms-section-container"
+                      style={highlightTerms ? {
+                        border: '2px dashed #ef4444',
+                        borderRadius: '12px',
+                        padding: '12px 14px',
+                        background: 'rgba(239, 68, 68, 0.03)',
+                        marginBottom: 16,
+                        animation: 'fadeIn 0.2s'
+                      } : {}}
+                    >
+                      <div className="qt-terms-head">
+                        <div className="qt-section-head" style={{ margin: 0 }}>
+                          Terms &amp; Conditions
+                        </div>
+                        <button className="pg-btn-cancel" onClick={() => setShowTermsModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
+                          <List size={12} /> Choose
+                        </button>
                       </div>
-                      <button className="pg-btn-cancel" onClick={() => setShowTermsModal(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-                        <List size={12} /> Choose
-                      </button>
+                      {selectedTerms.length === 0
+                        ? <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#9090a8', fontStyle: 'italic' }}>None selected (optional)</div>
+                        : selectedTerms.map((termID, i) => {
+                          const t = termsList.find(t => t.termID === termID);
+                          return (
+                            <div key={termID} className="qt-term-chip">
+                              <span className="qt-term-chip__num">{i + 1}.</span>
+                              <span>{t?.description || '—'}</span>
+                            </div>
+                          );
+                        })}
                     </div>
-                    {selectedTerms.length === 0
-                      ? <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#9090a8', fontStyle: 'italic' }}>None selected (optional)</div>
-                      : selectedTerms.map((termID, i) => {
-                        const t = termsList.find(t => t.termID === termID);
-                        return (
-                          <div key={termID} className="qt-term-chip">
-                            <span className="qt-term-chip__num">{i + 1}.</span>
-                            <span>{t?.description || '—'}</span>
-                          </div>
-                        );
-                      })}
 
                     {mergedCount > 0 && (
                       <div style={{ marginTop: 16, padding: '10px 14px', borderRadius: 11, background: 'rgba(124,58,237,0.05)', border: '1px solid rgba(124,58,237,0.18)' }}>
@@ -7951,6 +8133,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           siteMap={siteMap}
           startDate={globalStart}
           endDate={globalEnd}
+          showToast={showToast} // ✅ MODIFIED: Pass showToast function
         />
       )}
       {/* Hoarding date conflict modal */}
@@ -7967,6 +8150,24 @@ export default function QuotationPage({ onNavigateToContracts }) {
           onSelectAll={(allIds) => setSelectedTerms(allIds)}
           termsList={termsList}
           onClose={() => setShowTermsModal(false)}
+        />
+      )}
+      {showTermsConfirmModal && (
+        <TermsConfirmModal
+          onConfirm={() => {
+            setShowTermsConfirmModal(false);
+            generatePDF(true);
+          }}
+          onCancel={() => {
+            setShowTermsConfirmModal(false);
+            setHighlightTerms(true);
+            setTimeout(() => {
+              const el = document.getElementById('terms-section-container');
+              if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }
+            }, 100);
+          }}
         />
       )}
 

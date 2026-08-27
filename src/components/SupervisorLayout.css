@@ -77,7 +77,8 @@ body { margin: 0; font-family: 'Nunito', sans-serif; }
   backdrop-filter: blur(24px) saturate(160%);
   border-right: 1.5px solid rgba(255,255,255,0.8);
   box-shadow: 4px 0 28px rgba(100,100,180,0.09);
-  z-index: 20;
+  /* z-index: 20; */
+  z-index: 9999999;
   overflow-y: auto;
   overflow-x: hidden;
 }

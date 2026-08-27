@@ -1060,6 +1060,7 @@ export default function OpportunityPage({ changeTab }) {
   const [sortDir, setSortDir] = useState('desc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [statusFilter, setStatusFilter] = useState(''); // ✅ MODIFIED: State for status filter
 
   /* -- Modals -- */
   const [detailOpportunity, setDetailOpportunity] = useState(null);
@@ -1154,6 +1155,10 @@ export default function OpportunityPage({ changeTab }) {
 
   /* -- Filter / Sort -- */
   const filtered = opportunities.filter(o => {
+    // ✅ MODIFIED: Apply status filter
+    if (statusFilter === 'Active' && !o.isActive) return false;
+    if (statusFilter === 'Inactive' && o.isActive) return false;
+
     const q = search.toLowerCase().trim();
     if (!q) return true;
     return (
@@ -1259,6 +1264,17 @@ export default function OpportunityPage({ changeTab }) {
               />
               {search && <X size={13} style={{ cursor: 'pointer', color: '#9090a8', flexShrink: 0 }} onClick={() => setSearch('')} />}
             </div>
+
+            {/* ✅ MODIFIED: Added dropdown for status filter */}
+            <select
+              className="hd-filter-select"
+              value={statusFilter}
+              onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+            >
+              <option value="">All Statuses</option>
+              <option value="Active">Active</option>
+              <option value="Inactive">Inactive</option>
+            </select>
 
             <button
               onClick={loadOpportunities}

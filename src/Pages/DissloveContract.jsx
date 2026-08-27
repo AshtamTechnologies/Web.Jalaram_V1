@@ -29,23 +29,23 @@ function addDays(dateStr, n) {
 function normalizeContract(raw) {
   return {
     customerContractID: raw.customerContractID ?? raw.CustomerContractID,
-    customerID:         raw.customerID         ?? raw.CustomerID,
-    startDate:          (raw.startDate         ?? raw.StartDate         ?? '').split('T')[0],
-    endDate:            (raw.endDate           ?? raw.EndDate           ?? '').split('T')[0],
-    contractOrigValue:  raw.contractOrigValue  ?? raw.ContractOrigValue  ?? '',
+    customerID: raw.customerID ?? raw.CustomerID,
+    startDate: (raw.startDate ?? raw.StartDate ?? '').split('T')[0],
+    endDate: (raw.endDate ?? raw.EndDate ?? '').split('T')[0],
+    contractOrigValue: raw.contractOrigValue ?? raw.ContractOrigValue ?? '',
     contractFinalValue: raw.contractFinalValue ?? raw.ContractFinalValue ?? '',
-    amountPerFreq:      raw.amountPerFreq      ?? raw.AmountPerFreq      ?? '',
-    advancePaid:        raw.advancePaid        ?? raw.AdvancePaid        ?? '',
-    paymentFreqID:      raw.paymentFreqID      ?? raw.PaymentFreqID      ?? '',
-    status:             raw.status             ?? raw.Status             ?? '',
-    comments:           raw.comments           ?? raw.Comments           ?? '',
+    amountPerFreq: raw.amountPerFreq ?? raw.AmountPerFreq ?? '',
+    advancePaid: raw.advancePaid ?? raw.AdvancePaid ?? '',
+    paymentFreqID: raw.paymentFreqID ?? raw.PaymentFreqID ?? '',
+    status: raw.status ?? raw.Status ?? '',
+    comments: raw.comments ?? raw.Comments ?? '',
   };
 }
 const STATUS_COLORS = {
-  Active:     { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
-  Expired:    { bg: '#fff7ed', color: '#ea580c', border: '#fed7aa' },
+  Active: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' },
+  Expired: { bg: '#fff7ed', color: '#ea580c', border: '#fed7aa' },
   Terminated: { bg: '#fef2f2', color: '#dc2626', border: '#fecaca' },
-  Pending:    { bg: '#fffbeb', color: '#d97706', border: '#fde68a' },
+  Pending: { bg: '#fffbeb', color: '#d97706', border: '#fde68a' },
 };
 function statusStyle(s) { return STATUS_COLORS[s] || { bg: '#f8f8fd', color: '#7878a0', border: '#e8e8f4' }; }
 
@@ -87,8 +87,8 @@ function PortalDropdown({ anchorRef, open, children }) {
     const rect = anchorRef.current.getBoundingClientRect();
     setStyle({
       position: 'fixed',
-      top:   rect.bottom + 6,
-      left:  rect.left,
+      top: rect.bottom + 6,
+      left: rect.left,
       width: rect.width,
       zIndex: 99990,
     });
@@ -104,14 +104,14 @@ function PortalDropdown({ anchorRef, open, children }) {
 /* ─── Dissolve Modal ─── */
 function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCancel, dissolving }) {
   const [endDate, setEndDate] = useState(contract.endDate || todayStr());
- 
+
   // The new hoarding effdt row will be effective from the day AFTER dissolution
   const availableFrom = addDays(endDate, 1);
- 
+
   return ReactDOM.createPortal(
     <div className="pg-overlay" onClick={e => e.target === e.currentTarget && !dissolving && onCancel()}>
       <div className="pg-modal" style={{ maxWidth: 500 }}>
- 
+
         {/* Header */}
         <div style={{
           background: 'linear-gradient(135deg,#049edf,#6c63ff)',
@@ -132,10 +132,10 @@ function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCan
             Contract #{contract.customerContractID} · {customerName}
           </div>
         </div>
- 
+
         {/* Body */}
         <div style={{ padding: '22px 26px 24px' }}>
- 
+
           {/* Contract info */}
           <div style={{
             background: '#fafafe', border: '1.5px solid #e8e8f4',
@@ -143,9 +143,9 @@ function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCan
             borderRadius: '0 12px 12px 0', overflow: 'hidden', marginBottom: 18,
           }}>
             {[
-              { label: 'Contract',    value: `#${contract.customerContractID}` },
-              { label: 'Customer',    value: customerName },
-              { label: 'Period',      value: `${fmtDate(contract.startDate)} → ${fmtDate(contract.endDate)}` },
+              { label: 'Contract', value: `#${contract.customerContractID}` },
+              { label: 'Customer', value: customerName },
+              { label: 'Period', value: `${fmtDate(contract.startDate)} → ${fmtDate(contract.endDate)}` },
               { label: 'Final Value', value: fmtCurrency(contract.contractFinalValue || contract.contractOrigValue) },
             ].map((row, i, arr) => (
               <div key={row.label} style={{
@@ -158,7 +158,7 @@ function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCan
               </div>
             ))}
           </div>
- 
+
           {/* Dissolution date picker */}
           <div style={{ marginBottom: 18 }}>
             <label style={{
@@ -187,7 +187,7 @@ function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCan
               />
             </div>
           </div>
- 
+
           {/* What will happen box — explains NEW ROW insertion */}
           {hoardingCount > 0 && endDate && (
             <div style={{
@@ -202,7 +202,7 @@ function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCan
                 <Building2 size={13} color="#16a34a" />
                 {hoardingCount} Hoarding{hoardingCount !== 1 ? 's' : ''} — New Row Will Be Added
               </div>
- 
+
               {/* Visual: old row → new row */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {/* Existing row */}
@@ -224,7 +224,7 @@ function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCan
                     }}>Occupied</span>
                   </span>
                 </div>
- 
+
                 {/* Arrow */}
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 6,
@@ -233,7 +233,7 @@ function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCan
                 }}>
                   ↓ New row INSERT on dissolve
                 </div>
- 
+
                 {/* New row being inserted */}
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8,
@@ -254,7 +254,7 @@ function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCan
                   </span>
                 </div>
               </div>
- 
+
               <div style={{
                 marginTop: 9, fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#4ade80',
                 fontWeight: 600, color: '#15803d',
@@ -263,7 +263,7 @@ function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCan
               </div>
             </div>
           )}
- 
+
           {/* Action buttons */}
           <div style={{ display: 'flex', gap: 10 }}>
             <button
@@ -305,22 +305,22 @@ function DissolveModal({ contract, customerName, hoardingCount, onConfirm, onCan
 export default function DissolveContractPage() {
   const [view, setView] = useState('grid'); // 'grid' | 'dissolve'
 
-  const [customers,    setCustomers]    = useState([]);
+  const [customers, setCustomers] = useState([]);
   const [allContracts, setAllContracts] = useState([]);
   const [allHoardings, setAllHoardings] = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [loadError,    setLoadError]    = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
-  const [query,            setQuery]           = useState('');
-  const [dropdownOpen,     setDropdownOpen]     = useState(false);
+  const [query, setQuery] = useState('');
+  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   const [gridSearch, setGridSearch] = useState('');
 
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [hoardingCount, setHoardingCount] = useState(0);
-  const [dissolving,    setDissolving]    = useState(false);
-  const [toast,         setToast]         = useState(null);
+  const [dissolving, setDissolving] = useState(false);
+  const [toast, setToast] = useState(null);
 
   /* The anchor ref for the portal dropdown — wraps the whole search input box */
   const searchBoxRef = useRef(null);
@@ -373,23 +373,23 @@ export default function DissolveContractPage() {
 
   const customerMap = useMemo(() =>
     Object.fromEntries(customers.map(c => [c.customerID, c])),
-  [customers]);
+    [customers]);
 
   const searchResults = useMemo(() =>
     query.trim()
       ? customers.filter(c =>
-          (c.customerName || '').toLowerCase().includes(query.toLowerCase()) ||
-          (c.phone1 || '').toLowerCase().includes(query.toLowerCase()) ||
-          String(c.customerID).includes(query)
-        ).slice(0, 8)
+        (c.customerName || '').toLowerCase().includes(query.toLowerCase()) ||
+        (c.phone1 || '').toLowerCase().includes(query.toLowerCase()) ||
+        String(c.customerID).includes(query)
+      ).slice(0, 8)
       : [],
-  [customers, query]);
+    [customers, query]);
 
   const dissolvedContracts = useMemo(() =>
     allContracts
       .filter(c => c.status === 'Terminated' || c.status === 'Expired')
       .sort((a, b) => (b.endDate || '').localeCompare(a.endDate || '')),
-  [allContracts]);
+    [allContracts]);
 
   const filteredGrid = useMemo(() => {
     if (!gridSearch.trim()) return dissolvedContracts;
@@ -407,42 +407,42 @@ export default function DissolveContractPage() {
   const activeContracts = useMemo(() =>
     selectedCustomer
       ? allContracts.filter(c =>
-          Number(c.customerID) === Number(selectedCustomer.customerID) &&
-          (c.status === 'Active' || c.status === 'Pending')
-        )
+        Number(c.customerID) === Number(selectedCustomer.customerID) &&
+        (c.status === 'Active' || c.status === 'Pending')
+      )
       : [],
-  [allContracts, selectedCustomer]);
+    [allContracts, selectedCustomer]);
 
   /* ── Dissolve action ── */
-const handleDissolve = async (endDate, availableFrom) => {
+  const handleDissolve = async (endDate, availableFrom) => {
     if (!confirmTarget) return;
     setDissolving(true);
     try {
- 
+
       /* STEP 1 — Update contract */
       await apiService.updateCustomerContract({
         ...confirmTarget,
         endDate,
         status: 'Terminated',
       });
- 
+
       /* STEP 2 — Get hoardings in this contract */
       const rawMaps = await apiService
         .getCustomerContractHoardingMaps(confirmTarget.customerContractID)
         .catch(() => []);
- 
+
       const maps = (Array.isArray(rawMaps) ? rawMaps : rawMaps?.data ?? [])
         .filter(m =>
           Number(m.customerContractID ?? m.CustomerContractID) ===
           Number(confirmTarget.customerContractID)
         );
- 
+
       /* STEP 3 — Insert new effdt row for each hoarding */
       const results = await Promise.allSettled(
         maps.map(async (m) => {
           const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
           if (!hid) return;
- 
+
           /* allHoardings is the flat raw array from getAllHoardings()
              field names may be camelCase or PascalCase depending on API */
           const h = allHoardings.find(hh =>
@@ -452,33 +452,33 @@ const handleDissolve = async (endDate, availableFrom) => {
             console.warn('[Dissolve] hoarding not found, hID:', hid);
             return;
           }
- 
+
           /* Normalize fields — handles both camelCase and PascalCase */
-          const hoardingCode  = h.hoardingCode  ?? h.HoardingCode  ?? '';
-          const material      = h.material      ?? h.Material      ?? '';
-          const hoardingType  = h.hoardingType  ?? h.HoardingType  ?? 0;
-          const monthlyRent   = Number(h.monthlyRent  ?? h.MonthlyRent  ?? 0);
-          const width         = Number(h.width        ?? h.Width        ?? 0);
-          const height        = Number(h.height       ?? h.Height       ?? 0);
-          const siteID        = Number(h.siteID       ?? h.SiteID       ?? 0);
- 
+          const hoardingCode = h.hoardingCode ?? h.HoardingCode ?? '';
+          const material = h.material ?? h.Material ?? '';
+          const hoardingType = h.hoardingType ?? h.HoardingType ?? 0;
+          const monthlyRent = Number(h.monthlyRent ?? h.MonthlyRent ?? 0);
+          const width = Number(h.width ?? h.Width ?? 0);
+          const height = Number(h.height ?? h.Height ?? 0);
+          const siteID = Number(h.siteID ?? h.SiteID ?? 0);
+
           if (!hoardingCode) {
             console.warn('[Dissolve] missing hoardingCode for hID:', hid, h);
             return;
           }
- 
+
           /* Build payload — must match HoardingPage "New Effective Date" */
           const payload = {
-            effdt:       availableFrom,   // "YYYY-MM-DD"
+            effdt: availableFrom,   // "YYYY-MM-DD"
             material,
             hoardingType: Number(hoardingType), // ensure it's a number
-            status:      'Available',
+            status: 'Available',
             monthlyRent,
             width,
             height,
             siteID,
           };
- 
+
           /*
           console.log('[Dissolve] addHoardingEffdt →', hoardingCode, payload);
           return apiService.addHoardingEffdt(hoardingCode, payload);
@@ -501,14 +501,14 @@ const handleDissolve = async (endDate, availableFrom) => {
           return apiService.saveHoardingLinkWithPhotos(newPayload);
         })
       );
- 
+
       const successCount = results.filter(r => r.status === 'fulfilled' && r.value !== undefined).length;
-      const failCount    = results.filter(r => r.status === 'rejected').length;
- 
+      const failCount = results.filter(r => r.status === 'rejected').length;
+
       results
         .filter(r => r.status === 'rejected')
         .forEach(r => console.error('[Dissolve] failed:', r.reason?.response?.data || r.reason?.message));
- 
+
       /* STEP 4 — Update local state */
       setAllContracts(prev =>
         prev.map(c =>
@@ -517,7 +517,7 @@ const handleDissolve = async (endDate, availableFrom) => {
             : c
         )
       );
- 
+
       showToast(
         `Contract #${confirmTarget.customerContractID} dissolved. ` +
         `${successCount} hoarding row${successCount !== 1 ? 's' : ''} inserted (Available from ${fmtDate(availableFrom)}).` +
@@ -525,7 +525,7 @@ const handleDissolve = async (endDate, availableFrom) => {
         failCount > 0 ? 'error' : 'success'
       );
       setConfirmTarget(null);
- 
+
     } catch (err) {
       showToast(err?.response?.data?.message || err?.message || 'Failed to dissolve.', 'error');
     } finally {
@@ -819,12 +819,12 @@ const handleDissolve = async (endDate, availableFrom) => {
                           background: '#f8f8fd', border: '1px solid #f0f0f8', borderRadius: 10, overflow: 'hidden',
                         }}>
                           {[
-                            { icon: Calendar,   label: 'Start Date',  value: fmtDate(contract.startDate) },
-                            { icon: Calendar,   label: 'End Date',    value: fmtDate(contract.endDate) },
-                            { icon: IndianRupee,label: 'Final Value', value: fmtCurrency(contract.contractFinalValue || contract.contractOrigValue) },
-                            { icon: IndianRupee,label: 'Per Freq.',   value: fmtCurrency(contract.amountPerFreq) },
-                            { icon: IndianRupee,label: 'Advance',     value: fmtCurrency(contract.advancePaid) },
-                            { icon: ShieldCheck,label: 'Orig. Value', value: fmtCurrency(contract.contractOrigValue) },
+                            { icon: Calendar, label: 'Start Date', value: fmtDate(contract.startDate) },
+                            { icon: Calendar, label: 'End Date', value: fmtDate(contract.endDate) },
+                            { icon: IndianRupee, label: 'Final Value', value: fmtCurrency(contract.contractFinalValue || contract.contractOrigValue) },
+                            { icon: IndianRupee, label: 'Per Freq.', value: fmtCurrency(contract.amountPerFreq) },
+                            { icon: IndianRupee, label: 'Advance', value: fmtCurrency(contract.advancePaid) },
+                            { icon: ShieldCheck, label: 'Orig. Value', value: fmtCurrency(contract.contractOrigValue) },
                           ].map(({ icon: Icon, label, value }, idx, arr) => (
                             <div key={label} style={{
                               padding: '11px 14px',
@@ -906,8 +906,8 @@ const handleDissolve = async (endDate, availableFrom) => {
         <div className="exp-stats-strip">
           {[
             { label: 'Total Dissolved', val: dissolvedContracts.length, icon: <FileText size={16} color="#049edf" />, bg: 'rgba(4,158,223,0.10)' },
-            { label: 'Terminated',      val: dissolvedContracts.filter(c => c.status === 'Terminated').length, icon: <AlertTriangle size={16} color="#6c63ff" />, bg: 'rgba(108,99,255,0.10)' },
-            { label: 'Expired',         val: dissolvedContracts.filter(c => c.status === 'Expired').length, icon: <Clock size={16} color="#d97706" />, bg: 'rgba(217,119,6,0.10)' },
+            { label: 'Terminated', val: dissolvedContracts.filter(c => c.status === 'Terminated').length, icon: <AlertTriangle size={16} color="#6c63ff" />, bg: 'rgba(108,99,255,0.10)' },
+            { label: 'Expired', val: dissolvedContracts.filter(c => c.status === 'Expired').length, icon: <Clock size={16} color="#d97706" />, bg: 'rgba(217,119,6,0.10)' },
           ].map(s => (
             <div key={s.label} className="exp-stat-item">
               <div className="exp-stat-item__icon" style={{ background: s.bg }}>{s.icon}</div>

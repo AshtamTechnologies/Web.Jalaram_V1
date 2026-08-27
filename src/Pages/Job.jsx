@@ -116,12 +116,12 @@ const validateTargetDate = (selectedDate, contractStart) => {
   if (!selectedDate || !contractStart) return { isValid: true };
   const target = new Date(selectedDate + 'T00:00:00');
   const start = new Date(contractStart + 'T00:00:00');
-  
+
   // If target date is before start date, it is allowed (valid)
   if (target < start) {
     return { isValid: true };
   }
-  
+
   // If target date is on or after start date, it must be within 7 days of start date
   const diffTime = target.getTime() - start.getTime();
   const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
@@ -132,7 +132,7 @@ const validateTargetDate = (selectedDate, contractStart) => {
       message: `Target Completion Date must be within 7 days after the Contract Start Date.`
     };
   }
-  
+
   return { isValid: true };
 };
 
@@ -787,7 +787,7 @@ function ValidationAlertModal({ isOpen, onClose, contractStartDate, targetDate, 
                 {fmtDate(contractStartDate)}
               </span>
             </div>
-            
+
             <div style={{ height: '1px', background: 'rgba(239, 68, 68, 0.1)' }} />
 
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -872,7 +872,7 @@ function ValidationAlertModal({ isOpen, onClose, contractStartDate, targetDate, 
           </button>
         </div>
       </div>
-      
+
       {/* Styles for animation */}
       <style>{`
         @keyframes fadeInScale {
@@ -1650,15 +1650,73 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
 /* ═══════════════════════════════════════════
    JOB PHOTOS VIEW MODAL
 ═══════════════════════════════════════════ */
-function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
-  const [selectedTaskID, setSelectedTaskID] = useState(
-    tasks.length > 0 ? String(tasks[0].jobTaskID) : ''
-  );
+// ✅ MODIFIED: Added hoardingMerges prop to group merged hoardings together in dropdown and photos view
+function JobPhotosViewModal({ job, tasks, hoardings, attachments, hoardingMerges = [], onClose }) {
+  // ✅ MODIFIED: Group tasks by site and merge flag so merged hoardings show up as a single dropdown item
+  const options = useMemo(() => {
+    const mergeMap = new Map();
+    (hoardingMerges || []).forEach(m => {
+      const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+      if (hid) {
+        mergeMap.set(hid, m);
+      }
+    });
+
+    const mergedGroups = {}; // key: siteID_flag -> array of tasks
+    const unmergedRows = [];
+
+    tasks.forEach(task => {
+      const hid = Number(task.hoardingID);
+      const mergeInfo = mergeMap.get(hid);
+      if (mergeInfo) {
+        const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+        const hoarding = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
+        const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
+        const key = `${siteID}_${flag}`;
+        if (!mergedGroups[key]) {
+          mergedGroups[key] = [];
+        }
+        mergedGroups[key].push(task);
+      } else {
+        unmergedRows.push(task);
+      }
+    });
+
+    const result = [];
+
+    // Process merged groups
+    Object.entries(mergedGroups).forEach(([key, groupTasks]) => {
+      if (groupTasks.length === 0) return;
+      const [siteIDStr, flag] = key.split('_');
+      result.push({
+        _type: 'merged',
+        _id: `__merged__${siteIDStr}_${flag}`,
+        tasks: groupTasks,
+        mergeFlag: flag,
+        jobTaskID: String(groupTasks[0].jobTaskID),
+      });
+    });
+
+    // Individual rows for unmerged
+    unmergedRows.forEach(task => result.push({ _type: 'single', jobTaskID: String(task.jobTaskID), ...task }));
+
+    return result;
+  }, [tasks, hoardingMerges, hoardings]);
+
+  const [selectedTaskID, setSelectedTaskID] = useState('');
+
+  // Set default selection
+  useEffect(() => {
+    if (options.length > 0 && !selectedTaskID) {
+      setSelectedTaskID(String(options[0].jobTaskID));
+    }
+  }, [options, selectedTaskID]);
+
   const [lightbox, setLightbox] = useState(null);
   const [geoAddress, setGeoAddress] = useState('');
   const [geoLoading, setGeoLoading] = useState(false);
 
-  const selectedTask = tasks.find(t => String(t.jobTaskID) === selectedTaskID);
+  const selectedOption = options.find(o => String(o.jobTaskID) === selectedTaskID);
 
   // Fetch geo address whenever the selected task changes
   useEffect(() => {
@@ -1677,12 +1735,20 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
       .finally(() => setGeoLoading(false));
   }, [selectedTaskID]);
 
+  // ✅ MODIFIED: Retrieve photos for all task IDs in a group if it is a merged hoarding, otherwise retrieve for the single task
   const taskAttachments = useMemo(() => {
-    if (!selectedTaskID) return [];
-    return attachments.filter(
-      a => Number(a.jobTaskID ?? a.JobTaskID) === Number(selectedTaskID)
-    );
-  }, [selectedTaskID, attachments]);
+    if (!selectedOption) return [];
+    if (selectedOption._type === 'merged') {
+      const taskIDs = selectedOption.tasks.map(t => Number(t.jobTaskID));
+      return attachments.filter(
+        a => taskIDs.includes(Number(a.jobTaskID ?? a.JobTaskID))
+      );
+    } else {
+      return attachments.filter(
+        a => Number(a.jobTaskID ?? a.JobTaskID) === Number(selectedTaskID)
+      );
+    }
+  }, [selectedOption, selectedTaskID, attachments]);
 
   const customerName = job.customerName || `Customer ID ${job.customerID}`;
 
@@ -1749,17 +1815,32 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
             <ComboField
               value={selectedTaskID}
               onChange={t => setSelectedTaskID(t ? String(t.jobTaskID) : '')}
-              options={tasks}
+              options={options}
               placeholder="Select hoarding…"
               icon={Building2}
               getLabel={t => {
-                const h = hoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
-                return t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`;
+                if (t._type === 'merged') {
+                  const flagStr = t.mergeFlag === 'H' ? 'Horizontal Merge' : 'Vertical Merge';
+                  const codes = t.tasks.map(tsk => {
+                    const h = hoardings.find(hh => Number(hh.hoardingID) === Number(tsk.hoardingID));
+                    return tsk.hoardingCode || h?.hoardingCode || `#${tsk.hoardingID}`;
+                  }).join(' + ');
+                  return `${flagStr} [${codes}]`;
+                } else {
+                  const h = hoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
+                  return t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`;
+                }
               }}
               getValue={t => t.jobTaskID}
               getSecondary={t => {
-                const h = hoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
-                return getSiteAddress(h);
+                if (t._type === 'merged') {
+                  const firstTask = t.tasks[0];
+                  const h = hoardings.find(hh => Number(hh.hoardingID) === Number(firstTask.hoardingID));
+                  return getSiteAddress(h);
+                } else {
+                  const h = hoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
+                  return getSiteAddress(h);
+                }
               }}
               searchPlaceholder="Search hoardings…"
             />
@@ -1942,6 +2023,69 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
     };
   });
 
+  // ✅ MODIFIED: Group hoarding previews so merged hoardings show together in the Complete confirmation list
+  const groupedPreviews = useMemo(() => {
+    const mergeMap = new Map();
+    (hoardingMerges || []).forEach(m => {
+      const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+      if (hid) {
+        mergeMap.set(hid, m);
+      }
+    });
+
+    const mergedGroups = {}; // key: siteID_flag -> array of tasks
+    const unmergedRows = [];
+
+    tasks.forEach(task => {
+      const hid = Number(task.hoardingID);
+      const mergeInfo = mergeMap.get(hid);
+      if (mergeInfo) {
+        const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+        const hoarding = allHoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
+        const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
+        const key = `${siteID}_${flag}`;
+        if (!mergedGroups[key]) {
+          mergedGroups[key] = [];
+        }
+        mergedGroups[key].push(task);
+      } else {
+        unmergedRows.push(task);
+      }
+    });
+
+    const result = [];
+
+    // Process merged groups
+    Object.entries(mergedGroups).forEach(([key, groupTasks]) => {
+      if (groupTasks.length === 0) return;
+      const [siteIDStr, flag] = key.split('_');
+      const firstH = allHoardings.find(hh => Number(hh.hoardingID) === Number(groupTasks[0].hoardingID));
+      const flagStr = flag === 'H' ? 'Horizontal Merge' : 'Vertical Merge';
+      const codes = groupTasks.map(t => {
+        const h = allHoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
+        return t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`;
+      }).join(' + ');
+
+      result.push({
+        _type: 'merged',
+        hoardingCode: `${flagStr} [${codes}]`,
+        currentStatus: firstH?.status || 'Active',
+      });
+    });
+
+    // Individual rows for unmerged
+    unmergedRows.forEach(task => {
+      const h = allHoardings.find(hh => Number(hh.hoardingID) === Number(task.hoardingID));
+      result.push({
+        _type: 'single',
+        hoardingCode: task.hoardingCode || h?.hoardingCode || `#${task.hoardingID}`,
+        currentStatus: h?.status || 'Active',
+      });
+    });
+
+    return result;
+  }, [tasks, hoardingMerges, allHoardings]);
+
   const handleFinalSubmit = () => {
     if (hasMissingPhotos) {
       setError('Upload the images first then make mark as complete the job');
@@ -2097,8 +2241,9 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
                 {hoardingPreviews.length} New Effdt Row{hoardingPreviews.length !== 1 ? 's' : ''} Will Be Added
               </div>
 
+              {/* ✅ MODIFIED: Render groupedPreviews list instead of hoardingPreviews individually */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
-                {hoardingPreviews.map((h, i) => (
+                {groupedPreviews.map((h, i) => (
                   <div key={i} style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     padding: '7px 10px', borderRadius: 8,
@@ -2106,13 +2251,13 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
                     fontFamily: 'Nunito,sans-serif', fontSize: 11.5,
                   }}>
                     {/* Hoarding code */}
-                    <span style={{ fontWeight: 800, color: '#15803d', minWidth: 70 }}>
+                    <span style={{ fontWeight: 800, color: '#15803d' }}>
                       {h.hoardingCode}
                     </span>
                     {/* Arrow */}
-                    <span style={{ color: '#9090a8', fontWeight: 700, fontSize: 11 }}>effdt =</span>
+                    <span style={{ color: '#9090a8', fontWeight: 700, fontSize: 11, marginLeft: '6px' }}>effdt =</span>
                     {/* Date */}
-                    <span style={{ fontWeight: 700, color: '#1a1a2e' }}>
+                    <span style={{ fontWeight: 700, color: '#1a1a2e', marginLeft: '4px' }}>
                       {completionDate ? fmtDate(completionDate) : '—'}
                     </span>
                     {/* Status (from last effdt row) */}
@@ -2388,11 +2533,11 @@ export default function JobPage() {
 
       const gaps = Math.max(groupTasks.length - 1, 0);
       const isHorizontalMerge = flag === 'H';
-      const mw = isHorizontalMerge 
-        ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps 
+      const mw = isHorizontalMerge
+        ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps
         : Math.max(...sizes.map(s => s.w), 0);
-      const mh = isHorizontalMerge 
-        ? Math.max(...sizes.map(s => s.h), 0) 
+      const mh = isHorizontalMerge
+        ? Math.max(...sizes.map(s => s.h), 0)
         : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
 
       result.push({
@@ -4310,6 +4455,7 @@ export default function JobPage() {
           tasks={getMyTasks(photosViewTarget.jobRequestID)}
           hoardings={hoardings}
           attachments={allAttachments}
+          hoardingMerges={hoardingMerges} // ✅ MODIFIED: Pass hoardingMerges to view combined photos/dropdowns
           onClose={() => setPhotosViewTarget(null)}
         />
       )}
