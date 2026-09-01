@@ -5354,14 +5354,14 @@ select.exp-cell-input {
   min-width: 1300px;
 }
 
-/* ── PAYMENT TABLE min-width (11 data cols) ── */
+/* ── PAYMENT TABLE min-width (13 data cols) ── */
 .exp-rows-tbl.exp-rows-tbl--payment {
-  min-width: 1520px;
+  min-width: 1580px;
 }
 
 /* If no modifier class, default wide enough for payment */
 .exp-rows-tbl {
-  min-width: 1520px;
+  min-width: 1580px;
 }
 
 /* Cell base */
@@ -5384,72 +5384,77 @@ select.exp-cell-input {
   overflow-y: auto;
 }
 
-/* ── Column widths — PAYMENT table ── */
-.exp-rows-tbl th:nth-child(1) {
+/* ── Column widths — PAYMENT table (13 columns) ── */
+.exp-rows-tbl th:nth-child(1),
+.exp-rows-tbl td:nth-child(1) {
   width: 42px;
 }
-
 /* # index      */
-.exp-rows-tbl th:nth-child(2) {
+.exp-rows-tbl th:nth-child(2),
+.exp-rows-tbl td:nth-child(2) {
   width: 130px;
 }
-
 /* Pay Date     */
-.exp-rows-tbl th:nth-child(3) {
-  width: 140px;
+.exp-rows-tbl th:nth-child(3),
+.exp-rows-tbl td:nth-child(3) {
+  width: 135px;
 }
-
 /* Purpose      */
-.exp-rows-tbl th:nth-child(4) {
+.exp-rows-tbl th:nth-child(4),
+.exp-rows-tbl td:nth-child(4) {
   width: 105px;
 }
-
 /* Amount       */
-.exp-rows-tbl th:nth-child(5) {
+.exp-rows-tbl th:nth-child(5),
+.exp-rows-tbl td:nth-child(5) {
+  width: 105px;
+}
+/* Extra Pay    */
+.exp-rows-tbl th:nth-child(6),
+.exp-rows-tbl td:nth-child(6) {
   width: 115px;
 }
-
 /* Mode         */
-.exp-rows-tbl th:nth-child(6) {
+.exp-rows-tbl th:nth-child(7),
+.exp-rows-tbl td:nth-child(7) {
   width: 115px;
 }
-
 /* Paid By      */
-.exp-rows-tbl th:nth-child(7) {
+.exp-rows-tbl th:nth-child(8),
+.exp-rows-tbl td:nth-child(8) {
   width: 128px;
 }
-
 /* Next Due     */
-.exp-rows-tbl th:nth-child(8) {
+.exp-rows-tbl th:nth-child(9),
+.exp-rows-tbl td:nth-child(9) {
   width: 120px;
 }
-
 /* Bank         */
-.exp-rows-tbl th:nth-child(9) {
+.exp-rows-tbl th:nth-child(10),
+.exp-rows-tbl td:nth-child(10) {
   width: 130px;
 }
-
 /* Reference    */
-.exp-rows-tbl th:nth-child(10) {
+.exp-rows-tbl th:nth-child(11),
+.exp-rows-tbl td:nth-child(11) {
   width: 140px;
 }
-
 /* Comments     */
-.exp-rows-tbl th:nth-child(11) {
-  width: 190px;
+.exp-rows-tbl th:nth-child(12),
+.exp-rows-tbl td:nth-child(12) {
+  width: 180px;
 }
-
 /* Photo / Doc  */
-.exp-rows-tbl th:nth-child(12) {
-  width: 44px;
+.exp-rows-tbl th:nth-child(13),
+.exp-rows-tbl td:nth-child(13) {
+  width: 48px;
 }
-
 /* Delete       */
 
 /* ── Attachment cell inside table ── */
 .exp-rows-tbl .ea-cell {
   min-width: 0;
-  max-width: 190px;
+  max-width: 180px;
   width: 100%;
 }
 

@@ -171,14 +171,64 @@ function normalizeCustomer(raw) {
 }
 
 function normalizeContract(raw) {
+  const rawComments = raw.comments ?? raw.Comments ?? '';
+  const matchCompany = rawComments.match(/\[CompanyID:\s*(\d+)\]/i);
+  const commentsCompanyID = matchCompany ? Number(matchCompany[1]) : '';
+  const comments = rawComments.replace(/\[CompanyID:\s*\d+\]/gi, '').trim();
+  const directCompanyID = raw.companyID ?? raw.CompanyID ?? raw.company_ID ?? raw.Company_ID ?? '';
+
   return {
-    customerContractID: raw.customerContractID ?? raw.CustomerContractID ?? 0,
-    customerID: raw.customerID ?? raw.CustomerID ?? 0,
-    hoardingID: raw.hoardingID ?? raw.HoardingID ?? 0,
+    customerContractID: Number(raw.customerContractID ?? raw.CustomerContractID ?? 0),
+    customerID: Number(raw.customerID ?? raw.CustomerID ?? 0),
+    hoardingID: Number(raw.hoardingID ?? raw.HoardingID ?? 0),
     startDate: (raw.startDate ?? raw.StartDate ?? '').split('T')[0],
     endDate: (raw.endDate ?? raw.EndDate ?? '').split('T')[0],
     status: raw.status ?? raw.Status ?? '',
     amountPerFreq: Number(raw.amountPerFreq ?? raw.AmountPerFreq ?? 0),
+    comments: comments,
+    companyID: directCompanyID !== '' ? Number(directCompanyID) : (commentsCompanyID !== '' ? Number(commentsCompanyID) : ''),
+  };
+}
+
+function normalizeCompany(raw) {
+  if (!raw) return null;
+  return {
+    companyID: Number(raw.company_ID ?? raw.Company_ID ?? raw.companyID ?? raw.CompanyID ?? 0),
+    companyName: raw.company_Name ?? raw.Company_Name ?? raw.companyName ?? raw.CompanyName ?? '',
+    addressLine1: raw.address_Line1 ?? raw.Address_Line1 ?? raw.addressLine1 ?? raw.AddressLine1 ?? '',
+    addressLine2: raw.address_Line2 ?? raw.Address_Line2 ?? raw.addressLine2 ?? raw.AddressLine2 ?? '',
+    city: raw.city ?? raw.City ?? '',
+    state: raw.state ?? raw.State ?? '',
+    country: raw.country ?? raw.Country ?? '',
+    pincode: raw.pincode ?? raw.Pincode ?? '',
+    contactPerson: raw.contact_Person ?? raw.Contact_Person ?? raw.contactPerson ?? raw.ContactPerson ?? '',
+    mobileNo: raw.mobile_No ?? raw.Mobile_No ?? raw.mobileNo ?? raw.MobileNo ?? '',
+    email: raw.email ?? raw.Email ?? '',
+    website: raw.website ?? raw.Website ?? '',
+    gstin: raw.gstin ?? raw.GSTIN ?? raw.Gstin ?? '',
+    panNo: raw.paN_No ?? raw.PAN_No ?? raw.panNo ?? raw.PanNo ?? raw.pan ?? '',
+  };
+}
+
+function getCompanyInfo(company) {
+  if (!company) return JOB_COMPANY;
+  const line2Parts = [
+    company.addressLine2,
+    company.city,
+    [company.state, company.pincode].filter(Boolean).join(' - '),
+    company.country
+  ].filter(Boolean);
+
+  const phoneParts = [
+    company.contactPerson ? `${company.contactPerson} # ` : '',
+    company.mobileNo || ''
+  ].filter(Boolean).join('');
+
+  return {
+    name: company.companyName || JOB_COMPANY.name,
+    line1: company.addressLine1 || JOB_COMPANY.line1,
+    line2: line2Parts.join(', ') || JOB_COMPANY.line2,
+    phone: phoneParts || company.mobileNo || JOB_COMPANY.phone,
   };
 }
 
@@ -340,6 +390,419 @@ function TaskStatusSelect({ value, onChange, disabled }) {
     </select>
   );
 }
+
+/* ═══════════════════════════════════════════
+   JOB PDF HTML BUILDER
+═══════════════════════════════════════════ */
+const JOB_COMPANY = {
+  name: 'JALARAM AD',
+  line1: '103/4/5/6, Drashti Arcade, Opp. Anand ITI',
+  line2: 'Nr. Grid Crossing, Anand - 388001, GUJ. INDIA',
+  phone: 'Parag Patel # 9428151123',
+};
+
+function buildJobPDFHTML({ company, job, customerName, supervisorName, tasks, attachments, hoardings, hoardingMerges = [] }) {
+  const comp = company || JOB_COMPANY;
+  const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const fmtD = (d) => {
+    if (!d) return '—';
+    return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  // Build a map: taskID -> { near, far }
+  const taskPhotoMap = {};
+  attachments.forEach(att => {
+    const taskID = Number(att.jobTaskID ?? att.JobTaskID ?? 0);
+    if (!taskID) return;
+    const url = buildImageUrl(att);
+    if (!url) return;
+    const type = (att.photoFileType ?? att.PhotoFileType ?? '').toLowerCase();
+    if (!taskPhotoMap[taskID]) taskPhotoMap[taskID] = { near: null, far: null };
+    if (type.includes('near')) {
+      taskPhotoMap[taskID].near = taskPhotoMap[taskID].near || url;
+    } else if (type.includes('far')) {
+      taskPhotoMap[taskID].far = taskPhotoMap[taskID].far || url;
+    }
+  });
+
+  // Group tasks by merge group if merged, else unmerged
+  const mergeMap = new Map();
+  (hoardingMerges || []).forEach(m => {
+    const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+    if (hid) {
+      mergeMap.set(hid, m);
+    }
+  });
+
+  const mergedGroups = {}; // key: `${siteID}_${flag}` -> array of tasks
+  const unmergedTasks = [];
+
+  tasks.forEach(task => {
+    const hid = Number(task.hoardingID);
+    const mergeInfo = mergeMap.get(hid);
+    if (mergeInfo) {
+      const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+      const hoarding = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
+      const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
+      const key = `${siteID}_${flag}`;
+      if (!mergedGroups[key]) {
+        mergedGroups[key] = [];
+      }
+      mergedGroups[key].push(task);
+    } else {
+      unmergedTasks.push(task);
+    }
+  });
+
+  // Process merged groups
+  const mergedItems = Object.entries(mergedGroups).map(([key, groupTasks]) => {
+    const [siteIDStr, flag] = key.split('_');
+    const isHorizontalMerge = flag === 'H';
+
+    const mergedHoardings = groupTasks.map(t => {
+      const h = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === Number(t.hoardingID));
+      return {
+        hoardingCode: t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`,
+        width: Number(h?.width ?? h?.Width ?? 0),
+        height: Number(h?.height ?? h?.Height ?? 0),
+        siteAddress: t.siteAddress || getSiteAddress(h),
+        taskID: Number(t.jobTaskID),
+      };
+    });
+
+    const sizes = mergedHoardings.map(h => ({ w: h.width, h: h.height }));
+    const gaps = Math.max(groupTasks.length - 1, 0);
+    const mw = isHorizontalMerge
+      ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps
+      : Math.max(...sizes.map(s => s.w), 0);
+    const mh = isHorizontalMerge
+      ? Math.max(...sizes.map(s => s.h), 0)
+      : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+    const combinedSqFt = mw * mh;
+
+    const hoardingCodes = mergedHoardings.map(h => h.hoardingCode).join(' + ');
+    const siteAddr = mergedHoardings.find(h => h.siteAddress)?.siteAddress || '';
+
+    // Photos: look across all taskIDs in the merge group
+    const allTaskIDs = groupTasks.map(t => Number(t.jobTaskID));
+    let near = null;
+    let far = null;
+    for (const tid of allTaskIDs) {
+      if (!near && taskPhotoMap[tid]?.near) near = taskPhotoMap[tid].near;
+      if (!far && taskPhotoMap[tid]?.far) far = taskPhotoMap[tid].far;
+    }
+
+    return {
+      isMerged: true,
+      direction: flag,
+      hoardingCodes,
+      mergedHoardings,
+      size: `${mw} × ${mh} ft`,
+      sqFt: combinedSqFt,
+      siteAddr,
+      status: groupTasks[0].status || 'Open',
+      photos: { near, far },
+      taskIDs: allTaskIDs,
+      totalCount: groupTasks.length,
+    };
+  });
+
+  // Process unmerged tasks
+  const unmergedItems = unmergedTasks.map(t => {
+    const h = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === Number(t.hoardingID));
+    const hoardingCode = t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`;
+    const size = h ? `${h.width} × ${h.height} ft` : (t.size || '—');
+    const sqFt = h ? (Number(h.width) * Number(h.height)) : (Number(t.sqFt) || 0);
+    const siteAddr = t.siteAddress || getSiteAddress(h);
+    const taskID = Number(t.jobTaskID);
+    const photos = taskPhotoMap[taskID] || { near: null, far: null };
+    return {
+      isMerged: false,
+      hoardingCode,
+      size,
+      sqFt,
+      siteAddr,
+      status: t.status,
+      photos,
+      taskID,
+      totalCount: 1,
+    };
+  });
+
+  const taskItems = [...mergedItems, ...unmergedItems];
+  const totalSqFt = taskItems.reduce((s, t) => s + (t.sqFt || 0), 0);
+
+  const css = `
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;}
+
+    /* ── A4 page ── */
+    .page{
+      width:210mm; height:297mm;
+      padding:10mm 14mm 9mm;
+      page-break-after:always;
+      display:flex; flex-direction:column;
+      overflow:hidden;
+    }
+    .page:last-child{page-break-after:avoid;}
+
+    /* ── Page header ── */
+    .ph{
+      display:flex; justify-content:space-between; align-items:flex-end;
+      padding-bottom:5px; border-bottom:2px solid #000;
+      margin-bottom:7px; flex-shrink:0;
+    }
+    .ph-co{font-size:14px;font-weight:900;letter-spacing:1px;}
+    .ph-r{font-size:10px;color:#444;text-align:right;line-height:1.4;}
+
+    /* ── COVER ── */
+    .cov{justify-content:space-between;}
+    .cov-top{
+      display:flex;justify-content:space-between;align-items:flex-start;
+      padding-bottom:13px;border-bottom:3px solid #000;
+    }
+    .cov-co{font-size:38px;font-weight:900;letter-spacing:2px;line-height:1.1;}
+    .cov-addr{font-size:10.5px;color:#555;margin-top:6px;line-height:1.7;}
+    .cov-date{font-size:15px;font-weight:700;white-space:nowrap;}
+    .cov-body{flex:1;display:flex;flex-direction:column;justify-content:center;padding:26px 0 14px;}
+    .cov-title{font-size:30px;font-weight:700;margin-bottom:8px;}
+    .cov-sub{font-size:15px;color:#333;margin-top:4px;}
+    .cov-info{
+      margin-top:18px;padding:13px 15px;
+      background:#f4f4f4;border-left:5px solid #000;
+      font-size:13px;line-height:2;color:#111;
+    }
+    .cov-foot{
+      display:flex;justify-content:space-between;align-items:center;
+      border-top:1px solid #ccc;padding-top:8px;
+      font-size:10.5px;color:#555;font-weight:600;
+    }
+
+    /* ── HOARDING PAIR ── */
+    .pair-wrap{
+      flex:1;min-height:0;
+      display:flex;flex-direction:column;
+      gap:0;
+    }
+    .hrd-section{
+      flex:0 0 50%;max-height:50%;
+      min-height:0;
+      display:flex;flex-direction:column;
+    }
+    .hrd-section + .hrd-section{
+      border-top:1.5px dashed #ccc;
+      padding-top:5px;
+    }
+    /* Vision photos side by side */
+    .hrd-photos{
+      flex:1;min-height:0;overflow:hidden;
+      display:flex;gap:4px;margin-bottom:4px;
+    }
+    .hrd-photo-wrap{
+      flex:1;min-width:0;position:relative;overflow:hidden;
+      background:#e0e0e0;
+    }
+    .hrd-photo-wrap img{
+      width:100%;height:100%;object-fit:contain;display:block;
+    }
+    .hrd-vision-label{
+      position:absolute;bottom:4px;left:4px;
+      background:rgba(0,0,0,0.65);color:#fff;
+      font-size:9px;font-weight:bold;
+      padding:1px 6px;border-radius:4px;
+    }
+    .hrd-no-photo{
+      flex:1;min-height:0;overflow:hidden;
+      background:#f5f5f5;border:1.5px dashed #ccc;
+      margin-bottom:4px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:11px;color:#aaa;gap:6px;
+    }
+    /* Details box */
+    .hrd-box{
+      background:#f2f2f2;padding:8px 12px;
+      border-left:4px solid #000;flex-shrink:0;
+    }
+    .hrd-title{font-size:11.5px;font-weight:700;margin-bottom:5px;line-height:1.4;color:#000;}
+    .hrd-row{display:flex;flex-wrap:wrap;font-size:11px;}
+    .hrd-cell{flex:0 0 50%;padding-right:8px;}
+    .hrd-lbl{font-weight:700;}
+    .hrd-status{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:800;
+      background:#e8fdf3;color:#16a34a;border:1px solid #bbf7d0;}
+
+    /* Download bar */
+    #dl-bar{
+      position:fixed;top:0;left:0;right:0;z-index:9999;
+      background:#111;color:#fff;
+      display:flex;align-items:center;justify-content:space-between;
+      padding:10px 20px;font-family:Arial,sans-serif;font-size:13px;gap:12px;
+    }
+    .dl-btn{
+      padding:7px 22px;background:#dc2626;color:#fff;
+      border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;
+    }
+    .dl-btn:hover{background:#b91c1c;}
+    @media print{
+      #dl-bar{display:none!important;}
+      body{padding-top:0!important;}
+      .page{width:100%;height:100vh;padding:8mm 12mm 8mm;}
+    }
+    @page{size:A4 portrait;margin:0;}
+  `;
+
+  /* shared page header */
+  const ph = `
+    <div class="ph">
+      <span class="ph-co">${comp.name}</span>
+      <span class="ph-r">Job #${job.jobRequestID} &mdash; ${customerName}<br>${today}</span>
+    </div>`;
+
+  /* hoarding section */
+  const section = (item) => {
+    const hasNear = !!item.photos.near;
+    const hasFar = !!item.photos.far;
+    const hasAnyPhoto = hasNear || hasFar;
+    const displayName = item.isMerged ? item.hoardingCodes : item.hoardingCode;
+
+    const photoArea = hasAnyPhoto ? `
+      <div class="hrd-photos">
+        ${hasNear ? `
+          <div class="hrd-photo-wrap">
+            <img src="${item.photos.near}" alt="Short Vision - ${displayName}" />
+            <span class="hrd-vision-label">📸 Short Vision</span>
+          </div>` : `
+          <div class="hrd-photo-wrap" style="display:flex;align-items:center;justify-content:center;font-size:11px;color:#aaa;">
+            📷 No Short Vision
+          </div>`}
+        ${hasFar ? `
+          <div class="hrd-photo-wrap">
+            <img src="${item.photos.far}" alt="Long Vision - ${displayName}" />
+            <span class="hrd-vision-label">🔭 Long Vision</span>
+          </div>` : `
+          <div class="hrd-photo-wrap" style="display:flex;align-items:center;justify-content:center;font-size:11px;color:#aaa;">
+            📷 No Long Vision
+          </div>`}
+      </div>` :
+      `<div class="hrd-no-photo">📷&nbsp;No photos uploaded for ${displayName}</div>`;
+
+    const detailsBox = item.isMerged ? `
+      <div class="hrd-box" style="border-left: 4px solid #7c3aed; background: #faf8ff;">
+        <div class="hrd-title">
+          <strong>${item.hoardingCodes}</strong>
+          <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:#ede9fe;color:#7c3aed;font-size:10px;font-weight:800;margin-left:6px;border:1px solid #ddd6fe;">
+            ${item.direction === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
+          </span>
+          ${item.siteAddr ? `&nbsp;&mdash;&nbsp;${item.siteAddr}` : ''}
+          ${item.size ? `&nbsp;&mdash;&nbsp;<strong>${item.size}</strong>` : ''}
+        </div>
+        <div class="hrd-row">
+          <div class="hrd-cell" style="flex:0 0 100%;margin-bottom:3px;">
+            <span class="hrd-lbl">Merged Hoardings:</span>&nbsp;
+            ${(item.mergedHoardings || []).map(h => `<span style="display:inline-block;background:#fff;padding:1px 6px;border-radius:4px;border:1px solid #e0d8f8;margin-right:4px;font-size:10.5px;">${h.hoardingCode} (${h.width}×${h.height} ft)</span>`).join('')}
+          </div>
+          <div class="hrd-cell"><span class="hrd-lbl">Combined Area:</span>&nbsp;${item.sqFt ? item.sqFt.toLocaleString('en-IN') + ' sq.ft' : '—'}</div>
+          <div class="hrd-cell"><span class="hrd-lbl">Status:</span>&nbsp;<span class="hrd-status">${item.status || 'Open'}</span></div>
+        </div>
+      </div>` : `
+      <div class="hrd-box">
+        <div class="hrd-title">${item.hoardingCode}${item.siteAddr ? ` &mdash; ${item.siteAddr}` : ''}${item.size ? ` &mdash; ${item.size}` : ''}</div>
+        <div class="hrd-row">
+          <div class="hrd-cell"><span class="hrd-lbl">Area:</span>&nbsp;${item.sqFt ? item.sqFt.toLocaleString('en-IN') + ' sq.ft' : '—'}</div>
+          <div class="hrd-cell"><span class="hrd-lbl">Status:</span>&nbsp;<span class="hrd-status">${item.status || 'Open'}</span></div>
+        </div>
+      </div>`;
+
+    return `
+      <div class="hrd-section">
+        ${photoArea}
+        ${detailsBox}
+      </div>`;
+  };
+
+  /* ── COVER ── */
+  const totalHoardingsCount = tasks.length;
+  const cover = `
+    <div class="page cov">
+      <div class="cov-top">
+        <div>
+          <div class="cov-co">${comp.name}</div>
+          <div class="cov-addr">${comp.line1}<br>${comp.line2}</div>
+        </div>
+        <div class="cov-date">${today}</div>
+      </div>
+      <div class="cov-body">
+        <div class="cov-title">Job #${job.jobRequestID}</div>
+        ${customerName ? `<div class="cov-sub">${customerName}</div>` : ''}
+        <div class="cov-info">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <tr>
+              <td style="width:180px;font-weight:bold;padding:2px 0;">Job Type</td>
+              <td style="padding:2px 0;">: ${job.jobType || '—'}</td>
+            </tr>
+            <tr>
+              <td style="font-weight:bold;padding:2px 0;">Supervisor</td>
+              <td style="padding:2px 0;">: ${supervisorName || '—'}</td>
+            </tr>
+            ${job.actualCompletionDate ? `
+            <tr>
+              <td style="font-weight:bold;padding:2px 0;">Completed On</td>
+              <td style="padding:2px 0;">: ${fmtD(job.actualCompletionDate)}</td>
+            </tr>` : ''}
+            <tr>
+              <td style="font-weight:bold;padding:2px 0;">Total Area</td>
+              <td style="padding:2px 0;">: ${totalSqFt.toLocaleString('en-IN')} sq.ft</td>
+            </tr>
+            <tr>
+              <td style="font-weight:bold;padding:2px 0;">Total Hoardings</td>
+              <td style="padding:2px 0;">: ${totalHoardingsCount} (${taskItems.length} location${taskItems.length !== 1 ? 's' : ''})</td>
+            </tr>
+            ${job.jobDescription ? `
+            <tr>
+              <td style="font-weight:bold;padding:2px 0;vertical-align:top;">Description</td>
+              <td style="padding:2px 0;">: ${job.jobDescription}</td>
+            </tr>` : ''}
+          </table>
+        </div>
+      </div>
+      <div class="cov-foot">
+        <span>${comp.phone}</span>
+        <span>${taskItems.length} Location${taskItems.length !== 1 ? 's' : ''} (${totalHoardingsCount} Hoarding${totalHoardingsCount !== 1 ? 's' : ''})</span>
+      </div>
+    </div>`;
+
+  /* ── HOARDING PAGES (2 per page) ── */
+  const hrdPages = [];
+  for (let i = 0; i < taskItems.length; i += 2) {
+    const a = taskItems[i];
+    const b = taskItems[i + 1];
+    hrdPages.push(`
+      <div class="page" style="display:flex;flex-direction:column;">
+        ${ph}
+        <div class="pair-wrap">
+          ${section(a)}
+          ${b ? section(b) : ''}
+        </div>
+      </div>`);
+  }
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Job #${job.jobRequestID} &mdash; ${customerName}</title>
+  <style>${css}</style>
+</head>
+<body style="padding-top:44px;">
+  <div id="dl-bar">
+    <span><strong>${comp.name}</strong> &mdash; Job #${job.jobRequestID} &mdash; ${customerName}</span>
+    <button class="dl-btn" onclick="window.print()">&#8681; Download / Print PDF</button>
+  </div>
+  ${cover}
+  ${hrdPages.join('')}
+</body>
+</html>`;
+}
+
 
 /* ═══════════════════════════════════════════
    PORTAL DROPDOWN
@@ -2349,6 +2812,7 @@ export default function JobPage() {
   /* ── API data ── */
   const [customers, setCustomers] = useState([]);
   const [contracts, setContracts] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [hoardings, setHoardings] = useState([]);
   const [availableHoardings, setAvailableHoardings] = useState([]);
   const [supervisors, setSupervisors] = useState([]);
@@ -2361,6 +2825,7 @@ export default function JobPage() {
   const [completeTarget, setCompleteTarget] = useState(null); // { job, tasks }
   const [completing, setCompleting] = useState(false);
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
+
 
   /* ── UI ── */
   const [loading, setLoading] = useState(true);
@@ -2780,7 +3245,7 @@ export default function JobPage() {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, conRaw, hRaw, avhRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw, extRaw] = await Promise.all([
+        const [cRaw, conRaw, hRaw, avhRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw, extRaw, compRaw] = await Promise.all([
           apiService.getAllCustomers().catch(() => []),
           apiService.getAllCustomerContracts().catch(() => []),
           apiService.getAllHoardings().catch(() => []), // All Hoardings for info/other
@@ -2793,10 +3258,12 @@ export default function JobPage() {
           apiService.getAllCustomerContractHoardingMaps().catch(() => []),
           apiService.getAllHoardingMerges().catch(() => []),   // ← ADD
           apiService.getAllExternalHoardings().catch(() => []), // ← NEW
+          apiService.getAllCompanyDetails().catch(() => []),   // ← Companies
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
         setContracts(normalizeList(conRaw).map(normalizeContract));
+        setCompanies(normalizeList(compRaw).map(normalizeCompany));
         // Build site lookup map
         const siteList = normalizeList(sRaw);
         const siteMap = new Map(
@@ -4231,6 +4698,14 @@ export default function JobPage() {
                     const myTasks = getMyTasks(job.jobRequestID);
                     const submittedCnt = myTasks.filter(t => t.status === 'Submitted').length;
                     const jts = jobTypeBadgeStyle(job.jobType);
+                    const currentStatus =
+                      job.jobStatus === 'Completed'
+                        ? 'Completed'
+                        : myTasks.length > 0
+                          ? (submittedCnt === myTasks.length ? 'Submitted' : (submittedCnt > 0 ? 'In Progress' : (['In Progress', 'Accepted', 'Submitted'].includes(job.jobStatus) ? 'Accepted' : job.jobStatus)))
+                          : (job.jobStatus || 'Open');
+                    const isPdfEligible = currentStatus === 'Completed' || currentStatus === 'Submitted';
+
                     return (
                       <tr key={job.jobRequestID} className="pg-tr">
                         <td className="pg-td">
@@ -4280,15 +4755,7 @@ export default function JobPage() {
                           )}
                         </td>
                         <td className="pg-td">
-                          <JobStatusBadge
-                            status={
-                              job.jobStatus === 'Completed'
-                                ? 'Completed'
-                                : myTasks.length > 0
-                                  ? (submittedCnt === myTasks.length ? 'Submitted' : (submittedCnt > 0 ? 'In Progress' : (['In Progress', 'Accepted', 'Submitted'].includes(job.jobStatus) ? 'Accepted' : job.jobStatus)))
-                                  : (job.jobStatus || 'Open')
-                            }
-                          />
+                          <JobStatusBadge status={currentStatus} />
                         </td>
                         <td className="pg-td">
                           <div className="pg-action-wrap">
@@ -4296,6 +4763,64 @@ export default function JobPage() {
                             <button className="pg-btn-view" onClick={() => setPhotosViewTarget(job)} title="View Photos" style={{ background: 'rgba(4,158,223,0.08)', color: '#049edf' }}>
                               <Camera size={13} />
                             </button>
+
+                            {/* Generate Job PDF - Shown only when Completed or Submitted */}
+                            {isPdfEligible && (
+                              <button
+                                className="pg-btn-view"
+                                onClick={async () => {
+                                  const jobTasks = getMyTasks(job.jobRequestID).map(jt => {
+                                    const h = hoardings.find(hh => hh.hoardingID === jt.hoardingID);
+                                    return {
+                                      jobTaskID: jt.jobTaskID,
+                                      hoardingID: jt.hoardingID,
+                                      hoardingCode: h?.hoardingCode || '',
+                                      siteAddress: getSiteAddress(h),
+                                      size: h ? `${h.width} X ${h.height}` : '',
+                                      sqFt: h ? (h.width * h.height) : 0,
+                                      status: jt.status,
+                                    };
+                                  });
+                                  const contract = contracts.find(c => Number(c.customerContractID) === Number(job.customerContractID));
+                                  const companyID = contract?.companyID ? Number(contract.companyID) : 0;
+                                  let compRecord = companies.find(c => Number(c.companyID) === companyID);
+
+                                  if (!compRecord && companyID) {
+                                    try {
+                                      const res = await apiService.getCompanyDetailsById(companyID);
+                                      const raw = res?.data ?? res;
+                                      if (raw) compRecord = normalizeCompany(raw);
+                                    } catch (e) {
+                                      console.warn('Failed to fetch company details by ID:', companyID, e);
+                                    }
+                                  }
+
+                                  if (!compRecord && companies.length > 0) {
+                                    compRecord = companies[0];
+                                  }
+
+                                  const companyInfo = getCompanyInfo(compRecord);
+
+                                  const html = buildJobPDFHTML({
+                                    company: companyInfo,
+                                    job,
+                                    customerName: custName(job.customerID),
+                                    supervisorName: supName(job.supervisorID),
+                                    tasks: jobTasks,
+                                    attachments: allAttachments,
+                                    hoardings,
+                                    hoardingMerges,
+                                  });
+                                  const win = window.open('', '_blank');
+                                  if (win) { win.document.write(html); win.document.close(); }
+                                  else alert('Popup blocked. Please allow popups for this site and try again.');
+                                }}
+                                title="Generate Job PDF"
+                                style={{ background: 'rgba(108,99,255,0.08)', color: '#6c63ff' }}
+                              >
+                                <FileText size={13} />
+                              </button>
+                            )}
 
                             {/* Edit */}
                             <button className="pg-btn-view" onClick={() => handleEdit(job)} title="Edit">

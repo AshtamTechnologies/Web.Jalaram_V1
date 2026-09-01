@@ -9,6 +9,7 @@ import {
   IndianRupee, Clock, Trash2, ShieldCheck, MessageSquare,
   CreditCard, TrendingUp, MapPin, Tag, Percent, SlidersHorizontal,
   Users, Paperclip, Upload, Image, File, Download, AlertTriangle, GitMerge, ArrowLeftRight, ArrowUpDown,
+  UploadCloud, Layers, ImageIcon,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
@@ -349,11 +350,14 @@ function getContractGst(contract, quotations = []) {
   return { cgstPct: 9, sgstPct: 9 };
 }
 
-// Change the function signature — add `terms` parameter:
 function buildContractPDFHTML({ company, customer, contract,
   hoardingItems, photoUrlMap, photoSelections, terms = [], cgstPct = 9, sgstPct = 9 }) {
 
   const isSingleHoarding = hoardingItems.length === 1;
+
+  const totalHoardingsCount = hoardingItems.reduce((sum, item) => {
+    return sum + (item.isMerged ? (item.mergedHoardings?.length || 1) : 1);
+  }, 0);
 
   const today = new Date().toLocaleDateString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric',
@@ -495,39 +499,89 @@ function buildContractPDFHTML({ company, customer, contract,
     </div>`;
 
   /* details box helper */
-  const box = (item, idx) => `
-    <div class="hrd-box">
-      <div class="hrd-title">
-        ${idx + 1})&nbsp;${item.hoardingCode}
-        ${item.address ? `&nbsp;&mdash;&nbsp;${item.address}` : ''}
-        ${item.size ? `&nbsp;&mdash;&nbsp;${item.size} ft` : ''}
-        ${item.material ? `&nbsp;&mdash;&nbsp;${item.material}` : ''}
-      </div>
-      <div class="hrd-row">
-        <div class="hrd-cell"><span class="hrd-lbl">Hoarding Type:</span>&nbsp;${item.hoardingTypeName || 'Hoarding'}</div>
-        <div class="hrd-cell">
-          <span class="hrd-lbl">Availability:</span>&nbsp;
-          <span class="hrd-green">${item.contractStatus || 'Available Now'}</span>
-        </div>
-        ${item.monthlyRent > 0 ? `
-        <div class="hrd-cell" style="flex:0 0 100%;margin-top:2px;">
-          <span class="hrd-lbl">Monthly Rent:</span>&nbsp;
-          <span class="hrd-red">&#8377;${Number(item.monthlyRent).toLocaleString('en-IN')}</span>
-        </div>` : ''}
-      </div>
-    </div>`;
+  const box = (item, idx) => {
+    if (item.isMerged) {
+      return `
+        <div class="hrd-box" style="border-left: 4px solid #7c3aed; background: #faf8ff;">
+          <div class="hrd-title">
+            ${idx + 1})&nbsp;<strong>${item.hoardingCodes}</strong>
+            <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:#ede9fe;color:#7c3aed;font-size:10px;font-weight:800;margin-left:6px;border:1px solid #ddd6fe;">
+              ${item.direction === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
+            </span>
+            ${item.address ? `&nbsp;&mdash;&nbsp;${item.address}` : ''}
+            ${item.combinedSize ? `&nbsp;&mdash;&nbsp;<strong>${item.combinedSize} ft</strong>` : ''}
+            ${item.combinedSqFt ? `&nbsp;(${item.combinedSqFt.toLocaleString('en-IN')} sq.ft)` : ''}
+          </div>
+          <div class="hrd-row">
+            <div class="hrd-cell" style="flex:0 0 100%;margin-bottom:3px;">
+              <span class="hrd-lbl">Merged Hoardings:</span>&nbsp;
+              ${(item.mergedHoardings || []).map(h => `<span style="display:inline-block;background:#fff;padding:1px 6px;border-radius:4px;border:1px solid #e0d8f8;margin-right:4px;font-size:10.5px;">${h.hoardingCode} (${h.size || '—'} ft)</span>`).join('')}
+            </div>
+            <div class="hrd-cell"><span class="hrd-lbl">Hoarding Type:</span>&nbsp;${item.hoardingTypeName || 'Hoarding'} (${item.direction === 'H' ? 'Horizontal' : 'Vertical'} Merge)</div>
+            <div class="hrd-cell">
+              <span class="hrd-lbl">Availability:</span>&nbsp;
+              <span class="hrd-green">${item.contractStatus || 'Available Now'}</span>
+            </div>
+            ${item.monthlyRent > 0 ? `
+            <div class="hrd-cell" style="flex:0 0 100%;margin-top:2px;">
+              <span class="hrd-lbl">Monthly Rent:</span>&nbsp;
+              <span class="hrd-red">&#8377;${Number(item.monthlyRent).toLocaleString('en-IN')}</span>
+            </div>` : ''}
+          </div>
+        </div>`;
+    }
 
-  /* single hoarding section */
+    return `
+      <div class="hrd-box">
+        <div class="hrd-title">
+          ${idx + 1})&nbsp;${item.hoardingCode}
+          ${item.address ? `&nbsp;&mdash;&nbsp;${item.address}` : ''}
+          ${item.size ? `&nbsp;&mdash;&nbsp;${item.size} ft` : ''}
+          ${item.material ? `&nbsp;&mdash;&nbsp;${item.material}` : ''}
+        </div>
+        <div class="hrd-row">
+          <div class="hrd-cell"><span class="hrd-lbl">Hoarding Type:</span>&nbsp;${item.hoardingTypeName || 'Hoarding'}</div>
+          <div class="hrd-cell">
+            <span class="hrd-lbl">Availability:</span>&nbsp;
+            <span class="hrd-green">${item.contractStatus || 'Available Now'}</span>
+          </div>
+          ${item.monthlyRent > 0 ? `
+          <div class="hrd-cell" style="flex:0 0 100%;margin-top:2px;">
+            <span class="hrd-lbl">Monthly Rent:</span>&nbsp;
+            <span class="hrd-red">&#8377;${Number(item.monthlyRent).toLocaleString('en-IN')}</span>
+          </div>` : ''}
+        </div>
+      </div>`;
+  };
+
+  /* single hoarding / merge section */
   const section = (item, idx) => {
-    const photoOn = photoSelections[item.hoardingID] !== false;
-    const photoUrl = photoUrlMap[item.hoardingID];
+    const photoKey = item.isMerged ? item.mergeGroupKey : item.hoardingID;
+    const photoOn = photoSelections[photoKey] !== false;
+    const photoUrl = photoUrlMap[photoKey] || (item.isMerged ? item.photoUrl : null);
 
     /* Photo ON + URL exists → show image (plain <img src>, no auth needed) */
     if (photoOn && photoUrl) {
       return `
         <div class="hrd-section">
           <div class="hrd-photo">
-            <img src="${photoUrl}" alt="${item.hoardingCode}" />
+            <img src="${photoUrl}" alt="${item.isMerged ? item.hoardingCodes : item.hoardingCode}" />
+          </div>
+          ${box(item, idx)}
+        </div>`;
+    }
+
+    /* Photo ON but merged group has subPhotos instead of single merge photo */
+    if (photoOn && !photoUrl && item.isMerged && item.subPhotos && item.subPhotos.length > 0) {
+      return `
+        <div class="hrd-section">
+          <div class="hrd-photo" style="display:flex;flex-direction:${item.direction === 'H' ? 'row' : 'column'};gap:4px;background:#e0e0e0;">
+            ${item.subPhotos.map(sp => `
+              <div style="flex:1;min-width:0;min-height:0;position:relative;overflow:hidden;background:#e0e0e0;">
+                <img src="${sp.url}" alt="${sp.code}" style="width:100%;height:100%;object-fit:contain;display:block;" />
+                <span style="position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,0.65);color:#fff;font-size:9px;font-weight:bold;padding:1px 5px;border-radius:4px;">${sp.code}</span>
+              </div>
+            `).join('')}
           </div>
           ${box(item, idx)}
         </div>`;
@@ -542,7 +596,7 @@ function buildContractPDFHTML({ company, customer, contract,
             border:1.5px dashed #ccc;margin-bottom:4px;
             display:flex;align-items:center;justify-content:center;
             font-size:11px;color:#aaa;gap:6px;
-          ">📷&nbsp;No photo uploaded for ${item.hoardingCode}</div>
+          ">📷&nbsp;No photo uploaded for ${item.isMerged ? item.hoardingCodes : item.hoardingCode}</div>
           ${box(item, idx)}
         </div>`;
     }
@@ -606,7 +660,7 @@ function buildContractPDFHTML({ company, customer, contract,
               </tr>
               <tr>
                 <td style="font-weight:bold; padding:2px 0;">Total Hoardings</td>
-                <td style="padding:2px 0;">: ${hoardingItems.length}</td>
+                <td style="padding:2px 0;">: ${totalHoardingsCount} (${hoardingItems.length} location${hoardingItems.length !== 1 ? 's' : ''})</td>
               </tr>
             </table>
           </div>`;
@@ -614,7 +668,7 @@ function buildContractPDFHTML({ company, customer, contract,
       </div>
       <div class="cov-foot">
         <span>${company.phone}</span>
-        <span>${hoardingItems.length} Hoarding${hoardingItems.length !== 1 ? 's' : ''}</span>
+        <span>${hoardingItems.length} Location${hoardingItems.length !== 1 ? 's' : ''} (${totalHoardingsCount} Hoarding${totalHoardingsCount !== 1 ? 's' : ''})</span>
       </div>
     </div>`;
 
@@ -633,19 +687,7 @@ function buildContractPDFHTML({ company, customer, contract,
       </div>`);
   }
 
-  /* ── TERMS (all 8 on 1 page) ── */
-  /* ── TERMS ── */
-  // const termsPage = terms.length === 0 ? '' : `
-  // <div class="page" style="display:flex;flex-direction:column;">
-  //   ${ph}
-  //   <div class="terms-hdr">Terms and Conditions &mdash;</div>
-  //   <ol class="terms-ol">
-  //     ${terms.map(t => `<li>${t}</li>`).join('')}
-  //   </ol>
-  //   <div class="terms-foot">
-  //     <span>${customer.authorizedName || customer.customerName}<br>${company.phone}</span>
-  //   </div>
-  // </div>`;
+  /* ── TERMS (all on 1 page) ── */
   const termsPage = terms.length === 0 ? '' : `
   <div class="page" style="display:flex;flex-direction:column;">
     ${ph}
@@ -3201,9 +3243,364 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
     </div>
   );
 }
+
+function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], mergedApiImages = [], onPhotoSelected, onClose }) {
+  const [activeTab, setActiveTab] = useState('existing');
+  const [selectedPhotoId, setSelectedPhotoId] = useState(null);
+  const [selectedPhotoUrl, setSelectedPhotoUrl] = useState(null);
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadPreview, setUploadPreview] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [loadedPhotos, setLoadedPhotos] = useState(rawHoardingPhotos || []);
+  const [fetchingPhotos, setFetchingPhotos] = useState(false);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    (async () => {
+      if (rawHoardingPhotos && rawHoardingPhotos.length > 0) {
+        setLoadedPhotos(rawHoardingPhotos);
+        return;
+      }
+      setFetchingPhotos(true);
+      try {
+        const res = await apiService.getAllHoardingPhotos();
+        if (Array.isArray(res) && res.length > 0) {
+          setLoadedPhotos(res);
+        }
+      } catch (e) {
+        console.warn('[SelectMergePhoto] photo fetch error:', e);
+      } finally {
+        setFetchingPhotos(false);
+      }
+    })();
+  }, [rawHoardingPhotos]);
+
+  // Filter existing photos that belong to any hoarding in this merge group
+  const existingPhotos = useMemo(() => {
+    const hIds = (mergeItem?.hoardingIDs || []).map(Number);
+    const result = [];
+
+    // 1. Add any previously uploaded merged images for this contract & hoarding
+    (mergedApiImages || []).forEach(img => {
+      const hid = Number(img.hoardingID ?? img.HoardingID ?? 0);
+      if (hIds.includes(hid)) {
+        const path = img.imageUrl ?? img.ImageUrl ?? img.contractFilename ?? img.ContractFilename ?? '';
+        if (path) {
+          const url = path.startsWith('http') ? path : `${API_ROOT_URL}${path.startsWith('/') ? path : '/' + path}`;
+          result.push({
+            hoardingPhotoID: `merged_${img.custContractAttachID || hid}`,
+            isMergedImage: true,
+            hoardingID: hid,
+            hoardingCode: `Merged Banner (Hoarding #${hid})`,
+            url,
+            effdt: img.lastUpdateDttm || null,
+          });
+        }
+      }
+    });
+
+    // 2. Add individual hoarding photos
+    const photos = (loadedPhotos || []).filter(p => hIds.includes(Number(p.hoardingID ?? p.HoardingID ?? 0)));
+    photos.forEach(p => {
+      const path = p.photoPath ?? p.PhotoPath ?? p.photoFilePath ?? p.PhotoFilePath ?? '';
+      if (!path) return;
+      const url = path.startsWith('http') ? path : `${API_ROOT_URL}${path.startsWith('/') ? path : '/' + path}`;
+      const hObj = mergeItem?.mergedHoardings?.find(h => Number(h.hoardingID) === Number(p.hoardingID ?? p.HoardingID));
+      result.push({
+        hoardingPhotoID: Number(p.hoardingPhotoID ?? p.HoardingPhotoID ?? 0),
+        isMergedImage: false,
+        hoardingID: Number(p.hoardingID ?? p.HoardingID ?? 0),
+        hoardingCode: hObj?.hoardingCode || `Hoarding #${p.hoardingID}`,
+        url,
+        effdt: p.effdt ?? p.Effdt ?? null,
+      });
+    });
+
+    return result;
+  }, [mergeItem, loadedPhotos, mergedApiImages]);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setUploadFile(file);
+      setUploadPreview(URL.createObjectURL(file));
+      setError('');
+    }
+  };
+
+  const handleSave = async () => {
+    setError('');
+    setSubmitting(true);
+    try {
+      if (activeTab === 'existing') {
+        if (!selectedPhotoId) {
+          setError('Please select an existing photo from the list.');
+          setSubmitting(false);
+          return;
+        }
+        const numericId = typeof selectedPhotoId === 'number' ? selectedPhotoId : Number(selectedPhotoId);
+        if (!isNaN(numericId) && numericId > 0) {
+          await apiService.selectMergePhoto({
+            customerContractID: contractID,
+            hoardingID: mergeItem.primaryHoardingID,
+            existingHoardingPhotoID: numericId,
+          });
+        }
+        onPhotoSelected(mergeItem.mergeGroupKey, selectedPhotoUrl);
+      } else {
+        if (!uploadFile) {
+          setError('Please select a photo file to upload.');
+          setSubmitting(false);
+          return;
+        }
+        await apiService.selectMergePhoto({
+          customerContractID: contractID,
+          hoardingID: mergeItem.primaryHoardingID,
+          existingHoardingPhotoID: null,
+          newPhoto: uploadFile,
+        });
+        onPhotoSelected(mergeItem.mergeGroupKey, uploadPreview);
+      }
+      onClose();
+    } catch (err) {
+      console.error('[SelectMergePhoto] error:', err);
+      if (activeTab === 'existing' && selectedPhotoUrl) {
+        onPhotoSelected(mergeItem.mergeGroupKey, selectedPhotoUrl);
+        onClose();
+      } else if (activeTab === 'upload' && uploadPreview) {
+        onPhotoSelected(mergeItem.mergeGroupKey, uploadPreview);
+        onClose();
+      } else {
+        setError(err?.response?.data?.message || err?.message || 'Failed to select merge photo.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return ReactDOM.createPortal(
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000005,
+      background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: '#fff', borderRadius: 18, width: '100%', maxWidth: 580,
+        maxHeight: '85vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 12px 48px rgba(0,0,0,0.3)', overflow: 'hidden', border: '1.5px solid #e8e8f4',
+      }}>
+        {/* Header */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '18px 22px',
+          borderBottom: '1.5px solid #f0f0f8', background: '#fff',
+        }}>
+          <div style={{
+            width: 42, height: 42, borderRadius: 12,
+            background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed',
+          }}>
+            <ImageIcon size={20} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: 16, color: '#1a1a2e' }}>
+              Select Merge Banner Image
+            </div>
+            <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, color: '#7c3aed', fontWeight: 700 }}>
+              {mergeItem?.hoardingCodes} ({mergeItem?.directionLabel})
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            width: 32, height: 32, borderRadius: 8, background: '#f5f5fb',
+            border: '1px solid #e8e8f0', cursor: 'pointer', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', color: '#9090a8',
+          }}>
+            <X size={15} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div style={{ display: 'flex', borderBottom: '1.5px solid #f0f0f8', background: '#f8f8fd' }}>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('existing'); setError(''); }}
+            style={{
+              flex: 1, padding: '11px 14px', border: 'none', background: activeTab === 'existing' ? '#fff' : 'transparent',
+              borderBottom: activeTab === 'existing' ? '2.5px solid #7c3aed' : '2.5px solid transparent',
+              fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800,
+              color: activeTab === 'existing' ? '#7c3aed' : '#7878a0', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}>
+            <Layers size={14} /> Existing Hoarding Photos ({existingPhotos.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => { setActiveTab('upload'); setError(''); }}
+            style={{
+              flex: 1, padding: '11px 14px', border: 'none', background: activeTab === 'upload' ? '#fff' : 'transparent',
+              borderBottom: activeTab === 'upload' ? '2.5px solid #7c3aed' : '2.5px solid transparent',
+              fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800,
+              color: activeTab === 'upload' ? '#7c3aed' : '#7878a0', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+            }}>
+            <UploadCloud size={14} /> Upload Custom Photo
+          </button>
+        </div>
+
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '18px 22px' }}>
+          {error && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+              borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca',
+              color: '#dc2626', fontSize: 12, marginBottom: 12, fontFamily: 'Nunito, sans-serif',
+            }}>
+              <AlertCircle size={14} /><span>{error}</span>
+            </div>
+          )}
+
+          {activeTab === 'existing' ? (
+            <div>
+              {fetchingPhotos ? (
+                <div style={{ textAlign: 'center', padding: '36px 10px', color: '#9090a8' }}>
+                  <Loader2 size={24} className="pg-spin" style={{ marginBottom: 8 }} />
+                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700 }}>Loading photos…</div>
+                </div>
+              ) : existingPhotos.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '36px 10px', color: '#9090a8' }}>
+                  <ImageIcon size={34} color="#d0d0e8" style={{ marginBottom: 8 }} />
+                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: '#7878a0' }}>
+                    No photos found on these hoardings
+                  </div>
+                  <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#b0b0c8', marginTop: 4 }}>
+                    Switch to &ldquo;Upload Custom Photo&rdquo; to upload a new banner image.
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 12 }}>
+                  {existingPhotos.map(p => {
+                    const isSelected = selectedPhotoId === p.hoardingPhotoID;
+                    return (
+                      <div
+                        key={p.hoardingPhotoID}
+                        onClick={() => {
+                          setSelectedPhotoId(p.hoardingPhotoID);
+                          setSelectedPhotoUrl(p.url);
+                          setError('');
+                        }}
+                        style={{
+                          border: `2px solid ${isSelected ? '#7c3aed' : '#e8e8f4'}`,
+                          borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
+                          background: isSelected ? 'rgba(124,58,237,0.04)' : '#fff',
+                          boxShadow: isSelected ? '0 3px 12px rgba(124,58,237,0.2)' : 'none',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        <div style={{ width: '100%', height: 95, background: '#f0f0f8', position: 'relative' }}>
+                          <img src={p.url} alt={p.hoardingCode} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          {isSelected && (
+                            <div style={{
+                              position: 'absolute', top: 4, right: 4, width: 22, height: 22,
+                              borderRadius: '50%', background: '#7c3aed', color: '#fff',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}>
+                              <Check size={13} />
+                            </div>
+                          )}
+                        </div>
+                        <div style={{ padding: '6px 8px' }}>
+                          <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 11.5, color: isSelected ? '#7c3aed' : '#1a1a2e' }}>
+                            {p.hoardingCode}
+                          </div>
+                          {p.effdt && (
+                            <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 10, color: '#9090a8', marginTop: 1 }}>
+                              {fmtDate(p.effdt)}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  border: '2px dashed rgba(124,58,237,0.35)', borderRadius: 12,
+                  padding: '30px 16px', textAlign: 'center', background: '#faf9ff',
+                  cursor: 'pointer', transition: 'border-color 0.15s',
+                }}
+              >
+                {uploadPreview ? (
+                  <div>
+                    <img src={uploadPreview} alt="Preview" style={{ maxHeight: 160, maxWidth: '100%', borderRadius: 8, marginBottom: 10, objectFit: 'contain' }} />
+                    <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>
+                      {uploadFile?.name}
+                    </div>
+                    <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8', marginTop: 3 }}>
+                      Click to change image
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <UploadCloud size={38} color="#7c3aed" style={{ marginBottom: 8 }} />
+                    <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                      Click to select custom merge photo
+                    </div>
+                    <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#9090a8', marginTop: 3 }}>
+                      PNG, JPG, WebP supported
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '14px 22px', borderTop: '1.5px solid #f0f0f8',
+          display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, background: '#fafafa',
+        }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              padding: '8px 18px', borderRadius: 8, border: '1.5px solid #e0e0f0',
+              background: '#fff', fontFamily: 'Nunito, sans-serif', fontSize: 12.5,
+              fontWeight: 700, color: '#7878a0', cursor: 'pointer',
+            }}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={submitting || (activeTab === 'existing' ? !selectedPhotoId : !uploadFile)}
+            style={{
+              padding: '8px 22px', borderRadius: 8, border: 'none',
+              background: 'linear-gradient(135deg, #7c3aed, #6c63ff)',
+              color: '#fff', fontFamily: 'Nunito, sans-serif', fontSize: 12.5,
+              fontWeight: 800, cursor: submitting || (activeTab === 'existing' ? !selectedPhotoId : !uploadFile) ? 'not-allowed' : 'pointer',
+              opacity: (activeTab === 'existing' ? selectedPhotoId : uploadFile) ? 1 : 0.6,
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+            {submitting ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Apply Image</>}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [], companies = [], onClose }) {
   const [maps, setMaps] = useState([]);
-  const [attachments, setAttachments] = useState([]);
+  const [merges, setMerges] = useState([]);
+  const [mergedApiImages, setMergedApiImages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [photoSelections, setPhotoSelections] = useState({});
   const [generating, setGenerating] = useState(false);
@@ -3212,6 +3609,10 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
   const [termsLoading, setTermsLoading] = useState(true);
   const [allHoardingsRaw, setAllHoardingsRaw] = useState([]);
   const [hoardingTypes, setHoardingTypes] = useState([]);
+  const [rawHoardingPhotos, setRawHoardingPhotos] = useState([]);
+  const [hoardingPhotos, setHoardingPhotos] = useState({});
+  const [customMergePhotos, setCustomMergePhotos] = useState({});
+  const [mergePhotoTarget, setMergePhotoTarget] = useState(null);
 
   const siteMap = useMemo(
     () => Object.fromEntries(sites.map(s => [s.siteID, s])),
@@ -3237,31 +3638,39 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
           return [];
         };
         const internalList = extractArray(res);
-        const externalList = extractArray(extRes);
+        const externalList = extractArray(extRes).map(eh => ({ ...eh, isExternal: true }));
         setAllHoardingsRaw([...internalList, ...externalList]);
         setHoardingTypes(extractArray(rawTypes));
       } catch { /* silent */ }
     })();
   }, []);
+
   useEffect(() => {
     if (!contract?.customerContractID) { setLoading(false); return; }
     (async () => {
       setLoading(true);
       try {
-        const rawMaps = await apiService.getCustomerContractHoardingMaps(
-          contract.customerContractID
-        ).catch(() => []);
+        const [rawMaps, rawMerges, rawMergedImages] = await Promise.all([
+          apiService.getCustomerContractHoardingMaps(contract.customerContractID).catch(() => []),
+          apiService.getAllHoardingMerges().catch(() => []),
+          apiService.getMergedImages(contract.customerContractID).catch(() => []),
+        ]);
         const mapList = (Array.isArray(rawMaps) ? rawMaps : [])
           .filter(m => Number(m.customerContractID ?? m.CustomerContractID) === Number(contract.customerContractID));
         setMaps(mapList);
-        const defaults = {};
-        mapList.forEach(m => { defaults[Number(m.hoardingID ?? m.HoardingID ?? 0)] = true; });
-        setPhotoSelections(defaults);
+
+        const mergeList = (Array.isArray(rawMerges) ? rawMerges : [])
+          .filter(m => Number(m.customerContractID ?? m.CustomerContractID) === Number(contract.customerContractID));
+        setMerges(mergeList);
+
+        const imgList = Array.isArray(rawMergedImages) ? rawMergedImages : [];
+        setMergedApiImages(imgList);
       } catch (err) {
         console.error('[ContractPDF] load error:', err?.message);
       } finally { setLoading(false); }
     })();
   }, [contract?.customerContractID]);
+
   useEffect(() => {
     (async () => {
       setTermsLoading(true);
@@ -3277,8 +3686,6 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
     })();
   }, []);
 
-  const [hoardingPhotos, setHoardingPhotos] = useState({});
-
   useEffect(() => {
     if (!maps.length || !allHoardingsRaw.length) return;
     setHoardingPhotos({});
@@ -3291,6 +3698,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
           }).then(r => r.json());
 
         const photoList = Array.isArray(allPhotos) ? allPhotos : [];
+        setRawHoardingPhotos(photoList);
 
         const photoMap = {};
 
@@ -3345,50 +3753,219 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
   }, [maps, allHoardingsRaw]);
 
   const photoUrlMap = useMemo(() => {
-    return hoardingPhotos;
-  }, [hoardingPhotos]);
+    return { ...hoardingPhotos, ...customMergePhotos };
+  }, [hoardingPhotos, customMergePhotos]);
 
-  const hoardingItems = useMemo(() => maps.map(m => {
-    const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+  const mergedApiImageMap = useMemo(() => {
+    const map = {};
+    if (!mergedApiImages || !mergedApiImages.length) return map;
 
-    // Search in the RAW (non-deduplicated) list so exact hoardingID always matches
-    const h = allHoardingsRaw.find(hh => Number(hh.hoardingID) === hid);
+    const sorted = [...mergedApiImages].sort((a, b) => {
+      const da = a.lastUpdateDttm ? new Date(a.lastUpdateDttm).getTime() : 0;
+      const db = b.lastUpdateDttm ? new Date(b.lastUpdateDttm).getTime() : 0;
+      if (db !== da) return db - da;
+      return (b.custContractAttachID ?? 0) - (a.custContractAttachID ?? 0);
+    });
 
-    const rawSiteID = h?.siteID ?? null;
+    sorted.forEach(img => {
+      const hid = Number(img.hoardingID ?? img.HoardingID ?? 0);
+      if (!hid) return;
+      const path = img.imageUrl ?? img.ImageUrl ?? img.contractFilename ?? img.ContractFilename ?? '';
+      if (!path) return;
+      const url = path.startsWith('http') ? path : `${API_ROOT_URL}${path.startsWith('/') ? path : '/' + path}`;
+      if (!map[hid]) {
+        map[hid] = url;
+      }
+    });
+    return map;
+  }, [mergedApiImages]);
 
-    const site =
-      (rawSiteID != null ? siteMap[rawSiteID] : null) ||
-      (rawSiteID != null ? siteMap[Number(rawSiteID)] : null) ||
-      (rawSiteID != null ? siteMap[String(rawSiteID)] : null) ||
-      null;
+  const getMergeGroupPhotoUrl = (item) => {
+    if (!item) return null;
+    if (!item.isMerged) return photoUrlMap[item.hoardingID] || null;
 
-    const addrParts = [
-      site?.addressLine1,
-      site?.addressLine2,
-      site?.landmark ? `Nr. ${site.landmark}` : null,
-      [site?.city, site?.district].filter(Boolean).join(', ') || null,
-    ].filter(Boolean);
-    const address = [...new Set(addrParts)].join(', ');
+    // 1. Current session selection
+    if (customMergePhotos[item.mergeGroupKey]) {
+      return customMergePhotos[item.mergeGroupKey];
+    }
+    // 2. From GetMergedImages API
+    for (const hid of (item.hoardingIDs || [])) {
+      if (mergedApiImageMap[hid]) {
+        return mergedApiImageMap[hid];
+      }
+    }
+    // 3. Fallback to existing photo logic
+    return photoUrlMap[item.mergeGroupKey] || photoUrlMap[item.primaryHoardingID] || null;
+  };
 
-    // hoardingCode comes directly from the raw hoarding record
-    const hoardingCode = h?.hoardingCode ?? `#${hid}`;
+  // Group hoardings into Merged groups and Standalone hoardings
+  const displayItems = useMemo(() => {
+    const fullHoardings = maps.map(m => {
+      const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+      const h = allHoardingsRaw.find(hh => Number(hh.hoardingID) === hid);
+      // START: Do not show site address for external hoardings in Contract PDF
+      const isExternal = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
+      const rawSiteID = h?.siteID ?? m.siteID ?? null;
+      const site =
+        (rawSiteID != null ? siteMap[rawSiteID] : null) ||
+        (rawSiteID != null ? siteMap[Number(rawSiteID)] : null) ||
+        null;
+      const addrParts = [
+        site?.addressLine1,
+        site?.addressLine2,
+        site?.landmark ? `Nr. ${site.landmark}` : null,
+        [site?.city, site?.district].filter(Boolean).join(', ') || null,
+      ].filter(Boolean);
+      const address = isExternal ? '' : [...new Set(addrParts)].join(', ');
+      // Original code:
+      // const address = [...new Set(addrParts)].join(', ');
+      // END: Do not show site address for external hoardings in Contract PDF
+      const hoardingCode = h?.hoardingCode ?? m.hoardingCode ?? `#${hid}`;
+      const width = Number(h?.width ?? m.width ?? 0);
+      const height = Number(h?.height ?? m.height ?? 0);
 
-    return {
-      hoardingID: hid,
-      hoardingCode,   // ← now always the real code e.g. "J880", "HOARDING22"
-      address,
-      size: h?.width && h?.height ? `${h.width}×${h.height}` : '',
-      material: h?.material || '',
-      contractStatus: h?.status || 'Available Now',
-      monthlyRent: h?.monthlyRent || 0,
-      hoardingTypeName: hoardingTypeMap[h?.hoardingType] || 'Hoarding',
-    };
-  }), [maps, allHoardingsRaw, siteMap, hoardingTypeMap]);
+      return {
+        hoardingID: hid,
+        customerContractLineID: m.customerContractLineID,
+        hoardingCode,
+        isExternal,
+        siteID: rawSiteID != null ? Number(rawSiteID) : null,
+        address,
+        width,
+        height,
+        size: width && height ? `${width}×${height}` : '',
+        material: h?.material || m.material || '',
+        contractStatus: h?.status || m.status || 'Available Now',
+        monthlyRent: Number(h?.monthlyRent ?? m.monthlyRent ?? 0),
+        hoardingTypeName: hoardingTypeMap[h?.hoardingType] || 'Hoarding',
+      };
+    });
 
-  const togglePhoto = (hid) =>
-    setPhotoSelections(p => ({ ...p, [hid]: !p[hid] }));
+    const mergedHoardingIds = new Set(merges.map(m => Number(m.hoardingID)));
+
+    // Group merges by siteID_direction
+    const mergeGroups = {};
+    merges.forEach(m => {
+      const hID = Number(m.hoardingID);
+      const hInfo = fullHoardings.find(h => h.hoardingID === hID);
+      const siteID = hInfo?.siteID ?? 0;
+      const direction = m.mergeAlongFlag ?? 'V';
+      const key = `merge_${siteID}_${direction}`;
+      if (!mergeGroups[key]) {
+        mergeGroups[key] = {
+          isMerged: true,
+          mergeGroupKey: key,
+          siteID,
+          direction,
+          merges: [],
+          hoardingIDs: [],
+        };
+      }
+      mergeGroups[key].merges.push(m);
+      if (!mergeGroups[key].hoardingIDs.includes(hID)) {
+        mergeGroups[key].hoardingIDs.push(hID);
+      }
+    });
+
+    const result = [];
+
+    // Add merged groups first
+    Object.values(mergeGroups).forEach(group => {
+      const groupHoardings = group.hoardingIDs
+        .map(hid => fullHoardings.find(h => h.hoardingID === hid))
+        .filter(Boolean);
+
+      if (!groupHoardings.length) return;
+
+      const gaps = Math.max(groupHoardings.length - 1, 0);
+      let mw, mh;
+      if (group.direction === 'H') {
+        mw = groupHoardings.reduce((s, h) => s + h.width, 0) + gaps;
+        mh = Math.max(...groupHoardings.map(h => h.height), 0);
+      } else {
+        mw = Math.max(...groupHoardings.map(h => h.width), 0);
+        mh = groupHoardings.reduce((s, h) => s + h.height, 0) + gaps;
+      }
+
+      const totalSqFt = mw * mh;
+      const combinedCodes = groupHoardings.map(h => h.hoardingCode).join(' + ');
+      const totalRent = groupHoardings.reduce((s, h) => s + h.monthlyRent, 0);
+      const primaryHid = groupHoardings[0]?.hoardingID;
+
+      // START: Do not show site address for external hoardings in Contract PDF
+      const nonExtHoardings = groupHoardings.filter(h => !h.isExternal);
+      const mergedAddress = nonExtHoardings.length > 0 ? (nonExtHoardings[0]?.address || '') : '';
+      // Original code:
+      // const mergedAddress = groupHoardings[0]?.address || '';
+      // END: Do not show site address for external hoardings in Contract PDF
+
+      result.push({
+        isMerged: true,
+        mergeGroupKey: group.mergeGroupKey,
+        direction: group.direction,
+        directionLabel: group.direction === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge',
+        hoardingIDs: group.hoardingIDs,
+        primaryHoardingID: primaryHid,
+        hoardingCode: combinedCodes,
+        hoardingCodes: combinedCodes,
+        mergedHoardings: groupHoardings,
+        address: mergedAddress,
+        combinedWidth: mw,
+        combinedHeight: mh,
+        combinedSize: mw && mh ? `${mw}×${mh}` : '',
+        combinedSqFt: totalSqFt,
+        size: mw && mh ? `${mw}×${mh}` : '',
+        material: groupHoardings[0]?.material || '',
+        contractStatus: groupHoardings[0]?.contractStatus || 'Available Now',
+        monthlyRent: totalRent,
+        hoardingTypeName: 'Merged Hoarding',
+      });
+    });
+
+    // Add standalone (unmerged) hoardings
+    fullHoardings.forEach(h => {
+      if (!mergedHoardingIds.has(h.hoardingID)) {
+        result.push({
+          ...h,
+          isMerged: false,
+        });
+      }
+    });
+
+    return result;
+  }, [maps, merges, allHoardingsRaw, siteMap, hoardingTypeMap]);
+
+  // Set default photo selections once displayItems are generated
+  useEffect(() => {
+    if (!displayItems.length) return;
+    setPhotoSelections(prev => {
+      const next = { ...prev };
+      displayItems.forEach(item => {
+        const key = item.isMerged ? item.mergeGroupKey : item.hoardingID;
+        if (next[key] === undefined) {
+          next[key] = true;
+        }
+      });
+      return next;
+    });
+  }, [displayItems]);
+
+  const togglePhoto = (key) =>
+    setPhotoSelections(p => ({ ...p, [key]: !p[key] }));
 
   const selectedCount = Object.values(photoSelections).filter(Boolean).length;
+
+  const handlePhotoSelected = (mergeGroupKey, photoUrl) => {
+    setCustomMergePhotos(prev => ({
+      ...prev,
+      [mergeGroupKey]: photoUrl,
+    }));
+    if (contract?.customerContractID) {
+      apiService.getMergedImages(contract.customerContractID)
+        .then(res => setMergedApiImages(Array.isArray(res) ? res : []))
+        .catch(() => {});
+    }
+  };
 
   const handleGenerate = () => {
     setGenerating(true);
@@ -3408,11 +3985,26 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
         phone: selectedCompany.mobileNo || CONTRACT_COMPANY.phone,
       } : CONTRACT_COMPANY;
 
+      // Attach sub-photos to merged items for smart layout in print/pdf if no single merge photo
+      const preparedHoardingItems = displayItems.map(item => {
+        if (!item.isMerged) return item;
+        const subPhotos = (item.mergedHoardings || []).map(h => ({
+          code: h.hoardingCode,
+          url: photoUrlMap[h.hoardingID],
+        })).filter(sp => !!sp.url);
+
+        return {
+          ...item,
+          photoUrl: getMergeGroupPhotoUrl(item),
+          subPhotos,
+        };
+      });
+
       const html = buildContractPDFHTML({
         company: companyInfo,
         customer,
         contract,
-        hoardingItems,
+        hoardingItems: preparedHoardingItems,
         photoUrlMap,
         photoSelections,
         terms: selectedTerms,       // ← pass selected terms
@@ -3553,7 +4145,6 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
   };
 
   return ReactDOM.createPortal(
-    // <div onClick={onClose} style={S.overlay}>
     <div style={S.overlay}>
       <div onClick={e => e.stopPropagation()} style={S.modal}>
 
@@ -3585,7 +4176,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
               <Loader2 size={28} className="pg-spin" style={{ marginBottom: 10 }} />
               <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 600 }}>Loading hoarding data…</div>
             </div>
-          ) : hoardingItems.length === 0 ? (
+          ) : displayItems.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '50px 0', color: '#9090a8' }}>
               <Building2 size={38} color="#d0d0e8" style={{ marginBottom: 10 }} />
               <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: '#7878a0' }}>No hoardings linked to this contract</div>
@@ -3600,7 +4191,127 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
               </span>
 
               <div>
-                {hoardingItems.map(item => {
+                {displayItems.map(item => {
+                  if (item.isMerged) {
+                    const photoKey = item.mergeGroupKey;
+                    const photoUrl = getMergeGroupPhotoUrl(item);
+                    const photoOn = photoSelections[photoKey] !== false;
+
+                    return (
+                      <div key={item.mergeGroupKey} style={{
+                        border: `1.5px solid ${photoOn ? 'rgba(124,58,237,0.30)' : '#f0f0f8'}`,
+                        borderRadius: 12, overflow: 'hidden',
+                        background: photoOn ? '#fff' : '#fcfcff',
+                        opacity: photoOn ? 1 : 0.65, transition: 'all 0.15s',
+                        marginBottom: 12,
+                      }}>
+                        {/* Merged Group Header */}
+                        <div style={{
+                          padding: '7px 14px', background: 'rgba(124,58,237,0.06)',
+                          borderBottom: '1px solid rgba(124,58,237,0.15)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {item.direction === 'H' ? <ArrowLeftRight size={13} color="#7c3aed" /> : <ArrowUpDown size={13} color="#7c3aed" />}
+                            <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, fontWeight: 800, color: '#7c3aed' }}>
+                              {item.directionLabel} · {item.mergedHoardings.length} hoardings
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, fontWeight: 800, color: '#5a5a78' }}>
+                              {item.combinedSize} ft ({item.combinedSqFt.toLocaleString('en-IN')} sq.ft)
+                            </span>
+                          </div>
+                        </div>
+
+                        <div style={S.hoardingInner}>
+                          {/* Thumbnail */}
+                          <div style={{ ...S.thumbnail, position: 'relative' }}>
+                            {photoUrl ? (
+                              <img src={photoUrl} alt={item.hoardingCodes}
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                            ) : (
+                              <div style={{ textAlign: 'center', color: '#c0c0d8' }}>
+                                <ImageIcon size={20} color="#d0d0e8" />
+                                <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 9, marginTop: 2, color: '#c0c0d8' }}>No photo</div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Info */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <div style={{ ...S.hoardingCode, color: '#7c3aed' }}>
+                                {item.hoardingCodes}
+                              </div>
+                              <span style={{
+                                fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 10,
+                                background: 'rgba(124,58,237,0.10)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.25)',
+                              }}>
+                                {item.direction === 'H' ? '↔ Horizontal' : '↕ Vertical'}
+                              </span>
+                            </div>
+
+                            <div style={{
+                              fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#6b7280',
+                              fontWeight: 600, marginTop: 3, display: 'flex', alignItems: 'center', gap: 4,
+                            }}>
+                              <span>Includes: {item.mergedHoardings.map(h => `${h.hoardingCode} (${h.size} ft)`).join(' + ')}</span>
+                            </div>
+
+                            {item.address && (
+                              <div style={{
+                                fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#6b7280',
+                                fontWeight: 600, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4,
+                              }}>
+                                <MapPin size={10} color="#c0c0d8" style={{ flexShrink: 0 }} />
+                                <span>{item.address}</span>
+                              </div>
+                            )}
+
+                            {item.monthlyRent > 0 && (
+                              <div style={S.hoardingRent}>
+                                ₹{Number(item.monthlyRent).toLocaleString('en-IN')}/mo (Combined)
+                              </div>
+                            )}
+
+                            {/* Change Image Button */}
+                            <div style={{ marginTop: 6 }}>
+                              <button
+                                type="button"
+                                onClick={() => setMergePhotoTarget(item)}
+                                style={{
+                                  display: 'inline-flex', alignItems: 'center', gap: 4,
+                                  padding: '3px 9px', borderRadius: 6,
+                                  border: '1.5px solid rgba(124,58,237,0.30)',
+                                  background: 'rgba(124,58,237,0.06)', color: '#7c3aed',
+                                  fontFamily: 'Nunito, sans-serif', fontSize: 11, fontWeight: 800,
+                                  cursor: 'pointer', transition: 'all 0.15s',
+                                }}
+                              >
+                                <RefreshCw size={10} /> Change / Select Merge Image
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Toggle */}
+                          <div style={S.toggleWrap}>
+                            <span style={S.toggleLabel(photoOn)}>
+                              {photoOn ? 'Photo ON' : 'Photo OFF'}
+                            </span>
+                            <div
+                              onClick={() => togglePhoto(photoKey)}
+                              style={S.toggleTrack(photoOn)}
+                            >
+                              <div style={S.toggleThumb(photoOn)} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  // Standalone hoarding rendering (regular card)
                   const hasPhoto = !!photoUrlMap[item.hoardingID];
                   const photoOn = photoSelections[item.hoardingID] !== false;
                   return (
@@ -3613,7 +4324,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
                               style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
                           ) : (
                             <div style={{ textAlign: 'center', color: '#c0c0d8' }}>
-                              <Image size={20} color="#d0d0e8" />
+                              <ImageIcon size={20} color="#d0d0e8" />
                               <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 9, marginTop: 2, color: '#c0c0d8' }}>No photo</div>
                             </div>
                           )}
@@ -3676,7 +4387,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
               {/* Summary strip */}
               <div style={S.summaryStrip}>
                 PDF will include:{' '}
-                <strong style={{ color: '#1a1a2e' }}>{hoardingItems.length} hoarding{hoardingItems.length !== 1 ? 's' : ''}</strong>
+                <strong style={{ color: '#1a1a2e' }}>{displayItems.length} item{displayItems.length !== 1 ? 's' : ''}</strong>
                 {' · '}
                 <strong style={{ color: '#049edf' }}>{selectedCount} with photo</strong>
                 {' · '}Cover page · Terms &amp; Conditions
@@ -3804,17 +4515,17 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
           </button>
           <button
             onClick={handleGenerate}
-            disabled={generating || loading || hoardingItems.length === 0}
-            style={S.generateBtn(hoardingItems.length > 0 && !generating && !loading)}
+            disabled={generating || loading || displayItems.length === 0}
+            style={S.generateBtn(displayItems.length > 0 && !generating && !loading)}
             onMouseEnter={e => {
-              if (hoardingItems.length > 0 && !generating) {
+              if (displayItems.length > 0 && !generating) {
                 e.currentTarget.style.transform = 'translateY(-2px)';
                 e.currentTarget.style.boxShadow = '0 8px 26px rgba(4,158,223,0.46)';
               }
             }}
             onMouseLeave={e => {
               e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = hoardingItems.length > 0 ? '0 4px 18px rgba(4,158,223,0.35)' : 'none';
+              e.currentTarget.style.boxShadow = displayItems.length > 0 ? '0 4px 18px rgba(4,158,223,0.35)' : 'none';
             }}
           >
             {generating
@@ -3823,6 +4534,17 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
           </button>
         </div>
       </div>
+
+      {mergePhotoTarget && (
+        <SelectMergePhotoModal
+          mergeItem={mergePhotoTarget}
+          contractID={contract?.customerContractID}
+          rawHoardingPhotos={rawHoardingPhotos}
+          mergedApiImages={mergedApiImages}
+          onPhotoSelected={handlePhotoSelected}
+          onClose={() => setMergePhotoTarget(null)}
+        />
+      )}
     </div>,
     document.body
   );
@@ -5392,7 +6114,11 @@ export default function CustomerContractPage() {
       ]);
       setCustomers(Array.isArray(rawCustomers) ? rawCustomers : rawCustomers?.data ?? []);
       const internalList = Array.isArray(rawHoardings) ? rawHoardings : rawHoardings?.data ?? [];
-      const externalList = Array.isArray(rawExternalHoardings) ? rawExternalHoardings : rawExternalHoardings?.data ?? [];
+      // START: Ensure external hoardings have isExternal flag set
+      const externalList = (Array.isArray(rawExternalHoardings) ? rawExternalHoardings : rawExternalHoardings?.data ?? []).map(eh => ({ ...eh, isExternal: true }));
+      // Original code:
+      // const externalList = Array.isArray(rawExternalHoardings) ? rawExternalHoardings : rawExternalHoardings?.data ?? [];
+      // END: Ensure external hoardings have isExternal flag set
       const rawHList = [...internalList, ...externalList];
       setAllHoardingsRaw(rawHList);
       setHoardings(deduplicateHoardings(rawHList));

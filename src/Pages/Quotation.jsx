@@ -366,6 +366,7 @@ function normalizeList(res) {
 }
 
 function normalizeCustomer(raw) {
+  if (!raw) return null;
   return {
     customerID: raw.customerID ?? raw.CustomerID ?? raw.id ?? raw.Id ?? 0,
     customerName: raw.customerName ?? raw.CustomerName ?? '',
@@ -548,8 +549,15 @@ const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = nu
     hoardingID: h?.hoardingID || 0,
     siteID,
     siteObj: site,
-    location: buildSiteAddress(site, h?.hoardingCode || ''),
     hoardingCode: h?.hoardingCode || '',
+    // START: Do not show site address for external hoardings in Quotation/Proforma PDF
+    isExternal: h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true',
+    location: (h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true')
+      ? (h?.hoardingCode || '')
+      : buildSiteAddress(site, h?.hoardingCode || ''),
+    // Original code:
+    // location: buildSiteAddress(site, h?.hoardingCode || ''),
+    // END: Do not show site address for external hoardings in Quotation/Proforma PDF
     size: h ? `${h.width} X ${h.height}` : '',
     sqFt: h ? (h.width * h.height) : 0,
     nos: nos,
@@ -632,12 +640,23 @@ function newMergedRow(rowsArr, direction) {
     mergedHoardingIDs: rowsArr.map(r => Number(r.hoardingID) || 0).filter(id => id > 0),
     hoardingID: 0,
     siteID: null,
+    // START: Do not show site address for external hoardings in Quotation/Proforma PDF
     location: [...new Set(rowsArr.map(r => {
+      const isExt = r.isExternal === true || String(r.isExternal).toLowerCase() === 'true' || r.is_External === true || String(r.is_External).toLowerCase() === 'true';
+      if (isExt) return r.hoardingCode || '';
       if (r.rowType === 'hoarding' && r.siteObj) {
         return `${r.siteObj.addressLine1 || ''}${r.siteObj.city ? `, ${r.siteObj.city}` : ''}`;
       }
       return r.location || '';
     }).filter(Boolean))].join(' + '),
+    // Original code:
+    // location: [...new Set(rowsArr.map(r => {
+    //   if (r.rowType === 'hoarding' && r.siteObj) {
+    //     return `${r.siteObj.addressLine1 || ''}${r.siteObj.city ? `, ${r.siteObj.city}` : ''}`;
+    //   }
+    //   return r.location || '';
+    // }).filter(Boolean))].join(' + '),
+    // END: Do not show site address for external hoardings in Quotation/Proforma PDF
     hoardingCode: rowsArr.map(r => r.hoardingCode || '').join(' + '),
     size: `${mw} X ${mh}`,
     sqFt,
@@ -4473,12 +4492,21 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
         const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
+        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
+        const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
+        const loc = isExt
+          ? (h?.hoardingCode || '')
+          : (siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '');
+        // Original code:
+        // const loc = siteObj
+        //   ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
+        //   : h?.hoardingCode || '';
+        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
+
         return {
           rowType: 'hoarding',
           hoardingID: l.hoardingID,
-          location: siteObj
-            ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
-            : h?.hoardingCode || '',
+          location: loc,
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
           nos: calcNOSFromDays(days),
@@ -4529,12 +4557,23 @@ export default function QuotationPage({ onNavigateToContracts }) {
           mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
         }
 
+        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
         const locations = hoardingObjs.map(h => {
+          const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
+          if (isExt) return h.hoardingCode || '';
           const site = h.siteID ? siteMap.get(h.siteID) : null;
           return site
             ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
             : h.hoardingCode || '';
         });
+        // Original code:
+        // const locations = hoardingObjs.map(h => {
+        //   const site = h.siteID ? siteMap.get(h.siteID) : null;
+        //   return site
+        //     ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
+        //     : h.hoardingCode || '';
+        // });
+        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
         const locFallback = [...new Set(locations)].join(' + ');
@@ -4660,12 +4699,21 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
         const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
+        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
+        const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
+        const loc = isExt
+          ? (h?.hoardingCode || '')
+          : (siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '');
+        // Original code:
+        // const loc = siteObj
+        //   ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
+        //   : h?.hoardingCode || '';
+        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
+
         return {
           rowType: 'hoarding',
           hoardingID: l.hoardingID,
-          location: siteObj
-            ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
-            : h?.hoardingCode || '',
+          location: loc,
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
           nos: calcNOSFromDays(days),
@@ -4716,12 +4764,23 @@ export default function QuotationPage({ onNavigateToContracts }) {
           mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
         }
 
+        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
         const locations = hoardingObjs.map(h => {
+          const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
+          if (isExt) return h.hoardingCode || '';
           const site = h.siteID ? siteMap.get(h.siteID) : null;
           return site
             ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
             : h.hoardingCode || '';
         });
+        // Original code:
+        // const locations = hoardingObjs.map(h => {
+        //   const site = h.siteID ? siteMap.get(h.siteID) : null;
+        //   return site
+        //     ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
+        //     : h.hoardingCode || '';
+        // });
+        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
         const locFallback = [...new Set(locations)].join(' + ');
@@ -4962,9 +5021,16 @@ export default function QuotationPage({ onNavigateToContracts }) {
           apiService.getAllQuotationCompanies().catch(() => []),
         ]);
 
-        setCustomers(normalizeList(cRaw).map(normalizeCustomer));
+        setCustomers(normalizeList(cRaw).map(normalizeCustomer).filter(Boolean));
 
-        const rawHoardings = [...normalizeList(hRaw), ...normalizeList(extRaw)];
+        // START: Ensure external hoardings have isExternal flag set
+        const rawHoardings = [
+          ...normalizeList(hRaw),
+          ...normalizeList(extRaw).map(eh => ({ ...eh, isExternal: true }))
+        ];
+        // Original code:
+        // const rawHoardings = [...normalizeList(hRaw), ...normalizeList(extRaw)];
+        // END: Ensure external hoardings have isExternal flag set
         const seenHoardings = new Set();
         const uniqueHoardings = [];
         for (const h of rawHoardings) {
@@ -5928,12 +5994,21 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
         const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
+        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
+        const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
+        const loc = isExt
+          ? (h?.hoardingCode || '')
+          : (siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '');
+        // Original code:
+        // const loc = siteObj
+        //   ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
+        //   : h?.hoardingCode || '';
+        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
+
         return {
           rowType: 'hoarding',
           hoardingID: l.hoardingID,
-          location: siteObj
-            ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
-            : h?.hoardingCode || '',
+          location: loc,
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
           nos: calcNOSFromDays(days),
@@ -5988,12 +6063,23 @@ export default function QuotationPage({ onNavigateToContracts }) {
           mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
         }
 
+        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
         const locations = hoardingObjs.map(h => {
+          const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
+          if (isExt) return h.hoardingCode || '';
           const site = h.siteID ? siteMap.get(h.siteID) : null;
           return site
             ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
             : h.hoardingCode || '';
         });
+        // Original code:
+        // const locations = hoardingObjs.map(h => {
+        //   const site = h.siteID ? siteMap.get(h.siteID) : null;
+        //   return site
+        //     ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
+        //     : h.hoardingCode || '';
+        // });
+        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
         const locFallback = [...new Set(locations)].join(' + ');
@@ -6449,12 +6535,21 @@ export default function QuotationPage({ onNavigateToContracts }) {
           const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
           const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
+          // START: Do not show site address for external hoardings in Quotation/Proforma PDF
+          const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
+          const loc = isExt
+            ? (h?.hoardingCode || '')
+            : (siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '');
+          // Original code:
+          // const loc = siteObj
+          //   ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
+          //   : h?.hoardingCode || '';
+          // END: Do not show site address for external hoardings in Quotation/Proforma PDF
+
           return {
             rowType: 'hoarding',
             hoardingID: l.hoardingID,
-            location: siteObj
-              ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
-              : h?.hoardingCode || '',
+            location: loc,
             size: h ? `${h.width} X ${h.height}` : '',
             sqFt: h ? (h.width * h.height) : 0,
             nos: calcNOSFromDays(days),
@@ -6499,12 +6594,23 @@ export default function QuotationPage({ onNavigateToContracts }) {
             mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
           }
 
+          // START: Do not show site address for external hoardings in Quotation/Proforma PDF
           const locations = hoardingObjs.map(h => {
+            const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
+            if (isExt) return h.hoardingCode || '';
             const site = h.siteID ? siteMap.get(h.siteID) : null;
             return site
               ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
               : h.hoardingCode || '';
           });
+          // Original code:
+          // const locations = hoardingObjs.map(h => {
+          //   const site = h.siteID ? siteMap.get(h.siteID) : null;
+          //   return site
+          //     ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
+          //     : h.hoardingCode || '';
+          // });
+          // END: Do not show site address for external hoardings in Quotation/Proforma PDF
           const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
           const locFallback = [...new Set(locations)].join(' + ');

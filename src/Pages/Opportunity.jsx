@@ -5,7 +5,7 @@ import {
   X, AlertCircle, Check, Edit2, Eye, ChevronDown,
   ChevronUp, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
   Loader2, ShieldCheck, FileText, IndianRupee, MapPin, Users,
-  Upload, Trash2, Image, AlertTriangle, UserRoundPlus
+  Upload, Trash2, Image, AlertTriangle, UserRoundPlus, ExternalLink
 } from 'lucide-react';
 import './Common1.css';
 import { apiService, API_ROOT_URL } from '../api/api';
@@ -31,7 +31,7 @@ const PHONE_REGEX = /^\+?[\d][\d\s\-]{4,18}$/;
 
 const FIELDS = [
   { key: 'name', label: 'Owner Name', icon: UserCircle, placeholder: 'e.g. Parag Patel', col: 6, required: true, type: 'text' },
-  { key: 'location', label: 'Location', icon: MapPin, placeholder: 'e.g. Anand', col: 6, required: true, type: 'text' },
+  { key: 'location', label: 'Location / Coordinates', icon: MapPin, placeholder: 'e.g. 22.5645, 72.9289 or Anand', col: 6, required: true, type: 'text' },
   { key: 'phoneNo1', label: 'Phone No 1', icon: Phone, placeholder: 'e.g. 9428151123', col: 6, required: true, type: 'phone' },
   { key: 'phoneNo2', label: 'Phone No 2', icon: Phone, placeholder: 'e.g. 9876543210 (optional)', col: 6, required: false, type: 'phone' },
   { key: 'rentOffered', label: 'Rent Offered (₹)', icon: IndianRupee, placeholder: 'e.g. 18000', col: 6, required: true, type: 'number' },
@@ -40,6 +40,29 @@ const FIELDS = [
   { key: 'comments', label: 'Comments', icon: FileText, placeholder: 'Additional comments or notes...', col: 12, required: false, type: 'textarea' },
   { key: 'isActive', label: 'Status', icon: ShieldCheck, placeholder: '', col: 6, required: true, type: 'combo-status' },
 ];
+
+export function extractCoordinates(str) {
+  if (!str || typeof str !== 'string') return null;
+  const trimmed = str.trim();
+  const match = trimmed.match(/^([-+]?\d{1,2}(?:\.\d+)?)[,\s]+([-+]?\d{1,3}(?:\.\d+)?)$/);
+  if (match) {
+    const lat = parseFloat(match[1]);
+    const lng = parseFloat(match[2]);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      return { lat, lng };
+    }
+  }
+  return null;
+}
+
+export function getGoogleMapsUrl(locationStr) {
+  if (!locationStr || typeof locationStr !== 'string') return null;
+  const coords = extractCoordinates(locationStr);
+  if (coords) {
+    return `https://www.google.com/maps?q=${coords.lat},${coords.lng}`;
+  }
+  return `https://www.google.com/maps?q=${encodeURIComponent(locationStr.trim())}`;
+}
 
 function validatePhone(value) {
   const stringVal = (value === undefined || value === null) ? '' : String(value);
@@ -413,8 +436,30 @@ function OpportunityCard({ opportunity, onViewDetail, onEdit, onConvert }) {
           <div className="pg-card__title" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
             {opportunity.name}
           </div>
-          <div style={{ marginTop: 4, fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#9090a8' }}>
-            ID: #{opportunity.opportunityID} · {opportunity.location}
+          <div style={{ marginTop: 4, fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#9090a8', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+            <span>ID: #{opportunity.opportunityID}</span>
+            <span>·</span>
+            <span>{opportunity.location || '—'}</span>
+            {opportunity.location && (
+              <a
+                href={getGoogleMapsUrl(opportunity.location)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Open in Google Maps"
+                onClick={e => e.stopPropagation()}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  color: '#049edf',
+                  fontWeight: 800,
+                  fontSize: 10.5,
+                  textDecoration: 'none',
+                }}
+              >
+                <MapPin size={10} /> Maps ↗
+              </a>
+            )}
           </div>
         </div>
         <div className="pg-card__actions">
@@ -587,9 +632,20 @@ function ViewModal({ opportunity, onClose, onEdit }) {
             </div>
             <div className="pg-view__pill">
               <MapPin size={11} color="rgba(255,255,255,0.85)" />
-              <span className="pg-view__pill-text">
-                {opportunity.location}
-              </span>
+              {opportunity.location ? (
+                <a
+                  href={getGoogleMapsUrl(opportunity.location)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ color: '#fff', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}
+                  title="Open in Google Maps"
+                >
+                  <span className="pg-view__pill-text">{opportunity.location}</span>
+                  <ExternalLink size={10} color="rgba(255,255,255,0.85)" />
+                </a>
+              ) : (
+                <span className="pg-view__pill-text">—</span>
+              )}
             </div>
           </div>
 
@@ -598,6 +654,40 @@ function ViewModal({ opportunity, onClose, onEdit }) {
             <InfoRow icon={Phone} label="Primary Phone Number" value={opportunity.phoneNo1} highlight />
             {opportunity.phoneNo2 && <InfoRow icon={Phone} label="Secondary Phone Number" value={opportunity.phoneNo2} />}
             <InfoRow icon={Home} label="Site Address" value={opportunity.address} />
+
+            {opportunity.location && (
+              <div className="pg-info-row">
+                <div className="pg-info-row__icon pg-info-row__icon--highlight">
+                  <MapPin size={14} color="#049edf" />
+                </div>
+                <div className="pg-info-row__content">
+                  <div className="pg-info-row__label">Location / Coordinates</div>
+                  <div className="pg-info-row__value pg-info-row__value--highlight" style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span>{opportunity.location}</span>
+                    <a
+                      href={getGoogleMapsUrl(opportunity.location)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontSize: 11.5,
+                        fontWeight: 800,
+                        color: '#049edf',
+                        textDecoration: 'none',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 3,
+                        padding: '2px 8px',
+                        background: 'rgba(4,158,223,0.08)',
+                        borderRadius: 6,
+                        border: '1px solid rgba(4,158,223,0.2)'
+                      }}
+                    >
+                      <ExternalLink size={11} /> Open in Google Maps
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="pg-view__section-label pg-view__section-label--mt">Rent Details</div>
             <InfoRow icon={IndianRupee} label="Rent Offered" value={`₹${opportunity.rentOffered?.toLocaleString()}`} highlight />
@@ -695,9 +785,39 @@ function OpportunityFormModal({ onClose, onSaved, editData }) {
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [gettingLocation, setGettingLocation] = useState(false);
+  const [locationError, setLocationError] = useState('');
 
   const isSupervisor = localStorage.getItem('userRole') === 'supervisor';
   const visibleFields = isSupervisor ? FIELDS.filter(f => f.key !== 'isActive') : FIELDS;
+
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation is not supported by your browser.');
+      return;
+    }
+    setGettingLocation(true);
+    setLocationError('');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const formatted = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        handleChange('location', formatted);
+        setGettingLocation(false);
+      },
+      (err) => {
+        console.error('Geolocation error:', err);
+        let msg = 'Failed to get current location.';
+        if (err.code === 1) msg = 'Location permission denied. Please allow location access in your browser.';
+        else if (err.code === 2) msg = 'Location position unavailable. Please try again.';
+        else if (err.code === 3) msg = 'Location request timed out. Please try again.';
+        setLocationError(msg);
+        setGettingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  };
 
   // Photos State
   const [photos, setPhotos] = useState([]);
@@ -871,15 +991,102 @@ function OpportunityFormModal({ onClose, onSaved, editData }) {
 
               return (
                 <div key={f.key} className={`col-12 col-md-${f.col}`}>
-                  <FieldLabel label={f.label} required={f.required} optional={!f.required} />
-
                   {f.type === 'combo-status' ? (
-                    <StatusDropdown
-                      value={form.isActive}
-                      onChange={val => handleChange('isActive', val)}
-                    />
+                    <>
+                      <FieldLabel label={f.label} required={f.required} optional={!f.required} />
+                      <StatusDropdown
+                        value={form.isActive}
+                        onChange={val => handleChange('isActive', val)}
+                      />
+                    </>
+                  ) : f.key === 'location' ? (
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
+                        <FieldLabel label={f.label} required={f.required} optional={!f.required} />
+                        <button
+                          type="button"
+                          onClick={handleGetCurrentLocation}
+                          disabled={gettingLocation}
+                          title="Get User Current Location (GPS)"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '3px 10px',
+                            borderRadius: 8,
+                            border: '1.5px solid #049edf',
+                            background: gettingLocation ? '#f0f9ff' : 'rgba(4, 158, 223, 0.08)',
+                            color: '#049edf',
+                            fontFamily: 'Nunito, sans-serif',
+                            fontSize: 11.5,
+                            fontWeight: 800,
+                            cursor: gettingLocation ? 'not-allowed' : 'pointer',
+                            whiteSpace: 'nowrap',
+                            transition: 'all 0.15s ease',
+                            marginBottom: 4,
+                          }}
+                        >
+                          {gettingLocation ? (
+                            <>
+                              <Loader2 size={12} className="pg-spin" />
+                              <span>Fetching GPS…</span>
+                            </>
+                          ) : (
+                            <>
+                              <MapPin size={12} />
+                              <span>Current Location</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <InputWrap error={isFieldTouched && !!fieldError} icon={f.icon}>
+                        <input
+                          className="pg-field-input"
+                          type="text"
+                          placeholder={f.placeholder}
+                          value={form[f.key] ?? ''}
+                          onChange={e => {
+                            handleChange(f.key, e.target.value);
+                            if (locationError) setLocationError('');
+                          }}
+                          onBlur={() => handleBlur(f.key)}
+                          autoComplete="off"
+                          style={{ width: '100%', fontSize: 13 }}
+                        />
+                      </InputWrap>
+
+                      {locationError && (
+                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#dc2626', marginTop: 4, display: 'flex', gap: 4, alignItems: 'center' }}>
+                          <AlertCircle size={11} /> {locationError}
+                        </div>
+                      )}
+                      {/* {form.location && (
+                        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <a
+                            href={getGoogleMapsUrl(form.location)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontFamily: 'Nunito, sans-serif',
+                              fontSize: 11,
+                              color: '#049edf',
+                              fontWeight: 700,
+                              textDecoration: 'none',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                            }}
+                          >
+                            <ExternalLink size={11} /> View in Google Maps ↗
+                          </a>
+                        </div>
+                      )} */}
+                    </div>
                   ) : (
-                    <InputWrap error={isFieldTouched && !!fieldError} icon={f.icon}>
+                    <>
+                      <FieldLabel label={f.label} required={f.required} optional={!f.required} />
+                      <InputWrap error={isFieldTouched && !!fieldError} icon={f.icon}>
                       {f.type === 'textarea' ? (
                         <textarea
                           className="pg-field-input"
@@ -911,6 +1118,7 @@ function OpportunityFormModal({ onClose, onSaved, editData }) {
                         />
                       )}
                     </InputWrap>
+                    </>
                   )}
                   {isFieldTouched && <FieldError msg={fieldError} />}
                 </div>
@@ -1342,7 +1550,36 @@ export default function OpportunityPage({ changeTab }) {
                         <span className="pg-td__ellipsis" title={o.name}>{o.name}</span>
                       </td>
                       <td className="pg-td pg-td--overflow">
-                        <span className="pg-td__ellipsis" title={o.location}>{o.location || '—'}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '100%' }}>
+                          <span className="pg-td__ellipsis" title={o.location} style={{ flex: 1 }}>
+                            {o.location || '—'}
+                          </span>
+                          {o.location && (
+                            <a
+                              href={getGoogleMapsUrl(o.location)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Open "${o.location}" in Google Maps`}
+                              onClick={e => e.stopPropagation()}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: 22,
+                                height: 22,
+                                borderRadius: 6,
+                                background: 'rgba(4, 158, 223, 0.08)',
+                                color: '#049edf',
+                                border: '1px solid rgba(4, 158, 223, 0.25)',
+                                flexShrink: 0,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease',
+                              }}
+                            >
+                              <MapPin size={11} />
+                            </a>
+                          )}
+                        </div>
                       </td>
                       <td className="pg-td" style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700 }}>
                         {o.phoneNo1}

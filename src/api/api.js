@@ -391,6 +391,7 @@ export const apiService = {
       paymentDate: data.paymentDate ? data.paymentDate.split('T')[0] : new Date().toISOString().split('T')[0],
       paymentPurpose: data.paymentPurpose || '',
       amountPaid: Number(data.amountPaid),
+      extrapayment: (data.extrapayment !== '' && data.extrapayment != null) ? Number(data.extrapayment) : null,
       paymentMode: data.paymentMode || '',
       nextDueDate: data.nextDueDate ? data.nextDueDate.split('T')[0] : '0001-01-01',
       bankName: data.bankName || null,
@@ -411,6 +412,7 @@ export const apiService = {
       paymentDate: data.paymentDate ? data.paymentDate.split('T')[0] : new Date().toISOString().split('T')[0],
       paymentPurpose: data.paymentPurpose || '',
       amountPaid: Number(data.amountPaid),
+      extrapayment: (data.extrapayment !== '' && data.extrapayment != null) ? Number(data.extrapayment) : null,
       paymentMode: data.paymentMode || '',
       nextDueDate: data.nextDueDate ? data.nextDueDate.split('T')[0] : '0001-01-01',
       bankName: data.bankName || null,
@@ -578,6 +580,47 @@ export const apiService = {
     mergeAlongFlag: data.mergeAlongFlag,
   }),
   deleteHoardingMerge: (id) => api.delete(`/HoardingMerge/Delete/${id}`),
+  selectMergePhoto: (data) => {
+    const fd = new FormData();
+    fd.append('CustomerContractID', Number(data.customerContractID ?? data.CustomerContractID ?? 0));
+    fd.append('HoardingID', Number(data.hoardingID ?? data.HoardingID ?? 0));
+    const existingPhotoId = data.existingHoardingPhotoID ?? data.ExistingHoardingPhotoID;
+    if (existingPhotoId != null && Number(existingPhotoId) > 0) {
+      fd.append('ExistingHoardingPhotoID', Number(existingPhotoId));
+    }
+    if (data.newPhoto || data.NewPhoto) {
+      const files = Array.isArray(data.newPhoto || data.NewPhoto)
+        ? (data.newPhoto || data.NewPhoto)
+        : [data.newPhoto || data.NewPhoto];
+      files.forEach(f => {
+        if (f) fd.append('NewPhoto', f);
+      });
+    }
+    return api.post('/HoardingMerge/SelectMergePhoto', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  getMergedImages: async (customerContractId) => {
+    try {
+      const res = await api.get(`/HoardingMerge/GetMergedImages/${customerContractId}`);
+      return Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.$values) ? res.$values : [];
+    } catch {
+      return [];
+    }
+  },
+  getAllHoardingPhotos: async () => {
+    try {
+      const res = await api.get('/HoardingPhoto/GetAll');
+      return Array.isArray(res) ? res : Array.isArray(res?.data) ? res.data : Array.isArray(res?.value) ? res.value : [];
+    } catch {
+      try {
+        const res2 = await api.get('/HoardingPhoto');
+        return Array.isArray(res2) ? res2 : Array.isArray(res2?.data) ? res2.data : Array.isArray(res2?.value) ? res2.value : [];
+      } catch {
+        return [];
+      }
+    }
+  },
 
   // LAND PAYMENT ATTACHMENTS
   getLandPaymentAttachByPaymentId: async (landPaymentID) => {

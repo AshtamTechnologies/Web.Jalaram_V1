@@ -74,8 +74,10 @@ const PAYMENT_PURPOSE_OPTIONS = [
 const EMPTY_ROW = {
   _rowId: '',
   paymentDate: '',
+  days: '',
   paymentPurpose: '',
   amountPaid: '',
+  extrapayment: '',
   paymentMode: '',
   nextDueDate: '',
   bankName: '',
@@ -104,6 +106,35 @@ function fmtCurrency(v) {
 
 function makeRowId() {
   return `row_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function addDaysToDate(dateStr, days) {
+  if (!dateStr || isNaN(days) || Number(days) <= 0) return '';
+  try {
+    const clean = dateStr.split('T')[0];
+    const parts = clean.split('-');
+    if (parts.length !== 3) return '';
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    d.setDate(d.getDate() + Number(days));
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  } catch {
+    return '';
+  }
+}
+
+function calculateDaysBetween(startStr, endStr) {
+  if (!startStr || !endStr) return '';
+  try {
+    const s = new Date(startStr.split('T')[0] + 'T00:00:00');
+    const e = new Date(endStr.split('T')[0] + 'T00:00:00');
+    const diff = Math.round((e - s) / (1000 * 60 * 60 * 24));
+    return diff > 0 ? String(diff) : '';
+  } catch {
+    return '';
+  }
 }
 
 function paymentModeStyle(mode) {
@@ -143,6 +174,7 @@ function normalizePayment(raw) {
     paymentDate: cleanDate(raw.paymentDate ?? raw.PaymentDate),
     paymentPurpose: raw.paymentPurpose ?? raw.PaymentPurpose ?? '',
     amountPaid: raw.amountPaid ?? raw.AmountPaid ?? '',
+    extrapayment: raw.extrapayment ?? raw.Extrapayment ?? raw.ExtraPayment ?? raw.extraPayment ?? null,
     paymentMode: raw.paymentMode ?? raw.PaymentMode ?? '',
     nextDueDate: cleanDate(raw.nextDueDate ?? raw.NextDueDate),
     bankName: raw.bankName ?? raw.BankName ?? '',
@@ -154,7 +186,7 @@ function normalizePayment(raw) {
   };
 }
 
-function validateRow(row, maxVal) {
+function validateRow(row, maxVal, contractEndDate, referenceDate) {
   const e = {};
   if (!row.paymentDate) {
     e.paymentDate = 'Required';
@@ -170,14 +202,23 @@ function validateRow(row, maxVal) {
   else if (maxVal != null && maxVal > 0 && Number(row.amountPaid) > Number(maxVal)) {
     e.amountPaid = `Cannot exceed Contract Value (${maxVal.toLocaleString('en-IN')})`;
   }
+  if (row.extrapayment !== '' && row.extrapayment != null) {
+    if (isNaN(Number(row.extrapayment)) || Number(row.extrapayment) < 0) {
+      e.extrapayment = 'Must be positive';
+    }
+  }
   if (!row.paymentMode) e.paymentMode = 'Required';
   if (!row.paidBy) e.paidBy = 'Required';
-  if (row.nextDueDate) {
+  if (!row.nextDueDate) {
+    e.nextDueDate = 'Required';
+  } else {
     const y = row.nextDueDate.split('-')[0];
     if (y && y.length > 4) {
       e.nextDueDate = 'Year cannot exceed 4 digits';
-    } else if (row.paymentDate && row.nextDueDate < row.paymentDate) {
-      e.nextDueDate = 'Must be after payment date';
+    } else if (referenceDate && row.nextDueDate < referenceDate) {
+      e.nextDueDate = `Must be on or after ${fmtDate(referenceDate)}`;
+    } else if (contractEndDate && row.nextDueDate > contractEndDate) {
+      e.nextDueDate = `Cannot be after Contract End Date (${fmtDate(contractEndDate)})`;
     }
   }
   if (row.referenceNumber && row.referenceNumber.length > 30)
@@ -877,6 +918,7 @@ function DeleteRowModal({ row, onConfirm, onCancel, deleting }) {
 function PaymentRowsTable({
   rows, rowErrors, onChangeRow, onDeleteRow, deletingRowId,
   attachFiles, existingAttaches, uploadingRowIds, onFileSelect, onFileClear,
+  referenceDateInfo, contractStartDate, contractEndDate,
 }) {
   if (rows.length === 0) return null;
   const total = rows.reduce((s, r) => s + (Number(r.amountPaid) || 0), 0);
@@ -906,25 +948,27 @@ function PaymentRowsTable({
       {/* ─── Desktop ─── */}
       <div className="exp-rows-desktop">
         <div className="exp-rows-scroll">
-          <table className="exp-rows-tbl">
+          <table className="exp-rows-tbl exp-rows-tbl--payment">
             <thead>
               <tr>
-                <th className="exp-col-idx">#</th>
-                <th>Pay Date <span className="exp-req">*</span></th>
-                <th>Purpose <span className="exp-req">*</span></th>
-                <th>Amount (₹) <span className="exp-req">*</span></th>
-                <th>Mode <span className="exp-req">*</span></th>
-                <th>Paid By <span className="exp-req">*</span></th>
-                <th>Next Due</th>
-                <th>Bank</th>
-                <th>Reference</th>
-                <th>Comments</th>
-                <th>
+                <th className="exp-col-idx" style={{ width: 42, minWidth: 42 }}>#</th>
+                <th style={{ width: 130, minWidth: 130 }}>Pay Date <span className="exp-req">*</span></th>
+                <th style={{ width: 135, minWidth: 135 }}>Purpose <span className="exp-req">*</span></th>
+                <th style={{ width: 105, minWidth: 105 }}>Amount (₹) <span className="exp-req">*</span></th>
+                <th style={{ width: 105, minWidth: 105 }}>Extra Pay (₹)</th>
+                <th style={{ width: 115, minWidth: 115 }}>Mode <span className="exp-req">*</span></th>
+                <th style={{ width: 115, minWidth: 115 }}>Paid By <span className="exp-req">*</span></th>
+                <th style={{ width: 85, minWidth: 85 }}>Days</th>
+                <th style={{ width: 128, minWidth: 128 }}>Next Due <span className="exp-req">*</span></th>
+                <th style={{ width: 120, minWidth: 120 }}>Bank</th>
+                <th style={{ width: 130, minWidth: 130 }}>Reference</th>
+                <th style={{ width: 140, minWidth: 140 }}>Comments</th>
+                <th style={{ width: 180, minWidth: 180 }}>
                   <span className="ea-col-head">
                     <Paperclip size={11} /> Photo / Doc
                   </span>
                 </th>
-                <th className="exp-col-del"></th>
+                <th className="exp-col-del" style={{ width: 48, minWidth: 48 }}></th>
               </tr>
             </thead>
             <tbody>
@@ -938,6 +982,10 @@ function PaymentRowsTable({
                   : null;
                 const showBank = ['Cheque', 'NEFT', 'RTGS', 'Bank Transfer', 'Demand Draft']
                   .includes(row.paymentMode);
+
+                const rowBaseDate = idx === 0
+                  ? (contractStartDate || referenceDateInfo?.date || '')
+                  : (rows[idx - 1]?.nextDueDate || rows[idx - 1]?.paymentDate || contractStartDate || '');
 
                 return (
                   <tr key={row._rowId}
@@ -978,6 +1026,15 @@ function PaymentRowsTable({
                       {errs.amountPaid && <div className="exp-cell-err">{errs.amountPaid}</div>}
                     </td>
 
+                    {/* Extra Payment */}
+                    <td className="exp-td">
+                      <input type="number" min="0"
+                        className={`exp-cell-input${errs.extrapayment ? ' exp-cell-input--err' : ''}`}
+                        placeholder="0" value={row.extrapayment ?? ''}
+                        onChange={e => onChangeRow(row._rowId, 'extrapayment', e.target.value)} />
+                      {errs.extrapayment && <div className="exp-cell-err">{errs.extrapayment}</div>}
+                    </td>
+
                     {/* Mode */}
                     <td className="exp-td">
                       <select
@@ -1000,13 +1057,46 @@ function PaymentRowsTable({
                       {errs.paidBy && <div className="exp-cell-err">{errs.paidBy}</div>}
                     </td>
 
+                    {/* Days */}
+                    <td className="exp-td">
+                      <input type="number" min="1"
+                        className="exp-cell-input"
+                        placeholder="Days…" value={row.days ?? ''}
+                        onChange={e => {
+                          const val = e.target.value;
+                          onChangeRow(row._rowId, 'days', val);
+                          const numDays = parseInt(val, 10);
+                          if (!isNaN(numDays) && numDays > 0) {
+                            if (rowBaseDate) {
+                              let calculatedDue = addDaysToDate(rowBaseDate, numDays);
+                              if (contractEndDate && calculatedDue > contractEndDate) {
+                                calculatedDue = contractEndDate;
+                                const cappedDays = calculateDaysBetween(rowBaseDate, contractEndDate);
+                                onChangeRow(row._rowId, 'days', cappedDays);
+                              }
+                              if (calculatedDue) onChangeRow(row._rowId, 'nextDueDate', calculatedDue);
+                            }
+                          }
+                        }} />
+                    </td>
+
                     {/* Next Due */}
                     <td className="exp-td">
                       <input type="date"
                         className={`exp-cell-input${errs.nextDueDate ? ' exp-cell-input--err' : ''}`}
-                        value={row.nextDueDate} min={row.paymentDate || undefined}
-                        max="9999-12-31"
-                        onChange={e => onChangeRow(row._rowId, 'nextDueDate', e.target.value)} />
+                        value={row.nextDueDate} min={rowBaseDate || undefined}
+                        max={contractEndDate || '9999-12-31'}
+                        onChange={e => {
+                          let val = sanitizeDate(e.target.value);
+                          if (contractEndDate && val > contractEndDate) {
+                            val = contractEndDate;
+                          }
+                          onChangeRow(row._rowId, 'nextDueDate', val);
+                          if (rowBaseDate && val) {
+                            const diff = calculateDaysBetween(rowBaseDate, val);
+                            onChangeRow(row._rowId, 'days', diff);
+                          }
+                        }} />
                       {errs.nextDueDate && <div className="exp-cell-err">{errs.nextDueDate}</div>}
                     </td>
 
@@ -1074,6 +1164,10 @@ function PaymentRowsTable({
           const showBank = ['Cheque', 'NEFT', 'RTGS', 'Bank Transfer', 'Demand Draft']
             .includes(row.paymentMode);
 
+          const rowBaseDate = idx === 0
+            ? (contractStartDate || referenceDateInfo?.date || '')
+            : (rows[idx - 1]?.nextDueDate || rows[idx - 1]?.paymentDate || contractStartDate || '');
+
           return (
             <div key={row._rowId}
               className={`exp-mob-card${Object.keys(errs).length ? ' exp-mob-card--err' : ''}`}
@@ -1099,6 +1193,13 @@ function PaymentRowsTable({
                     className={`exp-cell-input${errs.amountPaid ? ' exp-cell-input--err' : ''}`}
                     placeholder="0" value={row.amountPaid}
                     onChange={e => onChangeRow(row._rowId, 'amountPaid', e.target.value)} />
+                </div>
+                <div className="col-6">
+                  <div className="exp-mob-label">Extra Payment</div>
+                  <input type="number" min="0"
+                    className={`exp-cell-input${errs.extrapayment ? ' exp-cell-input--err' : ''}`}
+                    placeholder="0" value={row.extrapayment ?? ''}
+                    onChange={e => onChangeRow(row._rowId, 'extrapayment', e.target.value)} />
                 </div>
                 <div className="col-12">
                   <div className="exp-mob-label">Purpose <span className="exp-req">*</span></div>
@@ -1127,11 +1228,44 @@ function PaymentRowsTable({
                     onChange={e => onChangeRow(row._rowId, 'paidBy', e.target.value)} />
                 </div>
                 <div className="col-6">
-                  <div className="exp-mob-label">Next Due</div>
-                  <input type="date" className="exp-cell-input"
-                    value={row.nextDueDate} min={row.paymentDate || undefined}
-                    max="9999-12-31"
-                    onChange={e => onChangeRow(row._rowId, 'nextDueDate', e.target.value)} />
+                  <div className="exp-mob-label">Days</div>
+                  <input type="number" min="1" className="exp-cell-input"
+                    placeholder="Days…" value={row.days ?? ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      onChangeRow(row._rowId, 'days', val);
+                      const numDays = parseInt(val, 10);
+                      if (!isNaN(numDays) && numDays > 0) {
+                        if (rowBaseDate) {
+                          let calculatedDue = addDaysToDate(rowBaseDate, numDays);
+                          if (contractEndDate && calculatedDue > contractEndDate) {
+                            calculatedDue = contractEndDate;
+                            const cappedDays = calculateDaysBetween(rowBaseDate, contractEndDate);
+                            onChangeRow(row._rowId, 'days', cappedDays);
+                          }
+                          if (calculatedDue) onChangeRow(row._rowId, 'nextDueDate', calculatedDue);
+                        }
+                      }
+                    }} />
+                </div>
+                <div className="col-6">
+                  <div className="exp-mob-label">Next Due <span className="exp-req">*</span></div>
+                  <input type="date"
+                    className={`exp-cell-input${errs.nextDueDate ? ' exp-cell-input--err' : ''}`}
+                    value={row.nextDueDate} min={rowBaseDate || undefined}
+                    max={contractEndDate || '9999-12-31'}
+                    onChange={e => {
+                      let val = sanitizeDate(e.target.value);
+                      if (contractEndDate && val > contractEndDate) {
+                        val = contractEndDate;
+                      }
+                      onChangeRow(row._rowId, 'nextDueDate', val);
+                      if (rowBaseDate && val) {
+                        const diff = calculateDaysBetween(rowBaseDate, val);
+                        onChangeRow(row._rowId, 'days', diff);
+                      }
+                    }} />
+                  {errs.nextDueDate && <div className="exp-cell-err">{errs.nextDueDate}</div>}
                 </div>
                 {showBank && (<>
                   <div className="col-6">
@@ -1180,12 +1314,45 @@ function PaymentRowsTable({
 /* ─────────────────────────────────────────
    QUICK-ADD PANEL  (single new row form)
 ───────────────────────────────────────── */
-function QuickAddPanel({ row, errors, onChange, attachFile, onFileSelect, onFileClear }) {
+function QuickAddPanel({ row, errors, onChange, attachFile, onFileSelect, onFileClear, referenceDateInfo, contractEndDate }) {
   const showBank = ['Cheque', 'NEFT', 'RTGS', 'Bank Transfer', 'Demand Draft'].includes(row.paymentMode);
+
+  const handleDaysChange = (val) => {
+    onChange('days', val);
+    const numDays = parseInt(val, 10);
+    if (!isNaN(numDays) && numDays > 0) {
+      const baseDate = referenceDateInfo?.date || row.paymentDate;
+      if (baseDate) {
+        let calculatedDue = addDaysToDate(baseDate, numDays);
+        if (contractEndDate && calculatedDue > contractEndDate) {
+          calculatedDue = contractEndDate;
+          const cappedDays = calculateDaysBetween(baseDate, contractEndDate);
+          onChange('days', cappedDays);
+        }
+        if (calculatedDue) {
+          onChange('nextDueDate', calculatedDue);
+        }
+      }
+    }
+  };
+
+  const handleNextDueDateChange = (val) => {
+    let sanitized = sanitizeDate(val);
+    if (contractEndDate && sanitized > contractEndDate) {
+      sanitized = contractEndDate;
+    }
+    onChange('nextDueDate', sanitized);
+    const baseDate = referenceDateInfo?.date || row.paymentDate;
+    if (baseDate && sanitized) {
+      const diff = calculateDaysBetween(baseDate, sanitized);
+      onChange('days', diff);
+    }
+  };
+
   return (
     <div className="exp-entry-panel">
       <div className="row g-3">
-        <div className="col-12 col-md-4">
+        <div className="col-12 col-md-3">
           <FieldLabel label="Payment Date" required />
           <InputWrap error={errors.paymentDate} icon={Calendar}>
             <input className="pg-field-input" type="date" value={row.paymentDate}
@@ -1194,13 +1361,22 @@ function QuickAddPanel({ row, errors, onChange, attachFile, onFileSelect, onFile
           </InputWrap>
           <FieldError msg={errors.paymentDate} />
         </div>
-        <div className="col-12 col-md-4">
-          <FieldLabel label="Next Due Date" optional />
+        <div className="col-12 col-md-2">
+          <FieldLabel label="Days" optional />
+          <InputWrap error={errors.days} icon={Clock}>
+            <input className="pg-field-input" type="number" min="1" placeholder="e.g. 30"
+              value={row.days ?? ''}
+              onChange={e => handleDaysChange(e.target.value)} />
+          </InputWrap>
+          <FieldError msg={errors.days} />
+        </div>
+        <div className="col-12 col-md-3">
+          <FieldLabel label="Next Due Date" required />
           <InputWrap error={errors.nextDueDate} icon={Calendar}>
             <input className="pg-field-input" type="date" value={row.nextDueDate}
-              min={row.paymentDate || undefined}
-              max="9999-12-31"
-              onChange={e => onChange('nextDueDate', e.target.value)} />
+              min={referenceDateInfo?.date || undefined}
+              max={contractEndDate || '9999-12-31'}
+              onChange={e => handleNextDueDateChange(e.target.value)} />
           </InputWrap>
           <FieldError msg={errors.nextDueDate} />
         </div>
@@ -1210,6 +1386,13 @@ function QuickAddPanel({ row, errors, onChange, attachFile, onFileSelect, onFile
             <CurrencyInput value={row.amountPaid} onChange={val => onChange('amountPaid', val)} placeholder="e.g. 25,000" />
           </InputWrap>
           <FieldError msg={errors.amountPaid} />
+        </div>
+        <div className="col-12 col-md-4">
+          <FieldLabel label="Extra Payment (Rs.)" optional />
+          <InputWrap error={errors.extrapayment} icon={IndianRupee}>
+            <CurrencyInput value={row.extrapayment} onChange={val => onChange('extrapayment', val)} placeholder="e.g. 3,500" />
+          </InputWrap>
+          <FieldError msg={errors.extrapayment} />
         </div>
         <div className="col-12 col-md-4">
           <FieldLabel label="Payment Purpose" required />
@@ -1371,22 +1554,46 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   // Build initial rows from existing payments for this group
   const [rows, setRows] = useState(() => {
     if (!isAdd) {
-      return allPayments
+      const groupPayments = allPayments
         .filter(p => `${p.ownerID}_${p.landContractID}` === groupKey)
-        .map(p => ({
+        .slice()
+        .sort((a, b) => {
+          const da = a.paymentDate || a.nextDueDate || '';
+          const db = b.paymentDate || b.nextDueDate || '';
+          if (da !== db) return da.localeCompare(db);
+          return (Number(a.landPaymentID) || 0) - (Number(b.landPaymentID) || 0);
+        });
+
+      const matchedContract = contracts.find(c => `${c.ownerID}_${c.landContractID}` === groupKey || String(c.landContractID) === String(groupPayments[0]?.landContractID));
+      const sDate = matchedContract?.startDate || '';
+
+      let prevBase = sDate;
+      return groupPayments.map((p, idx) => {
+        const pNextDue = p.nextDueDate || '';
+        const baseForThisRow = idx === 0 ? sDate : prevBase;
+        const calcDays = (baseForThisRow && pNextDue) ? calculateDaysBetween(baseForThisRow, pNextDue) : '';
+        if (pNextDue) {
+          prevBase = pNextDue;
+        } else if (p.paymentDate) {
+          prevBase = p.paymentDate;
+        }
+        return {
           ...EMPTY_ROW,
           _rowId: makeRowId(),
           _paymentID: p.landPaymentID,
           paymentDate: p.paymentDate || '',
+          days: calcDays,
           paymentPurpose: p.paymentPurpose || '',
           amountPaid: p.amountPaid ?? '',
+          extrapayment: p.extrapayment != null ? p.extrapayment : '',
           paymentMode: p.paymentMode || '',
-          nextDueDate: p.nextDueDate || '',
+          nextDueDate: pNextDue,
           bankName: p.bankName || '',
           referenceNumber: p.referenceNumber || '',
           paidBy: p.paidBy || '',
           comments: p.comments || '',
-        }));
+        };
+      });
     }
     const saved = sessionStorage.getItem('unsaved_land_payment_form');
     if (saved) {
@@ -1498,7 +1705,8 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   const handleAddRow = () => {
     const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
     const maxVal = contract ? Number(contract.totalContractValue) : null;
-    const errs = validateRow(currentRow, maxVal);
+    const contractEndDate = contract?.endDate || '';
+    const errs = validateRow(currentRow, maxVal, contractEndDate, referenceDateInfo?.date);
     if (Object.keys(errs).length) {
       setCurrentErrors(errs);
       setTimeout(() => {
@@ -1562,10 +1770,17 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
 
     const contract = contracts.find(c => String(c.landContractID) === String(landContractID));
     const maxVal = contract ? Number(contract.totalContractValue) : 0;
+    const contractEndDate = contract?.endDate || '';
 
     const newRowErrors = {};
     let hasErr = false;
-    rows.forEach(r => { const e = validateRow(r, maxVal); if (Object.keys(e).length) { newRowErrors[r._rowId] = e; hasErr = true; } });
+    rows.forEach((r, idx) => {
+      const rowBase = idx === 0
+        ? (contract?.startDate || '')
+        : (rows[idx - 1]?.nextDueDate || rows[idx - 1]?.paymentDate || contract?.startDate || '');
+      const e = validateRow(r, maxVal, contractEndDate, rowBase);
+      if (Object.keys(e).length) { newRowErrors[r._rowId] = e; hasErr = true; }
+    });
 
     const entryHasData = Object.entries(currentRow)
       .filter(([k]) => k !== '_rowId')
@@ -1573,7 +1788,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
 
     let allRowsToSave = [...rows];
     if (showEntryForm && entryHasData) {
-      const errs = validateRow(currentRow, maxVal);
+      const errs = validateRow(currentRow, maxVal, contractEndDate, referenceDateInfo?.date);
       if (Object.keys(errs).length) {
         setCurrentErrors(errs);
         setTimeout(() => {
@@ -1643,6 +1858,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
           paymentDate: row.paymentDate,
           paymentPurpose: row.paymentPurpose,
           amountPaid: Number(row.amountPaid),
+          extrapayment: (row.extrapayment !== '' && row.extrapayment != null) ? Number(row.extrapayment) : null,
           paymentMode: row.paymentMode,
           nextDueDate: row.nextDueDate || null,
           bankName: row.bankName || '',
@@ -1686,15 +1902,11 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
       if (attachErrors.length) {
         setApiErr(`Payments saved, but ${attachErrors.length} attachment(s) failed: ${attachErrors[0]}`);
         setSaveOk(true);
-        // ── START: Clear unsaved draft on save success ──
         sessionStorage.removeItem('unsaved_land_payment_form');
-        // ── END: Clear unsaved draft on save success ──
         setTimeout(() => { onRefresh(); onBack(); }, 2500);
       } else {
         setSaveOk(true);
-        // ── START: Clear unsaved draft on save success ──
         sessionStorage.removeItem('unsaved_land_payment_form');
-        // ── END: Clear unsaved draft on save success ──
         setTimeout(() => { onRefresh(); onBack(); }, 700);
       }
     } catch (err) {
@@ -1715,6 +1927,54 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
   const editTitle = owner && contract
     ? `${owner.ownerName} — Contract #${contract.landContractID}${hoarding ? ` · ${hoardingLabel(hoarding)}` : ''}`
     : `Group: ${groupKey}`;
+
+  // Reference date for payment calculations: Contract Start Date for 1st payment, or Next Due Date from previous payments
+  const referenceDateInfo = React.useMemo(() => {
+    if (!landContractID || !contract) return null;
+
+    if (rows.length === 0) {
+      // Previous saved payments for this contract (excluding unsaved current additions)
+      const contractPayments = allPayments
+        .filter(p => Number(p.landContractID) === Number(landContractID))
+        .filter(p => Number(p.landPaymentID) > 0);
+
+      if (contractPayments.length === 0) {
+        // First payment: Show Contract Start Date
+        if (!contract.startDate) return null;
+        return {
+          isFirst: true,
+          label: 'Contract Start Date',
+          date: contract.startDate,
+        };
+      } else {
+        // Subsequent payment: Show Next Due Date from previous payments
+        const sorted = [...contractPayments].sort((a, b) => {
+          const da = a.nextDueDate || a.paymentDate || '';
+          const db = b.nextDueDate || b.paymentDate || '';
+          if (db !== da) return db.localeCompare(da);
+          return (Number(b.landPaymentID) || 0) - (Number(a.landPaymentID) || 0);
+        });
+        const latest = sorted[0];
+        const targetDate = latest?.nextDueDate || latest?.paymentDate || contract.startDate;
+        if (!targetDate) return null;
+        return {
+          isFirst: false,
+          label: 'Next Due Date',
+          date: targetDate,
+        };
+      }
+    } else {
+      // When rows already exist, the next entry is calculated from the last row's nextDueDate
+      const lastRow = rows[rows.length - 1];
+      const targetDate = lastRow.nextDueDate || lastRow.paymentDate || contract.startDate;
+      if (!targetDate) return null;
+      return {
+        isFirst: false,
+        label: 'Next Due Date',
+        date: targetDate,
+      };
+    }
+  }, [landContractID, contract, allPayments, rows]);
 
   return (
     <div className="hd-form-page">
@@ -1819,6 +2079,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                                 paymentDate: p.paymentDate || '',
                                 paymentPurpose: p.paymentPurpose || '',
                                 amountPaid: p.amountPaid ?? '',
+                                extrapayment: p.extrapayment != null ? p.extrapayment : '',
                                 paymentMode: p.paymentMode || '',
                                 nextDueDate: p.nextDueDate || '',
                                 bankName: p.bankName || '',
@@ -1839,6 +2100,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                     {contract && (() => {
                       const contractVal = Number(contract.totalContractValue) || 0;
                       const paidVal = rows.reduce((sum, r) => sum + (Number(r.amountPaid) || 0), 0);
+                      const extraVal = rows.reduce((sum, r) => sum + (Number(r.extrapayment) || 0), 0);
                       const pendingVal = Math.max(contractVal - paidVal, 0);
 
                       return (
@@ -1871,6 +2133,22 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                             <strong style={{ color: '#16a34a' }}>{fmtCurrency(paidVal)}</strong>
                           </div>
 
+                          {/* Extra Paid */}
+                          {extraVal > 0 && (
+                            <div style={{
+                              display: 'flex', alignItems: 'center', gap: 6,
+                              padding: '8px 12px', borderRadius: 8,
+                              background: 'rgba(124, 58, 237, 0.05)',
+                              border: '1px solid rgba(124, 58, 237, 0.15)',
+                              fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700,
+                              color: '#1a1a2e',
+                            }}>
+                              <IndianRupee size={13} color="#7c3aed" />
+                              <span>Extra Paid: </span>
+                              <strong style={{ color: '#7c3aed' }}>{fmtCurrency(extraVal)}</strong>
+                            </div>
+                          )}
+
                           {/* Total Pending */}
                           <div style={{
                             display: 'flex', alignItems: 'center', gap: 6,
@@ -1895,14 +2173,34 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
             {/* ── Payment Entries ── */}
             <div className="col-12">
               <div className="hd-section-card">
-                <div className="hd-section-head">
-                  <div className="hd-section-icon-wrap"><Receipt size={14} color="#049edf" /></div>
-                  <div style={{ flex: 1 }}>
-                    <div className="hd-section-title">Payment Entries</div>
-                    <div className="hd-section-sub">
-                      {isAdd
-                        ? 'Add one or more payment rows for this contract'
-                        : `${rows.length} payment row${rows.length !== 1 ? 's' : ''} · ${fmtCurrency(totalAmount)}`}
+                <div className="hd-section-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 260 }}>
+                    <div className="hd-section-icon-wrap"><Receipt size={14} color="#049edf" /></div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <div className="hd-section-title">Payment Entries</div>
+                        {referenceDateInfo && (
+                          <div style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 6,
+                            padding: '3px 10px', borderRadius: 20,
+                            background: referenceDateInfo.isFirst ? 'rgba(4, 158, 223, 0.08)' : 'rgba(22, 163, 74, 0.08)',
+                            border: referenceDateInfo.isFirst ? '1.5px solid rgba(4, 158, 223, 0.25)' : '1.5px solid rgba(22, 163, 74, 0.25)',
+                            fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800,
+                            color: referenceDateInfo.isFirst ? '#0284c7' : '#15803d',
+                          }}>
+                            <Calendar size={13} color={referenceDateInfo.isFirst ? '#049edf' : '#16a34a'} />
+                            <span>{referenceDateInfo.label}:</span>
+                            <strong style={{ color: referenceDateInfo.isFirst ? '#0369a1' : '#14532d' }}>
+                              {fmtDate(referenceDateInfo.date)}
+                            </strong>
+                          </div>
+                        )}
+                      </div>
+                      <div className="hd-section-sub">
+                        {isAdd
+                          ? 'Add one or more payment rows for this contract'
+                          : `${rows.length} payment row${rows.length !== 1 ? 's' : ''} · ${fmtCurrency(totalAmount)}`}
+                      </div>
                     </div>
                   </div>
                   {!isAdd && (
@@ -1924,6 +2222,8 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                         attachFile={attachFiles[currentRow._rowId] || null}
                         onFileSelect={handleFileSelect}
                         onFileClear={handleFileClear}
+                        referenceDateInfo={referenceDateInfo}
+                        contractEndDate={contract?.endDate || ''}
                       />
                       <div className="exp-addrow-bar">
                         <button className="exp-btn-addrow" onClick={handleAddRow}>
@@ -1953,6 +2253,9 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
                     uploadingRowIds={uploadingRowIds}
                     onFileSelect={handleFileSelect}
                     onFileClear={handleFileClear}
+                    referenceDateInfo={referenceDateInfo}
+                    contractStartDate={contract?.startDate || ''}
+                    contractEndDate={contract?.endDate || ''}
                   />
 
                   {!isAdd && rows.length === 0 && !showEntryForm && (
@@ -2018,7 +2321,7 @@ export default function LandPaymentPage() {
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loadingMeta) setTableReady(true); }, [loadingMeta]);
-  useResizableColumns(tableRef, tableReady, [200, 180, 100, 110, 80]);
+  useResizableColumns(tableRef, tableReady, [200, 180, 100, 100, 110, 80]);
 
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
@@ -2055,10 +2358,9 @@ export default function LandPaymentPage() {
         ? rawPayments
         : Array.isArray(rawPayments?.data) ? rawPayments.data : [];
       setPayments(list.map(normalizePayment));
-      setPayments(list.map(normalizePayment));
 
-      const mapList = Array.isArray(rawMaps) ? rawMaps : Array.isArray(rawMaps?.data) ? rawMaps.data : [];  // ← add
-      setHoardingMaps(mapList);  // ← add
+      const mapList = Array.isArray(rawMaps) ? rawMaps : Array.isArray(rawMaps?.data) ? rawMaps.data : [];
+      setHoardingMaps(mapList);
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load data.');
     } finally {
@@ -2110,6 +2412,7 @@ export default function LandPaymentPage() {
             dateRange: `${fmtDate(contract.startDate)} → ${fmtDate(contract.endDate)}`,
           } : null,
           totalAmount: 0,
+          totalExtraAmount: 0,
           count: 0,
           modes: new Set(),
           lastPaymentDate: '',
@@ -2117,6 +2420,7 @@ export default function LandPaymentPage() {
         };
       }
       map[key].totalAmount += Number(p.amountPaid) || 0;
+      map[key].totalExtraAmount += Number(p.extrapayment) || 0;
       map[key].count += 1;
       if (p.paymentMode) map[key].modes.add(p.paymentMode);
       if (p.paymentDate && p.paymentDate > map[key].lastPaymentDate) {
@@ -2140,6 +2444,8 @@ export default function LandPaymentPage() {
   const sortedRows = [...filtered].sort((a, b) => {
     if (sortKey === 'totalAmount')
       return sortDir === 'asc' ? a.totalAmount - b.totalAmount : b.totalAmount - a.totalAmount;
+    if (sortKey === 'totalExtraAmount')
+      return sortDir === 'asc' ? a.totalExtraAmount - b.totalExtraAmount : b.totalExtraAmount - a.totalExtraAmount;
     if (sortKey === 'count')
       return sortDir === 'asc' ? a.count - b.count : b.count - a.count;
     const av = String(a[sortKey] ?? '').toLowerCase();
@@ -2173,6 +2479,7 @@ export default function LandPaymentPage() {
     { key: 'ownerName', label: 'Owner' },
     { key: 'hoardingLabel', label: 'Contract Details', tabletHide: true },
     { key: 'totalAmount', label: 'Total Paid' },
+    { key: 'totalExtraAmount', label: 'Extra Paid' },
     { key: 'count', label: 'Payments', tabletHide: true },
     { key: '_action', label: 'Actions', noSort: true },
   ];
@@ -2391,6 +2698,17 @@ export default function LandPaymentPage() {
                         <span className="exp-amount-val">{fmtCurrency(r.totalAmount)}</span>
                       </td>
 
+                      {/* Extra Paid */}
+                      <td className="pg-td">
+                        {r.totalExtraAmount > 0 ? (
+                          <span className="exp-amount-val" style={{ color: '#7c3aed' }}>
+                            {fmtCurrency(r.totalExtraAmount)}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#c0c0d8' }}>—</span>
+                        )}
+                      </td>
+
                       {/* Count + modes */}
                       <td className="pg-td pg-tablet-hide">
                         <div style={{ fontSize: 12, color: '#5a5a7a', fontWeight: 700 }}>
@@ -2472,6 +2790,11 @@ export default function LandPaymentPage() {
                       <span className="pg-card__row-text" style={{ fontWeight: 800, color: '#1a1a2e' }}>
                         {fmtCurrency(r.totalAmount)}
                       </span>
+                      {r.totalExtraAmount > 0 && (
+                        <span style={{ color: '#7c3aed', fontSize: 11, fontWeight: 700, marginLeft: 6 }}>
+                          (+{fmtCurrency(r.totalExtraAmount)} extra)
+                        </span>
+                      )}
                       <span style={{ color: '#9090a8', fontSize: 11, marginLeft: 4 }}>
                         {r.count} payment{r.count !== 1 ? 's' : ''}
                       </span>
