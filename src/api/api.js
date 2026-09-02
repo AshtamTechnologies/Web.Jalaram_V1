@@ -1201,6 +1201,14 @@ export const apiService = {
 
   // JOB PAYMENTS
   getAllJobPayments: () => api.get('/JobPayment'),
+  getFilteredJobPayments: (params = {}) => {
+    const query = new URLSearchParams();
+    if (params.fromDate) query.append('fromDate', params.fromDate);
+    if (params.toDate) query.append('toDate', params.toDate);
+    if (params.userId) query.append('userId', params.userId);
+    const qs = query.toString();
+    return api.get(`/JobPayment/filter${qs ? `?${qs}` : ''}`);
+  },
   getJobPaymentsByUserId: (userId) => api.get(`/JobPayment/GetByUserId/${userId}`),
   getCompletedJobsWithPendingPayment: () => api.get('/JobPayment/GetCompletedJobsWithPendingPayment'),
   getJobPaymentById: (id) => api.get(`/JobPayment/${id}`),
@@ -1213,6 +1221,8 @@ export const apiService = {
     remainingAmount: Number(data.remainingAmount ?? 0),
     paidBY: String(data.paidBY ?? ''),
     extrapayment: data.extrapayment ? String(data.extrapayment) : null,
+    isAdvancePayment: Boolean(data.isAdvancePayment ?? false),
+    advancePaymentAmount: 0,
     receiptPhoto: String(data.receiptPhoto ?? ''),
     comments: String(data.comments ?? ''),
     isParicialPayment: Boolean(data.isParicialPayment ?? false),
@@ -1228,6 +1238,8 @@ export const apiService = {
     remainingAmount: Number(data.remainingAmount ?? 0),
     paidBY: String(data.paidBY ?? ''),
     extrapayment: data.extrapayment ? String(data.extrapayment) : null,
+    isAdvancePayment: Boolean(data.isAdvancePayment ?? false),
+    advancePaymentAmount: 0,
     receiptPhoto: String(data.receiptPhoto ?? ''),
     comments: String(data.comments ?? ''),
     isParicialPayment: Boolean(data.isParicialPayment ?? false),
@@ -1347,7 +1359,15 @@ export const apiService = {
     api.get(`/QuotationCompany/GetByQuotationId/${quotationID}`),
 
   // OPPORTUNITIES
-  getAllOpportunities: () => api.get('/Opportunity'),
+  getAllOpportunities: (isActive) => {
+    if (isActive === undefined || isActive === null || isActive === '') {
+      return api.get('/Opportunity');
+    }
+    return api.get(`/Opportunity?isActive=${isActive}`);
+  },
+  getConvertedOpportunities: () => api.get('/Opportunity/converted'),
+  convertToLandlord: (opportunityId, data) =>
+    api.post(`/Opportunity/ConvertToLandlord/${opportunityId}`, data),
   getOpportunityById: (id) => api.get(`/Opportunity/${id}`),
   createOpportunity: (data) => api.post('/Opportunity', data),
   updateOpportunity: (data) => api.put('/Opportunity', data),

@@ -101,6 +101,8 @@ function normalizeOpportunity(raw) {
     rentExpected: raw.rent_Expected ?? raw.rentExpected ?? 0,
     comments: raw.comments ?? '',
     isActive: raw.is_Active ?? raw.isActive ?? true,
+    ownerID: raw.owner_ID ?? raw.ownerID ?? raw.ownerId ?? null,
+    ownerName: raw.owner_Name ?? raw.ownerName ?? null,
   };
 }
 
@@ -411,7 +413,20 @@ function StatusDropdown({ value, onChange }) {
 /* ─────────────────────────────────────────
    STATUS BADGE
  ───────────────────────────────────────── */
-function StatusBadge({ isActive }) {
+function StatusBadge({ isActive, isConverted }) {
+  if (isConverted) {
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', padding: '3px 10px',
+        borderRadius: 20, fontFamily: 'Nunito,sans-serif', fontSize: 11,
+        fontWeight: 700, background: '#f5f3ff',
+        color: '#7c3aed',
+        border: '1px solid #ddd6fe', whiteSpace: 'nowrap',
+      }}>
+        Converted
+      </span>
+    );
+  }
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', padding: '3px 10px',
@@ -429,6 +444,8 @@ function StatusBadge({ isActive }) {
    OPPORTUNITY CARD (For mobile view)
  ───────────────────────────────────────── */
 function OpportunityCard({ opportunity, onViewDetail, onEdit, onConvert }) {
+  const isConverted = !!opportunity.ownerID;
+
   return (
     <div className="pg-card">
       <div className="pg-card__header">
@@ -466,11 +483,11 @@ function OpportunityCard({ opportunity, onViewDetail, onEdit, onConvert }) {
           <button className="pg-btn-edit" onClick={() => onEdit(opportunity)} title="Edit">
             <Edit2 size={13} />
           </button>
-          {/* ── START: Convert to Landlord Button (mobile) ── */}
-          {opportunity.isActive && (
+          {/* Convert to Landlord Button (mobile) - only if not already converted */}
+          {!isConverted && (
             <button
               onClick={() => onConvert(opportunity)}
-              title="Convert to Land Lord"
+              title="Convert to Landlord"
               style={{
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 gap: 4, padding: '4px 9px', borderRadius: 7, border: '1.5px solid #049edf',
@@ -481,7 +498,6 @@ function OpportunityCard({ opportunity, onViewDetail, onEdit, onConvert }) {
               <UserRoundPlus size={11} /> Convert
             </button>
           )}
-          {/* ── END: Convert to Landlord Button (mobile) ── */}
           <button className="pg-btn-view" onClick={() => onViewDetail(opportunity)} title="View detail">
             <Eye size={13} />
           </button>
@@ -489,6 +505,15 @@ function OpportunityCard({ opportunity, onViewDetail, onEdit, onConvert }) {
       </div>
 
       <div className="pg-card__body">
+        {opportunity.ownerName && (
+          <div className="pg-card__row">
+            <UserCircle size={12} className="pg-card__row-icon" color="#7c3aed" />
+            <span className="pg-card__row-text" style={{ fontWeight: 700, color: '#7c3aed' }}>
+              Owner: {opportunity.ownerName}
+            </span>
+          </div>
+        )}
+
         <div className="pg-card__row">
           <Phone size={12} className="pg-card__row-icon" />
           <span className="pg-card__row-text">{opportunity.phoneNo1}</span>
@@ -509,7 +534,7 @@ function OpportunityCard({ opportunity, onViewDetail, onEdit, onConvert }) {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4, paddingTop: 8, borderTop: '1px solid #eeeefc' }}>
-          <StatusBadge isActive={opportunity.isActive} />
+          <StatusBadge isActive={opportunity.isActive} isConverted={isConverted} />
         </div>
       </div>
     </div>
@@ -1261,6 +1286,7 @@ export default function OpportunityPage({ changeTab }) {
   const [opportunities, setOpportunities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState('');
+  const [successBanner, setSuccessBanner] = useState('');
 
   /* -- Filter & Search -- */
   const [search, setSearch] = useState('');
@@ -1268,37 +1294,41 @@ export default function OpportunityPage({ changeTab }) {
   const [sortDir, setSortDir] = useState('desc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [statusFilter, setStatusFilter] = useState(''); // ✅ MODIFIED: State for status filter
+  const [statusFilter, setStatusFilter] = useState('All');
 
   /* -- Modals -- */
   const [detailOpportunity, setDetailOpportunity] = useState(null);
-  // ── START: Restore formOpportunity if unsaved opportunity form exists ──
-  // const [formOpportunity, setFormOpportunity] = useState(null);
   const [formOpportunity, setFormOpportunity] = useState(() => {
     const saved = sessionStorage.getItem('unsaved_opportunity_form');
     if (saved) return EMPTY_FORM;
     return null;
   });
-  // ── END: Restore formOpportunity if unsaved opportunity form exists ──
   const [modalLoading, setModalLoading] = useState(false);
 
-  // ── START: Convert to Land Lord State ──
+  // ── Convert to Landlord State ──
   const [convertTarget, setConvertTarget] = useState(null);
-  // ── END: Convert to Land Lord State ──
 
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
-  // useResizableColumns(tableRef, tableReady, [60, 150, 120, 120, 110, 110, 90, 80]);
-  useResizableColumns(tableRef, tableReady, [60, 130, 120, 120, 110, 110, 90, 100]);
-  // ── END: Pass changeTab and add convertTarget state ──
+  useResizableColumns(tableRef, tableReady, [60, 130, 130, 110, 110, 95, 95, 80, 90]);
 
-  const loadOpportunities = useCallback(async () => {
+  const loadOpportunities = useCallback(async (filterValue = statusFilter) => {
     setLoading(true);
     setApiError('');
     try {
-      const data = await apiService.getAllOpportunities();
-      const list = (Array.isArray(data) ? data : data?.$values ?? data?.data ?? []).map(normalizeOpportunity);
+      let data;
+      if (filterValue === 'Converted') {
+        data = await apiService.getConvertedOpportunities();
+      } else if (filterValue === 'Active') {
+        data = await apiService.getAllOpportunities(true);
+      } else if (filterValue === 'Inactive') {
+        data = await apiService.getAllOpportunities(false);
+      } else {
+        data = await apiService.getAllOpportunities();
+      }
+      const raw = data?.data ?? data;
+      const list = (Array.isArray(raw) ? raw : raw?.$values ?? []).map(normalizeOpportunity);
       setOpportunities(list);
     } catch (err) {
       console.error('Failed to load opportunities:', err);
@@ -1306,11 +1336,21 @@ export default function OpportunityPage({ changeTab }) {
     } finally {
       setLoading(false);
     }
+  }, [statusFilter]);
+
+  useEffect(() => {
+    loadOpportunities(statusFilter);
   }, []);
 
   useEffect(() => {
-    loadOpportunities();
-  }, [loadOpportunities]);
+    const successMsg = sessionStorage.getItem('opportunity_convert_success');
+    if (successMsg) {
+      sessionStorage.removeItem('opportunity_convert_success');
+      setSuccessBanner(successMsg);
+      const timer = setTimeout(() => setSuccessBanner(''), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const handleSaved = (saved, isEdit) => {
     if (isEdit) {
@@ -1335,10 +1375,11 @@ export default function OpportunityPage({ changeTab }) {
     }
   };
 
-  // ── START: Convert to Land Lord Confirmation Handler ──
+  // ── Convert to Landlord Confirmation Handler ──
   const handleConvertConfirm = () => {
     if (!convertTarget) return;
     const dataToPass = {
+      fromOpportunityId: convertTarget.opportunityID,
       ownerName: convertTarget.name || '',
       phone1: convertTarget.phoneNo1 || '',
       phone2: convertTarget.phoneNo2 || '',
@@ -1353,7 +1394,6 @@ export default function OpportunityPage({ changeTab }) {
     }
     setConvertTarget(null);
   };
-  // ── END: Convert to Land Lord Confirmation Handler ──
 
   const handleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -1363,15 +1403,12 @@ export default function OpportunityPage({ changeTab }) {
 
   /* -- Filter / Sort -- */
   const filtered = opportunities.filter(o => {
-    // ✅ MODIFIED: Apply status filter
-    if (statusFilter === 'Active' && !o.isActive) return false;
-    if (statusFilter === 'Inactive' && o.isActive) return false;
-
     const q = search.toLowerCase().trim();
     if (!q) return true;
     return (
       String(o.opportunityID).includes(q) ||
       (o.name || '').toLowerCase().includes(q) ||
+      (o.ownerName || '').toLowerCase().includes(q) ||
       (o.location || '').toLowerCase().includes(q) ||
       (o.phoneNo1 || '').toLowerCase().includes(q) ||
       (o.address || '').toLowerCase().includes(q)
@@ -1410,6 +1447,14 @@ export default function OpportunityPage({ changeTab }) {
 
   return (
     <>
+      {convertTarget && (
+        <ConvertConfirmModal
+          opportunity={convertTarget}
+          onConfirm={handleConvertConfirm}
+          onCancel={() => setConvertTarget(null)}
+        />
+      )}
+
       {detailOpportunity && (
         <ViewModal
           opportunity={detailOpportunity}
@@ -1440,6 +1485,12 @@ export default function OpportunityPage({ changeTab }) {
           </button>
         </div>
 
+        {successBanner && (
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '10px 14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 11, marginBottom: 16, color: '#166534', fontSize: 13, fontWeight: 700, fontFamily: 'Nunito,sans-serif' }}>
+            <Check size={16} color="#16a34a" /> {successBanner}
+          </div>
+        )}
+
         {apiError && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 11, marginBottom: 16, color: '#dc2626', fontSize: 13, fontWeight: 600, fontFamily: 'Nunito,sans-serif' }}>
             <AlertCircle size={14} /> {apiError}
@@ -1466,26 +1517,32 @@ export default function OpportunityPage({ changeTab }) {
               <Search size={14} color="#9090a8" style={{ flexShrink: 0 }} />
               <input
                 style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}
-                placeholder="Search by ID, name, location, phone, address..."
+                placeholder="Search by ID, name, owner, location, phone, address..."
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
               />
               {search && <X size={13} style={{ cursor: 'pointer', color: '#9090a8', flexShrink: 0 }} onClick={() => setSearch('')} />}
             </div>
 
-            {/* ✅ MODIFIED: Added dropdown for status filter */}
+            {/* Status Filter Dropdown */}
             <select
               className="hd-filter-select"
               value={statusFilter}
-              onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+              onChange={e => {
+                const val = e.target.value;
+                setStatusFilter(val);
+                setPage(1);
+                loadOpportunities(val);
+              }}
             >
-              <option value="">All Statuses</option>
+              <option value="All">All Statuses</option>
               <option value="Active">Active</option>
               <option value="Inactive">Inactive</option>
+              <option value="Converted">Converted</option>
             </select>
 
             <button
-              onClick={loadOpportunities}
+              onClick={() => loadOpportunities(statusFilter)}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: '1.5px solid #e8e8f4', background: '#fff', color: '#5a5a78', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, flexShrink: 0 }}
             >
               <RefreshCw size={13} /> Refresh
@@ -1498,24 +1555,15 @@ export default function OpportunityPage({ changeTab }) {
               <thead>
                 <tr>
                   {[
-                    // ── START: Custom column widths for Convert action ──
-                    // { key: 'opportunityID', label: 'ID', w: '6%' },
-                    // { key: 'name', label: 'Owner Name', w: '24%' },
-                    // { key: 'location', label: 'Location', w: '14%' },
-                    // { key: 'phoneNo1', label: 'Phone No', w: '14%' },
-                    // { key: 'rentOffered', label: 'Rent Offered', w: '12%' },
-                    // { key: 'rentExpected', label: 'Rent Expected', w: '12%' },
-                    // { key: 'isActive', label: 'Status', w: '12%' },
-                    // { key: null, label: 'Actions', w: '6%' }
                     { key: 'opportunityID', label: 'ID', w: '6%' },
-                    { key: 'name', label: 'Owner Name', w: '20%' },
+                    { key: 'name', label: 'Name', w: '18%' },
+                    { key: 'ownerName', label: 'Owner Name', w: '16%' },
                     { key: 'location', label: 'Location', w: '14%' },
-                    { key: 'phoneNo1', label: 'Phone No', w: '14%' },
-                    { key: 'rentOffered', label: 'Rent Offered', w: '12%' },
-                    { key: 'rentExpected', label: 'Rent Expected', w: '12%' },
-                    { key: 'isActive', label: 'Status', w: '12%' },
-                    { key: null, label: 'Actions', w: '10%' }
-                    // ── END: Custom column widths for Convert action ──
+                    { key: 'phoneNo1', label: 'Phone No', w: '13%' },
+                    { key: 'rentOffered', label: 'Rent Offered', w: '11%' },
+                    { key: 'rentExpected', label: 'Rent Expected', w: '11%' },
+                    { key: 'isActive', label: 'Status', w: '9%' },
+                    { key: null, label: 'Actions', w: '12%' }
                   ].map((col, idx) => (
                     <th
                       key={idx} style={{ width: col.w }}
@@ -1533,7 +1581,7 @@ export default function OpportunityPage({ changeTab }) {
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="pg-td pg-empty">
+                    <td colSpan={9} className="pg-td pg-empty">
                       <div className="pg-empty__inner">
                         <Users size={36} color="#d0d0e8" />
                         <span className="pg-empty__label">No opportunities found</span>
@@ -1548,6 +1596,15 @@ export default function OpportunityPage({ changeTab }) {
                       </td>
                       <td className="pg-td pg-td--overflow" style={{ fontWeight: 800, color: '#1a1a2e' }}>
                         <span className="pg-td__ellipsis" title={o.name}>{o.name}</span>
+                      </td>
+                      <td className="pg-td pg-td--overflow">
+                        {o.ownerName ? (
+                          <span style={{ fontWeight: 700, color: '#7c3aed' }} title={o.ownerName}>
+                            {o.ownerName}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#a0a0b8' }}>—</span>
+                        )}
                       </td>
                       <td className="pg-td pg-td--overflow">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6, maxWidth: '100%' }}>
@@ -1591,18 +1648,18 @@ export default function OpportunityPage({ changeTab }) {
                         ₹{o.rentExpected?.toLocaleString()}
                       </td>
                       <td className="pg-td">
-                        <StatusBadge isActive={o.isActive} />
+                        <StatusBadge isActive={o.isActive} isConverted={!!o.ownerID} />
                       </td>
                       <td className="pg-td">
                         <div className="pg-action-wrap">
                           <button className="pg-btn-edit" onClick={() => handleEditClick(o)} title="Edit" style={{ width: 28, height: 28 }}>
                             <Edit2 size={12} />
                           </button>
-                          {/* ── START: Convert to Landlord Button (desktop) ── */}
-                          {o.isActive && (
+                          {/* Convert to Landlord Button (desktop) - only if not already converted */}
+                          {!o.ownerID && (
                             <button
                               onClick={() => setConvertTarget(o)}
-                              title="Convert to Land Lord"
+                              title="Convert to Landlord"
                               style={{
                                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                                 width: 28, height: 28, borderRadius: 7, border: '1.5px solid #049edf',
@@ -1612,7 +1669,6 @@ export default function OpportunityPage({ changeTab }) {
                               <UserRoundPlus size={12} />
                             </button>
                           )}
-                          {/* ── END: Convert to Landlord Button (desktop) ── */}
                           <button className="pg-btn-view" onClick={() => setDetailOpportunity(o)} title="View detail" style={{ width: 28, height: 28 }}>
                             <Eye size={12} />
                           </button>

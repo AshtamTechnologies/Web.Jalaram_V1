@@ -585,16 +585,16 @@ function buildOwner(id, raw) {
 ───────────────────────────────────────── */
 function toPayload(form) {
   return {
-    ownerName: form.ownerName.trim(),
-    alternateContactName: form.alternateContactName.trim(),
-    ownerAddress: form.ownerAddress.trim(),
-    phone1: form.phone1.trim(),
-    phone2: form.phone2.trim(),
-    city: form.city.trim(),
-    district: form.district.trim(),
-    state: form.state.trim(),
-    country: form.country.trim(),
-    emailAddress: form.emailAddress.trim(),
+    ownerName: String(form.ownerName || '').trim(),
+    alternateContactName: String(form.alternateContactName || '').trim(),
+    ownerAddress: String(form.ownerAddress || '').trim(),
+    phone1: String(form.phone1 || '').trim(),
+    phone2: String(form.phone2 || '').trim(),
+    city: String(form.city || '').trim(),
+    district: String(form.district || '').trim(),
+    state: String(form.state || '').trim(),
+    country: String(form.country || 'India').trim(),
+    emailAddress: String(form.emailAddress || '').trim(),
   };
 }
 
@@ -679,36 +679,49 @@ function ViewModal({ owner, onClose, onEdit }) {
 /* ═══════════════════════════════════════════
    ADD / EDIT MODAL
 ═══════════════════════════════════════════ */
-function OwnerModal({ onClose, onSaved, editData }) {
-  // ── START: Custom pre-fill & session recovery support for OwnerModal ──
-  // const isEdit = !!editData;
-  // const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+function OwnerModal({ onClose, onSaved, editData, fromOpportunityId, changeTab }) {
   const isEdit = !!editData && editData._id !== undefined && editData._id !== null;
+  const activeOpportunityId = fromOpportunityId || sessionStorage.getItem('unsaved_convert_opportunity_id') || null;
+
   const [form, setForm] = useState(() => {
-    if (editData) return { ...EMPTY_FORM, ...editData };
+    if (editData && editData._id !== undefined && editData._id !== null) {
+      return { ...EMPTY_FORM, ...editData };
+    }
     const saved = sessionStorage.getItem('unsaved_owner_form');
     if (saved) {
       try { return JSON.parse(saved); } catch (e) {}
     }
+    if (editData) return { ...EMPTY_FORM, ...editData };
     return { ...EMPTY_FORM };
   });
 
-  useEffect(() => {
-    if (!isEdit) {
-      sessionStorage.setItem('unsaved_owner_form', JSON.stringify(form));
-    }
-  }, [form, isEdit]);
+  const [comments, setComments] = useState(() => {
+    return sessionStorage.getItem('unsaved_owner_comments') || '';
+  });
 
-  const handleCancel = () => {
-    sessionStorage.removeItem('unsaved_owner_form');
-    onClose();
-  };
-  // ── END: Custom pre-fill & session recovery support for OwnerModal ──
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [apiError, setApiError] = useState('');
+  const isSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isEdit && !submitting && !success && !isSubmittingRef.current) {
+      sessionStorage.setItem('unsaved_owner_form', JSON.stringify(form));
+      if (activeOpportunityId) {
+        sessionStorage.setItem('unsaved_convert_opportunity_id', String(activeOpportunityId));
+        sessionStorage.setItem('unsaved_owner_comments', comments);
+      }
+    }
+  }, [form, isEdit, activeOpportunityId, comments, submitting, success]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_owner_form');
+    sessionStorage.removeItem('unsaved_convert_opportunity_id');
+    sessionStorage.removeItem('unsaved_owner_comments');
+    onClose();
+  };
 
   const runValidate = (f) => {
     const e = {};
@@ -747,6 +760,8 @@ function OwnerModal({ onClose, onSaved, editData }) {
   };
 
   const handleSubmit = async () => {
+    if (isSubmittingRef.current || submitting || success) return;
+
     const allTouched = {};
     FIELDS.forEach(f => { allTouched[f.key] = true; });
     setTouched(allTouched);
@@ -762,6 +777,7 @@ function OwnerModal({ onClose, onSaved, editData }) {
       return;
     }
 
+    isSubmittingRef.current = true;
     setSubmitting(true);
     setApiError('');
 
@@ -779,15 +795,39 @@ function OwnerModal({ onClose, onSaved, editData }) {
         const response = await apiService.createOwner(payload);
         const raw = response?.data ?? response;
         saved = normalizeOwner(raw);
+        const newOwnerID = saved._id || saved.ownerID || (typeof raw === 'object' && (raw.ownerID ?? raw.ownerId ?? raw.id));
+
+        if (activeOpportunityId && newOwnerID) {
+          try {
+            await apiService.convertToLandlord(activeOpportunityId, {
+              OpportunityId: Number(activeOpportunityId),
+              OwnerId: Number(newOwnerID),
+              Comments: String(comments || '').trim() || null,
+            });
+          } catch (convErr) {
+            console.error('Conversion link error:', convErr);
+            const convMsg = convErr?.response?.data?.message || convErr?.message || 'Conversion linking failed';
+            setApiError(`Owner #${newOwnerID} (${form.ownerName}) was created successfully, but linking to Opportunity #${activeOpportunityId} failed: ${convMsg}. Please link them manually.`);
+            setSubmitting(false);
+            isSubmittingRef.current = false;
+            return;
+          }
+        }
       }
 
       setSuccess(true);
-      await new Promise(r => setTimeout(r, 700));
-      // ── START: Clear unsaved form on submit success ──
       sessionStorage.removeItem('unsaved_owner_form');
+      sessionStorage.removeItem('unsaved_convert_opportunity_id');
+      sessionStorage.removeItem('unsaved_owner_comments');
+
+      await new Promise(r => setTimeout(r, 600));
       onSaved(saved, isEdit);
       onClose();
-      // ── END: Clear unsaved form on submit success ──
+
+      if (activeOpportunityId && typeof changeTab === 'function') {
+        sessionStorage.setItem('opportunity_convert_success', `Opportunity #${activeOpportunityId} was successfully converted to Landlord "${form.ownerName}"!`);
+        changeTab('opportunity');
+      }
 
     } catch (err) {
       console.error('Save owner error:', err);
@@ -800,11 +840,11 @@ function OwnerModal({ onClose, onSaved, editData }) {
       setApiError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
   return ReactDOM.createPortal(
-    // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
     <div className="pg-overlay">
       <div className="pg-modal">
 
@@ -813,8 +853,8 @@ function OwnerModal({ onClose, onSaved, editData }) {
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap"><UserCircle size={20} color="#049edf" /></div>
             <div>
-              <h5 className="pg-modal__title">{isEdit ? 'Edit Owner' : 'Add New Owner'}</h5>
-              <p className="pg-modal__subtitle">{isEdit ? `Editing: ${editData.ownerName}` : 'Fill in the details below'}</p>
+              <h5 className="pg-modal__title">{isEdit ? 'Edit Owner' : activeOpportunityId ? 'Convert Opportunity to Landlord' : 'Add New Owner'}</h5>
+              <p className="pg-modal__subtitle">{isEdit ? `Editing: ${editData.ownerName}` : activeOpportunityId ? `Converting Opportunity #${activeOpportunityId}` : 'Fill in the details below'}</p>
             </div>
           </div>
           <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
@@ -892,6 +932,35 @@ function OwnerModal({ onClose, onSaved, editData }) {
                 </div>
               );
             })}
+
+            {/* Conversion Comments field - only when converting from opportunity */}
+            {activeOpportunityId && (
+              <div className="col-12">
+                <label className="pg-field-label">
+                  Conversion Comments <span className="pg-field-label__optional">(optional)</span>
+                </label>
+                <div className="pg-field-wrap pg-field-wrap--normal">
+                  <FileText size={14} color="#049edf" style={{ flexShrink: 0, marginTop: 8 }} />
+                  <textarea
+                    className="pg-field-input"
+                    placeholder="Add comments or notes for landlord conversion..."
+                    value={comments}
+                    onChange={e => setComments(e.target.value)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      outline: 'none',
+                      resize: 'vertical',
+                      minHeight: '70px',
+                      paddingTop: '8px',
+                      paddingBottom: '8px',
+                      fontFamily: 'inherit',
+                      fontSize: '13px'
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <p className="pg-form__note">
             <span className="pg-field-label__required">*</span> Required fields &nbsp;·&nbsp; Fields marked optional may be left blank
@@ -900,19 +969,19 @@ function OwnerModal({ onClose, onSaved, editData }) {
 
         {/* Footer */}
         <div className="pg-modal__foot">
-          <button className="pg-btn-cancel" onClick={handleCancel} disabled={submitting}>Cancel</button>
-          <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
+          <button className="pg-btn-cancel" onClick={handleCancel} disabled={submitting || success}>Cancel</button>
+          <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting || success}>
             {success
               ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Added!'}</>
               : submitting
                 ? <><RefreshCw size={13} className="pg-spin" /> Saving…</>
-                : <><Plus size={14} /> {isEdit ? 'Save Changes' : 'Add Owner'}</>}
+                : <><Plus size={14} /> {isEdit ? 'Save Changes' : activeOpportunityId ? 'Create & Convert Landlord' : 'Add Owner'}</>}
           </button>
         </div>
 
       </div>
     </div>,
-    document.body   // ← escapes sidebar stacking context
+    document.body
   );
 }
 
@@ -1292,22 +1361,29 @@ function LandPaymentHistoryModal({ owner, onClose }) {
 /* ═══════════════════════════════════════════
    OWNER PAGE
 ═══════════════════════════════════════════ */
-export default function OwnerPage() {
+export default function OwnerPage({ changeTab }) {
   const [owners, setOwners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
 
-  // ── START: Restore showModal if unsaved owner form exists ──
-  // const [showModal, setShowModal] = useState(false);
   const [showModal, setShowModal] = useState(() => {
-    return sessionStorage.getItem('unsaved_owner_form') !== null;
+    return sessionStorage.getItem('unsaved_owner_form') !== null || sessionStorage.getItem('pending_convert_opportunity') !== null;
   });
-  // ── END: Restore showModal if unsaved owner form exists ──
   const [editOwner, setEditOwner] = useState(null);
+  const [convertOpportunityId, setConvertOpportunityId] = useState(() => {
+    return sessionStorage.getItem('unsaved_convert_opportunity_id') || null;
+  });
   const [viewOwner, setViewOwner] = useState(null);
-  // ── START: Payment History State ──
   const [paymentHistoryOwner, setPaymentHistoryOwner] = useState(null);
-  // ── END: Payment History State ──
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditOwner(null);
+    setConvertOpportunityId(null);
+    sessionStorage.removeItem('unsaved_owner_form');
+    sessionStorage.removeItem('unsaved_convert_opportunity_id');
+    sessionStorage.removeItem('unsaved_owner_comments');
+  };
 
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('ownerName');
@@ -1317,7 +1393,7 @@ export default function OwnerPage() {
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
-  // ── START: Pre-fill conversion data effect ──
+  // ── Pre-fill conversion data effect ──
   useEffect(() => {
     const pendingData = sessionStorage.getItem('pending_convert_opportunity');
     if (pendingData) {
@@ -1325,6 +1401,12 @@ export default function OwnerPage() {
         const parsed = JSON.parse(pendingData);
         if (parsed) {
           setEditOwner(parsed);
+          const oppId = parsed.fromOpportunityId || null;
+          setConvertOpportunityId(oppId);
+          if (oppId) {
+            sessionStorage.setItem('unsaved_convert_opportunity_id', String(oppId));
+          }
+          sessionStorage.setItem('unsaved_owner_form', JSON.stringify(parsed));
           setShowModal(true);
         }
       } catch (err) {
@@ -1334,7 +1416,6 @@ export default function OwnerPage() {
       }
     }
   }, []);
-  // ── END: Pre-fill conversion data effect ──
   useResizableColumns(tableRef, tableReady, [150, 150, 120, 110, 90, 90, 90, 120, 80]);
 
   /* ── Fetch all owners ── */
@@ -1405,7 +1486,6 @@ export default function OwnerPage() {
     setEditOwner({ ...o });   // spread so modal gets a fresh copy
     setShowModal(true);
   };
-  const closeModal = () => { setShowModal(false); setEditOwner(null); };
   const handleView = (o) => setViewOwner(o);
   const closeView = () => setViewOwner(null);
 
@@ -1676,9 +1756,14 @@ export default function OwnerPage() {
 
       {showModal && (
         <OwnerModal
-          onClose={closeModal}
+          onClose={() => {
+            closeModal();
+            setConvertOpportunityId(null);
+          }}
           onSaved={handleSaved}
           editData={editOwner}
+          fromOpportunityId={convertOpportunityId}
+          changeTab={changeTab}
         />
       )}
       {viewOwner && (

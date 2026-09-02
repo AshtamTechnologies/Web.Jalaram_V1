@@ -108,7 +108,7 @@ export default function App() {
       case 'land-payment': return <LandPayment />;
       case 'bookings': return <Placeholder title="Bookings" Icon={CalendarCheck} />;
       case 'clients': return <Placeholder title="Clients" Icon={Users} />;
-      case 'owners': return <OwnerPage />;
+      case 'owners': return <OwnerPage changeTab={changeTab} />;
       case 'payments': return <Placeholder title="Payments" Icon={CreditCard} />;
       case 'customer-details': return <CustomerPage />;
       case 'customer-contract': return <CustomerContract />;

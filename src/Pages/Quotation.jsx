@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { apiService } from '../api/api';
 import { useResizableColumns } from '../hooks/useResizableColumns';
+import AddExternalHoardingModal from '../components/AddExternalHoardingModal';
 import "./Common1.css";
 import paragSign from '../Assets/paragSign.png';
 
@@ -1671,97 +1672,99 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
   const [mappedHoardingIDs, setMappedHoardingIDs] = useState(new Set()); // ✅ MODIFIED: Track mapped external hoardings
+  const [showAddNewModal, setShowAddNewModal] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    const fetchExternal = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        // ✅ MODIFIED: Fetch available hoardings and vendor details in parallel
-        const [res, vendorsRes] = await Promise.all([
-          apiService.getAvailableHoardings(startDate, endDate),
-          apiService.getAllVendors().catch(err => {
-            console.error('Failed to load vendors:', err);
-            return [];
-          })
-        ]);
-        const list = normalizeList(res);
-        const vendors = Array.isArray(vendorsRes) ? vendorsRes
-          : Array.isArray(vendorsRes?.data) ? vendorsRes.data
-            : Array.isArray(vendorsRes?.$values) ? vendorsRes.$values : [];
-
-        const tempMapped = new Set();
-        vendors.forEach(v => {
-          (v.hoardingId || v.HoardingId || []).forEach(id => tempMapped.add(Number(id)));
-        });
-
-        if (active) {
-          setMappedHoardingIDs(tempMapped);
-          // Sort by effdt descending first to keep the latest version
-          const sortedList = [...list].sort((a, b) => new Date(b.effdt || b.Effdt) - new Date(a.effdt || a.Effdt));
-          
-          // Deduplicate by hoardingID
-          const seen = new Set();
-          const uniqueList = [];
-          for (const item of sortedList) {
-            const hid = item.hoardingID ?? item.HoardingID ?? item.hoardingId;
-            if (hid && !seen.has(hid)) {
-              seen.add(hid);
-              uniqueList.push(item);
-            }
-          }
-
-          // Filter: only keep items where isExternal is true
-          const filteredExternal = uniqueList.filter(item => {
-            const full = allHoardings.find(h => h.hoardingID === (item.hoardingId ?? item.hoardingID));
-            const isExt = item.isExternal ?? item.isexternal ?? item.IsExternal ?? full?.isExternal ?? full?.isexternal ?? full?.IsExternal ?? false;
-            return isExt === true || String(isExt).toLowerCase() === 'true';
-          });
-
-          const mapped = filteredExternal.map(item => {
-            const hid = item.hoardingID ?? item.HoardingID ?? item.hoardingId;
-            const full = allHoardings.find(h => h.hoardingID === hid);
-            const sid = item.siteID ?? item.SiteID ?? item.siteId ?? full?.siteID;
-            const siteObj = sid != null ? siteMap.get(sid) : null;
-            return {
-              hoardingID: hid,
-              hoardingCode: item.hoardingCode ?? full?.hoardingCode ?? item.HoardingCode ?? '',
-              monthlyRent: item.monthlyRent ?? full?.monthlyRent ?? item.MonthlyRent ?? 0,
-              width: item.width ?? full?.width ?? item.Width ?? 0,
-              height: item.height ?? full?.height ?? item.Height ?? 0,
-              status: 'Available',
-              siteID: sid ?? null,
-              site: siteObj || full?.site || {
-                addressLine1: item.addressLine1 || '',
-                city: item.city || '',
-                district: item.district || '',
-                siteType: item.material || '',
-              }
-            };
-          });
-          setHoardingsList(mapped);
-        }
-      } catch (err) {
-        if (active) {
-          setError(err?.response?.data?.message || err?.message || 'Failed to load external hoardings.');
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    if (startDate && endDate) {
-      fetchExternal();
-    } else {
+  const fetchExternal = useCallback(async () => {
+    if (!startDate || !endDate) {
       setLoading(false);
       setError('Global period dates are not set.');
+      return;
     }
+    setLoading(true);
+    setError(null);
+    try {
+      // ✅ Fetch available hoardings and vendor details in parallel
+      const [res, vendorsRes] = await Promise.all([
+        apiService.getAvailableHoardings(startDate, endDate),
+        apiService.getAllVendors().catch(err => {
+          console.error('Failed to load vendors:', err);
+          return [];
+        })
+      ]);
+      const list = normalizeList(res);
+      const vendors = Array.isArray(vendorsRes) ? vendorsRes
+        : Array.isArray(vendorsRes?.data) ? vendorsRes.data
+          : Array.isArray(vendorsRes?.$values) ? vendorsRes.$values : [];
 
-    return () => {
-      active = false;
-    };
+      const tempMapped = new Set();
+      vendors.forEach(v => {
+        (v.hoardingId || v.HoardingId || []).forEach(id => tempMapped.add(Number(id)));
+      });
+
+      setMappedHoardingIDs(tempMapped);
+      // Sort by effdt descending first to keep the latest version
+      const sortedList = [...list].sort((a, b) => new Date(b.effdt || b.Effdt) - new Date(a.effdt || a.Effdt));
+      
+      // Deduplicate by hoardingID
+      const seen = new Set();
+      const uniqueList = [];
+      for (const item of sortedList) {
+        const hid = item.hoardingID ?? item.HoardingID ?? item.hoardingId;
+        if (hid && !seen.has(hid)) {
+          seen.add(hid);
+          uniqueList.push(item);
+        }
+      }
+
+      // Filter: only keep items where isExternal is true
+      const filteredExternal = uniqueList.filter(item => {
+        const full = allHoardings.find(h => h.hoardingID === (item.hoardingId ?? item.hoardingID));
+        const isExt = item.isExternal ?? item.isexternal ?? item.IsExternal ?? full?.isExternal ?? full?.isexternal ?? full?.IsExternal ?? false;
+        return isExt === true || String(isExt).toLowerCase() === 'true';
+      });
+
+      const mapped = filteredExternal.map(item => {
+        const hid = item.hoardingID ?? item.HoardingID ?? item.hoardingId;
+        const full = allHoardings.find(h => h.hoardingID === hid);
+        const sid = item.siteID ?? item.SiteID ?? item.siteId ?? full?.siteID;
+        const siteObj = sid != null ? siteMap.get(sid) : null;
+        return {
+          hoardingID: hid,
+          hoardingCode: item.hoardingCode ?? full?.hoardingCode ?? item.HoardingCode ?? '',
+          monthlyRent: item.monthlyRent ?? full?.monthlyRent ?? item.MonthlyRent ?? 0,
+          width: item.width ?? full?.width ?? item.Width ?? 0,
+          height: item.height ?? full?.height ?? item.Height ?? 0,
+          status: 'Available',
+          siteID: sid ?? null,
+          site: siteObj || full?.site || {
+            addressLine1: item.addressLine1 || '',
+            city: item.city || '',
+            district: item.district || '',
+            siteType: item.material || '',
+          }
+        };
+      });
+      setHoardingsList(mapped);
+    } catch (err) {
+      setError(err?.response?.data?.message || err?.message || 'Failed to load external hoardings.');
+    } finally {
+      setLoading(false);
+    }
   }, [startDate, endDate, siteMap, allHoardings]);
+
+  useEffect(() => {
+    fetchExternal();
+  }, [fetchExternal]);
+
+  const handleHoardingCreated = (newHoarding, vendorID) => {
+    setShowAddNewModal(false);
+    if (newHoarding && newHoarding.hoardingID) {
+      // Auto-select the newly created hoarding
+      setSelected(prev => new Set([...prev, newHoarding.hoardingID]));
+    }
+    // Refresh list and vendor mapping
+    fetchExternal();
+  };
 
   const filtered = useMemo(() => {
     const s = search.toLowerCase();
@@ -1806,15 +1809,40 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
         </div>
 
         <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0f0f8', flexShrink: 0 }}>
-          <div className="pg-search-box">
-            <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
-            <input
-              placeholder="Search by code, site address…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              disabled={loading || !!error}
-            />
-            {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div className="pg-search-box" style={{ flex: 1 }}>
+              <Search size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
+              <input
+                placeholder="Search by code, site address…"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                disabled={loading || !!error}
+              />
+              {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowAddNewModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '9px 15px',
+                borderRadius: 10,
+                border: 'none',
+                background: 'linear-gradient(135deg,#049edf,#6c63ff)',
+                color: '#fff',
+                fontFamily: 'Nunito,sans-serif',
+                fontSize: 12.5,
+                fontWeight: 800,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                boxShadow: '0 2px 8px rgba(4,158,223,0.25)',
+                flexShrink: 0,
+              }}
+            >
+              <Plus size={14} /> Add New Hoarding
+            </button>
           </div>
         </div>
 
@@ -1960,6 +1988,15 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
           </div>
         </div>
       </div>
+
+      {showAddNewModal && (
+        <AddExternalHoardingModal
+          allHoardings={allHoardings}
+          onClose={() => setShowAddNewModal(false)}
+          onSuccess={handleHoardingCreated}
+          showToast={showToast}
+        />
+      )}
     </div>,
     document.body
   );

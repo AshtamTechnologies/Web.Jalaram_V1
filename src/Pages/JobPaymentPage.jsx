@@ -62,10 +62,23 @@ function normalizeJobRequest(raw) {
     customerID: raw.customerID ?? raw.CustomerID ?? 0,
     jobType: raw.jobType ?? raw.JobType ?? '',
     jobDescription: raw.jobDescription ?? raw.JobDescription ?? '',
+    supervisorID: Number(raw.iD ?? raw.ID ?? raw.id ?? raw.supervisorID ?? raw.SupervisorID ?? 0),
     totalAreaSQFT: Number(raw.totalAreaSQFT ?? raw.TotalAreaSQFT ?? 0),
     rateperSQFT: Number(raw.rateperSQFT ?? raw.RateperSQFT ?? 0),
     targetCompletionDate: (raw.targetCompletionDate ?? raw.TargetCompletionDate ?? '').split('T')[0],
     jobStatus: raw.jobStatus ?? raw.JobStatus ?? '',
+  };
+}
+
+function normalizeUser(raw) {
+  const id = Number(raw.id ?? raw.Id ?? raw.ID ?? raw.userID ?? raw.UserID ?? raw.userId ?? 0);
+  const firstName = raw.first_Name ?? raw.firstName ?? raw.FirstName ?? '';
+  const lastName = raw.last_Name ?? raw.lastName ?? raw.LastName ?? '';
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+  return {
+    id,
+    name: fullName || raw.name || raw.Name || raw.email || `User #${id}`,
+    role: String(raw.role ?? raw.Role ?? '').trim(),
   };
 }
 
@@ -87,6 +100,8 @@ function normalizePayment(raw) {
     remainingAmount: Number(raw.remainingAmount ?? raw.RemainingAmount ?? 0),
     paidBY: raw.paidBY ?? raw.PaidBY ?? raw.paidBy ?? raw.PaidBy ?? '',
     extrapayment: raw.extrapayment ?? raw.ExtraPayment ?? raw.extraPayment ?? '',
+    isAdvancePayment: !!(raw.isAdvancePayment ?? raw.IsAdvancePayment ?? false),
+    advancePaymentAmount: Number(raw.advancePaymentAmount ?? raw.AdvancePaymentAmount ?? 0),
     receiptPhoto: raw.receiptPhoto ?? raw.ReceiptPhoto ?? '',
     comments: raw.comments ?? raw.Comments ?? '',
     isParicialPayment: !!(raw.isParicialPayment ?? raw.IsParicialPayment ?? raw.isPartialPayment ?? raw.IsPartialPayment ?? false),
@@ -289,12 +304,12 @@ function JobComboField({ value, onChange, options, disabled }) {
                     <span className="pg-combo-option__name">
                       Job #{o.jobRequestID} — {o.jobType || '—'}
                     </span>
-                    {o.customerName && (
-                      <span className="pg-combo-option__id">
-                        {o.customerName}
-                        {o.totalAreaSQFT ? ` · ${Number(o.totalAreaSQFT).toFixed(1)} sq.ft` : ''}
-                      </span>
-                    )}
+                    <span className="pg-combo-option__id">
+                      {o.customerName ? `${o.customerName} · ` : ''}
+                      {o.totalAreaSQFT ? `${Number(o.totalAreaSQFT).toFixed(1)} sq.ft` : ''}
+                      {o.totalAmount ? ` · Total: ${fmtCurrency(o.totalAmount)}` : ''}
+                      {o.remainingForJob !== undefined ? ` · Pending: ${fmtCurrency(o.remainingForJob)}` : ''}
+                    </span>
                   </div>
                   {o.jobRequestID === value && (
                     <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
@@ -644,14 +659,25 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
     }
     return false;
   });
+  const [isAdvancePayment, setIsAdvancePayment] = useState(() => {
+    if (isEdit) return payment?.isAdvancePayment || false;
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.isAdvancePayment !== undefined) return parsed.isAdvancePayment;
+      } catch (e) { }
+    }
+    return false;
+  });
 
   useEffect(() => {
     if (!isEdit) {
       sessionStorage.setItem('unsaved_job_payment_form', JSON.stringify({
-        jobRequestID, paymentDate, calculatedAmount, paidAmount, paidBY, extrapayment, comments, isParicialPayment
+        jobRequestID, paymentDate, calculatedAmount, paidAmount, paidBY, extrapayment, comments, isParicialPayment, isAdvancePayment
       }));
     }
-  }, [jobRequestID, paymentDate, calculatedAmount, paidAmount, paidBY, extrapayment, comments, isParicialPayment, isEdit]);
+  }, [jobRequestID, paymentDate, calculatedAmount, paidAmount, paidBY, extrapayment, comments, isParicialPayment, isAdvancePayment, isEdit]);
 
   const handleCancel = () => {
     sessionStorage.removeItem('unsaved_job_payment_form');
@@ -717,6 +743,8 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
         remainingAmount,
         paidBY: paidBY || '',
         extrapayment: extrapayment || '',
+        isAdvancePayment: Boolean(isAdvancePayment),
+        advancePaymentAmount: 0,
         receiptPhoto: payment?.receiptPhoto || '',
         comments: comments || '',
         isParicialPayment: Boolean(isParicialPayment),
@@ -778,6 +806,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
                 <span>Type: {selectedJob.jobType}</span>
                 <span>{Number(selectedJob.totalAreaSQFT).toFixed(1)} sq.ft</span>
                 <span style={{ color: '#049edf' }}>₹{selectedJob.rateperSQFT}/sq.ft</span>
+                <span>Total: {fmtCurrency(Number(selectedJob.totalAreaSQFT) * Number(selectedJob.rateperSQFT))}</span>
                 {selectedJob.jobStatus && <span>Status: {selectedJob.jobStatus}</span>}
               </div>
             )}
@@ -872,6 +901,37 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
             )}
           </div>
 
+          {/* Is Advance Payment */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                id="isAdvancePayment"
+                type="checkbox"
+                checked={isAdvancePayment}
+                onChange={e => setIsAdvancePayment(e.target.checked)}
+                style={{
+                  width: 16,
+                  height: 16,
+                  cursor: 'pointer',
+                  accentColor: '#049edf',
+                }}
+              />
+              <label
+                htmlFor="isAdvancePayment"
+                style={{
+                  fontFamily: 'Nunito,sans-serif',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: '#1a1a2e',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                Is Advance Payment?
+              </label>
+            </div>
+          </div>
+
           {/* Paid By */}
           <div>
             <label className="qt-label">Paid By</label>
@@ -937,8 +997,13 @@ export default function JobPaymentPage() {
   /* ── Data ── */
   const [payments, setPayments] = useState([]);
   const [jobRequests, setJobRequests] = useState([]);
-  const [completedJobRequests, setCompletedJobRequests] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [supervisors, setSupervisors] = useState([]);
+
+  /* ── Filters ── */
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [selectedSupervisor, setSelectedSupervisor] = useState('');
 
   /* ── UI ── */
   const [loading, setLoading] = useState(true);
@@ -963,55 +1028,68 @@ export default function JobPaymentPage() {
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
-  useResizableColumns(tableRef, tableReady, [50, 50, 130, 70, 80, 95, 85, 85, 85, 85, 85, 95, 80, 75]);
+  useResizableColumns(tableRef, tableReady, [45, 45, 110, 60, 95, 75, 80, 80, 75, 75, 80, 75, 75, 85, 70, 70]);
 
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type }), []);
 
-  /* ── Job options enriched with customer name ── */
+  /* ── Job options enriched with customer name & payment calculation ── */
   const jobOptions = useMemo(() => {
-    const list = completedJobRequests
-      .filter(j => {
+    const list = jobRequests
+      .map(j => {
         const totalValue = Number(j.totalAreaSQFT ?? 0) * Number(j.rateperSQFT ?? 0);
         const totalPaid = payments
           .filter(p => p.jobRequestID === j.jobRequestID && (!editingPayment || p.jobPaymentID !== editingPayment.jobPaymentID))
           .reduce((sum, p) => sum + Number(p.paidAmount ?? 0), 0);
         const remaining = totalValue - totalPaid;
-        return remaining > 0;
+        const cust = customers.find(c => c.customerID === j.customerID);
+        return {
+          ...j,
+          totalAmount: totalValue,
+          totalPaidForJob: totalPaid,
+          remainingForJob: remaining,
+          customerName: cust?.customerName || '',
+        };
       })
-      .map(j => ({
-        ...j,
-        customerName: customers.find(c => c.customerID === j.customerID)?.customerName || '',
-      }));
+      .filter(j => j.remainingForJob > 0);
+
     if (editingPayment?.jobRequestID) {
       const exists = list.some(o => o.jobRequestID === editingPayment.jobRequestID);
       if (!exists) {
         const fullJob = jobRequests.find(j => j.jobRequestID === editingPayment.jobRequestID);
         if (fullJob) {
+          const totalValue = Number(fullJob.totalAreaSQFT ?? 0) * Number(fullJob.rateperSQFT ?? 0);
+          const totalPaid = payments
+            .filter(p => p.jobRequestID === fullJob.jobRequestID && p.jobPaymentID !== editingPayment.jobPaymentID)
+            .reduce((sum, p) => sum + Number(p.paidAmount ?? 0), 0);
           list.push({
             ...fullJob,
+            totalAmount: totalValue,
+            totalPaidForJob: totalPaid,
+            remainingForJob: totalValue - totalPaid,
             customerName: customers.find(c => c.customerID === fullJob.customerID)?.customerName || '',
           });
         }
       }
     }
     return list;
-  }, [completedJobRequests, jobRequests, customers, editingPayment, payments]);
+  }, [jobRequests, customers, editingPayment, payments]);
 
   /* ── Initial load using apiService ── */
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const [pRaw, jRaw, cRaw, compRaw] = await Promise.all([
-          apiService.getAllJobPayments().catch(() => []),
+        const [pRaw, jRaw, cRaw, uRaw] = await Promise.all([
+          apiService.getFilteredJobPayments().catch(() => []),
           apiService.getAllJobRequests().catch(() => []),
           apiService.getAllCustomers().catch(() => []),
-          apiService.getCompletedJobsWithPendingPayment().catch(() => []),
+          apiService.getAllUsers().catch(() => []),
         ]);
         setPayments(normalizeList(pRaw).map(normalizePayment));
         setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
-        setCompletedJobRequests(normalizeList(compRaw).map(normalizeJobRequest));
+        const allUsers = normalizeList(uRaw).map(normalizeUser);
+        setSupervisors(allUsers.filter(u => u.role.toLowerCase() === 'supervisor'));
       } catch (err) {
         setApiError(err?.message || 'Failed to load data.');
       } finally {
@@ -1020,20 +1098,47 @@ export default function JobPaymentPage() {
     })();
   }, []);
 
+  /* ── Date filter effect ── */
+  useEffect(() => {
+    let ignore = false;
+    const loadFiltered = async () => {
+      try {
+        const pRaw = await apiService.getFilteredJobPayments({
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
+        });
+        if (!ignore) {
+          setPayments(normalizeList(pRaw).map(normalizePayment));
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.error('Failed to load filtered payments:', err);
+        }
+      }
+    };
+    if (!loading) {
+      loadFiltered();
+    }
+    return () => { ignore = true; };
+  }, [fromDate, toDate]);
+
   /* ── Refresh ── */
   const refresh = useCallback(async () => {
     try {
-      const [pRaw, compRaw] = await Promise.all([
-        apiService.getAllJobPayments(),
-        apiService.getCompletedJobsWithPendingPayment().catch(() => []),
+      const [pRaw, jRaw, uRaw] = await Promise.all([
+        apiService.getFilteredJobPayments({ fromDate: fromDate || undefined, toDate: toDate || undefined }),
+        apiService.getAllJobRequests().catch(() => []),
+        apiService.getAllUsers().catch(() => []),
       ]);
       setPayments(normalizeList(pRaw).map(normalizePayment));
-      setCompletedJobRequests(normalizeList(compRaw).map(normalizeJobRequest));
+      setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
+      const allUsers = normalizeList(uRaw).map(normalizeUser);
+      setSupervisors(allUsers.filter(u => u.role.toLowerCase() === 'supervisor'));
       showToast('Refreshed', 'success');
     } catch {
       showToast('Refresh failed', 'error');
     }
-  }, [showToast]);
+  }, [fromDate, toDate, showToast]);
 
   /* ── Table helpers ── */
   const custName = (jobReqID) => {
@@ -1045,25 +1150,42 @@ export default function JobPaymentPage() {
   const jobType = (jobReqID) =>
     jobRequests.find(j => j.jobRequestID === jobReqID)?.jobType || '—';
 
+  const supervisorName = (jobReqID) => {
+    const job = jobRequests.find(j => j.jobRequestID === jobReqID);
+    if (!job || !job.supervisorID) return '—';
+    const sup = supervisors.find(s => s.id === job.supervisorID);
+    return sup?.name || (job.supervisorID ? `Supervisor #${job.supervisorID}` : '—');
+  };
+
   /* ── Filter / sort / paginate ── */
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    if (!q) return payments;
     return payments.filter(p => {
+      const job = jobRequests.find(j => j.jobRequestID === p.jobRequestID);
+      const sName = supervisorName(p.jobRequestID);
       const cName = custName(p.jobRequestID).toLowerCase();
       const jType = jobType(p.jobRequestID).toLowerCase();
+
+      // Supervisor filter
+      if (selectedSupervisor && String(job?.supervisorID) !== String(selectedSupervisor)) {
+        return false;
+      }
+
+      if (!q) return true;
       return (
         String(p.jobPaymentID).includes(q) ||
         String(p.jobRequestID).includes(q) ||
         cName.includes(q) ||
         jType.includes(q) ||
+        sName.toLowerCase().includes(q) ||
         (p.paidBY || '').toLowerCase().includes(q) ||
         (p.extrapayment || '').toLowerCase().includes(q) ||
+        (p.isAdvancePayment ? 'advance' : '').includes(q) ||
         getPaymentStatus(p).toLowerCase().includes(q)
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payments, search, jobRequests, customers]);
+  }, [payments, search, jobRequests, customers, supervisors, selectedSupervisor]);
 
   const sorted = useMemo(() =>
     [...filtered].sort((a, b) => {
@@ -1174,17 +1296,86 @@ export default function JobPaymentPage() {
               </div>
             </div>
 
-            <div style={{ flex: 1, minWidth: 220, display: 'flex', alignItems: 'center', gap: 9, padding: '9px 14px', background: '#f4f4fb', borderRadius: 10, border: '1.5px solid #ececf8' }}>
+            {/* Search */}
+            <div style={{ flex: 1, minWidth: 190, display: 'flex', alignItems: 'center', gap: 9, padding: '8px 14px', background: '#f4f4fb', borderRadius: 10, border: '1.5px solid #ececf8' }}>
               <Search size={14} color="#9090a8" style={{ flexShrink: 0 }} />
               <input
                 style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}
-                placeholder="Search by ID, customer, job type, status…"
+                placeholder="Search by ID, customer, supervisor, status…"
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
               />
               {search && <X size={13} style={{ cursor: 'pointer', color: '#9090a8', flexShrink: 0 }} onClick={() => setSearch('')} />}
             </div>
 
+            {/* Supervisor Filter */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <User size={14} color="#049edf" style={{ flexShrink: 0 }} />
+              <select
+                value={selectedSupervisor}
+                onChange={e => { setSelectedSupervisor(e.target.value); setPage(1); }}
+                style={{
+                  padding: '7px 12px', borderRadius: 9, border: '1.5px solid #ececf8',
+                  background: '#f4f4fb', fontFamily: 'Nunito,sans-serif', fontSize: 12.5,
+                  fontWeight: 700, color: '#1a1a2e', outline: 'none', cursor: 'pointer',
+                  maxWidth: 160,
+                }}
+              >
+                <option value="">All Supervisors</option>
+                {supervisors.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* From Date */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Calendar size={14} color="#049edf" style={{ flexShrink: 0 }} />
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>From:</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={e => { setFromDate(e.target.value); setPage(1); }}
+                style={{
+                  padding: '6px 10px', borderRadius: 8, border: '1.5px solid #ececf8',
+                  background: '#f4f4fb', fontFamily: 'Nunito,sans-serif', fontSize: 12,
+                  fontWeight: 600, color: '#1a1a2e', outline: 'none', cursor: 'pointer',
+                }}
+              />
+            </div>
+
+            {/* To Date */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>To:</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={e => { setToDate(e.target.value); setPage(1); }}
+                style={{
+                  padding: '6px 10px', borderRadius: 8, border: '1.5px solid #ececf8',
+                  background: '#f4f4fb', fontFamily: 'Nunito,sans-serif', fontSize: 12,
+                  fontWeight: 600, color: '#1a1a2e', outline: 'none', cursor: 'pointer',
+                }}
+              />
+            </div>
+
+            {/* Clear Filters */}
+            {(fromDate || toDate || selectedSupervisor) && (
+              <button
+                onClick={() => { setFromDate(''); setToDate(''); setSelectedSupervisor(''); setPage(1); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px',
+                  borderRadius: 9, border: '1px solid #fecaca', background: '#fef2f2',
+                  color: '#dc2626', fontFamily: 'Nunito,sans-serif', fontSize: 12,
+                  fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                }}
+                title="Clear all filters"
+              >
+                <X size={12} /> Clear
+              </button>
+            )}
+
+            {/* Refresh */}
             <button
               onClick={refresh}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: '1.5px solid #e8e8f4', background: '#fff', color: '#5a5a78', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, flexShrink: 0 }}
@@ -1195,22 +1386,24 @@ export default function JobPaymentPage() {
 
           {/* Table */}
           <div style={{ overflowX: 'auto' }}>
-            <table ref={tableRef} className="pg-table" style={{ minWidth: 900, tableLayout: 'fixed' }}>
+            <table ref={tableRef} className="pg-table" style={{ minWidth: 1040, tableLayout: 'fixed' }}>
               <thead>
                 <tr>
                   {[
                     { key: 'jobPaymentID', label: 'Pay ID', w: '4%' },
                     { key: 'jobRequestID', label: 'Job #', w: '4%' },
-                    { key: '_customer', label: 'Customer', w: '11%', noSort: true },
-                    { key: '_jobType', label: 'Type', w: '6%', noSort: true },
+                    { key: '_customer', label: 'Customer', w: '10%', noSort: true },
+                    { key: '_jobType', label: 'Type', w: '5%', noSort: true },
+                    { key: '_payTo', label: 'Pay To', w: '9%', noSort: true },
                     { key: 'paymentDate', label: 'Date', w: '7%' },
-                    { key: 'calculatedAmount', label: 'Calculated', w: '9%' },
+                    { key: 'calculatedAmount', label: 'Calculated', w: '8%' },
                     { key: 'paidAmount', label: 'Paid', w: '8%' },
                     { key: 'remainingAmount', label: 'Remaining', w: '7%' },
                     { key: 'penalty', label: 'Penalty', w: '7%', noSort: true },
-                    { key: 'paidBY', label: 'Paid By', w: '8%' },
-                    { key: 'extrapayment', label: 'Extra Pay', w: '8%' },
-                    { key: 'totalPaidExtra', label: 'Total (Paid+Extra)', w: '9%', noSort: true },
+                    { key: 'paidBY', label: 'Paid By', w: '7%' },
+                    { key: 'extrapayment', label: 'Extra Pay', w: '6%' },
+                    { key: 'isAdvancePayment', label: 'Advance Pay', w: '7%' },
+                    { key: 'totalPaidExtra', label: 'Total (Paid+Extra)', w: '8%', noSort: true },
                     { key: '_status', label: 'Status', w: '6%', noSort: true },
                     { key: '_action', label: 'Actions', w: '6%', noSort: true },
                   ].map(col => (
@@ -1232,7 +1425,7 @@ export default function JobPaymentPage() {
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="pg-td pg-empty">
+                    <td colSpan={16} className="pg-td pg-empty">
                       <div className="pg-empty__inner">
                         <CreditCard size={36} color="#d0d0e8" />
                         <span className="pg-empty__label">No payments found</span>
@@ -1242,6 +1435,7 @@ export default function JobPaymentPage() {
                 ) : paginated.map(p => {
                   const cName = custName(p.jobRequestID);
                   const jType = jobType(p.jobRequestID);
+                  const sName = supervisorName(p.jobRequestID);
                   const jts = jobTypeBadgeStyle(jType);
                   const rawRem = Number(p.remainingAmount ?? 0);
                   const isPartial = p.isParicialPayment;
@@ -1268,6 +1462,15 @@ export default function JobPaymentPage() {
                             {jType}
                           </span>
                         ) : <span style={{ color: '#c0c0d8' }}>—</span>}
+                      </td>
+                      <td className="pg-td pg-td--overflow">
+                        <span className="pg-td__ellipsis" title={sName}>
+                          {sName !== '—' ? (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 700, color: '#374151' }}>
+                              <User size={12} color="#049edf" style={{ flexShrink: 0 }} /> {sName}
+                            </span>
+                          ) : <span style={{ color: '#c0c0d8' }}>—</span>}
+                        </span>
                       </td>
                       <td className="pg-td">
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#4a5568' }}>
@@ -1303,6 +1506,20 @@ export default function JobPaymentPage() {
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf' }}>
                           {p.extrapayment && Number(p.extrapayment) !== 0 ? fmtCurrency(p.extrapayment) : '—'}
                         </span>
+                      </td>
+                      <td className="pg-td">
+                        {p.isAdvancePayment ? (
+                          <span style={{
+                            display: 'inline-flex', alignItems: 'center', padding: '3px 9px',
+                            borderRadius: 12, fontFamily: 'Nunito,sans-serif', fontSize: 11,
+                            fontWeight: 700, background: '#eff6ff', color: '#2563eb',
+                            border: '1px solid #bfdbfe', whiteSpace: 'nowrap'
+                          }}>
+                            Yes
+                          </span>
+                        ) : (
+                          <span style={{ color: '#c0c0d8', fontSize: 12 }}>No</span>
+                        )}
                       </td>
                       <td className="pg-td">
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#1a1a2e' }}>

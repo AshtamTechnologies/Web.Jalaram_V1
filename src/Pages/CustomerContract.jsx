@@ -679,7 +679,6 @@ function buildContractPDFHTML({ company, customer, contract,
     const b = hoardingItems[i + 1];
     hrdPages.push(`
       <div class="page" style="display:flex;flex-direction:column;">
-        ${ph}
         <div class="pair-wrap">
           ${section(a, i)}
           ${b ? section(b, i + 1) : ''}
