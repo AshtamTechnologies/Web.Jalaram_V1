@@ -210,6 +210,7 @@ export const apiService = {
   getAllExternalHoardings: () => api.get('/Hoarding/GetAllExternal'),
   getAllExternalAvailableForVendor: () => api.get('/Hoarding/GetAllExternalavailableforVendor'),
   getAvailableHoardings: (startDate, endDate) => api.get(`/Hoarding/available?startDate=${startDate}&endDate=${endDate}`),
+  getAvailableHoardingListPhoto: (startDate, endDate) => api.get(`/Hoarding/GetAvailableHoardingListPhoto?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`),
   getAllavailableforJob: () => api.get('/Hoarding/availableforJob'), //Show the hoarding available
   getHoardingById: (hoardingID) => api.get(`/Hoarding/${hoardingID}`),
   getHoardingAvailabilityDetails: (hoardingID) => api.get(`/Hoarding/${hoardingID}/HoardingAvailabilityDetails`),
@@ -303,11 +304,12 @@ export const apiService = {
   },
   uploadHoardingPhoto: (formData) =>
     api.post('/HoardingPhoto', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
-  updateHoardingPhoto: async (formData) => {
-    const oldId = formData.get('hoardingPhotoID');
-    if (oldId && Number(oldId) > 0) await api.delete(`/HoardingPhoto/${oldId}`);
-    formData.set('hoardingPhotoID', '0');
-    return api.post('/HoardingPhoto', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+  updateHoardingPhoto: (idOrFormData, maybeFormData) => {
+    if (maybeFormData) {
+      return api.put(`/HoardingPhoto/${idOrFormData}`, maybeFormData, { headers: { 'Content-Type': 'multipart/form-data' } });
+    }
+    const id = idOrFormData.get('hoardingPhotoID');
+    return api.put(`/HoardingPhoto/${id}`, idOrFormData, { headers: { 'Content-Type': 'multipart/form-data' } });
   },
   deleteHoardingPhoto: (hoardingPhotoID) => api.delete(`/HoardingPhoto/${hoardingPhotoID}`),
 

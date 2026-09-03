@@ -720,6 +720,15 @@ function OwnerModal({ onClose, onSaved, editData, fromOpportunityId, changeTab }
     sessionStorage.removeItem('unsaved_owner_form');
     sessionStorage.removeItem('unsaved_convert_opportunity_id');
     sessionStorage.removeItem('unsaved_owner_comments');
+    const returnTab = sessionStorage.getItem('redirect_after_owner_save');
+    if (returnTab) {
+      sessionStorage.removeItem('redirect_after_owner_save');
+      onClose();
+      if (typeof changeTab === 'function') {
+        changeTab(returnTab);
+      }
+      return;
+    }
     onClose();
   };
 
@@ -824,7 +833,17 @@ function OwnerModal({ onClose, onSaved, editData, fromOpportunityId, changeTab }
       onSaved(saved, isEdit);
       onClose();
 
-      if (activeOpportunityId && typeof changeTab === 'function') {
+      const returnTab = sessionStorage.getItem('redirect_after_owner_save');
+      if (returnTab) {
+        sessionStorage.removeItem('redirect_after_owner_save');
+        const createdId = saved?._id || saved?.ownerID || null;
+        if (createdId) {
+          sessionStorage.setItem('newly_created_owner_id', String(createdId));
+        }
+        if (typeof changeTab === 'function') {
+          changeTab(returnTab);
+        }
+      } else if (activeOpportunityId && typeof changeTab === 'function') {
         sessionStorage.setItem('opportunity_convert_success', `Opportunity #${activeOpportunityId} was successfully converted to Landlord "${form.ownerName}"!`);
         changeTab('opportunity');
       }
@@ -1367,7 +1386,11 @@ export default function OwnerPage({ changeTab }) {
   const [fetchError, setFetchError] = useState('');
 
   const [showModal, setShowModal] = useState(() => {
-    return sessionStorage.getItem('unsaved_owner_form') !== null || sessionStorage.getItem('pending_convert_opportunity') !== null;
+    return (
+      sessionStorage.getItem('unsaved_owner_form') !== null ||
+      sessionStorage.getItem('pending_convert_opportunity') !== null ||
+      sessionStorage.getItem('open_owner_modal') === 'true'
+    );
   });
   const [editOwner, setEditOwner] = useState(null);
   const [convertOpportunityId, setConvertOpportunityId] = useState(() => {
@@ -1383,6 +1406,7 @@ export default function OwnerPage({ changeTab }) {
     sessionStorage.removeItem('unsaved_owner_form');
     sessionStorage.removeItem('unsaved_convert_opportunity_id');
     sessionStorage.removeItem('unsaved_owner_comments');
+    sessionStorage.removeItem('open_owner_modal');
   };
 
   const [search, setSearch] = useState('');
@@ -1393,6 +1417,16 @@ export default function OwnerPage({ changeTab }) {
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
+  // ── Handle open_owner_modal trigger ──
+  useEffect(() => {
+    if (sessionStorage.getItem('open_owner_modal') === 'true') {
+      sessionStorage.removeItem('open_owner_modal');
+      setEditOwner(null);
+      setConvertOpportunityId(null);
+      setShowModal(true);
+    }
+  }, []);
+
   // ── Pre-fill conversion data effect ──
   useEffect(() => {
     const pendingData = sessionStorage.getItem('pending_convert_opportunity');

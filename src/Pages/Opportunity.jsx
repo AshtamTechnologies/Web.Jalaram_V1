@@ -25,6 +25,8 @@ const EMPTY_FORM = {
   rentExpected: 0,
   comments: '',
   isActive: true,
+  ownerID: 0,
+  ownerName: '',
 };
 
 const PHONE_REGEX = /^\+?[\d][\d\s\-]{4,18}$/;
@@ -91,18 +93,18 @@ function validateField(key, value, type, required) {
 
 function normalizeOpportunity(raw) {
   return {
-    opportunityID: raw.opportunity_ID ?? raw.opportunityID ?? 0,
+    opportunityID: Number(raw.opportunity_ID ?? raw.opportunityID ?? 0),
     location: raw.location ?? '',
     address: raw.address ?? '',
     name: raw.name ?? '',
     phoneNo1: raw.phone_No1 ?? raw.phoneNo1 ?? '',
     phoneNo2: raw.phone_No2 ?? raw.phoneNo2 ?? '',
-    rentOffered: raw.rent_Offered ?? raw.rentOffered ?? 0,
-    rentExpected: raw.rent_Expected ?? raw.rentExpected ?? 0,
+    rentOffered: Number(raw.rent_Offered ?? raw.rentOffered ?? 0),
+    rentExpected: Number(raw.rent_Expected ?? raw.rentExpected ?? 0),
     comments: raw.comments ?? '',
-    isActive: raw.is_Active ?? raw.isActive ?? true,
-    ownerID: raw.owner_ID ?? raw.ownerID ?? raw.ownerId ?? null,
-    ownerName: raw.owner_Name ?? raw.ownerName ?? null,
+    isActive: raw.is_Active !== undefined ? !!raw.is_Active : (raw.isActive !== undefined ? !!raw.isActive : true),
+    ownerID: Number(raw.owner_ID ?? raw.ownerID ?? raw.ownerId ?? 0),
+    ownerName: raw.owner_Name ?? raw.ownerName ?? '',
   };
 }
 
@@ -118,7 +120,9 @@ function toPayload(form) {
     rentOffered: Number(form.rentOffered ?? 0),
     rentExpected: Number(form.rentExpected ?? 0),
     comments: String(form.comments || '').trim(),
-    isActive: isSupervisor ? (form.opportunityID === 0 ? true : form.isActive) : !!form.isActive,
+    isActive: isSupervisor ? (form.opportunityID === 0 ? true : !!form.isActive) : !!form.isActive,
+    ownerID: Number(form.ownerID ?? 0),
+    ownerName: String(form.ownerName || '').trim(),
   };
 }
 
@@ -483,8 +487,8 @@ function OpportunityCard({ opportunity, onViewDetail, onEdit, onConvert }) {
           <button className="pg-btn-edit" onClick={() => onEdit(opportunity)} title="Edit">
             <Edit2 size={13} />
           </button>
-          {/* Convert to Landlord Button (mobile) - only if not already converted */}
-          {!isConverted && (
+          {/* Convert to Landlord Button (mobile) - only if not already converted and active */}
+          {!isConverted && opportunity.isActive && (
             <button
               onClick={() => onConvert(opportunity)}
               title="Convert to Landlord"
@@ -1655,8 +1659,8 @@ export default function OpportunityPage({ changeTab }) {
                           <button className="pg-btn-edit" onClick={() => handleEditClick(o)} title="Edit" style={{ width: 28, height: 28 }}>
                             <Edit2 size={12} />
                           </button>
-                          {/* Convert to Landlord Button (desktop) - only if not already converted */}
-                          {!o.ownerID && (
+                          {/* Convert to Landlord Button (desktop) - only if not already converted and active */}
+                          {!o.ownerID && o.isActive && (
                             <button
                               onClick={() => setConvertTarget(o)}
                               title="Convert to Landlord"

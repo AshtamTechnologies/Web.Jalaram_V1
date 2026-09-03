@@ -11,7 +11,7 @@ import {
   Calendar, CheckCircle2,
   Briefcase,
   User, FileText, Image,
-  CreditCard, Wallet,
+  CreditCard, Wallet, BookOpen,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import "./Common1.css";
@@ -316,6 +316,103 @@ function JobComboField({ value, onChange, options, disabled }) {
                   )}
                 </div>
               ))}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   SUPERVISOR COMBO (SYSTEM DROPDOWN)
+═══════════════════════════════════════════ */
+function SupervisorComboField({ value, onChange, supervisors }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
+
+  const close = useCallback(() => { setOpen(false); setQuery(''); }, []);
+  useOutsideClick(wrapRef, panelRef, open, close);
+
+  const selected = supervisors.find(s => String(s.id) === String(value));
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return q ? supervisors.filter(s => (s.name || '').toLowerCase().includes(q)) : supervisors;
+  }, [supervisors, query]);
+
+  const openDD = () => { setOpen(true); setQuery(''); setTimeout(() => inputRef.current?.focus(), 0); };
+  const select = (s) => { onChange(s); setOpen(false); setQuery(''); };
+  const clear = (e) => { e.stopPropagation(); onChange(null); setOpen(false); setQuery(''); };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef} style={{ minWidth: 175 }}>
+      <div
+        ref={triggerRef}
+        className="pg-field-wrap pg-combo-trigger pg-field-wrap--normal"
+        onClick={openDD}
+        tabIndex={0}
+        style={{
+          background: '#f4f4fb',
+          border: '1.5px solid #ececf8',
+          borderRadius: 9,
+          padding: '6px 12px',
+          minHeight: 'unset',
+          height: 35,
+          cursor: 'pointer'
+        }}
+      >
+        <User size={14} color="#049edf" style={{ flexShrink: 0 }} />
+        <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`} style={{ fontSize: 12.5, fontWeight: 700, color: selected ? '#1a1a2e' : '#9090a8' }}>
+          {selected ? selected.name : 'All Supervisors'}
+        </span>
+        {selected ? (
+          <X size={12} className="pg-combo-clear" onClick={clear} />
+        ) : (
+          <ChevronDown size={13} color="#9090a8" style={{ flexShrink: 0 }} />
+        )}
+      </div>
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static' }}>
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              className="pg-combo-search__input"
+              placeholder="Search supervisor…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') close(); }}
+            />
+            {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+          </div>
+          <div className="pg-combo-list" ref={listRef}>
+            <div
+              className={`pg-combo-option${!value ? ' pg-combo-option--active' : ''}`}
+              onClick={() => select(null)}
+              tabIndex={0}
+            >
+              <span className="pg-combo-option__name">All Supervisors</span>
+              {!value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+            </div>
+            {filtered.map(s => (
+              <div
+                key={s.id}
+                className={`pg-combo-option${String(s.id) === String(value) ? ' pg-combo-option--active' : ''}`}
+                onClick={() => select(s)}
+                tabIndex={0}
+              >
+                <div style={{ flex: 1 }}>
+                  <span className="pg-combo-option__name">{s.name}</span>
+                </div>
+                {String(s.id) === String(value) && (
+                  <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </PortalDropdown>
@@ -992,7 +1089,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
 /* ═══════════════════════════════════════════
    MAIN JOB PAYMENT PAGE
 ═══════════════════════════════════════════ */
-export default function JobPaymentPage() {
+export default function JobPaymentPage({ changeTab }) {
 
   /* ── Data ── */
   const [payments, setPayments] = useState([]);
@@ -1268,9 +1365,35 @@ export default function JobPaymentPage() {
               Track and manage <strong>payment records</strong> against job requests.
             </p>
           </div>
-          <button className="pg-btn-add" onClick={() => { setEditingPayment(null); setShowForm(true); }}>
-            <Plus size={14} /> New Payment
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              className="pg-btn-secondary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '9px 16px',
+                borderRadius: 10,
+                fontFamily: 'Nunito,sans-serif',
+                fontSize: 13,
+                fontWeight: 800,
+                background: '#ffffff',
+                color: '#049edf',
+                border: '1.5px solid #049edf',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(4,158,223,0.12)',
+                transition: 'all 0.15s ease'
+              }}
+              onClick={() => changeTab?.('JobPaymentLedger')}
+              title="View Dr/Cr Job Payment Ledger"
+            >
+              <BookOpen size={15} /> View Ledger
+            </button>
+            <button className="pg-btn-add" onClick={() => { setEditingPayment(null); setShowForm(true); }}>
+              <Plus size={14} /> New Payment
+            </button>
+          </div>
         </div>
 
         {apiError && (
@@ -1308,25 +1431,12 @@ export default function JobPaymentPage() {
               {search && <X size={13} style={{ cursor: 'pointer', color: '#9090a8', flexShrink: 0 }} onClick={() => setSearch('')} />}
             </div>
 
-            {/* Supervisor Filter */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <User size={14} color="#049edf" style={{ flexShrink: 0 }} />
-              <select
-                value={selectedSupervisor}
-                onChange={e => { setSelectedSupervisor(e.target.value); setPage(1); }}
-                style={{
-                  padding: '7px 12px', borderRadius: 9, border: '1.5px solid #ececf8',
-                  background: '#f4f4fb', fontFamily: 'Nunito,sans-serif', fontSize: 12.5,
-                  fontWeight: 700, color: '#1a1a2e', outline: 'none', cursor: 'pointer',
-                  maxWidth: 160,
-                }}
-              >
-                <option value="">All Supervisors</option>
-                {supervisors.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
+            {/* Supervisor System Combo Filter */}
+            <SupervisorComboField
+              value={selectedSupervisor}
+              onChange={s => { setSelectedSupervisor(s ? String(s.id) : ''); setPage(1); }}
+              supervisors={supervisors}
+            />
 
             {/* From Date */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

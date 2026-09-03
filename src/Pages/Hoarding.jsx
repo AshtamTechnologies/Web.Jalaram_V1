@@ -549,6 +549,243 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
 }
 
 /* ─────────────────────────────────────────
+   PHOTO HELPER
+───────────────────────────────────────── */
+export function isPhotoDefault(p) {
+  if (!p) return false;
+  return p.isDefault === true || p.isDefault === 'true' ||
+         p.is_Default === true || p.is_Default === 'true' ||
+         p.IsDefault === true || p.IsDefault === 'true';
+}
+
+/* ─────────────────────────────────────────
+   PHOTO ADD MODAL (with isDefault checkbox)
+───────────────────────────────────────── */
+function PhotoAddModal({ files, existingPhotos = [], onConfirm, onClose }) {
+  const hasExistingDefault = existingPhotos.some(p => isPhotoDefault(p));
+  const existingDefaultPhoto = existingPhotos.find(p => isPhotoDefault(p));
+  const [isDefault, setIsDefault] = useState(false);
+
+  const previews = useRef(files.map(f => ({
+    name: f.name,
+    url: URL.createObjectURL(f),
+  }))).current;
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100000,
+        background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 20, width: '100%', maxWidth: 450,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '22px 22px 18px',
+          animation: 'modalIn 0.24s cubic-bezier(0.22,1,0.36,1) both',
+          fontFamily: 'Nunito, sans-serif',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: 'rgba(4,158,223,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Upload size={18} color="#049edf" />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: '#1a1a2e' }}>
+                Add Photo{files.length > 1 ? `s (${files.length})` : ''}
+              </h3>
+              <p style={{ margin: 0, fontSize: 11.5, fontWeight: 600, color: '#7878a0' }}>
+                Configure photos before staging
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9090a8', padding: 4 }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Previews */}
+        <div style={{
+          display: 'flex', gap: 10, overflowX: 'auto', padding: '6px 2px 10px', marginBottom: 14,
+        }}>
+          {previews.map((p, i) => (
+            <div key={i} style={{
+              position: 'relative', width: 88, height: 80, borderRadius: 8, overflow: 'hidden',
+              border: '1.5px solid #ececf8', flexShrink: 0
+            }}>
+              <img src={p.url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div style={{
+                position: 'absolute', bottom: 0, insetInline: 0, background: 'rgba(0,0,0,0.65)',
+                color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 4px',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              }}>{p.name}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* isDefault Checkbox */}
+        <div style={{
+          background: hasExistingDefault ? '#fffbeb' : '#f8fafd',
+          border: `1.5px solid ${hasExistingDefault ? '#fde68a' : '#e0e7ff'}`,
+          borderRadius: 12, padding: '12px 14px', marginBottom: 16,
+        }}>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            cursor: hasExistingDefault ? 'not-allowed' : 'pointer',
+            opacity: hasExistingDefault ? 0.75 : 1,
+            userSelect: 'none'
+          }}>
+            <input
+              type="checkbox"
+              checked={!hasExistingDefault && isDefault}
+              disabled={hasExistingDefault}
+              onChange={e => setIsDefault(e.target.checked)}
+              style={{ width: 17, height: 17, accentColor: '#049edf', cursor: hasExistingDefault ? 'not-allowed' : 'pointer' }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 800, color: hasExistingDefault ? '#92400e' : '#1a1a2e' }}>
+              Set as default photo
+            </span>
+          </label>
+          {hasExistingDefault && (
+            <p style={{ margin: '6px 0 0 27px', fontSize: 11.5, fontWeight: 600, color: '#b45309', lineHeight: 1.4 }}>
+              A default photo already exists{existingDefaultPhoto?.filename ? ` ("${existingDefaultPhoto.filename}")` : ''}. Delete or replace the existing default photo first to set a new default.
+            </p>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
+          <button className="pg-btn-save" onClick={() => onConfirm(files, isDefault)}>
+            <Check size={14} /> Add {files.length > 1 ? `${files.length} Photos` : 'Photo'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ─────────────────────────────────────────
+   PHOTO REPLACE MODAL (with isDefault checkbox)
+───────────────────────────────────────── */
+function PhotoReplaceModal({ photoToReplace, newFile, existingPhotos = [], onConfirm, onClose }) {
+  const isCurrentDefault = isPhotoDefault(photoToReplace);
+  const hasOtherDefault = existingPhotos.some(
+    p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID && isPhotoDefault(p)
+  );
+  const otherDefaultPhoto = existingPhotos.find(
+    p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID && isPhotoDefault(p)
+  );
+
+  const [isDefault, setIsDefault] = useState(isCurrentDefault && !hasOtherDefault);
+
+  const newPreviewUrl = useRef(URL.createObjectURL(newFile)).current;
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100000,
+        background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 20, width: '100%', maxWidth: 440,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '22px 22px 18px',
+          animation: 'modalIn 0.24s cubic-bezier(0.22,1,0.36,1) both',
+          fontFamily: 'Nunito, sans-serif',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: 'rgba(4,158,223,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Replace size={18} color="#049edf" />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: '#1a1a2e' }}>
+                Replace Photo
+              </h3>
+              <p style={{ margin: 0, fontSize: 11.5, fontWeight: 600, color: '#7878a0' }}>
+                Replacing "{photoToReplace.filename}"
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9090a8', padding: 4 }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* New Preview */}
+        <div style={{
+          width: '100%', height: 160, borderRadius: 10, overflow: 'hidden',
+          border: '1.5px solid #ececf8', marginBottom: 14, position: 'relative'
+        }}>
+          <img src={newPreviewUrl} alt={newFile.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <div style={{
+            position: 'absolute', bottom: 0, insetInline: 0, background: 'rgba(0,0,0,0.65)',
+            color: '#fff', fontSize: 11, fontWeight: 700, padding: '4px 8px',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+          }}>New: {newFile.name}</div>
+        </div>
+
+        {/* isDefault Checkbox */}
+        <div style={{
+          background: hasOtherDefault ? '#fffbeb' : '#f8fafd',
+          border: `1.5px solid ${hasOtherDefault ? '#fde68a' : '#e0e7ff'}`,
+          borderRadius: 12, padding: '12px 14px', marginBottom: 16,
+        }}>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            cursor: hasOtherDefault ? 'not-allowed' : 'pointer',
+            opacity: hasOtherDefault ? 0.75 : 1,
+            userSelect: 'none'
+          }}>
+            <input
+              type="checkbox"
+              checked={!hasOtherDefault && isDefault}
+              disabled={hasOtherDefault}
+              onChange={e => setIsDefault(e.target.checked)}
+              style={{ width: 17, height: 17, accentColor: '#049edf', cursor: hasOtherDefault ? 'not-allowed' : 'pointer' }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 800, color: hasOtherDefault ? '#92400e' : '#1a1a2e' }}>
+              Set as default photo
+            </span>
+          </label>
+          {hasOtherDefault && (
+            <p style={{ margin: '6px 0 0 27px', fontSize: 11.5, fontWeight: 600, color: '#b45309', lineHeight: 1.4 }}>
+              Another photo is already marked as default{otherDefaultPhoto?.filename ? ` ("${otherDefaultPhoto.filename}")` : ''}. Delete or replace that photo first to set this one as default.
+            </p>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
+          <button className="pg-btn-save" onClick={() => onConfirm(photoToReplace, newFile, isDefault)}>
+            <Check size={14} /> Confirm Replace
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ─────────────────────────────────────────
    PHOTO SECTION
 ───────────────────────────────────────── */
 function PhotoSection({
@@ -560,10 +797,13 @@ function PhotoSection({
   onDeletePhoto,
   readOnly = false,
   uploading = false,
+  creatingNew = false,
 }) {
   const [lightbox, setLightbox] = useState(null);
   const [photoError, setPhotoError] = useState('');
   const [replacingPhoto, setReplacingPhoto] = useState(null);
+  const [pendingReplaceFile, setPendingReplaceFile] = useState(null);
+  const [pendingAddFiles, setPendingAddFiles] = useState(null);
   const [photoToDelete, setPhotoToDelete] = useState(null);
   const addRef = useRef(null);
   const replaceRef = useRef(null);
@@ -585,8 +825,13 @@ function PhotoSection({
     e.target.value = '';
     if (!files.length) return;
     if (!validateFiles(files)) return;
+    setPendingAddFiles(files);
+  };
+
+  const confirmAddPhotos = (files, isDefault) => {
+    setPendingAddFiles(null);
     if (onAddPhotos) {
-      onAddPhotos(files);
+      onAddPhotos(files, isDefault);
     }
   };
 
@@ -595,8 +840,14 @@ function PhotoSection({
     e.target.value = '';
     if (!file || !replacingPhoto) return;
     if (!validateFiles([file])) return;
+    setPendingReplaceFile(file);
+  };
+
+  const confirmReplacePhoto = (photoToReplace, file, isDefault) => {
+    setPendingReplaceFile(null);
+    setReplacingPhoto(null);
     if (onReplacePhoto) {
-      onReplacePhoto(replacingPhoto, file);
+      onReplacePhoto(photoToReplace, file, isDefault);
     }
   };
 
@@ -628,6 +879,8 @@ function PhotoSection({
     return `${base}${rel}`;
   };
 
+  const canUpload = !readOnly && (!!hoardingID || creatingNew);
+
   return (
     <div className="hd-photo-wrap">
       <div className="hd-photo-header">
@@ -641,8 +894,8 @@ function PhotoSection({
           <button
             className="hd-btn-upload"
             onClick={() => addRef.current?.click()}
-            disabled={uploading || !hoardingID}
-            title={!hoardingID ? 'Save the hoarding first' : `Upload photos (${ALLOWED_LABEL})`}
+            disabled={uploading || !canUpload}
+            title={!canUpload ? 'Save the hoarding first' : `Upload photos (${ALLOWED_LABEL})`}
           >
             <Upload size={12} /> Upload
           </button>
@@ -668,7 +921,7 @@ function PhotoSection({
           <span>
             {readOnly
               ? 'No photos for this version'
-              : hoardingID
+              : canUpload
                 ? `No photos yet — click Upload to add images (${ALLOWED_LABEL})`
                 : 'Save the hoarding version first, then upload photos'}
           </span>
@@ -678,8 +931,24 @@ function PhotoSection({
       {photos.length > 0 && (
         <div className="hd-photo-grid">
           {photos.map((p) => (
-            <div key={p.hoardingPhotoID} className="hd-photo-item">
+            <div key={p.hoardingPhotoID} className="hd-photo-item" style={{ position: 'relative' }}>
               <img src={resolvePhotoSrc(p)} alt={p.filename} />
+              {isPhotoDefault(p) && (
+                <span
+                  className="hd-default-badge"
+                  style={{
+                    position: 'absolute', top: 6, left: 6,
+                    fontSize: 9, fontWeight: 900, color: '#fff',
+                    background: 'linear-gradient(135deg, #049edf, #0284c7)',
+                    boxShadow: '0 2px 6px rgba(4,158,223,0.45)',
+                    padding: '2px 7px', borderRadius: 4,
+                    fontFamily: 'Nunito,sans-serif', letterSpacing: 0.5,
+                    zIndex: 2, textTransform: 'uppercase'
+                  }}
+                >
+                  DEFAULT
+                </span>
+              )}
               <div className="hd-photo-name">{p.filename}</div>
               <div className="hd-photo-overlay">
                 <button className="hd-photo-action" onClick={() => setLightbox(p)} title="View" disabled={uploading}>
@@ -707,8 +976,8 @@ function PhotoSection({
             </div>
           ))}
           {!readOnly && (
-            <label className={`hd-upload-tile ${(!hoardingID || uploading) ? 'hd-upload-tile--disabled' : ''}`}>
-              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={handleAddFiles} style={{ display: 'none' }} disabled={!hoardingID || uploading} />
+            <label className={`hd-upload-tile ${(!canUpload || uploading) ? 'hd-upload-tile--disabled' : ''}`}>
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={handleAddFiles} style={{ display: 'none' }} disabled={!canUpload || uploading} />
               {uploading ? <Loader2 size={16} className="pg-spin" /> : <Upload size={16} />}
               <span>{uploading ? 'Uploading…' : 'Add More'}</span>
             </label>
@@ -734,6 +1003,27 @@ function PhotoSection({
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Add Photo Modal with isDefault */}
+      {pendingAddFiles && (
+        <PhotoAddModal
+          files={pendingAddFiles}
+          existingPhotos={photos}
+          onConfirm={confirmAddPhotos}
+          onClose={() => setPendingAddFiles(null)}
+        />
+      )}
+
+      {/* Replace Photo Modal with isDefault */}
+      {pendingReplaceFile && replacingPhoto && (
+        <PhotoReplaceModal
+          photoToReplace={replacingPhoto}
+          newFile={pendingReplaceFile}
+          existingPhotos={photos}
+          onConfirm={confirmReplacePhoto}
+          onClose={() => { setPendingReplaceFile(null); setReplacingPhoto(null); }}
+        />
       )}
 
       {photoToDelete && (
@@ -986,6 +1276,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
   const [versionPhotos, setVersionPhotos] = useState([]);
   const [stagedNewPhotos, setStagedNewPhotos] = useState([]);
   const [stagedDeletedPhotos, setStagedDeletedPhotos] = useState([]);
+  const [stagedReplacedPhotos, setStagedReplacedPhotos] = useState([]);
 
   const activeVersion = activePanel !== null && activePanel.idx >= 0
     ? sortedVersions[activePanel.idx]
@@ -1035,6 +1326,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
       setVersionPhotos(hoardingPhotos);
       setStagedNewPhotos([]);
       setStagedDeletedPhotos([]);
+      setStagedReplacedPhotos([]);
     } catch (err) {
       console.error('[loadPhotos] failed:', err);
       setPhotosMap(prev => ({ ...prev, [hoardingID]: [] }));
@@ -1042,40 +1334,57 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     } finally { setPhotosLoading(false); }
   }, []);
 
-  const handleAddPhotos = (files) => {
-    files.forEach(file => {
+  const handleAddPhotos = (files, isDefault = false) => {
+    const fileList = Array.isArray(files) ? files : [files];
+    fileList.forEach((file, idx) => {
       const tempId = 'new_' + Math.random().toString(36).substr(2, 9);
       const newPhoto = {
         hoardingPhotoID: tempId,
         filename: file.name,
         _file: file,
         photoUrl: URL.createObjectURL(file),
+        isDefault: idx === 0 ? !!isDefault : false,
       };
       setVersionPhotos(prev => [...prev, newPhoto]);
       setStagedNewPhotos(prev => [...prev, newPhoto]);
     });
   };
 
-  const handleReplacePhoto = (photoToReplace, file) => {
-    if (!String(photoToReplace.hoardingPhotoID).startsWith('new_')) {
-      setStagedDeletedPhotos(prev => [...prev, photoToReplace]);
+  const handleReplacePhoto = (photoToReplace, file, isDefault) => {
+    const isLocallyStaged = String(photoToReplace.hoardingPhotoID).startsWith('new_');
+    const defaultVal = isDefault !== undefined ? !!isDefault : isPhotoDefault(photoToReplace);
+
+    if (isLocallyStaged) {
+      const updated = {
+        ...photoToReplace,
+        filename: file.name,
+        _file: file,
+        photoUrl: URL.createObjectURL(file),
+        isDefault: defaultVal,
+      };
+      setVersionPhotos(prev => prev.map(p => p.hoardingPhotoID === photoToReplace.hoardingPhotoID ? updated : p));
+      setStagedNewPhotos(prev => prev.map(p => p.hoardingPhotoID === photoToReplace.hoardingPhotoID ? updated : p));
     } else {
-      setStagedNewPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID));
+      const updated = {
+        ...photoToReplace,
+        filename: file.name,
+        _file: file,
+        photoUrl: URL.createObjectURL(file),
+        isDefault: defaultVal,
+      };
+      setVersionPhotos(prev => prev.map(p => p.hoardingPhotoID === photoToReplace.hoardingPhotoID ? updated : p));
+      setStagedReplacedPhotos(prev => [
+        ...prev.filter(p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID),
+        updated
+      ]);
+      setStagedDeletedPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID));
     }
-    const tempId = 'new_' + Math.random().toString(36).substr(2, 9);
-    const newPhoto = {
-      hoardingPhotoID: tempId,
-      filename: file.name,
-      _file: file,
-      photoUrl: URL.createObjectURL(file),
-    };
-    setVersionPhotos(prev => prev.map(p => p.hoardingPhotoID === photoToReplace.hoardingPhotoID ? newPhoto : p));
-    setStagedNewPhotos(prev => [...prev, newPhoto]);
   };
 
   const handleDeletePhoto = (photoToDelete) => {
     if (!String(photoToDelete.hoardingPhotoID).startsWith('new_')) {
       setStagedDeletedPhotos(prev => [...prev, photoToDelete]);
+      setStagedReplacedPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToDelete.hoardingPhotoID));
     } else {
       setStagedNewPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToDelete.hoardingPhotoID));
     }
@@ -1155,6 +1464,28 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
       if (savedID) {
         setNewlySavedHoardingID(savedID);
         setNewlySavedEffdtRaw(new Date(addForm.effdt + 'T00:00:00.000Z').toISOString());
+
+        // Upload staged photos if any
+        if (stagedNewPhotos.length > 0) {
+          const userId = getLoggedInUserId();
+          const todayDate = new Date().toISOString().split('T')[0];
+          const effdtDateOnly = (addForm.effdt || '').split('T')[0] || todayDate;
+          for (const np of stagedNewPhotos) {
+            const fd = new FormData();
+            fd.append('hoardingPhotoID', '0');
+            fd.append('hoardingID', String(savedID));
+            fd.append('effdt', effdtDateOnly);
+            fd.append('photo', np._file, np.filename);
+            fd.append('photoUrl', np.filename);
+            fd.append('photoPath', np.filename);
+            fd.append('filename', np.filename);
+            fd.append('uploadedOn', todayDate);
+            fd.append('lastUpdateDttm', todayDate);
+            fd.append('lastUpdatedBy', String(userId));
+            fd.append('isDefault', np.isDefault ? 'true' : 'false');
+            await apiService.uploadHoardingPhoto(fd);
+          }
+        }
       }
 
       setSaveOk(true);
@@ -1237,6 +1568,26 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
             await apiService.deleteHoardingPhoto(dp.hoardingPhotoID);
           }
         }
+        if (stagedReplacedPhotos.length > 0 && resolvedHID) {
+          const userId = getLoggedInUserId();
+          const todayDate = new Date().toISOString().split('T')[0];
+          const effdtDateOnly = (effdtForm.effdtRaw || effdtForm.effdt || '').split('T')[0] || todayDate;
+          for (const rp of stagedReplacedPhotos) {
+            const fd = new FormData();
+            fd.append('hoardingPhotoID', String(rp.hoardingPhotoID));
+            fd.append('hoardingID', String(resolvedHID));
+            fd.append('effdt', effdtDateOnly);
+            fd.append('photo', rp._file, rp.filename);
+            fd.append('photoUrl', rp.filename);
+            fd.append('photoPath', rp.filename);
+            fd.append('filename', rp.filename);
+            fd.append('uploadedOn', todayDate);
+            fd.append('lastUpdateDttm', todayDate);
+            fd.append('lastUpdatedBy', String(userId));
+            fd.append('isDefault', rp.isDefault ? 'true' : 'false');
+            await apiService.updateHoardingPhoto(rp.hoardingPhotoID, fd);
+          }
+        }
         if (stagedNewPhotos.length > 0 && resolvedHID) {
           const userId = getLoggedInUserId();
           const todayDate = new Date().toISOString().split('T')[0];
@@ -1253,6 +1604,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
             fd.append('uploadedOn', todayDate);
             fd.append('lastUpdateDttm', todayDate);
             fd.append('lastUpdatedBy', String(userId));
+            fd.append('isDefault', np.isDefault ? 'true' : 'false');
             await apiService.uploadHoardingPhoto(fd);
           }
         }
@@ -1342,15 +1694,13 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                     <PhotoSection
                       hoardingID={newlySavedHoardingID}
                       effdtRaw={newlySavedEffdtRaw}
-                      photos={photosFor(newlySavedHoardingID)}
-                      onPhotosChange={() => loadPhotos(newlySavedHoardingID, newlySavedEffdtRaw)}
+                      photos={versionPhotos}
+                      onAddPhotos={handleAddPhotos}
+                      onReplacePhoto={handleReplacePhoto}
+                      onDeletePhoto={handleDeletePhoto}
+                      creatingNew={true}
+                      uploading={saving}
                     />
-                    {!newlySavedHoardingID && (
-                      <div className="hd-info-banner mt-2">
-                        <Info size={13} style={{ flexShrink: 0 }} />
-                        <span>Save the hoarding first, then you can upload photos for it.</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>

@@ -431,17 +431,29 @@ function InactiveWarningModal({ onConfirm, onCancel, saving }) {
 /* ═══════════════════════════════════════════
    ADD / EDIT MODAL
 ═══════════════════════════════════════════ */
-function SiteModal({ onClose, onSaved, editData, owners }) {
+function SiteModal({ onClose, onSaved, editData, owners, changeTab }) {
   const isEdit = !!editData;
   const originalStatus = isEdit ? (editData?.status || '') : '';
 
   // ── START: Restore unsaved form data support ──
-  // const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
   const [form, setForm] = useState(() => {
     if (isEdit) return { ...editData };
     const saved = sessionStorage.getItem('unsaved_site_form');
+    const newOwnerId = sessionStorage.getItem('newly_created_owner_id');
+    if (newOwnerId) {
+      sessionStorage.removeItem('newly_created_owner_id');
+    }
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try {
+        const parsed = JSON.parse(saved);
+        if (newOwnerId) {
+          parsed.ownerID = Number(newOwnerId);
+        }
+        return parsed;
+      } catch (e) {}
+    }
+    if (newOwnerId) {
+      return { ...EMPTY_FORM, ownerID: Number(newOwnerId) };
     }
     return { ...EMPTY_FORM };
   });
@@ -454,7 +466,17 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
 
   const handleCancel = () => {
     sessionStorage.removeItem('unsaved_site_form');
+    sessionStorage.removeItem('newly_created_owner_id');
     onClose();
+  };
+
+  const handleAddNewOwner = () => {
+    sessionStorage.setItem('unsaved_site_form', JSON.stringify(form));
+    sessionStorage.setItem('redirect_after_owner_save', 'sites');
+    sessionStorage.setItem('open_owner_modal', 'true');
+    if (typeof changeTab === 'function') {
+      changeTab('owners');
+    }
   };
   // ── END: Restore unsaved form data support ──
   const [errors, setErrors] = useState({});
@@ -682,10 +704,36 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
               </div>
 
               <div className="col-12">
-                <label className="pg-field-label">
-                  Owner <span className="pg-field-label__required">*</span>
-                  <span className="pg-field-label__hint"> — search by name or ID</span>
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label className="pg-field-label" style={{ marginBottom: 0 }}>
+                    Owner <span className="pg-field-label__required">*</span>
+                    <span className="pg-field-label__hint"> — search by name or ID</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddNewOwner}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      background: 'none',
+                      border: 'none',
+                      color: '#049edf',
+                      fontFamily: 'Nunito,sans-serif',
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      padding: '2px 6px',
+                      borderRadius: 6,
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                    onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                  >
+                    <Plus size={13} color="#049edf" />
+                    <span>Add New Owner</span>
+                  </button>
+                </div>
                 <OwnerCombo
                   value={form.ownerID}
                   onChange={v => handleChange('ownerID', v)}
@@ -757,7 +805,7 @@ function SiteCard({ s, onEdit, owners }) {
 /* ═══════════════════════════════════════════
    SITE PAGE
 ═══════════════════════════════════════════ */
-export default function SitePage() {
+export default function SitePage({ changeTab }) {
   const [sites, setSites] = useState([]);
   const [owners, setOwners] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -959,6 +1007,7 @@ export default function SitePage() {
           onSaved={handleSaved}
           editData={editSite}
           owners={owners}
+          changeTab={changeTab}
         />
       )}
     </>

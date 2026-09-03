@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   LogOut, Menu, X, ChevronDown, ChevronRight,
   IndianRupee, Users, MapPin, Layers, UserCircle, Hash, FileX,
-  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard, UserRoundPlus, Lightbulb
+  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard, UserRoundPlus, Lightbulb, BookOpen
 } from 'lucide-react';
 // import Chatbot from './Chatbot';
 import Notification from './Notification';
@@ -20,6 +20,7 @@ const MENU = [
     children: [
       { id: 'Jobs', icon: Briefcase, label: 'Jobs', badge: null },
       { id: 'JobPayment', icon: CreditCard, label: 'Job Payment', badge: null },
+      { id: 'JobPaymentLedger', icon: BookOpen, label: 'Payment Ledger', badge: null },
     ]
   },
   {

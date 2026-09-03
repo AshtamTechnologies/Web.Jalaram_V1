@@ -21,6 +21,7 @@ import WorkersPage from './Pages/Workers.jsx';
 import Supervisorjobs from './Pages/SupervisorJobs.jsx';
 import WorkerTask from './Pages/WorkerTask.jsx';
 import JobPaymentPage from './Pages/JobPaymentPage.jsx';
+import JobPaymentLedger from './Pages/JobPaymentLedger.jsx';
 import FinancialYear from './Pages/FinancialYear.jsx'
 import SeriesSetup from './Pages/SeriesSetup.jsx';
 import DissloveContract from './Pages/DissloveContract.jsx'
@@ -112,7 +113,7 @@ export default function App() {
       case 'payments': return <Placeholder title="Payments" Icon={CreditCard} />;
       case 'customer-details': return <CustomerPage />;
       case 'customer-contract': return <CustomerContract />;
-      case 'sites': return <SitePage />;
+      case 'sites': return <SitePage changeTab={changeTab} />;
       case 'reports': return <Reports />;
       case 'quotation': return <Quotation onNavigateToContracts={() => changeTab('customer-contract')} />;
       case 'terms': return <Terms />;
@@ -121,7 +122,8 @@ export default function App() {
       case 'workers': return <WorkersPage />;
       case 'jobs': return <Supervisorjobs />;
       case 'WorkersPage': return <Supervisorjobs />;
-      case 'JobPayment': return <JobPaymentPage />;
+      case 'JobPayment': return <JobPaymentPage changeTab={changeTab} />;
+      case 'JobPaymentLedger': return <JobPaymentLedger changeTab={changeTab} />;
       case 'SeriesSetup': return <SeriesSetup />;
       case 'DissloveContract': return <DissloveContract />;
       case 'Registration': return <RegistrationPage />;
