@@ -2097,10 +2097,17 @@ export default function HoardingPage() {
     );
   });
 
+  // const sorted = [...filtered].sort((a, b) => {
+  //   const av = String(a[sortKey] ?? '').toLowerCase();
+  //   const bv = String(b[sortKey] ?? '').toLowerCase();
+  //   return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+  // });
+
   const sorted = [...filtered].sort((a, b) => {
-    const av = String(a[sortKey] ?? '').toLowerCase();
-    const bv = String(b[sortKey] ?? '').toLowerCase();
-    return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    const av = String(a[sortKey] ?? '');
+    const bv = String(b[sortKey] ?? '');
+    const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+    return sortDir === 'asc' ? cmp : -cmp;
   });
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));

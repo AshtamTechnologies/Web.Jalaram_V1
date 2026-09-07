@@ -794,7 +794,7 @@ function OpportunityFormModal({ onClose, onSaved, editData }) {
     if (isEdit) return { ...editData };
     const saved = sessionStorage.getItem('unsaved_opportunity_form');
     if (saved) {
-      try { return JSON.parse(saved); } catch (e) {}
+      try { return JSON.parse(saved); } catch (e) { }
     }
     return { ...EMPTY_FORM };
   });
@@ -1116,37 +1116,37 @@ function OpportunityFormModal({ onClose, onSaved, editData }) {
                     <>
                       <FieldLabel label={f.label} required={f.required} optional={!f.required} />
                       <InputWrap error={isFieldTouched && !!fieldError} icon={f.icon}>
-                      {f.type === 'textarea' ? (
-                        <textarea
-                          className="pg-field-input"
-                          placeholder={f.placeholder}
-                          value={form[f.key] ?? ''}
-                          onChange={e => handleChange(f.key, e.target.value)}
-                          onBlur={() => handleBlur(f.key)}
-                          style={{
-                            border: 'none',
-                            background: 'transparent',
-                            outline: 'none',
-                            resize: 'vertical',
-                            minHeight: '80px',
-                            paddingTop: '8px',
-                            paddingBottom: '8px',
-                            fontFamily: 'inherit',
-                            fontSize: '13px'
-                          }}
-                        />
-                      ) : (
-                        <input
-                          className="pg-field-input"
-                          type={f.type === 'number' ? 'number' : 'text'}
-                          placeholder={f.placeholder}
-                          value={form[f.key] ?? ''}
-                          onChange={e => handleChange(f.key, f.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
-                          onBlur={() => handleBlur(f.key)}
-                          autoComplete="off"
-                        />
-                      )}
-                    </InputWrap>
+                        {f.type === 'textarea' ? (
+                          <textarea
+                            className="pg-field-input"
+                            placeholder={f.placeholder}
+                            value={form[f.key] ?? ''}
+                            onChange={e => handleChange(f.key, e.target.value)}
+                            onBlur={() => handleBlur(f.key)}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              outline: 'none',
+                              resize: 'vertical',
+                              minHeight: '80px',
+                              paddingTop: '8px',
+                              paddingBottom: '8px',
+                              fontFamily: 'inherit',
+                              fontSize: '13px'
+                            }}
+                          />
+                        ) : (
+                          <input
+                            className="pg-field-input"
+                            type={f.type === 'number' ? 'number' : 'text'}
+                            placeholder={f.placeholder}
+                            value={form[f.key] ?? ''}
+                            onChange={e => handleChange(f.key, f.type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
+                            onBlur={() => handleBlur(f.key)}
+                            autoComplete="off"
+                          />
+                        )}
+                      </InputWrap>
                     </>
                   )}
                   {isFieldTouched && <FieldError msg={fieldError} />}

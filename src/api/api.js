@@ -864,6 +864,7 @@ export const apiService = {
     totalAmount: Number(data.totalAmount ?? 0),
   }),
   archiveQuotation: (quotationId) => api.post(`/QuotationArchive/${quotationId}`),
+  getAllQuotationArchives: () => api.get('/QuotationArchive'),
   deleteQuotation: (quotationId, revisionNo, customerId) =>
     api.delete(`/Quotation/${Number(quotationId)}/${Number(revisionNo)}/${Number(customerId)}`),
 

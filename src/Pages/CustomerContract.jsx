@@ -17,6 +17,16 @@ import { useResizableColumns } from '../hooks/useResizableColumns';
 
 const forceDownload = async (url, filename) => {
   try {
+    if (!url) return;
+    if (url.startsWith('blob:') || url.startsWith('data:')) {
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || 'download';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
     let cleanUrl = url.split('?')[0];
     if (process.env.NODE_ENV === 'development' && cleanUrl.startsWith(API_ROOT_URL)) {
       cleanUrl = cleanUrl.replace(API_ROOT_URL, window.location.origin);
@@ -229,6 +239,9 @@ function normalizeAttach(raw) {
     contractFilePath: raw.contractFilePath ?? raw.ContractFilePath ?? '',
     contractFilename: raw.contractFilename ?? raw.ContractFilename ?? '',
     lastUpdateDttm: raw.lastUpdateDttm ?? raw.LastUpdateDttm ?? '',
+    file: raw.file,
+    _previewUrl: raw._previewUrl,
+    _isNew: raw._isNew,
   };
 }
 function isImageFile(filename) {
@@ -1369,7 +1382,6 @@ function MergeDeleteConfirmModal({ hoardingCode, onConfirm, onCancel }) {
 ═══════════════════════════════════════════ */
 async function fetchImageAsBase64(url) {
   if (!url) return null;
-  const token = localStorage.getItem('authToken');
   const blobToBase64 = (blob) =>
     new Promise((resolve) => {
       const r = new FileReader();
@@ -1377,8 +1389,13 @@ async function fetchImageAsBase64(url) {
       r.onerror = () => resolve(null);
       r.readAsDataURL(blob);
     });
+  if (typeof window !== 'undefined' && ((window.File && url instanceof window.File) || (window.Blob && url instanceof window.Blob))) {
+    return blobToBase64(url);
+  }
+  const isLocalUrl = typeof url === 'string' && (url.startsWith('blob:') || url.startsWith('data:'));
+  const token = localStorage.getItem('authToken');
   try {
-    const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : {});
+    const res = await fetch(url, token && !isLocalUrl ? { headers: { Authorization: `Bearer ${token}` } } : {});
     if (res.ok) return blobToBase64(await res.blob());
   } catch { /* fall through */ }
   return null;
@@ -1440,6 +1457,11 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
 
     if (attachmentsFromProps) {
       const tempId = `_temp_${Date.now()}`;
+      let preview = '';
+      try {
+        if (newFile) preview = URL.createObjectURL(newFile);
+      } catch { /* ignore */ }
+
       const newAttach = {
         custContractAttachID: tempId,
         customerContractID,
@@ -1450,6 +1472,7 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
         contractFilePath: '',
         lastUpdateDttm: new Date().toISOString(),
         file: newFile, // store raw File object for upload later
+        _previewUrl: preview,
         _isNew: true,
       };
       setAttachments(prev => {
@@ -1488,6 +1511,11 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
 
     if (attachmentsFromProps) {
       const tempId = `_temp_${Date.now()}`;
+      let preview = '';
+      try {
+        if (replaceFile) preview = URL.createObjectURL(replaceFile);
+      } catch { /* ignore */ }
+
       const newAttach = {
         custContractAttachID: tempId,
         customerContractID,
@@ -1498,6 +1526,7 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
         contractFilePath: '',
         lastUpdateDttm: new Date().toISOString(),
         file: replaceFile,
+        _previewUrl: preview,
         _isNew: true,
       };
 
@@ -1559,9 +1588,17 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
   };
 
   const fileUrl = (a) => {
+    if (a._previewUrl) return a._previewUrl;
+    if (a.file && typeof window !== 'undefined' && ((window.File && a.file instanceof window.File) || (window.Blob && a.file instanceof window.Blob))) {
+      try {
+        a._previewUrl = URL.createObjectURL(a.file);
+        return a._previewUrl;
+      } catch { /* ignore */ }
+    }
+    if (a._isNew || String(a.custContractAttachID).startsWith('_temp')) return null;
     const p = a.contractFilePath || a.contractFilename || '';
     if (!p) return null;
-    if (p.startsWith('http')) return p;
+    if (p.startsWith('http') || p.startsWith('blob:') || p.startsWith('data:')) return p;
     return `${API_ROOT_URL}/${p.replace(/^\/?/, '')}`;
   };
 
@@ -1658,18 +1695,18 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
             {attachments.map((a, idx) => {
               const ts = uploadTypeStyle(a.fileUploadType);
               const url = fileUrl(a);
-              const isImg = isImageFile(a.contractFilename);
+              const isImg = isImageFile(a.contractFilename || a.file?.name);
               const isEditing = editTarget?.custContractAttachID === a.custContractAttachID;
 
               return (
                 <div key={a.custContractAttachID} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafe', borderBottom: idx < attachments.length - 1 ? '1px solid #f0f0f8' : 'none' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', flexWrap: 'wrap' }}>
                     <div style={{ width: 36, height: 36, borderRadius: 8, background: isImg ? '#f5f3ff' : '#eff6ff', border: `1px solid ${isImg ? '#ddd6fe' : '#bfdbfe'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {fileTypeIcon(a.contractFilename)}
+                      {fileTypeIcon(a.contractFilename || a.file?.name)}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 13, color: '#1a1a2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {a.contractFilename || 'Unnamed file'}
+                        {a.contractFilename || a.file?.name || 'Unnamed file'}
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' }}>
                         <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 12, background: ts.bg, color: ts.color, border: `1px solid ${ts.border}`, fontSize: 10.5, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
@@ -1690,7 +1727,7 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
                         </button>
                       )}
                       {url && !hideDownload && (
-                        <button onClick={() => forceDownload(url, a.contractFilename || 'Attachment')} title="Download / Open"
+                        <button onClick={() => forceDownload(url, a.contractFilename || a.file?.name || 'Attachment')} title="Download / Open"
                           style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #e8e8f4', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#049edf' }}>
                           <Download size={14} />
                         </button>

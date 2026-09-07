@@ -1599,14 +1599,43 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.rows) return parsed.rows;
+        if (parsed && parsed.rows && parsed.rows.length > 0) return parsed.rows;
       } catch (e) {}
     }
     return [];
   });
-  /* ── Load attachments on edit mount ── */
+
+  // Auto-populate previous payments when entering Add mode with pre-selected contract
   useEffect(() => {
-    if (isAdd || rows.length === 0) { setAttachLoadDone(true); return; }
+    if (isAdd && landContractID && allPayments && allPayments.length > 0) {
+      setRows((prevRows) => {
+        if (prevRows.length > 0) return prevRows;
+
+        const existing = allPayments
+          .filter((p) => Number(p.landContractID) === Number(landContractID))
+          .map((p) => ({
+            ...EMPTY_ROW,
+            _rowId: makeRowId(),
+            _paymentID: p.landPaymentID,
+            paymentDate: p.paymentDate || '',
+            paymentPurpose: p.paymentPurpose || '',
+            amountPaid: p.amountPaid ?? '',
+            extrapayment: p.extrapayment != null ? p.extrapayment : '',
+            paymentMode: p.paymentMode || '',
+            nextDueDate: p.nextDueDate || '',
+            bankName: p.bankName || '',
+            referenceNumber: p.referenceNumber || '',
+            paidBy: p.paidBy || '',
+            comments: p.comments || '',
+          }));
+        return existing;
+      });
+    }
+  }, [isAdd, landContractID, allPayments]);
+
+  /* ── Load attachments on mount / row update ── */
+  useEffect(() => {
+    if (rows.length === 0) { setAttachLoadDone(true); return; }
     const ids = rows.map(r => r._paymentID).filter(Boolean);
     if (!ids.length) { setAttachLoadDone(true); return; }
     let cancelled = false;
@@ -1622,7 +1651,7 @@ function PaymentForm({ mode, groupKey, allPayments, owners, hoardings, contracts
       });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [rows]);
 
   /* ── File handlers ── */
   const handleFileSelect = useCallback((rowId, file) => {
