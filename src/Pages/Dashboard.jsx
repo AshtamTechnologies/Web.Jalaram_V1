@@ -66,6 +66,16 @@ function fmtDate(d) {
   }
 }
 
+function isExternalHoarding(h, extIdSet, extCodeSet) {
+  if (!h) return false;
+  const id = Number(h.hoardingID ?? h.HoardingID ?? 0);
+  if (id && extIdSet && extIdSet.has(id)) return true;
+  const code = String(h.hoardingCode ?? h.HoardingCode ?? '').trim().toUpperCase();
+  if (code && extCodeSet && extCodeSet.has(code)) return true;
+  const val = h.isExternal ?? h.IsExternal;
+  return val === true || val === 'true' || val === 1 || val === '1';
+}
+
 function getSiteAddress(h, siteMap) {
   if (!h) return '—';
   const siteId = Number(h.siteID ?? h.SiteID ?? h.site?.siteID ?? 0);
@@ -109,6 +119,7 @@ export default function Dashboard({ changeTab }) {
   const [contracts, setContracts] = useState([]);
   const [contractHoardingMaps, setContractHoardingMaps] = useState([]);
   const [hoardings, setHoardings] = useState([]);
+  const [externalHoardings, setExternalHoardings] = useState([]);
   const [sites, setSites] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [jobRequests, setJobRequests] = useState([]);
@@ -185,6 +196,7 @@ export default function Dashboard({ changeTab }) {
         contractsRes,
         mapsRes,
         hoardingsRes,
+        externalHoardingsRes,
         sitesRes,
         customersRes,
         jobsRes,
@@ -210,6 +222,10 @@ export default function Dashboard({ changeTab }) {
         }),
         apiService.getAllHoardings().catch((err) => {
           console.warn('Hoardings fetch error:', err);
+          return [];
+        }),
+        apiService.getAllExternalHoardings().catch((err) => {
+          console.warn('External hoardings fetch error:', err);
           return [];
         }),
         apiService.getAllSites().catch((err) => {
@@ -273,6 +289,7 @@ export default function Dashboard({ changeTab }) {
       setContracts(normalizeList(contractsRes));
       setContractHoardingMaps(normalizeList(mapsRes));
       setHoardings(normalizeList(hoardingsRes));
+      setExternalHoardings(normalizeList(externalHoardingsRes));
       setSites(normalizeList(sitesRes));
       setCustomers(normalizeList(customersRes));
       setJobRequests(normalizeList(jobsRes));
@@ -319,6 +336,25 @@ export default function Dashboard({ changeTab }) {
     });
     return map;
   }, [hoardings]);
+
+  /* ── External Hoardings Lookup Sets (from GetAllExternal API) ── */
+  const externalHoardingIdSet = useMemo(() => {
+    const set = new Set();
+    externalHoardings.forEach((h) => {
+      const id = Number(h.hoardingID ?? h.HoardingID ?? 0);
+      if (id) set.add(id);
+    });
+    return set;
+  }, [externalHoardings]);
+
+  const externalHoardingCodeSet = useMemo(() => {
+    const set = new Set();
+    externalHoardings.forEach((h) => {
+      const code = String(h.hoardingCode ?? h.HoardingCode ?? '').trim().toUpperCase();
+      if (code) set.add(code);
+    });
+    return set;
+  }, [externalHoardings]);
 
   const customerMap = useMemo(() => {
     const map = new Map();
@@ -404,6 +440,7 @@ export default function Dashboard({ changeTab }) {
       if (!cId || !hId) return;
 
       const hoarding = hoardingMap.get(hId);
+      const isExt = isExternalHoarding(hoarding, externalHoardingIdSet, externalHoardingCodeSet) || externalHoardingIdSet.has(hId);
       const hCode = hoarding?.hoardingCode ?? hoarding?.HoardingCode ?? `HD-${hId}`;
       const location = hoarding ? getSiteAddress(hoarding, siteMap) : '—';
 
@@ -414,10 +451,11 @@ export default function Dashboard({ changeTab }) {
         hoardingID: hId,
         hoardingCode: hCode,
         location: location,
+        isExternal: isExt,
       });
     });
     return map;
-  }, [contractHoardingMaps, hoardingMap, siteMap]);
+  }, [contractHoardingMaps, hoardingMap, siteMap, externalHoardingIdSet, externalHoardingCodeSet]);
 
   /* ══════════════════════════════════════════════════
      STEP 1: Expiring Hoarding Contracts (Separated by Hoarding Row)
@@ -453,9 +491,12 @@ export default function Dashboard({ changeTab }) {
       const custId = Number(c.customerID ?? c.CustomerID ?? 0);
       const clientName = customerMap.get(custId) || `Client #${custId}`;
       const contractLabel = `Contract #${cId}`;
-      const mappedHoardings = contractHoardingsMap.get(cId) || [];
+      // Filter out external hoardings (only show isExternal = false)
+      const mappedHoardings = (contractHoardingsMap.get(cId) || []).filter(
+        (h) => !h.isExternal && !externalHoardingIdSet.has(h.hoardingID) && !externalHoardingCodeSet.has(String(h.hoardingCode).trim().toUpperCase())
+      );
 
-      // If contract has mapped hoardings, generate a separate row per hoarding
+      // If contract has mapped non-external hoardings, generate a separate row per hoarding
       if (mappedHoardings.length > 0) {
         mappedHoardings.forEach((h, hIdx) => {
           const row = {
@@ -476,25 +517,6 @@ export default function Dashboard({ changeTab }) {
             next7List.push({ ...row, urgency: 'Closing Soon' });
           }
         });
-      } else {
-        // Fallback for contract without hoarding mapping
-        const row = {
-          id: `${cId}_none`,
-          customerContractID: cId,
-          contractNumber: contractLabel,
-          hoardingID: 0,
-          hoardingCode: '—',
-          location: '—',
-          client: clientName,
-          endDate: rawEnd,
-          status: c.status ?? c.Status ?? 'Active',
-        };
-
-        if (rawEnd === todayStr) {
-          todayList.push({ ...row, urgency: 'Closing Today' });
-        } else if (rawEnd >= tomorrowStr && rawEnd <= next7EndStr) {
-          next7List.push({ ...row, urgency: 'Closing Soon' });
-        }
       }
     });
 
@@ -1427,10 +1449,11 @@ export default function Dashboard({ changeTab }) {
     const codeDisplayMap = new Map(); // uppercaseKey -> originalCode
     const codeLocationMap = new Map(); // uppercaseKey -> location
 
-    // 1. Gather all unique hoarding codes and their best locations
+    // 1. Gather all unique non-external hoarding codes and their best locations
     hoardings.forEach((h) => {
+      if (isExternalHoarding(h, externalHoardingIdSet, externalHoardingCodeSet)) return;
       const rawCode = String(h.hoardingCode ?? h.HoardingCode ?? '').trim();
-      if (!rawCode) return;
+      if (!rawCode || externalHoardingCodeSet.has(rawCode.toUpperCase())) return;
       const key = rawCode.toUpperCase();
 
       if (!codeDisplayMap.has(key)) {
@@ -1442,12 +1465,14 @@ export default function Dashboard({ changeTab }) {
       }
     });
 
-    // 2. Count usage from contractHoardingMaps by hoardingCode
+    // 2. Count usage from contractHoardingMaps by non-external hoardingCode
     contractHoardingMaps.forEach((item) => {
       const hId = Number(item.hoardingID ?? item.HoardingID ?? 0);
-      if (!hId) return;
+      if (!hId || externalHoardingIdSet.has(hId)) return;
       const h = hoardingMap.get(hId);
+      if (!h || isExternalHoarding(h, externalHoardingIdSet, externalHoardingCodeSet)) return;
       const rawCode = String(h?.hoardingCode ?? h?.HoardingCode ?? `HD-${hId}`).trim();
+      if (externalHoardingCodeSet.has(rawCode.toUpperCase())) return;
       const key = rawCode.toUpperCase();
 
       if (!codeDisplayMap.has(key)) {
@@ -1481,7 +1506,7 @@ export default function Dashboard({ changeTab }) {
       mostUsedHoardings: mostUsed,
       leastUsedHoardings: leastUsed,
     };
-  }, [contractHoardingMaps, hoardings, hoardingMap, siteMap]);
+  }, [contractHoardingMaps, hoardings, hoardingMap, siteMap, externalHoardingIdSet, externalHoardingCodeSet]);
 
   const inventoryColumns = [
     {
