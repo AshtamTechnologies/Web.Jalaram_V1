@@ -290,21 +290,26 @@ function normalizeJobTask(raw) {
   };
 }
 
-function getSiteAddress(h) {
+function getSiteAddress(h, siteMap = null) {
   if (!h) return '';
 
-  // 1. Try nested site object (if populated)
-  const s = h.site ? normalizeSite(h.site) : null;
+  // 1. Try nested site object (if populated) or lookup in siteMap
+  const rawSite = h.site || (siteMap && (h.siteID || h.SiteID) ? siteMap.get(Number(h.siteID ?? h.SiteID)) : null);
+  const s = rawSite ? normalizeSite(rawSite) : null;
   if (s) {
     const addr = [s.addressLine1, s.addressLine2].filter(Boolean).join(', ');
     const city = [s.city, s.district].filter(Boolean).join(', ');
     const full = [addr, city].filter(Boolean).join(' — ');
     if (full) return full;
+    if (addr) return addr;
+    if (city) return city;
+    if (s.landmark) return s.landmark;
+    if (s.siteName) return s.siteName;
   }
 
   // 2. Try flat fields directly on the hoarding (common in .NET APIs)
   const flatAddr = [
-    h.addressLine1 ?? h.AddressLine1 ?? '',
+    h.addressLine1 ?? h.AddressLine1 ?? h.siteAddress ?? h.SiteAddress ?? '',
     h.addressLine2 ?? h.AddressLine2 ?? '',
   ].filter(Boolean).join(', ');
 
@@ -315,21 +320,27 @@ function getSiteAddress(h) {
 
   const flatFull = [flatAddr, flatCity].filter(Boolean).join(' — ');
   if (flatFull) return flatFull;
+  if (flatAddr) return flatAddr;
+  if (flatCity) return flatCity;
 
   // 3. Try landmark
   const landmark = h.landmark ?? h.Landmark ?? h.siteLandmark ?? h.SiteLandmark ?? '';
   if (landmark) return landmark;
 
-  // 4. Last resort
+  // 4. Try site name
+  const siteName = h.siteName ?? h.SiteName ?? '';
+  if (siteName) return siteName;
+
+  // 5. Last resort
   return h.hoardingCode ?? h.HoardingCode ?? '';
 }
 
-const newTaskRow = (h = null) => ({
+const newTaskRow = (h = null, siteMap = null) => ({
   _id: uid(),
   jobTaskID: 0,
   hoardingID: h?.hoardingID || 0,
   hoardingCode: h?.hoardingCode || '',
-  siteAddress: getSiteAddress(h),
+  siteAddress: getSiteAddress(h, siteMap),
   size: h ? `${h.width} X ${h.height}` : '',
   sqFt: h ? (h.width * h.height) : 0,
   actualCompletionDate: '',
@@ -442,9 +453,10 @@ function buildJobPDFHTML({ company, job, customerName, supervisorName, tasks, at
     const mergeInfo = mergeMap.get(hid);
     if (mergeInfo) {
       const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+      const lineNum = Number(mergeInfo.hoardingLineNumber ?? mergeInfo.HoardingLineNumber ?? 0);
       const hoarding = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
       const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
-      const key = `${siteID}_${flag}`;
+      const key = `${siteID}_${flag}_${lineNum}`;
       if (!mergedGroups[key]) {
         mergedGroups[key] = [];
       }
@@ -922,17 +934,23 @@ function ComboField({ value, onChange, options, placeholder, icon: Icon, disable
 /* ═══════════════════════════════════════════
    HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
-function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAdd, onClose, anyIdToLatestId, hoardingMerges }) {
+function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAdd, onClose, anyIdToLatestId, hoardingMerges, siteMap }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
   const isFiltered = filteredHoardingIds !== null;
 
-  // Build a map: hoardingID → mergeAlongFlag ('H' or 'V'), for merged hoardings only
-  const mergedFlagMap = useMemo(() => {
+  // Build a map: hoardingID → { flag: 'H'|'V', lineNo: number, contractID: number }
+  const mergeInfoMap = useMemo(() => {
     const map = new Map();
     (hoardingMerges || []).forEach(m => {
       const id = Number(m.hoardingID ?? m.HoardingID ?? 0);
-      if (id) map.set(id, m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H');
+      if (id) {
+        map.set(id, {
+          flag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
+          lineNo: Number(m.hoardingLineNumber ?? m.HoardingLineNumber ?? 0),
+          contractID: Number(m.customerContractID ?? m.CustomerContractID ?? 0),
+        });
+      }
     });
     return map;
   }, [hoardingMerges]);
@@ -958,23 +976,25 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
     if (!q) return base;
     return base.filter(h =>
       (h.hoardingCode || '').toLowerCase().includes(q) ||
-      getSiteAddress(h).toLowerCase().includes(q) ||
+      getSiteAddress(h, siteMap).toLowerCase().includes(q) ||
       (h.site?.city || '').toLowerCase().includes(q)
     );
-  }, [base, search]);
+  }, [base, search, siteMap]);
 
-  // Group display: merged hoardings shown together by site & flag, unmerged shown individually
+  // Group display: merged hoardings shown together by line/site & flag, unmerged shown individually
   const { mergeGroups, unmerged } = useMemo(() => {
-    const groups = new Map(); // "siteID_flag" -> { siteID, flag, hoardings: [] }
+    const groups = new Map(); // key -> { key, siteID, flag, hoardings: [] }
     const ungrouped = [];
 
     display.forEach(h => {
-      const flag = mergedFlagMap.get(Number(h.hoardingID));
-      if (flag) {
+      const info = mergeInfoMap.get(Number(h.hoardingID));
+      if (info) {
         const siteID = Number(h.siteID ?? h.SiteID ?? h.site?.siteID ?? 0);
-        const key = `${siteID}_${flag}`;
+        const key = info.lineNo > 0
+          ? `line_${info.contractID}_${info.lineNo}`
+          : `site_${siteID}_${info.flag}`;
         if (!groups.has(key)) {
-          groups.set(key, { siteID, flag, hoardings: [] });
+          groups.set(key, { key, siteID, flag: info.flag, hoardings: [] });
         }
         groups.get(key).hoardings.push(h);
       } else {
@@ -983,7 +1003,7 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
     });
 
     return { mergeGroups: [...groups.values()], unmerged: ungrouped };
-  }, [display, mergedFlagMap]);
+  }, [display, mergeInfoMap]);
 
   // Build a lookup map: hoardingID -> array of other hoardingIDs in the same merge group
   const hoardingIdToGroupIds = useMemo(() => {
@@ -1026,8 +1046,10 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
   const renderRow = (h, isMerged = false, mergeFlag = null) => {
     const checked = selected.has(h.hoardingID);
     const alreadyIn = existingIds.has(h.hoardingID);
-    const addr = getSiteAddress(h);
-    const siteCity = [h.site?.city, h.site?.district].filter(Boolean).join(', ');
+    const siteObj = h.site ?? (h.siteID ? siteMap?.get(Number(h.siteID)) : null);
+    const enrichedH = siteObj ? { ...h, site: siteObj } : h;
+    const addr = getSiteAddress(enrichedH, siteMap);
+    const siteCity = [siteObj?.city ?? h.siteCity ?? h.city, siteObj?.district ?? h.siteDistrict ?? h.district].filter(Boolean).join(', ');
 
     return (
       <div key={h.hoardingID}
@@ -2133,9 +2155,10 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, hoardingMerges
       const mergeInfo = mergeMap.get(hid);
       if (mergeInfo) {
         const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+        const lineNum = Number(mergeInfo.hoardingLineNumber ?? mergeInfo.HoardingLineNumber ?? 0);
         const hoarding = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
         const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
-        const key = `${siteID}_${flag}`;
+        const key = `${siteID}_${flag}_${lineNum}`;
         if (!mergedGroups[key]) {
           mergedGroups[key] = [];
         }
@@ -2443,9 +2466,10 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
       const m = (hoardingMerges || []).find(x => Number(x.hoardingID ?? x.HoardingID ?? 0) === Number(t.hoardingID));
       const flag = m ? (m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H') : null;
       if (flag) {
+        const lineNum = Number(m?.hoardingLineNumber ?? m?.HoardingLineNumber ?? 0);
         const h = allHoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? 0) === Number(t.hoardingID));
         const siteID = h ? Number(h.siteID ?? h.SiteID ?? 0) : 0;
-        const key = `${siteID}_${flag}`;
+        const key = `${siteID}_${flag}_${lineNum}`;
         if (!mergeGroupToTaskIDs[key]) mergeGroupToTaskIDs[key] = [];
         mergeGroupToTaskIDs[key].push(Number(t.jobTaskID));
       }
@@ -2457,9 +2481,10 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
 
       let targetTaskIDs = [Number(t.jobTaskID)];
       if (flag) {
+        const lineNum = Number(m?.hoardingLineNumber ?? m?.HoardingLineNumber ?? 0);
         const h = allHoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? 0) === Number(t.hoardingID));
         const siteID = h ? Number(h.siteID ?? h.SiteID ?? 0) : 0;
-        const key = `${siteID}_${flag}`;
+        const key = `${siteID}_${flag}_${lineNum}`;
         if (mergeGroupToTaskIDs[key]) {
           targetTaskIDs = mergeGroupToTaskIDs[key];
         }
@@ -2504,9 +2529,10 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
       const mergeInfo = mergeMap.get(hid);
       if (mergeInfo) {
         const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+        const lineNum = Number(mergeInfo.hoardingLineNumber ?? mergeInfo.HoardingLineNumber ?? 0);
         const hoarding = allHoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
         const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
-        const key = `${siteID}_${flag}`;
+        const key = `${siteID}_${flag}_${lineNum}`;
         if (!mergedGroups[key]) {
           mergedGroups[key] = [];
         }
@@ -2813,6 +2839,7 @@ export default function JobPage() {
   const [customers, setCustomers] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [sites, setSites] = useState([]);
   const [hoardings, setHoardings] = useState([]);
   const [availableHoardings, setAvailableHoardings] = useState([]);
   const [supervisors, setSupervisors] = useState([]);
@@ -2825,6 +2852,10 @@ export default function JobPage() {
   const [completeTarget, setCompleteTarget] = useState(null); // { job, tasks }
   const [completing, setCompleting] = useState(false);
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
+
+  const siteMap = useMemo(() => new Map(
+    sites.map(s => [Number(s.siteID ?? s.SiteID ?? 0), normalizeSite(s)])
+  ), [sites]);
 
 
   /* ── UI ── */
@@ -2970,9 +3001,10 @@ export default function JobPage() {
       const mergeInfo = mergeMap.get(hid);
       if (mergeInfo) {
         const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+        const lineNum = Number(mergeInfo.hoardingLineNumber ?? mergeInfo.HoardingLineNumber ?? 0);
         const hoarding = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
         const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
-        const key = `${siteID}_${flag}`;
+        const key = `${siteID}_${flag}_${lineNum}`;
         if (!mergedGroups[key]) {
           mergedGroups[key] = [];
         }
@@ -3265,8 +3297,9 @@ export default function JobPage() {
         setContracts(normalizeList(conRaw).map(normalizeContract));
         setCompanies(normalizeList(compRaw).map(normalizeCompany));
         // Build site lookup map
-        const siteList = normalizeList(sRaw);
-        const siteMap = new Map(
+        const siteList = normalizeList(sRaw).map(normalizeSite).filter(Boolean);
+        setSites(siteList);
+        const siteMapLocal = new Map(
           siteList.map(s => [
             Number(s.siteID ?? s.SiteID ?? 0),
             normalizeSite(s)
@@ -3308,7 +3341,7 @@ export default function JobPage() {
         // ── 3. Enrich with site data
         const enrichedHoardings = Array.from(latestByCode.values()).map(h => {
           const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
-          const foundSite = siteMap.get(siteID) || null;
+          const foundSite = siteMapLocal.get(siteID) || null;
           const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
           return {
             ...h,
@@ -3320,7 +3353,10 @@ export default function JobPage() {
         setAnyIdToLatestId(anyIdToLatestId); // ← new state, see below
 
         // Deduplicate and enrich available hoardings:
-        const rawAvailable = normalizeList(avhRaw);
+        const rawAvailable = [
+          ...normalizeList(avhRaw),
+          ...normalizeList(extRaw),
+        ];
         const latestAvailableByCode = new Map();
         rawAvailable.forEach(h => {
           const code = h.hoardingCode ?? h.HoardingCode ?? '';
@@ -3331,7 +3367,7 @@ export default function JobPage() {
         });
         const enrichedAvailable = Array.from(latestAvailableByCode.values()).map(h => {
           const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
-          const foundSite = siteMap.get(siteID) || null;
+          const foundSite = siteMapLocal.get(siteID) || null;
           const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
           return {
             ...h,
@@ -3538,9 +3574,9 @@ export default function JobPage() {
   /* ── Task operations ── */
   const handleAddHoardings = (selectedIds) => {
     const existingHoardingIDs = new Set(tasks.map(t => t.hoardingID));
-    const toAdd = availableHoardings
+    const toAdd = hoardings
       .filter(h => selectedIds.has(h.hoardingID) && !existingHoardingIDs.has(h.hoardingID))
-      .map(h => newTaskRow(h));
+      .map(h => newTaskRow(h, siteMap));
     setTasks(p => [...p, ...toAdd]);
     setShowHoardModal(false);
   };
@@ -4920,7 +4956,8 @@ export default function JobPage() {
       {/* ── Hoarding selector modal ── */}
       {showHoardModal && (
         <HoardingSelectModal
-          hoardings={availableHoardings}
+          hoardings={hoardings}
+          siteMap={siteMap}
           filteredHoardingIds={filteredHoardingIds}
           existingIds={existingTaskHoardingIds}
           onAdd={handleAddHoardings}

@@ -2168,7 +2168,9 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
           })
           .map(m => ({
             hoardingMergeID: m.hoardingMergeID ?? m.HoardingMergeID ?? m.id ?? m.Id,
+            hoardingLineNumber: Number(m.hoardingLineNumber ?? m.HoardingLineNumber ?? 0),
             hoardingID: Number(m.hoardingID ?? m.HoardingID ?? 0),
+            customerContractID: Number(m.customerContractID ?? m.CustomerContractID ?? customerContractID),
             mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'V',
           }))
       );
@@ -2308,9 +2310,12 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
     setMergePickOpen(false);
     setMergeSaving(true); setApiError('');
     try {
+      const maxLine = (merges || []).reduce((max, m) => Math.max(max, Number(m.hoardingLineNumber || 0)), 0);
+      const nextLineNum = maxLine + 1;
       await Promise.all(
         selectedIds.map(hoardingID =>
           apiService.createHoardingMerge({
+            hoardingLineNumber: nextLineNum,
             hoardingID: Number(hoardingID),
             customerContractID: Number(customerContractID),
             mergeAlongFlag: direction,
@@ -2351,6 +2356,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
         groupMerges.map(m => {
 
           return apiService.updateHoardingMerge(m.hoardingMergeID, {
+            hoardingLineNumber: Number(m.hoardingLineNumber || 0),
             hoardingID: Number(m.hoardingID),
             customerContractID: Number(customerContractID),
             mergeAlongFlag: newDirection,
@@ -2385,28 +2391,34 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
   };
 
   const displayMergeGroups = useMemo(() => {
-    const groups = {}; // key: "siteID_direction" -> array of merges
+    const groups = {}; // key: groupKey -> { lineNum, siteID, direction, merges }
     merges.forEach(m => {
       const mapEntry = maps.find(mp => Number(mp.hoardingID) === Number(m.hoardingID));
       const siteID = mapEntry ? Number(mapEntry.siteID ?? 0) : 0;
       const direction = m.mergeAlongFlag ?? 'V';
-      const key = `${siteID}_${direction}`;
+      const lineNum = Number(m.hoardingLineNumber ?? 0);
+      const key = lineNum > 0 ? `line_${lineNum}` : `legacy_${siteID}_${direction}`;
       if (!groups[key]) {
-        groups[key] = [];
+        groups[key] = {
+          lineNum,
+          siteID,
+          direction,
+          merges: [],
+        };
       }
-      groups[key].push(m);
+      groups[key].merges.push(m);
     });
 
     return Object.entries(groups)
-      .map(([key, groupMerges]) => {
-        const [siteIDStr, direction] = key.split('_');
-        return {
-          siteID: Number(siteIDStr),
-          direction,
-          merges: groupMerges,
-        };
-      })
-      .filter(g => g.merges.length > 0);
+      .map(([key, grp]) => ({
+        groupKey: key,
+        lineNum: grp.lineNum,
+        siteID: grp.siteID,
+        direction: grp.direction,
+        merges: grp.merges,
+      }))
+      .filter(g => g.merges.length > 0)
+      .sort((a, b) => (a.lineNum || 999999) - (b.lineNum || 999999));
   }, [merges, maps]);
 
   const renderMergeGroup = (groupMerges, direction, groupKey) => {
@@ -2679,7 +2691,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
                     No merges yet — click below to merge hoardings
                   </div>
                 )}
-                {displayMergeGroups.map((g) => renderMergeGroup(g.merges, g.direction, `${g.siteID}_${g.direction}`))}
+                {displayMergeGroups.map((g) => renderMergeGroup(g.merges, g.direction, g.groupKey || `${g.siteID}_${g.direction}`))}
 
                 {/* ── Merge button — hidden in readOnly mode ── */}
                 {!readOnly && (
@@ -3070,6 +3082,7 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
         .filter(m => Number(m.customerContractID ?? m.CustomerContractID) === Number(customerContractID))
         .map(m => ({
           hoardingMergeID: m.hoardingMergeID ?? m.HoardingMergeID,
+          hoardingLineNumber: Number(m.hoardingLineNumber ?? m.HoardingLineNumber ?? 0),
           hoardingID: Number(m.hoardingID ?? m.HoardingID),
           customerContractID: Number(m.customerContractID ?? m.CustomerContractID),
           mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
@@ -3096,9 +3109,12 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
     setPickOpen(false);
     setSaving(true); setApiError('');
     try {
+      const maxLine = (merges || []).reduce((max, m) => Math.max(max, Number(m.hoardingLineNumber || 0)), 0);
+      const nextLineNum = maxLine + 1;
       await Promise.all(
         selectedIds.map(hoardingID =>
           apiService.createHoardingMerge({
+            hoardingLineNumber: nextLineNum,
             hoardingID: Number(hoardingID),
             customerContractID: Number(customerContractID),
             mergeAlongFlag: direction,
@@ -3121,9 +3137,25 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
     } finally { setDeletingId(null); }
   };
 
-  // Group merges by direction for display
-  const hMerges = merges.filter(m => m.mergeAlongFlag === 'H');
-  const vMerges = merges.filter(m => m.mergeAlongFlag === 'V');
+  // Group merges by hoardingLineNumber for display
+  const displayGroups = useMemo(() => {
+    const groups = {};
+    merges.forEach(m => {
+      const lineNum = Number(m.hoardingLineNumber || 0);
+      const direction = m.mergeAlongFlag ?? 'H';
+      const key = lineNum > 0 ? `line_${lineNum}` : `legacy_${direction}`;
+      if (!groups[key]) {
+        groups[key] = {
+          key,
+          lineNum,
+          direction,
+          merges: [],
+        };
+      }
+      groups[key].merges.push(m);
+    });
+    return Object.values(groups).sort((a, b) => (a.lineNum || 999999) - (b.lineNum || 999999));
+  }, [merges]);
 
   const renderMergeRow = (m, idx, total) => {
     const h = allHoardingsRaw.find(hh => hh.hoardingID === m.hoardingID);
@@ -3212,27 +3244,21 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
               </div>
             )}
 
-            {/* Horizontal merges group */}
-            {hMerges.length > 0 && (
-              <div style={{ border: '1.5px solid rgba(124,58,237,0.20)', borderRadius: 12, overflow: 'hidden', marginBottom: 12 }}>
-                <div style={{ padding: '8px 14px', background: 'rgba(124,58,237,0.06)', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <ArrowLeftRight size={13} color="#7c3aed" />
-                  <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>Horizontal Merge · {hMerges.length} hoarding{hMerges.length !== 1 ? 's' : ''}</span>
+            {/* Merge groups */}
+            {displayGroups.map((g) => {
+              const isH = g.direction === 'H';
+              return (
+                <div key={g.key} style={{ border: '1.5px solid rgba(124,58,237,0.20)', borderRadius: 12, overflow: 'hidden', marginBottom: 12 }}>
+                  <div style={{ padding: '8px 14px', background: 'rgba(124,58,237,0.06)', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {isH ? <ArrowLeftRight size={13} color="#7c3aed" /> : <ArrowUpDown size={13} color="#7c3aed" />}
+                    <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>
+                      {isH ? 'Horizontal' : 'Vertical'} Merge {g.lineNum > 0 ? `(Group ${g.lineNum})` : ''} · {g.merges.length} hoarding{g.merges.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {g.merges.map((m, i) => renderMergeRow(m, i, g.merges.length))}
                 </div>
-                {hMerges.map((m, i) => renderMergeRow(m, i, hMerges.length))}
-              </div>
-            )}
-
-            {/* Vertical merges group */}
-            {vMerges.length > 0 && (
-              <div style={{ border: '1.5px solid rgba(124,58,237,0.20)', borderRadius: 12, overflow: 'hidden', marginBottom: 12 }}>
-                <div style={{ padding: '8px 14px', background: 'rgba(124,58,237,0.06)', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <ArrowUpDown size={13} color="#7c3aed" />
-                  <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>Vertical Merge · {vMerges.length} hoarding{vMerges.length !== 1 ? 's' : ''}</span>
-                </div>
-                {vMerges.map((m, i) => renderMergeRow(m, i, vMerges.length))}
-              </div>
-            )}
+              );
+            })}
 
             {/* Add merge button */}
             <button
@@ -3696,7 +3722,14 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
         setMaps(mapList);
 
         const mergeList = (Array.isArray(rawMerges) ? rawMerges : [])
-          .filter(m => Number(m.customerContractID ?? m.CustomerContractID) === Number(contract.customerContractID));
+          .filter(m => Number(m.customerContractID ?? m.CustomerContractID) === Number(contract.customerContractID))
+          .map(m => ({
+            hoardingMergeID: m.hoardingMergeID ?? m.HoardingMergeID ?? m.id ?? m.Id,
+            hoardingLineNumber: Number(m.hoardingLineNumber ?? m.HoardingLineNumber ?? 0),
+            hoardingID: Number(m.hoardingID ?? m.HoardingID ?? 0),
+            customerContractID: Number(m.customerContractID ?? m.CustomerContractID ?? contract.customerContractID),
+            mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'V',
+          }));
         setMerges(mergeList);
 
         const imgList = Array.isArray(rawMergedImages) ? rawMergedImages : [];
@@ -3879,18 +3912,20 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
 
     const mergedHoardingIds = new Set(merges.map(m => Number(m.hoardingID)));
 
-    // Group merges by siteID_direction
+    // Group merges by hoardingLineNumber (or fallback to siteID_direction for legacy 0)
     const mergeGroups = {};
     merges.forEach(m => {
       const hID = Number(m.hoardingID);
       const hInfo = fullHoardings.find(h => h.hoardingID === hID);
       const siteID = hInfo?.siteID ?? 0;
       const direction = m.mergeAlongFlag ?? 'V';
-      const key = `merge_${siteID}_${direction}`;
+      const lineNum = Number(m.hoardingLineNumber ?? 0);
+      const key = lineNum > 0 ? `merge_line_${lineNum}` : `merge_${siteID}_${direction}`;
       if (!mergeGroups[key]) {
         mergeGroups[key] = {
           isMerged: true,
           mergeGroupKey: key,
+          lineNum,
           siteID,
           direction,
           merges: [],
@@ -3905,8 +3940,9 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
 
     const result = [];
 
-    // Add merged groups first
-    Object.values(mergeGroups).forEach(group => {
+    // Add merged groups first (sorted by line number)
+    const sortedGroups = Object.values(mergeGroups).sort((a, b) => (a.lineNum || 999999) - (b.lineNum || 999999));
+    sortedGroups.forEach(group => {
       const groupHoardings = group.hoardingIDs
         .map(hid => fullHoardings.find(h => h.hoardingID === hid))
         .filter(Boolean);

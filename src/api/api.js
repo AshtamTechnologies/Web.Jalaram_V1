@@ -571,15 +571,17 @@ export const apiService = {
   getHoardingMergeById: (id) => api.get(`/HoardingMerge/${id}`),
   createHoardingMerge: (data) => api.post('/HoardingMerge/Create', {
     hoardingMergeID: 0,
-    hoardingID: Number(data.hoardingID),
-    customerContractID: Number(data.customerContractID),
-    mergeAlongFlag: data.mergeAlongFlag,
+    hoardingLineNumber: Number(data.hoardingLineNumber ?? data.HoardingLineNumber ?? data.lineNo ?? 0),
+    hoardingID: Number(data.hoardingID ?? data.HoardingID),
+    customerContractID: Number(data.customerContractID ?? data.CustomerContractID),
+    mergeAlongFlag: data.mergeAlongFlag ?? data.MergeAlongFlag ?? 'H',
   }),
   updateHoardingMerge: (id, data) => api.put(`/HoardingMerge/Update`, {
     hoardingMergeID: Number(id),
-    hoardingID: Number(data.hoardingID),
-    customerContractID: Number(data.customerContractID),
-    mergeAlongFlag: data.mergeAlongFlag,
+    hoardingLineNumber: Number(data.hoardingLineNumber ?? data.HoardingLineNumber ?? data.lineNo ?? 0),
+    hoardingID: Number(data.hoardingID ?? data.HoardingID),
+    customerContractID: Number(data.customerContractID ?? data.CustomerContractID),
+    mergeAlongFlag: data.mergeAlongFlag ?? data.MergeAlongFlag ?? 'H',
   }),
   deleteHoardingMerge: (id) => api.delete(`/HoardingMerge/Delete/${id}`),
   selectMergePhoto: (data) => {

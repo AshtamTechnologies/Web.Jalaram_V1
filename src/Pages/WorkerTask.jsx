@@ -121,21 +121,49 @@ function extractArray(res) {
     return [];
 }
 
-function getSiteAddress(h) {
+function normalizeSite(raw) {
+    if (!raw) return null;
+    return {
+        siteID: raw.siteID ?? raw.SiteID ?? raw.site_id ?? raw.Site_ID ?? 0,
+        addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? raw.address_line1 ?? raw.address ?? raw.Address ?? '',
+        addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? raw.address_line2 ?? '',
+        landmark: raw.landmark ?? raw.Landmark ?? '',
+        city: raw.city ?? raw.City ?? '',
+        district: raw.district ?? raw.District ?? '',
+        siteName: raw.siteName ?? raw.SiteName ?? '',
+    };
+}
+
+function getSiteAddress(h, siteMap = null) {
     if (!h) return '';
-    const s = h.site || null;
+    const rawSite = h.site || (siteMap && (h.siteID || h.SiteID) ? siteMap.get(Number(h.siteID ?? h.SiteID)) : null);
+    const s = rawSite ? normalizeSite(rawSite) : null;
     if (s) {
         const addr = [s.addressLine1, s.addressLine2].filter(Boolean).join(', ');
         const city = [s.city, s.district].filter(Boolean).join(', ');
         const full = [addr, city].filter(Boolean).join(' — ');
         if (full) return full;
+        if (addr) return addr;
+        if (city) return city;
+        if (s.landmark) return s.landmark;
+        if (s.siteName) return s.siteName;
     }
-    const flatAddr = [h.addressLine1 ?? h.AddressLine1 ?? '', h.addressLine2 ?? h.AddressLine2 ?? ''].filter(Boolean).join(', ');
-    const flatCity = [h.city ?? h.City ?? h.siteCity ?? h.SiteCity ?? '', h.district ?? h.District ?? ''].filter(Boolean).join(', ');
+    const flatAddr = [
+        h.addressLine1 ?? h.AddressLine1 ?? h.siteAddress ?? h.SiteAddress ?? '',
+        h.addressLine2 ?? h.AddressLine2 ?? '',
+    ].filter(Boolean).join(', ');
+    const flatCity = [
+        h.city ?? h.City ?? h.siteCity ?? h.SiteCity ?? '',
+        h.district ?? h.District ?? h.siteDistrict ?? h.SiteDistrict ?? '',
+    ].filter(Boolean).join(', ');
     const flatFull = [flatAddr, flatCity].filter(Boolean).join(' — ');
     if (flatFull) return flatFull;
-    const landmark = h.landmark ?? h.Landmark ?? '';
+    if (flatAddr) return flatAddr;
+    if (flatCity) return flatCity;
+    const landmark = h.landmark ?? h.Landmark ?? h.siteLandmark ?? h.SiteLandmark ?? '';
     if (landmark) return landmark;
+    const siteName = h.siteName ?? h.SiteName ?? '';
+    if (siteName) return siteName;
     return h.hoardingCode ?? h.HoardingCode ?? '';
 }
 
@@ -858,22 +886,15 @@ function MergedGroupRow({ groupTasks, onView, onEdit, onOpenHoardingPhoto }) {
                             <Layers size={9} /> {t.hoardingCode || `#${t.hoardingID}`}
                         </span>
                     ))}
-                    {groupTasks.map((t, idx) => t.siteAddress ? (
+                    {/* Display site addresses under hoarding badges */}
+                    {[...new Set(groupTasks.map(t => t.siteAddress).filter(Boolean))].map((addr, idx) => (
                         <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: 2 }}>
                             <MapPin size={10} color="#9090a8" style={{ flexShrink: 0, marginTop: 2 }} />
                             <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4, flex: 1 }}>
-                                <strong style={{ color: '#7c3aed', marginRight: 3 }}>{t.hoardingCode || `Hoarding #${t.hoardingID}`}:</strong>
-                                {t.siteAddress}
+                                {addr}
                             </span>
-                            {onOpenHoardingPhoto && (
-                                <button type="button" onClick={(e) => { e.stopPropagation(); onOpenHoardingPhoto({ hoardingID: t.hoardingID, hoardingCode: t.hoardingCode, siteAddress: t.siteAddress }); }}
-                                    title="View Hoarding Image"
-                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.22)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 9.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
-                                    <Eye size={10} /> View
-                                </button>
-                            )}
                         </div>
-                    ) : null)}
+                    ))}
                 </div>
             </td>
             <td className="pg-td">
@@ -1117,13 +1138,46 @@ export default function WorkerTasksPage() {
                 const id = u.userID ?? u.UserID ?? u.id ?? 0;
                 return [Number(id), userName];
             }));
-            const siteList = extractArray(sRaw);
-            const siteMap = new Map(siteList.map(s => [Number(s.siteID ?? s.SiteID ?? 0), { addressLine1: s.addressLine1 ?? s.AddressLine1 ?? '', addressLine2: s.addressLine2 ?? s.AddressLine2 ?? '', city: s.city ?? s.City ?? '', district: s.district ?? s.District ?? '', landmark: s.landmark ?? s.Landmark ?? '' }]));
+            const siteList = extractArray(sRaw).map(normalizeSite).filter(Boolean);
+            const siteMap = new Map(siteList.map(s => [Number(s.siteID ?? s.SiteID ?? 0), s]));
             const rawHoardings = [
                 ...extractArray(hRaw),
                 ...extractArray(extRaw)
             ];
-            const enrichedHoardings = rawHoardings.map(h => { const siteID = Number(h.siteID ?? h.SiteID ?? h.siteId ?? 0); return { ...h, site: siteMap.get(siteID) || h.site || null }; });
+
+            // Build latestByCode and anyIdToLatest map (matching Job.jsx)
+            const latestByCode = new Map();
+            rawHoardings.forEach(h => {
+                const code = (h.hoardingCode ?? h.HoardingCode ?? '').trim();
+                if (!code) return;
+                const existing = latestByCode.get(code);
+                const thisDate = new Date(h.effdt ?? h.Effdt ?? 0).getTime();
+                const existDate = existing ? new Date(existing.effdt ?? existing.Effdt ?? 0).getTime() : -1;
+                if (!existing || thisDate > existDate) latestByCode.set(code, h);
+            });
+
+            const anyIdToLatest = new Map();
+            rawHoardings.forEach(h => {
+                const code = (h.hoardingCode ?? h.HoardingCode ?? '').trim();
+                const latest = latestByCode.get(code) || h;
+                const hID = Number(h.hoardingID ?? h.HoardingID ?? 0);
+                if (hID) {
+                    anyIdToLatest.set(hID, latest);
+                }
+            });
+
+            const enrichHoarding = (h) => {
+                if (!h) return null;
+                const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.site?.siteID ?? 0);
+                const foundSite = siteMap.get(siteID) || null;
+                const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+                return {
+                    ...h,
+                    site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+                };
+            };
+
+            const enrichedHoardings = rawHoardings.map(enrichHoarding);
             const hoardingMap = new Map(enrichedHoardings.map(h => [Number(h.hoardingID ?? h.HoardingID ?? 0), h]));
             const mergeList = extractArray(mergeRaw);
             const mergeMap = new Map(mergeList.map(m => [Number(m.hoardingID ?? m.HoardingID ?? 0), m]));
@@ -1138,13 +1192,27 @@ export default function WorkerTasksPage() {
                 .filter(t => assignedTaskIds.has(Number(t.jobTaskID ?? t.JobTaskID)))
                 .map(raw => {
                     const task = normalizeTask(raw);
-                    const h = hoardingMap.get(Number(task.hoardingID));
+                    const rawH = anyIdToLatest.get(Number(task.hoardingID)) || hoardingMap.get(Number(task.hoardingID));
+                    const h = enrichHoarding(rawH);
                     const merge = mergeMap.get(Number(task.hoardingID));
                     const jobObj = jobMap[task.jobRequestID] ?? null;
                     const contractID = jobObj?.customerContractID ?? 0;
                     const supervisorId = jobObj ? Number(jobObj.iD) : 0;
                     const supervisorName = supervisorId ? (userMap.get(supervisorId) || `User #${supervisorId}`) : '—';
-                    return { ...task, hoardingCode: h?.hoardingCode ?? h?.HoardingCode ?? '', siteAddress: getSiteAddress(h), siteID: h ? Number(h.siteID ?? h.SiteID ?? 0) : 0, mergeAlongFlag: merge?.mergeAlongFlag ?? null, isMerged: !!merge, job: jobObj, contract: contractMap[contractID] ?? null, supervisorName };
+                    return {
+                        ...task,
+                        hoardingCode: h?.hoardingCode ?? h?.HoardingCode ?? '',
+                        siteAddress: getSiteAddress(h, siteMap),
+                        siteID: h ? Number(h.siteID ?? h.SiteID ?? 0) : 0,
+                        mergeAlongFlag: merge?.mergeAlongFlag ?? merge?.MergeAlongFlag ?? null,
+                        hoardingLineNumber: Number(merge?.hoardingLineNumber ?? merge?.HoardingLineNumber ?? 0),
+                        customerContractID: Number(merge?.customerContractID ?? merge?.CustomerContractID ?? contractID ?? 0),
+                        hoardingMergeID: Number(merge?.hoardingMergeID ?? merge?.HoardingMergeID ?? 0),
+                        isMerged: !!merge,
+                        job: jobObj,
+                        contract: contractMap[contractID] ?? null,
+                        supervisorName
+                    };
                 });
             setTasks(myTasks);
         } catch (err) {
@@ -1237,7 +1305,11 @@ export default function WorkerTasksPage() {
             if (task.isMerged) {
                 const siteID = task.siteID ?? 0;
                 const flag = task.mergeAlongFlag || 'H';
-                const key = `merged__${task.jobRequestID}_${siteID}_${flag}`;
+                const lineNum = Number(task.hoardingLineNumber ?? 0);
+                const contractID = Number(task.customerContractID ?? task.contract?.customerContractID ?? 0);
+                const key = lineNum > 0
+                    ? `merged__${task.jobRequestID}_line_${contractID}_${lineNum}`
+                    : `merged__${task.jobRequestID}_site_${siteID}_${flag}`;
                 if (mergedGroupMap.has(key)) { rows[mergedGroupMap.get(key)].groupTasks.push(task); }
                 else { mergedGroupMap.set(key, rows.length); rows.push({ type: 'merged', groupTasks: [task] }); }
             } else {

@@ -620,21 +620,49 @@ function TaskPhotosSection({ jobTaskID }) {
     </>
   );
 }
-function getSiteAddress(h) {
+function normalizeSite(raw) {
+  if (!raw) return null;
+  return {
+    siteID: raw.siteID ?? raw.SiteID ?? raw.site_id ?? raw.Site_ID ?? 0,
+    addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? raw.address_line1 ?? raw.address ?? raw.Address ?? '',
+    addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? raw.address_line2 ?? '',
+    landmark: raw.landmark ?? raw.Landmark ?? '',
+    city: raw.city ?? raw.City ?? '',
+    district: raw.district ?? raw.District ?? '',
+    siteName: raw.siteName ?? raw.SiteName ?? '',
+  };
+}
+
+function getSiteAddress(h, siteMap = null) {
   if (!h) return '';
-  const s = h.site || null;
+  const rawSite = h.site || (siteMap && (h.siteID || h.SiteID) ? siteMap.get(Number(h.siteID ?? h.SiteID)) : null);
+  const s = rawSite ? normalizeSite(rawSite) : null;
   if (s) {
     const addr = [s.addressLine1, s.addressLine2].filter(Boolean).join(', ');
     const city = [s.city, s.district].filter(Boolean).join(', ');
     const full = [addr, city].filter(Boolean).join(' — ');
     if (full) return full;
+    if (addr) return addr;
+    if (city) return city;
+    if (s.landmark) return s.landmark;
+    if (s.siteName) return s.siteName;
   }
-  const flatAddr = [h.addressLine1 ?? h.AddressLine1 ?? '', h.addressLine2 ?? h.AddressLine2 ?? ''].filter(Boolean).join(', ');
-  const flatCity = [h.city ?? h.City ?? h.siteCity ?? h.SiteCity ?? '', h.district ?? h.District ?? ''].filter(Boolean).join(', ');
+  const flatAddr = [
+    h.addressLine1 ?? h.AddressLine1 ?? h.siteAddress ?? h.SiteAddress ?? '',
+    h.addressLine2 ?? h.AddressLine2 ?? '',
+  ].filter(Boolean).join(', ');
+  const flatCity = [
+    h.city ?? h.City ?? h.siteCity ?? h.SiteCity ?? '',
+    h.district ?? h.District ?? h.siteDistrict ?? h.SiteDistrict ?? '',
+  ].filter(Boolean).join(', ');
   const flatFull = [flatAddr, flatCity].filter(Boolean).join(' — ');
   if (flatFull) return flatFull;
-  const landmark = h.landmark ?? h.Landmark ?? '';
+  if (flatAddr) return flatAddr;
+  if (flatCity) return flatCity;
+  const landmark = h.landmark ?? h.Landmark ?? h.siteLandmark ?? h.SiteLandmark ?? '';
   if (landmark) return landmark;
+  const siteName = h.siteName ?? h.SiteName ?? '';
+  if (siteName) return siteName;
   return h.hoardingCode ?? h.HoardingCode ?? '';
 }
 /* ═══════════════════════════════════════════
@@ -1283,15 +1311,19 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
   const pct = job.tasks.length > 0 ? Math.round((done / job.tasks.length) * 100) : 0;
   const canAccept = job.jobStatus !== 'Accepted' && job.jobStatus !== 'Completed';
 
-  // ── Group merged tasks together by site and direction, keep singles separate ──
+  // ── Group merged tasks together by line number (or site and direction), keep singles separate ──
   const { mergedGroups, singleTasks } = useMemo(() => {
-    const mergedMap = new Map(); // "siteID_direction" → [tasks]
+    const mergedMap = new Map(); // key → [tasks]
     const singles = [];
     job.tasks.forEach(task => {
       if (task.isMerged) {
         const siteID = task.siteID ?? 0;
         const flag = task.mergeAlongFlag || 'H';
-        const key = `${siteID}_${flag}`;
+        const lineNum = Number(task.hoardingLineNumber ?? 0);
+        const contractID = Number(task.customerContractID ?? job.customerContractID ?? 0);
+        const key = lineNum > 0
+          ? `line_${contractID}_${lineNum}`
+          : `site_${siteID}_${flag}`;
         if (!mergedMap.has(key)) mergedMap.set(key, []);
         mergedMap.get(key).push(task);
       } else {
@@ -1299,7 +1331,7 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
       }
     });
     return { mergedGroups: [...mergedMap.entries()], singleTasks: singles };
-  }, [job.tasks]);
+  }, [job.tasks, job.customerContractID]);
 
   return (
     <div className="hd-form-page">
@@ -1416,7 +1448,7 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                     <>
                       {/* ── Merged group cards ── */}
                       {mergedGroups.map(([key, groupTasks]) => {
-                        const [siteIDStr, flag] = key.split('_');
+                        const flag = groupTasks[0]?.mergeAlongFlag || 'H';
                         return (
                           <div key={key} style={{ marginBottom: 16, border: '1.5px solid rgba(124,58,237,0.3)', borderRadius: 14, overflow: 'hidden' }}>
 
@@ -2266,36 +2298,49 @@ export default function SupervisorJobsPage() {
       ]);
 
       // Build site lookup map
-      const siteList = Array.isArray(sRaw) ? sRaw
-        : Array.isArray(sRaw?.$values) ? sRaw.$values
-          : Array.isArray(sRaw?.data) ? sRaw.data : [];
-
-      const siteMap = new Map(
-        siteList.map(s => [
-          Number(s.siteID ?? s.SiteID ?? 0),
-          {
-            addressLine1: s.addressLine1 ?? s.AddressLine1 ?? '',
-            addressLine2: s.addressLine2 ?? s.AddressLine2 ?? '',
-            city: s.city ?? s.City ?? '',
-            district: s.district ?? s.District ?? '',
-            landmark: s.landmark ?? s.Landmark ?? '',
-          }
-        ])
-      );
+      const siteList = extractArray(sRaw).map(normalizeSite).filter(Boolean);
+      const siteMap = new Map(siteList.map(s => [Number(s.siteID ?? s.SiteID ?? 0), s]));
 
       // Enrich hoardings with site data
       const rawHoardingList = [
         ...extractArray(hRaw),
         ...extractArray(extRaw)
       ];
-      const enrichedHoardings = rawHoardingList.map(h => {
-        const siteID = Number(h.siteID ?? h.SiteID ?? h.siteId ?? 0);
+
+      // Build latestByCode and anyIdToLatest map (matching Job.jsx)
+      const latestByCode = new Map();
+      rawHoardingList.forEach(h => {
+        const code = (h.hoardingCode ?? h.HoardingCode ?? '').trim();
+        if (!code) return;
+        const existing = latestByCode.get(code);
+        const thisDate = new Date(h.effdt ?? h.Effdt ?? 0).getTime();
+        const existDate = existing ? new Date(existing.effdt ?? existing.Effdt ?? 0).getTime() : -1;
+        if (!existing || thisDate > existDate) latestByCode.set(code, h);
+      });
+
+      const anyIdToLatest = new Map();
+      rawHoardingList.forEach(h => {
+        const code = (h.hoardingCode ?? h.HoardingCode ?? '').trim();
+        const latest = latestByCode.get(code) || h;
+        const hID = Number(h.hoardingID ?? h.HoardingID ?? 0);
+        if (hID) {
+          anyIdToLatest.set(hID, latest);
+        }
+      });
+
+      const enrichHoarding = (h) => {
+        if (!h) return null;
+        const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.site?.siteID ?? 0);
         const foundSite = siteMap.get(siteID) || null;
+        const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
         return {
           ...h,
-          site: foundSite || (h.site ? h.site : null),
+          site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
         };
-      });
+      };
+
+      const enrichedHoardings = rawHoardingList.map(enrichHoarding);
+      const hoardingMap = new Map(enrichedHoardings.map(h => [Number(h.hoardingID ?? h.HoardingID ?? 0), h]));
 
       setHoardings(enrichedHoardings);
       setHoardingMerges(extractArray(mergeRaw));
@@ -2312,13 +2357,11 @@ export default function SupervisorJobsPage() {
             const tRes = await apiService.getJobTasksByJobRequestId(job.jobRequestID);
             const taskList = extractArray(tRes).map(t => {
               const task = normalizeTask(t);
-
-              const h = enrichedHoardings.find(        // ← use enrichedHoardings
-                x => Number(x.hoardingID) === Number(task.hoardingID)
-              );
+              const rawH = anyIdToLatest.get(Number(task.hoardingID)) || hoardingMap.get(Number(task.hoardingID));
+              const h = enrichHoarding(rawH);
 
               const merge = extractArray(mergeRaw).find(
-                x => Number(x.hoardingID) === Number(task.hoardingID)
+                x => Number(x.hoardingID ?? x.HoardingID) === Number(task.hoardingID)
               );
 
               return {
@@ -2327,9 +2370,12 @@ export default function SupervisorJobsPage() {
                 material: h?.material || h?.Material || '',
                 width: h?.width || h?.Width || 0,
                 height: h?.height || h?.Height || 0,
-                siteAddress: getSiteAddress(h),         // ← now uses enriched h
+                siteAddress: getSiteAddress(h, siteMap),         // ← now uses enriched h and siteMap
                 siteID: h ? Number(h.siteID ?? h.SiteID ?? 0) : 0,
-                mergeAlongFlag: merge?.mergeAlongFlag || null,
+                mergeAlongFlag: merge?.mergeAlongFlag ?? merge?.MergeAlongFlag ?? null,
+                hoardingLineNumber: Number(merge?.hoardingLineNumber ?? merge?.HoardingLineNumber ?? 0),
+                customerContractID: Number(merge?.customerContractID ?? merge?.CustomerContractID ?? job.customerContractID ?? 0),
+                hoardingMergeID: Number(merge?.hoardingMergeID ?? merge?.HoardingMergeID ?? 0),
                 isMerged: !!merge,
               };
             });

@@ -255,7 +255,7 @@ function calcNOSFromDays(days) {
   const d = Number(days);
   if (isNaN(d) || d <= 0) return 0;
   if (d >= 28 && d <= 31) return 1;
-  
+
   // If it's a multiple of a full year (approx 365 or 366 days per year)
   for (let years = 1; years <= 10; years++) {
     const minDays = years * 365;
@@ -906,18 +906,18 @@ async function fetchCompanyDetailsForQuotation(quotationId, revisionNumber) {
     const cd = cdRes?.data ?? cdRes;
     if (!cd) return null;
     return {
-      name:      cd.company_Name  ?? cd.companyName  ?? COMPANY.name,
-      line1:     cd.address_Line1 ?? cd.addressLine1 ?? COMPANY.line1,
-      line2:     [cd.address_Line2 ?? cd.addressLine2, cd.city, cd.state, cd.pincode]
-                   .filter(Boolean).join(', ') || COMPANY.line2,
+      name: cd.company_Name ?? cd.companyName ?? COMPANY.name,
+      line1: cd.address_Line1 ?? cd.addressLine1 ?? COMPANY.line1,
+      line2: [cd.address_Line2 ?? cd.addressLine2, cd.city, cd.state, cd.pincode]
+        .filter(Boolean).join(', ') || COMPANY.line2,
       contactPerson: cd.contact_Person ?? cd.contactPerson ?? '',
-      mobile:    cd.mobile_No ?? cd.mobileNo ?? '',
-      gstin:     cd.gstin ?? cd.GSTIN ?? COMPANY.gstin,
-      pan:       cd.paN_No ?? cd.panNo ?? cd.PAN_No ?? COMPANY.pan,
-      bank:      cd.bank_Name ?? cd.bankName ?? COMPANY.bank,
-      branch:    cd.branch_Name ?? cd.branchName ?? COMPANY.branch,
-      account:   cd.account_No ?? cd.accountNo ?? COMPANY.account,
-      ifsc:      cd.ifsC_Code ?? cd.ifscCode ?? COMPANY.ifsc,
+      mobile: cd.mobile_No ?? cd.mobileNo ?? '',
+      gstin: cd.gstin ?? cd.GSTIN ?? COMPANY.gstin,
+      pan: cd.paN_No ?? cd.panNo ?? cd.PAN_No ?? COMPANY.pan,
+      bank: cd.bank_Name ?? cd.bankName ?? COMPANY.bank,
+      branch: cd.branch_Name ?? cd.branchName ?? COMPANY.branch,
+      account: cd.account_No ?? cd.accountNo ?? COMPANY.account,
+      ifsc: cd.ifsC_Code ?? cd.ifscCode ?? COMPANY.ifsc,
       accountHolder: cd.account_Holder_Name ?? cd.accountHolderName ?? COMPANY.name,
       signatory: COMPANY.signatory,
     };
@@ -1704,7 +1704,7 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
       setMappedHoardingIDs(tempMapped);
       // Sort by effdt descending first to keep the latest version
       const sortedList = [...list].sort((a, b) => new Date(b.effdt || b.Effdt) - new Date(a.effdt || a.Effdt));
-      
+
       // Deduplicate by hoardingID
       const seen = new Set();
       const uniqueList = [];
@@ -1962,7 +1962,7 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
               className="pg-btn-save"
               onClick={() => {
                 const selectedObjects = hoardingsList.filter(h => selected.has(h.hoardingID));
-                
+
                 // ✅ MODIFIED: Check if each selected hoarding is mapped to a vendor
                 for (const h of selectedObjects) {
                   if (!mappedHoardingIDs.has(Number(h.hoardingID))) {
@@ -1974,7 +1974,7 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
                     return;
                   }
                 }
-                
+
                 onAdd(selectedObjects);
               }}
               disabled={selected.size === 0 || loading || !!error}
@@ -3555,10 +3555,19 @@ function CreateContractFromQuotModal({
     let savedContractID = 0;
     let targetCompanyID = null;
     try {
-      const qcRes = await apiService.getQuotationCompanyByQuotationId(quot.quotationID);
-      const qcList = Array.isArray(qcRes) ? qcRes : qcRes?.data ?? [];
+      const revNum = Number(quot.quotationRevisionNumber ?? quot.QuotationRevisionNumber ?? quot.revisionNumber ?? 0);
+      let qcRes;
+      try {
+        qcRes = await apiService.getQuotationCompanyByQuotation(quot.quotationID, revNum);
+      } catch {
+        qcRes = await apiService.getQuotationCompanyByQuotationId(quot.quotationID);
+      }
+      const qcList = Array.isArray(qcRes) ? qcRes : Array.isArray(qcRes?.data) ? qcRes.data : [];
       if (qcList.length > 0) {
-        targetCompanyID = qcList[0].companyID ?? qcList[0].CompanyID ?? null;
+        const matchingQc = qcList.find(qc =>
+          Number(qc.quotationRevisionNumber ?? qc.QuotationRevisionNumber ?? 0) === revNum
+        ) || qcList[0];
+        targetCompanyID = matchingQc.company_ID ?? matchingQc.companyID ?? matchingQc.CompanyID ?? null;
       }
     } catch (qcErr) {
       console.warn('[QuotationCompany] Fetch failed:', qcErr?.message);
@@ -3719,22 +3728,37 @@ function CreateContractFromQuotModal({
       }
       */
 
-      // Step 4: Merge records — only for hoardings that were actually mapped
+      // Step 4: Merge records — only for hoardings that were actually mapped from this quotation revision
       const thisMerges = quotMerges.filter(m =>
-        Number(m.quotationID) === Number(quot.quotationID)
+        Number(m.quotationID ?? m.QuotationID) === Number(quot.quotationID ?? quot.QuotationID) &&
+        Number(m.quotationRevisionNumber ?? m.QuotationRevisionNumber ?? 0) === Number(quot.quotationRevisionNumber ?? quot.QuotationRevisionNumber ?? 0)
       );
 
+      // Group merges by quotationLineNumber to assign distinct hoardingLineNumber per merge group
+      const mergeGroups = new Map();
       for (const m of thisMerges) {
-        const hID = Number(m.hoardingID);
-        if (!allHoardingIDsToMap.has(hID)) continue;
-        try {
-          await apiService.createHoardingMerge({
-            hoardingID: hID,
-            customerContractID: Number(savedContractID),
-            mergeAlongFlag: m.mergeAlongFlag ?? 'H',
-          });
-        } catch (err) {
-          console.error('[Merge] Failed:', hID, err?.message);
+        const ln = Number(m.quotationLineNumber ?? m.QuotationLineNumber ?? 0);
+        if (!mergeGroups.has(ln)) mergeGroups.set(ln, []);
+        mergeGroups.get(ln).push(m);
+      }
+
+      let lineCounter = 1;
+      for (const groupRecords of mergeGroups.values()) {
+        const validRecords = groupRecords.filter(m => allHoardingIDsToMap.has(Number(m.hoardingID ?? m.HoardingID)));
+        if (validRecords.length === 0) continue;
+        const lineNumToSend = lineCounter++;
+        for (const m of validRecords) {
+          const hID = Number(m.hoardingID ?? m.HoardingID);
+          try {
+            await apiService.createHoardingMerge({
+              hoardingLineNumber: lineNumToSend,
+              hoardingID: hID,
+              customerContractID: Number(savedContractID),
+              mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
+            });
+          } catch (err) {
+            console.error('[Merge] Failed:', hID, err?.message);
+          }
         }
       }
     }
@@ -7663,7 +7687,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                     </div>
 
                     {/* ✅ MODIFIED: Wrap terms section in a container that highlights (with dashed red border and background tint) if user proceeds without selecting terms and cancels confirmation */}
-                    <div 
+                    <div
                       id="terms-section-container"
                       style={highlightTerms ? {
                         border: '2px dashed #ef4444',

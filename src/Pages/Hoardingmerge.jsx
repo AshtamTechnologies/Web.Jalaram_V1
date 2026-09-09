@@ -441,7 +441,7 @@ function DeleteModal({ group, onConfirm, onCancel, deleting }) {
 /* ─────────────────────────────────────
    MERGE FORM
 ───────────────────────────────────── */
-function MergeForm({ mode, group, hoardings, sites, contracts, customers, onBack }) {
+function MergeForm({ mode, group, hoardings, sites, contracts, customers, merges = [], onBack }) {
   const isAdd = mode === 'add';
 
   const [contractID, setContractID] = useState(isAdd ? '' : String(group?.customerContractID || ''));
@@ -470,8 +470,13 @@ function MergeForm({ mode, group, hoardings, sites, contracts, customers, onBack
           await apiService.deleteHoardingMerge(id);
         }
       }
+      const existingForContract = (merges || []).filter(m => Number(m.customerContractID ?? m.CustomerContractID) === Number(contractID));
+      const maxLine = existingForContract.reduce((max, m) => Math.max(max, Number(m.hoardingLineNumber ?? m.HoardingLineNumber ?? 0)), 0);
+      const lineNumToSend = isAdd ? (maxLine + 1) : (Number(group?.hoardingLineNumber) || (maxLine + 1));
+
       for (const hID of selectedH) {
         await apiService.createHoardingMerge({
+          hoardingLineNumber: lineNumToSend,
           hoardingID:         hID,
           customerContractID: Number(contractID),
           mergeAlongFlag:     direction,
@@ -734,24 +739,30 @@ export default function HoardingMergePage() {
   const groups = React.useMemo(() => {
     const map = {};
     merges.forEach(m => {
-      const key = m.customerContractID;
+      const contractID = Number(m.customerContractID ?? m.CustomerContractID ?? 0);
+      const lineNum = Number(m.hoardingLineNumber ?? m.HoardingLineNumber ?? 0);
+      const mergeAlong = m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'W';
+      const key = lineNum > 0 ? `${contractID}_line_${lineNum}` : `${contractID}_${mergeAlong}`;
       if (!map[key]) {
         map[key] = {
-          customerContractID: key,
-          mergeAlongFlag:     m.mergeAlongFlag,
+          customerContractID: contractID,
+          hoardingLineNumber: lineNum,
+          mergeAlongFlag:     mergeAlong,
           mergeIDs:           [],
           hoardingIDs:        [],
         };
       }
-      map[key].mergeIDs.push(m.hoardingMergeID);
-      if (!map[key].hoardingIDs.includes(m.hoardingID)) {
-        map[key].hoardingIDs.push(m.hoardingID);
+      const mId = m.hoardingMergeID ?? m.HoardingMergeID;
+      const hId = Number(m.hoardingID ?? m.HoardingID);
+      if (mId) map[key].mergeIDs.push(mId);
+      if (hId && !map[key].hoardingIDs.includes(hId)) {
+        map[key].hoardingIDs.push(hId);
       }
     });
 
     return Object.values(map).map(g => {
-      const contract     = contracts.find(c => c.customerContractID === g.customerContractID);
-      const customer     = contract ? customers.find(c => c.customerID === contract.customerID) : null;
+      const contract     = contracts.find(c => Number(c.customerContractID ?? c.CustomerContractID) === Number(g.customerContractID));
+      const customer     = contract ? customers.find(c => Number(c.customerID ?? c.CustomerID) === Number(contract.customerID ?? contract.CustomerID)) : null;
       g.customerName     = customer?.customerName || (contract?.customerID ? `Customer #${contract.customerID}` : '—');
       g.contractStatus   = contract?.status || '';
       g.count            = g.mergeIDs.length;
@@ -861,6 +872,7 @@ if (isWidth) {
         sites={sites}
         contracts={contracts}
         customers={customers}
+        merges={merges}
         onBack={() => { setView('grid'); setEditGroup(null); fetchAll(); }}
       />
     );
