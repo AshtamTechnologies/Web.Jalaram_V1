@@ -3775,10 +3775,10 @@ function CreateContractFromQuotModal({
 
   return ReactDOM.createPortal(
     <div className="pg-overlay">
-      <div className="pg-modal" style={{ maxWidth: 940, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+      <div className="pg-modal" style={{ maxWidth: 940, display: 'flex', flexDirection: 'column', maxHeight: '92vh', overflowY: 'auto' }}>
 
         {/* ── Head ── */}
-        <div className="pg-modal__head" style={{ flexShrink: 0 }}>
+        <div className="pg-modal__head" style={{ padding: '14px 20px', flexShrink: 0 }}>
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap" style={{ background: 'rgba(124,58,237,0.10)' }}>
               <FileCheck size={20} color="#7c3aed" />
@@ -3800,7 +3800,7 @@ function CreateContractFromQuotModal({
         </div>
         {/* ── Occupancy warning ── */}
         {occupancyWarnings.length > 0 && (
-          <div style={{ padding: '14px 24px 0', flexShrink: 0 }}>
+          <div style={{ padding: '10px 20px 0', flexShrink: 0 }}>
             <OccupancyWarningBanner
               messages={occupancyWarnings}
               onDismiss={() => setOccupancyWarnings([])}
@@ -3809,22 +3809,22 @@ function CreateContractFromQuotModal({
         )}
         {/* ── Customer bar ── */}
         <div style={{
-          padding: '11px 24px', borderBottom: '1px solid #f0f0f8', background: '#fafafe',
+          padding: '8px 20px', borderBottom: '1px solid #f0f0f8', background: '#fafafe',
           display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', flexShrink: 0,
         }}>
           <div style={{
-            width: 32, height: 32, borderRadius: 9,
+            width: 30, height: 30, borderRadius: 8,
             background: 'rgba(4,158,223,0.10)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
           }}>
-            <User size={15} color="#049edf" />
+            <User size={14} color="#049edf" />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 900, color: '#1a1a2e', lineHeight: 1.1 }}>
+            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#1a1a2e', lineHeight: 1.1 }}>
               {localCustomer?.customerName || `Customer ID ${quot.customerID}`}
             </div>
             {localCustomer && (
-              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600, marginTop: 3 }}>
+              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600, marginTop: 2 }}>
                 {[localCustomer.addressLine1, localCustomer.city, localCustomer.district].filter(Boolean).join(', ')}
                 {localCustomer.gstNumber && <span style={{ marginLeft: 8 }}>· GST: {localCustomer.gstNumber}</span>}
                 {localCustomer.phone1 && <span style={{ marginLeft: 8 }}>· {localCustomer.phone1}</span>}
@@ -3834,10 +3834,10 @@ function CreateContractFromQuotModal({
           <button
             onClick={() => setShowEditCust(true)}
             style={{
-              display: 'flex', alignItems: 'center', gap: 5, padding: '6px 13px',
+              display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px',
               borderRadius: 8, border: '1.5px solid rgba(4,158,223,0.30)',
               background: 'rgba(4,158,223,0.06)', cursor: 'pointer',
-              color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800,
+              color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800,
               flexShrink: 0,
             }}
           >
@@ -3847,8 +3847,8 @@ function CreateContractFromQuotModal({
 
         {/* ── Config bar ── */}
         <div style={{
-          padding: '10px 24px', borderBottom: '1px solid #f0f0f8', background: '#fff',
-          display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', flexShrink: 0,
+          padding: '8px 20px', borderBottom: '1px solid #f0f0f8', background: '#fff',
+          display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap', flexShrink: 0,
         }}>
           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#5a5a78', whiteSpace: 'nowrap' }}>
             Payment Frequency:
@@ -3857,8 +3857,8 @@ function CreateContractFromQuotModal({
             value={freqID}
             onChange={e => setFreqID(e.target.value)}
             style={{
-              padding: '7px 14px', border: '1.5px solid #e8e8f4', borderRadius: 9,
-              fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700,
+              padding: '5px 12px', border: '1.5px solid #e8e8f4', borderRadius: 8,
+              fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
               color: '#1a1a2e', background: '#fff', cursor: 'pointer', outline: 'none',
             }}
           >
@@ -3873,7 +3873,7 @@ function CreateContractFromQuotModal({
         </div>
 
         {/* ── Table ── */}
-        <div style={{ flex: '1 1 auto', overflow: 'auto', maxHeight: 370, minHeight: 0 }}>
+        <div style={{ flex: '1 1 auto', overflow: 'auto', minHeight: 180, maxHeight: 380 }}>
           {contractRows.length === 0 ? (
             <div style={{ padding: '40px 20px', textAlign: 'center', fontFamily: 'Nunito,sans-serif', color: '#9090a8' }}>
               <Building2 size={36} color="#d0d0e8" style={{ marginBottom: 10 }} />
@@ -4098,57 +4098,56 @@ function CreateContractFromQuotModal({
 
           return (
             <div style={{
-              padding: '12px 24px', borderTop: '1px solid #f0f0f8',
+              padding: '8px 20px', borderTop: '1px solid #f0f0f8',
               background: 'rgba(124,58,237,0.04)',
-              display: 'flex', alignItems: 'center', gap: '20px 28px', flexWrap: 'wrap', flexShrink: 0,
+              display: 'flex', alignItems: 'center', gap: '16px 24px', flexWrap: 'wrap', flexShrink: 0,
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap' }}>
-                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700, color: '#5a5a78' }}>
                   Sub Total:&nbsp;
-                  <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: '#1a1a2e' }}>
                     ₹ {fmtCurrency(totalContractValue)}
                   </span>
                 </div>
                 {cgstPct > 0 && (
-                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>
+                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700, color: '#5a5a78' }}>
                     CGST ({cgstPct}%):&nbsp;
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: '#1a1a2e' }}>
                       ₹ {fmtCurrency(cgstAmt)}
                     </span>
                   </div>
                 )}
                 {sgstPct > 0 && (
-                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>
+                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700, color: '#5a5a78' }}>
                     SGST ({sgstPct}%):&nbsp;
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: '#1a1a2e' }}>
                       ₹ {fmtCurrency(sgstAmt)}
                     </span>
                   </div>
                 )}
                 {Math.abs(roundOff) > 0.001 && (
-                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>
+                  <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700, color: '#5a5a78' }}>
                     Round Off:&nbsp;
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 800, color: '#1a1a2e' }}>
                       ₹ {fmtCurrency(roundOff)}
                     </span>
                   </div>
                 )}
-                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#7c3aed' }}>
+                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#7c3aed' }}>
                   Total Contract Value:&nbsp;
-                  <span style={{ fontSize: 14.5, fontWeight: 900, background: 'rgba(124,58,237,0.1)', padding: '3px 8px', borderRadius: 6 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 900, background: 'rgba(124,58,237,0.1)', padding: '2px 7px', borderRadius: 6 }}>
                     ₹ {fmtCurrency(finalTotal)}
                   </span>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexWrap: 'wrap', marginLeft: 'auto' }}>
-                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#16a34a' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', marginLeft: 'auto' }}>
+                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700, color: '#16a34a' }}>
                   Total Amt / Freq:&nbsp;
-                  <span style={{ fontSize: 14, fontWeight: 900 }}>
-                    {/* ₹ {fmtCurrency(totalAmtPerFreq)} */}
+                  <span style={{ fontSize: 13, fontWeight: 900 }}>
                     ₹ {fmtCurrency(finalTotal)}
                   </span>
                 </div>
-                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#9090a8', fontWeight: 600 }}>
+                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>
                   Frequency: <strong style={{ color: '#1a1a2e' }}>{freqOptions.find(f => String(f.value) === String(freqID))?.label || '—'}</strong>
                 </div>
               </div>
@@ -4157,7 +4156,7 @@ function CreateContractFromQuotModal({
         })()}
 
         {/* ── Footer ── */}
-        <div className="pg-modal__foot qt-merge-foot-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+        <div className="pg-modal__foot qt-merge-foot-container" style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <span className="qt-merge-foot-text" style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, color: '#9090a8', fontWeight: 600 }}>
             {selectedRows.length} of {contractRows.length} hoardings selected
           </span>

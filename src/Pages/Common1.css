@@ -1030,7 +1030,7 @@
 .pg-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1050;
+  z-index: 10000;
   background: rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(6px);
   display: flex;
@@ -1041,8 +1041,20 @@
   overflow-y: auto;
 }
 
+@media (min-width: 1024px) {
+  .pg-overlay {
+    left: 255px;
+  }
+}
+
+@media (max-width: 1280px) and (min-width: 1024px) {
+  .pg-overlay {
+    left: 210px;
+  }
+}
+
 .pg-overlay--view {
-  z-index: 1060;
+  z-index: 10010;
   background: rgba(15, 23, 42, 0.55);
 }
 
