@@ -622,7 +622,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave, onOpenHoardingP
                         </span>
                         {task.isMerged && (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, background: 'rgba(124,58,237,0.25)', border: '1px solid rgba(255,255,255,0.3)', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, color: '#fff' }}>
-                                {task.mergeAlongFlag === 'H' ? '↔' : '↕'} Merged
+                                {task.mergeAlongFlag === 'S' ? '⊞' : task.mergeAlongFlag === 'H' ? '↔' : '↕'} Merged
                             </span>
                         )}
                     </div>
@@ -673,7 +673,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave, onOpenHoardingP
                                     )}
                                 />
                             )}
-                            {task.isMerged && <InfoRow icon={Layers} label="Merge Type" value={task.mergeAlongFlag === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'} accent="#7c3aed" />}
+                            {task.isMerged && <InfoRow icon={Layers} label="Merge Type" value={task.mergeAlongFlag === 'S' ? '⊞ Square Merge' : task.mergeAlongFlag === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'} accent="#7c3aed" />}
                             <InfoRow icon={User} label="Supervisor" value={task.supervisorName} accent="#6c63ff" />
                             <InfoRow icon={CheckCircle} label="Status" value={task.status} />
                             <InfoRow icon={Calendar} label="Completion Date" value={fmtDate(task.actualCompletionDate)} />
@@ -869,7 +869,7 @@ function MergedGroupRow({ groupTasks, onView, onEdit, onOpenHoardingPhoto }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#1a1a2e' }}>{job?.jobType || '—'}</span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.22)', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800 }}>
-                            {flag === 'H' ? '↔' : '↕'} {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                            {flag === 'S' ? '⊞' : flag === 'H' ? '↔' : '↕'} {flag === 'S' ? 'Square' : flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
                         </span>
                     </div>
                     {job?.jobDescription && (
@@ -948,7 +948,7 @@ function TaskCard({ task, onView, onEdit, onOpenHoardingPhoto }) {
                 {task.isMerged && (
                     <div className="pg-card__row">
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800 }}>
-                            {task.mergeAlongFlag === 'H' ? '↔' : '↕'} {task.mergeAlongFlag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                            {task.mergeAlongFlag === 'S' ? '⊞' : task.mergeAlongFlag === 'H' ? '↔' : '↕'} {task.mergeAlongFlag === 'S' ? 'Square' : task.mergeAlongFlag === 'H' ? 'Horizontal' : 'Vertical'} Merge
                         </span>
                     </div>
                 )}
@@ -1007,9 +1007,9 @@ function MergedGroupCard({ groupTasks, onView, onEdit, onOpenHoardingPhoto }) {
         <div className="pg-card" style={{ border: '1.5px solid rgba(124,58,237,0.3)', background: 'linear-gradient(135deg,rgba(124,58,237,0.03),#fff)' }}>
             {/* Merge header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px 8px', borderBottom: '1px solid rgba(124,58,237,0.12)', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 16 }}>{flag === 'H' ? '↔' : '↕'}</span>
+                <span style={{ fontSize: 16 }}>{flag === 'S' ? '⊞' : flag === 'H' ? '↔' : '↕'}</span>
                 <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 900, color: '#7c3aed' }}>
-                    {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                    {flag === 'S' ? 'Square' : flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
                 </span>
                 <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>
                     · {groupTasks.length} hoardings
@@ -1194,9 +1194,22 @@ export default function WorkerTasksPage() {
                     const task = normalizeTask(raw);
                     const rawH = anyIdToLatest.get(Number(task.hoardingID)) || hoardingMap.get(Number(task.hoardingID));
                     const h = enrichHoarding(rawH);
-                    const merge = mergeMap.get(Number(task.hoardingID));
                     const jobObj = jobMap[task.jobRequestID] ?? null;
-                    const contractID = jobObj?.customerContractID ?? 0;
+                    const contractID = Number(jobObj?.customerContractID ?? 0);
+                    const contractMerges = contractID ? mergeList.filter(x => Number(x.customerContractID ?? x.CustomerContractID) === contractID) : [];
+                    const mergePool = contractMerges.length > 0 ? contractMerges : mergeList;
+                    const merge = (contractID ? contractMerges.find(m => Number(m.hoardingID ?? m.HoardingID) === Number(task.hoardingID)) : null)
+                        || mergeMap.get(Number(task.hoardingID))
+                        || mergePool.find(x => {
+                            const xHid = Number(x.hoardingID ?? x.HoardingID);
+                            if (xHid === Number(task.hoardingID)) return true;
+                            if (rawH && Number(rawH.hoardingID ?? rawH.HoardingID) === xHid) return true;
+                            const xH = hoardingMap.get(xHid);
+                            if (xH && h && (xH.hoardingCode ?? xH.HoardingCode) && (h.hoardingCode ?? h.HoardingCode) && (xH.hoardingCode ?? xH.HoardingCode).trim().toLowerCase() === (h.hoardingCode ?? h.HoardingCode).trim().toLowerCase()) {
+                                return true;
+                            }
+                            return false;
+                        });
                     const supervisorId = jobObj ? Number(jobObj.iD) : 0;
                     const supervisorName = supervisorId ? (userMap.get(supervisorId) || `User #${supervisorId}`) : '—';
                     return {

@@ -1321,9 +1321,7 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
         const flag = task.mergeAlongFlag || 'H';
         const lineNum = Number(task.hoardingLineNumber ?? 0);
         const contractID = Number(task.customerContractID ?? job.customerContractID ?? 0);
-        const key = lineNum > 0
-          ? `line_${contractID}_${lineNum}`
-          : `site_${siteID}_${flag}`;
+        const key = `${siteID}_${flag}_${lineNum}`;
         if (!mergedMap.has(key)) mergedMap.set(key, []);
         mergedMap.get(key).push(task);
       } else {
@@ -1449,19 +1447,49 @@ function JobDetailPage({ job, workers, onBack, onAccept, accepting, showToast, a
                       {/* ── Merged group cards ── */}
                       {mergedGroups.map(([key, groupTasks]) => {
                         const flag = groupTasks[0]?.mergeAlongFlag || 'H';
+                        const sizes = groupTasks.map(t => ({ w: Number(t.width) || 0, h: Number(t.height) || 0 }));
+                        const gaps = Math.max(groupTasks.length - 1, 0);
+                        const isSquare = flag === 'S';
+                        const isHorizontalMerge = flag === 'H';
+                        let mw, mh;
+                        if (isSquare) {
+                          const singleW = sizes[0]?.w || 0;
+                          const singleH = sizes[0]?.h || 0;
+                          mw = (singleW * 2) + 1;
+                          mh = (singleH * 2) + 1;
+                        } else if (isHorizontalMerge) {
+                          mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+                          mh = Math.max(...sizes.map(s => s.h), 0);
+                        } else {
+                          mw = Math.max(...sizes.map(s => s.w), 0);
+                          mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+                        }
+                        const mergedSqFt = mw * mh;
+
                         return (
                           <div key={key} style={{ marginBottom: 16, border: '1.5px solid rgba(124,58,237,0.3)', borderRadius: 14, overflow: 'hidden' }}>
 
                             {/* Group header */}
                             <div style={{ padding: '12px 18px', background: 'linear-gradient(135deg, rgba(124,58,237,0.07), rgba(124,58,237,0.03))', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
-                              <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{flag === 'H' ? '↔' : '↕'}</div>
+                              <div style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{flag === 'S' ? '⊞' : flag === 'H' ? '↔' : '↕'}</div>
                               <div style={{ flex: 1, minWidth: 0 }}>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
                                   <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 900, color: '#7c3aed' }}>
-                                    {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                                    {flag === 'S' ? 'Square' : flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
                                   </span>
                                   <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#9090a8' }}>
                                     · {groupTasks.length} hoardings combined
+                                  </span>
+                                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#5a5a78' }}>
+                                    · {mw} × {mh} ft
+                                  </span>
+                                  <span style={{
+                                    padding: '1px 8px', borderRadius: 10,
+                                    background: 'rgba(124,58,237,0.10)', color: '#7c3aed',
+                                    border: '1px solid rgba(124,58,237,0.20)',
+                                    fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800,
+                                  }}>
+                                    {mergedSqFt.toLocaleString('en-IN')} sq.ft
                                   </span>
                                   {groupTasks.map(t => {
                                     const specs = [t.material, t.width && t.height ? `${t.width}×${t.height} ft` : ''].filter(Boolean).join(' · ');
@@ -1977,7 +2005,7 @@ function TaskModal({ task, onClose, onSave, onOpenHoardingPhoto }) {
             </span>
             {task.isMerged && (
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, background: 'rgba(124,58,237,0.25)', border: '1px solid rgba(255,255,255,0.3)', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, color: '#fff' }}>
-                {task.mergeAlongFlag === 'H' ? '↔' : '↕'} Merged
+                {task.mergeAlongFlag === 'S' ? '⊞' : task.mergeAlongFlag === 'H' ? '↔' : '↕'} Merged
               </span>
             )}
           </div>
@@ -2360,9 +2388,21 @@ export default function SupervisorJobsPage() {
               const rawH = anyIdToLatest.get(Number(task.hoardingID)) || hoardingMap.get(Number(task.hoardingID));
               const h = enrichHoarding(rawH);
 
-              const merge = extractArray(mergeRaw).find(
-                x => Number(x.hoardingID ?? x.HoardingID) === Number(task.hoardingID)
-              );
+              const allMerges = extractArray(mergeRaw);
+              const jContractID = Number(job.customerContractID ?? 0);
+              const contractMerges = jContractID ? allMerges.filter(x => Number(x.customerContractID ?? x.CustomerContractID) === jContractID) : [];
+              const mergePool = contractMerges.length > 0 ? contractMerges : allMerges;
+
+              const merge = mergePool.find(x => {
+                const xHid = Number(x.hoardingID ?? x.HoardingID);
+                if (xHid === Number(task.hoardingID)) return true;
+                if (rawH && Number(rawH.hoardingID ?? rawH.HoardingID) === xHid) return true;
+                const xH = hoardingMap.get(xHid);
+                if (xH && h && (xH.hoardingCode ?? xH.HoardingCode) && (h.hoardingCode ?? h.HoardingCode) && (xH.hoardingCode ?? xH.HoardingCode).trim().toLowerCase() === (h.hoardingCode ?? h.HoardingCode).trim().toLowerCase()) {
+                  return true;
+                }
+                return false;
+              });
 
               return {
                 ...task,

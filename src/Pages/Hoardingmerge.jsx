@@ -5,7 +5,7 @@ import {
   RefreshCw, ArrowLeft, Loader2, Trash2,
   Building2, ArrowLeftRight, ArrowUpDown,
   Link2, Layers, ChevronDown,
-  GitMerge, Maximize2, LayoutTemplate,
+  GitMerge, Maximize2, LayoutTemplate, LayoutGrid,
   ChevronUp, ChevronsLeft, ChevronsRight,
   ChevronLeft, ChevronRight,
 } from 'lucide-react';
@@ -215,6 +215,12 @@ function ContractSelector({ value, onChange, contracts, customers, hoardings, er
 function HoardingMultiSelect({ selected, onChange, hoardings, sites, error }) {
   const [query, setQuery] = useState('');
 
+  const isExtHoarding = (h) => Boolean(
+    h?.latest?.isExternal === true || String(h?.latest?.isExternal).toLowerCase() === 'true' ||
+    h?.latest?.is_External === true || String(h?.latest?.is_External).toLowerCase() === 'true' ||
+    h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true'
+  );
+
   const allHoardings = hoardings.map(h => {
     const latest = getLatest(h);
     const site   = sites.find(s => s.siteID === latest?.siteID);
@@ -223,6 +229,13 @@ function HoardingMultiSelect({ selected, onChange, hoardings, sites, error }) {
       : '';
     return { ...h, latest, addr };
   });
+
+  const firstSelectedId = selected[0];
+  const firstSelectedHoarding = firstSelectedId
+    ? allHoardings.find(h => h.latest?.hoardingID === firstSelectedId || h.versions?.some(v => v.hoardingID === firstSelectedId))
+    : null;
+  const firstIsExt = firstSelectedHoarding ? isExtHoarding(firstSelectedHoarding) : null;
+  const firstSiteID = firstSelectedHoarding ? (firstSelectedHoarding.latest?.siteID ?? null) : null;
 
   const filtered = allHoardings.filter(h => {
     if (!query.trim()) return true;
@@ -233,7 +246,15 @@ function HoardingMultiSelect({ selected, onChange, hoardings, sites, error }) {
     );
   });
 
-  const toggle  = (id) => onChange(selected.includes(id) ? selected.filter(x => x !== id) : [...selected, id]);
+  const toggle = (id, h) => {
+    if (selected.includes(id)) {
+      onChange(selected.filter(x => x !== id));
+      return;
+    }
+    if (firstSiteID !== null && h.latest?.siteID !== firstSiteID) return;
+    if (firstIsExt !== null && isExtHoarding(h) !== firstIsExt) return;
+    onChange([...selected, id]);
+  };
   const remove  = (id) => onChange(selected.filter(x => x !== id));
 
   return (
@@ -241,17 +262,27 @@ function HoardingMultiSelect({ selected, onChange, hoardings, sites, error }) {
       {selected.length > 0 && (
         <div className="hm-selected-strip">
           {selected.map(id => {
-            const h = allHoardings.find(h2 => h2.latest?.hoardingID === id);
+            const h = allHoardings.find(h2 => h2.latest?.hoardingID === id || h2.versions?.some(v => v.hoardingID === id));
+            const isExt = isExtHoarding(h);
             return (
-              <div key={id} className="hm-selected-pill">
-                <Building2 size={10} color="#049edf" />
+              <div key={id} className="hm-selected-pill" style={{ borderColor: isExt ? 'rgba(234,88,12,0.3)' : 'rgba(108,99,255,0.3)', background: isExt ? 'rgba(234,88,12,0.06)' : 'rgba(108,99,255,0.06)' }}>
+                <Building2 size={10} color={isExt ? '#ea580c' : '#6c63ff'} />
                 {h?.hoardingCode || `#${id}`}
+                <span style={{ fontSize: 9.5, fontWeight: 800, color: isExt ? '#ea580c' : '#6c63ff', padding: '0 4px', borderRadius: 3, background: isExt ? 'rgba(234,88,12,0.12)' : 'rgba(108,99,255,0.12)' }}>
+                  {isExt ? 'EXT' : 'INT'}
+                </span>
                 <button className="hm-selected-pill__remove" onClick={() => remove(id)}>
                   <X size={10} />
                 </button>
               </div>
             );
           })}
+        </div>
+      )}
+
+      {firstIsExt !== null && (
+        <div style={{ marginTop: 6, padding: '5px 10px', borderRadius: 6, background: firstIsExt ? 'rgba(234,88,12,0.08)' : 'rgba(108,99,255,0.08)', border: `1px solid ${firstIsExt ? 'rgba(234,88,12,0.2)' : 'rgba(108,99,255,0.2)'}`, fontSize: 11.5, fontFamily: 'Nunito, sans-serif', fontWeight: 700, color: firstIsExt ? '#c2410c' : '#5b21b6', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <span>Merging <strong>{firstIsExt ? 'External' : 'Internal'}</strong> hoardings only. {firstIsExt ? 'Internal' : 'External'} hoardings are locked.</span>
         </div>
       )}
 
@@ -279,19 +310,44 @@ function HoardingMultiSelect({ selected, onChange, hoardings, sites, error }) {
         ) : (
           filtered.map(h => {
             const id         = h.latest?.hoardingID;
+            const isExt      = isExtHoarding(h);
             const isSelected = id && selected.includes(id);
+            const siteLocked = firstSiteID !== null && h.latest?.siteID !== firstSiteID;
+            const extLocked  = firstIsExt !== null && isExt !== firstIsExt;
+            const isLocked   = siteLocked || extLocked;
+            const lockReason = extLocked
+              ? (firstIsExt ? 'Cannot mix internal with external' : 'Cannot mix external with internal')
+              : siteLocked ? 'Different site' : '';
+
             return (
               <div
                 key={h.hoardingCode}
                 className={`hm-hoarding-row${isSelected ? ' hm-hoarding-row--selected' : ''}`}
-                onClick={() => id && toggle(id)}
-                style={{ cursor: 'pointer' }}
+                onClick={() => id && !isLocked && toggle(id, h)}
+                title={lockReason}
+                style={{ cursor: isLocked ? 'not-allowed' : 'pointer', opacity: isLocked ? 0.4 : 1 }}
               >
                 <div className="hm-hoarding-row__check">
                   {isSelected && <Check size={11} color="#fff" />}
                 </div>
                 <div className="hm-hoarding-row__info">
-                  <div className="hm-hoarding-row__code">{h.hoardingCode}</div>
+                  <div className="hm-hoarding-row__code" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {h.hoardingCode}
+                    {isExt ? (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#ea580c', background: 'rgba(234,88,12,0.1)', border: '1px solid rgba(234,88,12,0.25)', padding: '1px 6px', borderRadius: 4 }}>
+                        External
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 10, fontWeight: 800, color: '#6c63ff', background: 'rgba(108,99,255,0.1)', border: '1px solid rgba(108,99,255,0.25)', padding: '1px 6px', borderRadius: 4 }}>
+                        Internal
+                      </span>
+                    )}
+                    {lockReason && (
+                      <span style={{ fontSize: 10, color: '#dc2626', fontWeight: 600, marginLeft: 'auto' }}>
+                        {lockReason}
+                      </span>
+                    )}
+                  </div>
                   <div className="hm-hoarding-row__meta">{h.addr || 'No site info'}</div>
                 </div>
                 {h.latest?.width && h.latest?.height && (
@@ -320,7 +376,7 @@ function HoardingMultiSelect({ selected, onChange, hoardings, sites, error }) {
 function DirectionSelector({ value, onChange, error }) {
   return (
     <div>
-      <div className="hm-dir-explainer">
+      <div className="hm-dir-explainer" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
         <div
           className={`hm-dir-card${value === 'W' ? ' hm-dir-card--active-width' : ''}`}
           onClick={() => onChange('W')}
@@ -372,6 +428,30 @@ function DirectionSelector({ value, onChange, error }) {
             ))}
           </div>
         </div>
+
+        <div
+          className={`hm-dir-card${value === 'S' ? ' hm-dir-card--active-width' : ''}`}
+          onClick={() => onChange('S')}
+          style={{ borderColor: value === 'S' ? '#7c3aed' : undefined }}
+        >
+          <div className="hm-dir-card__title" style={{ color: value === 'S' ? '#7c3aed' : undefined }}>
+            <LayoutGrid size={14} color={value === 'S' ? '#7c3aed' : '#9090a8'} />
+            Square Merge
+          </div>
+          <div className="hm-dir-card__desc">
+            2×2 Grid layout. Requires exactly 4 same-sized hoardings.
+          </div>
+          <div className="hm-dir-card__diagram" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+            {['H1', 'H2', 'H3', 'H4'].map((lbl) => (
+              <div key={lbl} className="hm-dir-mini-block" style={{
+                width: 26, height: 18,
+                borderColor: value === 'S' ? '#7c3aed' : '#d8dfe8',
+                color: '#7c3aed',
+                background: value === 'S' ? 'rgba(124,58,237,0.1)' : '#f5f6ff',
+              }}>{lbl}</div>
+            ))}
+          </div>
+        </div>
       </div>
       {error && (
         <div className="hm-val-err" style={{ marginTop: 6 }}>
@@ -393,6 +473,31 @@ function MergeVisual({ hoardingIDs, direction, hoardings, compact = false }) {
   });
 
   if (blocks.length === 0) return null;
+
+  if (direction === 'S') {
+    return (
+      <div
+        className="hm-visual-wrap"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(2, 1fr)',
+          gap: 8,
+          padding: compact ? '6px 6px' : '16px 12px 10px',
+          background: 'rgba(124,58,237,0.03)',
+          border: '1.5px solid rgba(124,58,237,0.2)',
+          borderRadius: 8,
+        }}
+      >
+        {blocks.map((b, i) => (
+          <div key={i} className="hm-vis-block" style={{ padding: compact ? '4px 6px' : '8px 12px', background: 'rgba(124,58,237,0.08)', borderColor: 'rgba(124,58,237,0.3)', textAlign: 'center' }}>
+            <div className="hm-vis-block__code" style={{ color: '#7c3aed', fontWeight: 800 }}>{b.code}</div>
+            {b.width && b.height && <div className="hm-vis-block__dim">{b.width}×{b.height}ft</div>}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   const dir = direction === 'W' ? 'width' : 'height';
 
   return (
@@ -455,7 +560,39 @@ function MergeForm({ mode, group, hoardings, sites, contracts, customers, merges
   const validate = () => {
     const e = {};
     if (!contractID)           e.contractID = 'Please select a customer contract.';
-    if (selectedH.length < 2) e.hoardings  = 'Select at least 2 hoardings to merge.';
+    if (selectedH.length < 2)  e.hoardings  = 'Select at least 2 hoardings to merge.';
+    else {
+      const isExtH = (hID) => {
+        const h = hoardings.find(h2 => h2.versions?.some(v => v.hoardingID === hID));
+        const latest = getLatest(h);
+        return Boolean(
+          latest?.isExternal === true || String(latest?.isExternal).toLowerCase() === 'true' ||
+          latest?.is_External === true || String(latest?.is_External).toLowerCase() === 'true' ||
+          h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true'
+        );
+      };
+      const hasExt = selectedH.some(id => isExtH(id));
+      const hasNonExt = selectedH.some(id => !isExtH(id));
+      if (hasExt && hasNonExt) {
+        e.hoardings = 'Cannot merge internal and external hoardings together.';
+      }
+      if (direction === 'S') {
+        if (selectedH.length !== 4) {
+          e.hoardings = `Square merge requires exactly 4 hoardings (${selectedH.length} currently selected).`;
+        } else {
+          const blocks = selectedH.map(id => {
+            const h = hoardings.find(h2 => h2.versions?.some(v => v.hoardingID === id));
+            return getLatest(h);
+          }).filter(Boolean);
+          const firstW = Number(blocks[0]?.width) || 0;
+          const firstH = Number(blocks[0]?.height) || 0;
+          const allSame = blocks.every(b => Number(b?.width) === firstW && Number(b?.height) === firstH);
+          if (!allSame) {
+            e.hoardings = 'All 4 selected hoardings must be the exact same size (width and height).';
+          }
+        }
+      }
+    }
     if (!direction)            e.direction  = 'Please select a merge direction.';
     setErrors(e);
     return Object.keys(e).length === 0;
@@ -500,16 +637,22 @@ function MergeForm({ mode, group, hoardings, sites, contracts, customers, merges
       const h = hoardings.find(h2 => h2.versions?.some(v => v.hoardingID === id));
       return getLatest(h);
     }).filter(Boolean);
-const gapCount = blocks.length - 1;          // ← number of connectors
-if (direction === 'W') {
-  const tw = blocks.reduce((s, b) => s + (Number(b?.width)  || 0), 0) + gapCount;
-  const h  = blocks[0]?.height;
-  return tw ? `${tw} × ${h || '?'} ft` : null;
-} else {
-  const th = blocks.reduce((s, b) => s + (Number(b?.height) || 0), 0) + gapCount;
-  const w  = blocks[0]?.width;
-  return th ? `${w || '?'} × ${th} ft` : null;
-}
+    const gapCount = blocks.length - 1;
+    if (direction === 'S') {
+      const singleW = Number(blocks[0]?.width) || 0;
+      const singleH = Number(blocks[0]?.height) || 0;
+      const tw = (singleW * 2) + 1;
+      const th = (singleH * 2) + 1;
+      return tw && th ? `${tw} × ${th} ft (Square)` : null;
+    } else if (direction === 'W') {
+      const tw = blocks.reduce((s, b) => s + (Number(b?.width)  || 0), 0) + gapCount;
+      const h  = blocks[0]?.height;
+      return tw ? `${tw} × ${h || '?'} ft` : null;
+    } else {
+      const th = blocks.reduce((s, b) => s + (Number(b?.height) || 0), 0) + gapCount;
+      const w  = blocks[0]?.width;
+      return th ? `${w || '?'} × ${th} ft` : null;
+    }
   })();
 
   return (
@@ -701,18 +844,27 @@ export default function HoardingMergePage() {
       }
     };
 
-    const [rawMerges, rawHoardings, rawSites, rawContracts, rawCustomers] = await Promise.all([
-      safe('Merges',    () => apiService.getAllHoardingMerges()),
-      safe('Hoardings', () => apiService.getAllHoardings()),
-      safe('Sites',     () => apiService.getAllSites()),
-      safe('Contracts', () => apiService.getAllCustomerContracts()),
-      safe('Customers', () => apiService.getAllCustomers()),
+    const [rawMerges, rawHoardings, rawExtHoardings, rawSites, rawContracts, rawCustomers] = await Promise.all([
+      safe('Merges',            () => apiService.getAllHoardingMerges()),
+      safe('Hoardings',         () => apiService.getAllHoardings()),
+      safe('External Hoardings', () => apiService.getAllExternalHoardings().catch(() => [])),
+      safe('Sites',             () => apiService.getAllSites()),
+      safe('Contracts',         () => apiService.getAllCustomerContracts()),
+      safe('Customers',         () => apiService.getAllCustomers()),
     ]);
 
+    const internalList = rawHoardings.map(h => ({ ...h, isExternal: false }));
+    const externalList = rawExtHoardings.map(eh => ({ ...eh, isExternal: true }));
+    const allRawHoardings = [...internalList, ...externalList];
+
     const hMap = {};
-    rawHoardings.forEach(rec => {
+    allRawHoardings.forEach(rec => {
       const code = rec.hoardingCode;
-      if (!hMap[code]) hMap[code] = { hoardingCode: code, versions: [] };
+      const isExt = Boolean(
+        rec.isExternal === true || String(rec.isExternal).toLowerCase() === 'true' ||
+        rec.is_External === true || String(rec.is_External).toLowerCase() === 'true'
+      );
+      if (!hMap[code]) hMap[code] = { hoardingCode: code, isExternal: isExt, versions: [] };
       hMap[code].versions.push({
         hoardingID: rec.hoardingID,
         effdt:      rec.effdt?.split('T')[0] || '',
@@ -721,6 +873,7 @@ export default function HoardingMergePage() {
         width:      rec.width     || '',
         height:     rec.height    || '',
         siteID:     rec.siteID    || '',
+        isExternal: isExt,
       });
     });
 
@@ -832,24 +985,32 @@ export default function HoardingMergePage() {
     });
 
   const getMergedLabel = (g) => {
-    const isWidth = g.mergeAlongFlag === 'W';
+    const isSquare = g.mergeAlongFlag === 'S';
+    const isWidth  = g.mergeAlongFlag === 'W';
     const blocks = g.hoardingIDs.map(id => {
       const h = hoardings.find(h2 => h2.versions?.some(v => v.hoardingID === id));
       return getLatest(h);
     }).filter(Boolean);
     if (!blocks.length) return null;
-const gapCount = blocks.length - 1;          // ← number of connectors
-if (isWidth) {
-  const tw = blocks.reduce((s, b) => s + (Number(b?.width) || 0), 0) + gapCount;
-  return tw ? `${tw}×${blocks[0]?.height || '?'}ft` : null;
-} else {
-  const th = blocks.reduce((s, b) => s + (Number(b?.height) || 0), 0) + gapCount;
-  return th ? `${blocks[0]?.width || '?'}×${th}ft` : null;
-}
+    const gapCount = blocks.length - 1;
+    if (isSquare) {
+      const singleW = Number(blocks[0]?.width) || 0;
+      const singleH = Number(blocks[0]?.height) || 0;
+      const tw = (singleW * 2) + 1;
+      const th = (singleH * 2) + 1;
+      return tw && th ? `${tw}×${th}ft` : null;
+    } else if (isWidth) {
+      const tw = blocks.reduce((s, b) => s + (Number(b?.width) || 0), 0) + gapCount;
+      return tw ? `${tw}×${blocks[0]?.height || '?'}ft` : null;
+    } else {
+      const th = blocks.reduce((s, b) => s + (Number(b?.height) || 0), 0) + gapCount;
+      return th ? `${blocks[0]?.width || '?'}×${th}ft` : null;
+    }
   };
 
   const widthCount  = groups.filter(g => g.mergeAlongFlag === 'W').length;
   const heightCount = groups.filter(g => g.mergeAlongFlag === 'H').length;
+  const squareCount = groups.filter(g => g.mergeAlongFlag === 'S').length;
 
   /* ── Table columns ── */
   const COLS = [
@@ -924,6 +1085,7 @@ if (isWidth) {
             { icon: <GitMerge size={18} color="#049edf" />,       bg: 'rgba(4,158,223,0.1)',  label: 'Total Groups',     val: groups.length },
             { icon: <ArrowLeftRight size={18} color="#049edf" />, bg: 'rgba(4,158,223,0.1)',  label: 'Width Merges',     val: widthCount },
             { icon: <ArrowUpDown size={18} color="#6c63ff" />,    bg: 'rgba(108,99,255,0.1)', label: 'Height Merges',    val: heightCount },
+            ...(squareCount > 0 ? [{ icon: <LayoutGrid size={18} color="#7c3aed" />, bg: 'rgba(124,58,237,0.1)', label: 'Square Merges', val: squareCount }] : []),
             { icon: <Building2 size={18} color="#16a34a" />,      bg: 'rgba(22,163,74,0.1)',  label: 'Hoardings Merged', val: merges.length },
           ].map(s => (
             <div key={s.label} className="hm-stat">
@@ -1010,6 +1172,7 @@ if (isWidth) {
                   </thead>
                   <tbody>
                     {paginated.map(g => {
+                      const isSquare   = g.mergeAlongFlag === 'S';
                       const isWidth    = g.mergeAlongFlag === 'W';
                       const codes      = getHoardingCodes(g);
                       const mergedLabel = getMergedLabel(g);
@@ -1033,9 +1196,10 @@ if (isWidth) {
 
                           {/* Direction */}
                           <td className="pg-td">
-                            <div className={`hm-dir-badge${isWidth ? ' hm-dir-badge--width' : ' hm-dir-badge--height'}`}>
-                              {isWidth ? <ArrowLeftRight size={10} /> : <ArrowUpDown size={10} />}
-                              {isWidth ? 'Width' : 'Height'}
+                            <div className={`hm-dir-badge${isSquare ? ' hm-dir-badge--height' : isWidth ? ' hm-dir-badge--width' : ' hm-dir-badge--height'}`}
+                              style={isSquare ? { color: '#7c3aed', background: 'rgba(124,58,237,0.1)', borderColor: 'rgba(124,58,237,0.25)' } : undefined}>
+                              {isSquare ? <LayoutGrid size={10} /> : isWidth ? <ArrowLeftRight size={10} /> : <ArrowUpDown size={10} />}
+                              {isSquare ? 'Square' : isWidth ? 'Width' : 'Height'}
                             </div>
                           </td>
 
@@ -1043,8 +1207,9 @@ if (isWidth) {
                           <td className="pg-td">
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                               {codes.map((code, i) => (
-                                <span key={i} className={`hm-hoarding-tag${isWidth ? ' hm-hoarding-tag--width' : ' hm-hoarding-tag--height'}`}>
-                                  <Building2 size={10} color={isWidth ? '#049edf' : '#6c63ff'} />
+                                <span key={i} className={`hm-hoarding-tag${isSquare ? ' hm-hoarding-tag--height' : isWidth ? ' hm-hoarding-tag--width' : ' hm-hoarding-tag--height'}`}
+                                  style={isSquare ? { color: '#7c3aed', background: 'rgba(124,58,237,0.08)' } : undefined}>
+                                  <Building2 size={10} color={isSquare ? '#7c3aed' : isWidth ? '#049edf' : '#6c63ff'} />
                                   {code}
                                 </span>
                               ))}
@@ -1067,9 +1232,9 @@ if (isWidth) {
                           <td className="pg-td">
                             {mergedLabel ? (
                               <span className="hm-info-chip" style={{
-                                color:      isWidth ? '#049edf' : '#6c63ff',
-                                background: isWidth ? 'rgba(4,158,223,0.06)' : 'rgba(108,99,255,0.06)',
-                                borderColor: isWidth ? 'rgba(4,158,223,0.2)' : 'rgba(108,99,255,0.2)',
+                                color:      isSquare ? '#7c3aed' : isWidth ? '#049edf' : '#6c63ff',
+                                background: isSquare ? 'rgba(124,58,237,0.06)' : isWidth ? 'rgba(4,158,223,0.06)' : 'rgba(108,99,255,0.06)',
+                                borderColor: isSquare ? 'rgba(124,58,237,0.2)' : isWidth ? 'rgba(4,158,223,0.2)' : 'rgba(108,99,255,0.2)',
                               }}>
                                 <Maximize2 size={10} /> {mergedLabel}
                               </span>
@@ -1110,6 +1275,7 @@ if (isWidth) {
               {/* Mobile cards */}
               <div className="pg-mobile-cards">
                 {paginated.map(g => {
+                  const isSquare    = g.mergeAlongFlag === 'S';
                   const isWidth     = g.mergeAlongFlag === 'W';
                   const codes       = getHoardingCodes(g);
                   const mergedLabel = getMergedLabel(g);
@@ -1135,15 +1301,17 @@ if (isWidth) {
                       </div>
                       <div className="pg-card__body">
                         <div className="pg-card__row">
-                          <div className={`hm-dir-badge${isWidth ? ' hm-dir-badge--width' : ' hm-dir-badge--height'}`}>
-                            {isWidth ? <ArrowLeftRight size={10} /> : <ArrowUpDown size={10} />}
-                            {isWidth ? 'Width Merge' : 'Height Merge'}
+                          <div className={`hm-dir-badge${isSquare ? ' hm-dir-badge--height' : isWidth ? ' hm-dir-badge--width' : ' hm-dir-badge--height'}`}
+                            style={isSquare ? { color: '#7c3aed', background: 'rgba(124,58,237,0.1)', borderColor: 'rgba(124,58,237,0.25)' } : undefined}>
+                            {isSquare ? <LayoutGrid size={10} /> : isWidth ? <ArrowLeftRight size={10} /> : <ArrowUpDown size={10} />}
+                            {isSquare ? 'Square Merge' : isWidth ? 'Width Merge' : 'Height Merge'}
                           </div>
                         </div>
                         <div className="pg-card__row" style={{ flexWrap: 'wrap', gap: 4 }}>
                           {codes.map((code, i) => (
-                            <span key={i} className={`hm-hoarding-tag${isWidth ? ' hm-hoarding-tag--width' : ' hm-hoarding-tag--height'}`}>
-                              <Building2 size={10} color={isWidth ? '#049edf' : '#6c63ff'} />{code}
+                            <span key={i} className={`hm-hoarding-tag${isSquare ? ' hm-hoarding-tag--height' : isWidth ? ' hm-hoarding-tag--width' : ' hm-hoarding-tag--height'}`}
+                              style={isSquare ? { color: '#7c3aed', background: 'rgba(124,58,237,0.08)' } : undefined}>
+                              <Building2 size={10} color={isSquare ? '#7c3aed' : isWidth ? '#049edf' : '#6c63ff'} />{code}
                             </span>
                           ))}
                         </div>
@@ -1152,7 +1320,10 @@ if (isWidth) {
                         </div>
                         {mergedLabel && (
                           <div className="pg-card__row">
-                            <span className="hm-info-chip" style={{ color: isWidth ? '#049edf' : '#6c63ff', background: isWidth ? 'rgba(4,158,223,0.06)' : 'rgba(108,99,255,0.06)' }}>
+                            <span className="hm-info-chip" style={{
+                              color: isSquare ? '#7c3aed' : isWidth ? '#049edf' : '#6c63ff',
+                              background: isSquare ? 'rgba(124,58,237,0.06)' : isWidth ? 'rgba(4,158,223,0.06)' : 'rgba(108,99,255,0.06)',
+                            }}>
                               <Maximize2 size={10} /> {mergedLabel}
                             </span>
                           </div>

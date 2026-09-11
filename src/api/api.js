@@ -923,25 +923,28 @@ export const apiService = {
       console.error('[createQuotationMerge] Blocked — quotationID or hoardingID is 0:', data);
       return Promise.resolve(null);
     }
+    const flag = data.mergeAlongFlag === 'S' ? 'S' : (data.mergeAlongFlag === 'H' ? 'H' : 'V');
     return api.post('/QuotationMergeDTL', {
       quotationMergeID: 0,
       quotationLineNumber: Number(data.quotationLineNumber ?? 0),
       quotationID: Number(data.quotationID),
       quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
       hoardingID: Number(data.hoardingID),
-      mergeAlongFlag: data.mergeAlongFlag === 'H' ? 'H' : 'V',
+      mergeAlongFlag: flag,
     });
   },
 
-  updateQuotationMerge: (mergeId, hoardingId, data) =>
-    api.put(`/QuotationMergeDTL/${mergeId}/${hoardingId}`, {
+  updateQuotationMerge: (mergeId, hoardingId, data) => {
+    const flag = data.mergeAlongFlag === 'S' ? 'S' : (data.mergeAlongFlag === 'H' ? 'H' : 'V');
+    return api.put(`/QuotationMergeDTL/${mergeId}/${hoardingId}`, {
       quotationMergeID: Number(mergeId),
       quotationLineNumber: Number(data.quotationLineNumber ?? 0),
       quotationID: Number(data.quotationID ?? 0),
       quotationRevisionNumber: Number(data.quotationRevisionNumber ?? 0),
       hoardingID: Number(hoardingId),
-      mergeAlongFlag: data.mergeAlongFlag === 'H' ? 'H' : 'V',
-    }),
+      mergeAlongFlag: flag,
+    });
+  },
 
   deleteQuotationMerge: (mergeId, hoardingId) =>
     api.delete(`/QuotationMergeDTL/${mergeId}/${hoardingId}`),

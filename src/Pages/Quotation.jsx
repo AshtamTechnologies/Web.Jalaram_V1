@@ -423,6 +423,10 @@ function normalizeQuotLine(raw) {
 
 function normalizeHoarding(raw) {
   if (!raw) return null;
+  const isExt = raw.isExternal === true || String(raw.isExternal).toLowerCase() === 'true' ||
+    raw.is_External === true || String(raw.is_External).toLowerCase() === 'true' ||
+    raw.IsExternal === true || String(raw.IsExternal).toLowerCase() === 'true' ||
+    raw.Is_External === true || String(raw.Is_External).toLowerCase() === 'true';
   return {
     hoardingID: Number(raw.hoardingID ?? raw.HoardingID ?? 0),
     hoardingCode: raw.hoardingCode ?? raw.HoardingCode ?? '',
@@ -434,7 +438,7 @@ function normalizeHoarding(raw) {
     material: raw.material ?? raw.Material ?? '',
     hoardingType: raw.hoardingType ?? raw.HoardingType ?? '',
     site: raw.site ? normalizeSite(raw.site) : null,
-    isExternal: raw.isExternal ?? raw.IsExternal ?? raw.is_External ?? raw.Is_External ?? false,
+    isExternal: isExt,
   };
 }
 // Normalize siteID to number for consistent Map keys
@@ -544,6 +548,11 @@ const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = nu
   const nos = calcNOSFromDays(days);
   const baseRent = nos * (h?.monthlyRent || 0);
 
+  const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
+    h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
+    h?.IsExternal === true || String(h?.IsExternal).toLowerCase() === 'true' ||
+    h?.Is_External === true || String(h?.Is_External).toLowerCase() === 'true';
+
   return {
     _id: uid(),
     rowType: 'hoarding',
@@ -551,14 +560,10 @@ const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = nu
     siteID,
     siteObj: site,
     hoardingCode: h?.hoardingCode || '',
-    // START: Do not show site address for external hoardings in Quotation/Proforma PDF
-    isExternal: h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true',
-    location: (h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true')
+    isExternal: isExt,
+    location: isExt
       ? (h?.hoardingCode || '')
       : buildSiteAddress(site, h?.hoardingCode || ''),
-    // Original code:
-    // location: buildSiteAddress(site, h?.hoardingCode || ''),
-    // END: Do not show site address for external hoardings in Quotation/Proforma PDF
     size: h ? `${h.width} X ${h.height}` : '',
     sqFt: h ? (h.width * h.height) : 0,
     nos: nos,
@@ -616,7 +621,12 @@ function newMergedRow(rowsArr, direction) {
   const gaps = Math.max(rowsArr.length - 1, 1); // at least 1 gap
 
   let mw, mh;
-  if (direction === 'H') {
+  if (direction === 'S') {
+    const singleW = sizes[0]?.w || 0;
+    const singleH = sizes[0]?.h || 0;
+    mw = (singleW * 2) + 1;
+    mh = (singleH * 2) + 1;
+  } else if (direction === 'H') {
     mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;   // sum widths + gaps
     mh = Math.max(...sizes.map(s => s.h));               // tallest height
   } else {
@@ -632,10 +642,13 @@ function newMergedRow(rowsArr, direction) {
   const nos = calcNOSFromDays(days);
   const combinedAmt = nos * combinedRate;
 
+  const isExt = rowsArr.some(r => r?.isExternal === true || String(r?.isExternal).toLowerCase() === 'true' || r?.is_External === true || String(r?.is_External).toLowerCase() === 'true' || r?.IsExternal === true || String(r?.IsExternal).toLowerCase() === 'true');
+
   return {
     _id: uid(),
     rowType: 'merged',
     isMerged: true,
+    isExternal: isExt,
     mergeDirection: direction,
     mergedFromIds: rowsArr.map(r => r._id),
     mergedHoardingIDs: rowsArr.map(r => Number(r.hoardingID) || 0).filter(id => id > 0),
@@ -1058,7 +1071,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
     const dates = (row.rowType !== 'extra' && row.rowType !== 'printing') && row.startDate && row.endDate
       ? `<br><span style="font-size:9px;color:#555;">${fmtDateShort(row.startDate)} TO ${fmtDateShort(row.endDate)}</span>` : '';
     const mergeTag = row.rowType === 'merged'
-      ? `<div class="merged-tag">${row.mergeDirection === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}</div>`
+      ? `<div class="merged-tag">${row.mergeDirection === 'S' ? '⊞ Square Merge' : (row.mergeDirection === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge')}</div>`
       : '';
     return `<tr${row.rowType === 'merged' ? ' style="background:#faf5ff;"' : ''}>
       <td class="c">${sr}</td>
@@ -1077,7 +1090,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000;background
       ? `<td class="r" style="font-weight:bold;">${row.amount > 0 ? fmtCurrency(row.amount) : '—'}</td>`
       : `<td class="r">${Number(row.printingCost || 0) > 0 ? fmtCurrency(row.printingCost) : '—'}</td>`;
     const mergeTag = row.rowType === 'merged'
-      ? `<div class="merged-tag">${row.mergeDirection === 'H' ? '↔ H' : '↕ V'}</div>`
+      ? `<div class="merged-tag">${row.mergeDirection === 'S' ? '⊞ Square Merge' : (row.mergeDirection === 'H' ? '↔ H' : '↕ V')}</div>`
       : '';
     return `<tr${row.rowType === 'merged' ? ' style="background:#faf5ff;"' : ''}>
       <td class="c">${sr}</td>
@@ -1246,6 +1259,7 @@ function HoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteCo
               width: item.width ?? full?.width ?? 0,
               height: item.height ?? full?.height ?? 0,
               status: 'Available',
+              isExternal: false,
               siteID: full?.siteID ?? null,
               site: full?.site || {
                 addressLine1: item.addressLine1 || '',
@@ -1449,6 +1463,7 @@ function ManualHoardingModal({ allHoardings, existingIds, onAdd, onClose, siteCo
               width: item.width ?? full?.width ?? 0,
               height: item.height ?? full?.height ?? 0,
               status: 'Available',
+              isExternal: false,
               siteID: full?.siteID ?? null,
               site: full?.site || {
                 addressLine1: item.addressLine1 || '',
@@ -1735,6 +1750,7 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
           width: item.width ?? full?.width ?? item.Width ?? 0,
           height: item.height ?? full?.height ?? item.Height ?? 0,
           status: 'Available',
+          isExternal: true,
           siteID: sid ?? null,
           site: siteObj || full?.site || {
             addressLine1: item.addressLine1 || '',
@@ -2799,14 +2815,31 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
   const [sel, setSel] = useState([]);
   const [dir, setDir] = useState('V');
 
-  const firstSiteID = sel.length > 0
-    ? (hoardingRows.find(r => r._id === sel[0])?.siteID ?? null)
-    : undefined;
+  const isExtRow = (r) => Boolean(
+    r?.isExternal === true ||
+    String(r?.isExternal).toLowerCase() === 'true' ||
+    r?.is_External === true ||
+    String(r?.is_External).toLowerCase() === 'true' ||
+    r?.IsExternal === true ||
+    String(r?.IsExternal).toLowerCase() === 'true' ||
+    r?.Is_External === true ||
+    String(r?.Is_External).toLowerCase() === 'true'
+  );
 
-  // Toggle without any upper limit (min 2 to merge)
+  const firstSelectedRow = sel.length > 0
+    ? hoardingRows.find(r => r._id === sel[0])
+    : null;
+  const firstSiteID = firstSelectedRow ? (firstSelectedRow.siteID ?? null) : undefined;
+  const firstIsExternal = firstSelectedRow ? isExtRow(firstSelectedRow) : undefined;
+
+  // Toggle selection
   const toggle = (id) => {
     const row = hoardingRows.find(r => r._id === id);
     if (!row) return;
+    if (!sel.includes(id)) {
+      if (firstSiteID !== undefined && row.siteID !== firstSiteID) return;
+      if (firstIsExternal !== undefined && isExtRow(row) !== firstIsExternal) return;
+    }
     setSel(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
@@ -2818,24 +2851,80 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
     const sizes = selRows.map(r => parseSize(r.size));
     const gaps = selRows.length - 1;
     let mw, mh;
-    if (dir === 'H') { mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps; mh = Math.max(...sizes.map(s => s.h)); }
-    else { mw = Math.max(...sizes.map(s => s.w)); mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps; }
+    if (dir === 'S') {
+      const singleW = sizes[0]?.w || 0;
+      const singleH = sizes[0]?.h || 0;
+      mw = (singleW * 2) + 1;
+      mh = (singleH * 2) + 1;
+    } else if (dir === 'H') {
+      mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+      mh = Math.max(...sizes.map(s => s.h));
+    } else {
+      mw = Math.max(...sizes.map(s => s.w));
+      mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+    }
     return { size: `${mw} × ${mh} ft`, sqFt: (mw * mh).toFixed(1), count: selRows.length };
+  }, [sel, dir, rows]);
+
+  const { canMerge, validationError } = useMemo(() => {
+    if (sel.length === 0) {
+      return { canMerge: false, validationError: null };
+    }
+    const selRows = sel.map(id => rows.find(r => r._id === id)).filter(Boolean);
+
+    // Validate isExternal consistency
+    const firstExt = isExtRow(selRows[0]);
+    const allSameExternal = selRows.every(r => isExtRow(r) === firstExt);
+    if (!allSameExternal) {
+      return {
+        canMerge: false,
+        validationError: 'Cannot merge internal and external hoardings together.'
+      };
+    }
+
+    if (dir === 'S') {
+      if (sel.length !== 4) {
+        return {
+          canMerge: false,
+          validationError: `Square merge requires exactly 4 hoardings (${sel.length} currently selected).`
+        };
+      }
+      const sizes = selRows.map(r => parseSize(r.size));
+      const firstW = sizes[0]?.w;
+      const firstH = sizes[0]?.h;
+      const allSameSize = sizes.every(s => s.w === firstW && s.h === firstH);
+      if (!allSameSize) {
+        return {
+          canMerge: false,
+          validationError: 'All 4 selected hoardings must be the exact same size (width and height).'
+        };
+      }
+      return { canMerge: true, validationError: null };
+    }
+
+    if (sel.length < 2) {
+      return { canMerge: false, validationError: 'Select at least 2 hoardings to merge.' };
+    }
+
+    return { canMerge: true, validationError: null };
   }, [sel, dir, rows]);
 
   const siteGroups = useMemo(() => {
     const map = new Map();
     for (const r of hoardingRows) {
+      const isExt = isExtRow(r);
       const sid = r.siteID ?? '__none__';
-      if (!map.has(sid)) {
+      const groupKey = `${sid}__${isExt ? 'EXT' : 'INT'}`;
+      if (!map.has(groupKey)) {
         const site = r.siteObj;
-        const label = site
+        const baseLabel = site
           ? [site.addressLine1 || site.city, site.city, site.district]
             .filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).join(', ')
           : (sid === '__none__' ? 'Unknown Site' : `Site ${sid}`);
-        map.set(sid, { label, siteID: r.siteID, rows: [] });
+        const label = isExt ? `${baseLabel} (External)` : baseLabel;
+        map.set(groupKey, { label, siteID: r.siteID, isExternal: isExt, rows: [] });
       }
-      map.get(sid).rows.push(r);
+      map.get(groupKey).rows.push(r);
     }
     return [...map.values()];
   }, [hoardingRows]);
@@ -2866,7 +2955,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
 
   return ReactDOM.createPortal(
     <div className="pg-overlay">
-      <div className="pg-modal qt-merge-modal" style={{ maxWidth: 580, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+      <div className="pg-modal qt-merge-modal" style={{ maxWidth: 620, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
         <div className="pg-modal__head" style={{ flexShrink: 0 }}>
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap" style={{ background: 'rgba(124,58,237,0.10)' }}>
@@ -2875,7 +2964,10 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
             <div>
               <h5 className="pg-modal__title">Merge Hoardings</h5>
               <p className="pg-modal__subtitle">
-                Select <strong>2 or more</strong> hoardings from the <strong>same site</strong>
+                {dir === 'S'
+                  ? <>Select <strong>exactly 4</strong> same-size hoardings from the <strong>same site</strong> (all internal or all external)</>
+                  : <>Select <strong>2 or more</strong> hoardings from the <strong>same site</strong> (all internal or all external)</>
+                }
               </p>
             </div>
           </div>
@@ -2891,6 +2983,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
             {[
               { val: 'H', label: 'Horizontal', sub: 'Side by side · sum(widths) + gaps', icon: '↔' },
               { val: 'V', label: 'Vertical', sub: 'Top to bottom · sum(heights) + gaps', icon: '↕' },
+              { val: 'S', label: 'Square', sub: '2×2 grid · exact 4 same-size hoardings', icon: '⊞' },
             ].map(({ val, label, sub, icon }) => (
               <button key={val} onClick={() => setDir(val)}
                 className="qt-merge-dir-btn"
@@ -2912,16 +3005,21 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
         <div className="qt-merge-pad-custom-top" style={{ padding: '14px 24px 0', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78', flexShrink: 0 }}>
           Select hoardings from the Same Site
           <span style={{ color: '#9090a8', fontWeight: 600, marginLeft: 6 }}>
-            ({sel.length} selected — min. 2)
+            ({sel.length} selected — {dir === 'S' ? 'exactly 4 required' : 'min. 2'})
           </span>
         </div>
 
         <div className="qt-merge-scroll-area" style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 300, minHeight: 0, padding: '8px 24px 14px' }}>
           {siteGroups.map(group => {
             const groupColor = group.siteID != null ? siteColorMap.get(group.siteID) : null;
-            const groupLocked = firstSiteID !== undefined && group.siteID !== firstSiteID;
+            const siteMismatch = firstSiteID !== undefined && group.siteID !== firstSiteID;
+            const extMismatch = firstIsExternal !== undefined && group.isExternal !== firstIsExternal;
+            const groupLocked = siteMismatch || extMismatch;
+            const lockReason = siteMismatch
+              ? '✕ Different site'
+              : (group.isExternal ? '✕ External hoardings' : '✕ Internal hoardings');
             return (
-              <div key={String(group.siteID ?? '__none__')} style={{ marginBottom: 14 }}>
+              <div key={`${String(group.siteID ?? '__none__')}_${group.isExternal ? 'ext' : 'int'}`} style={{ marginBottom: 14 }}>
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
                   padding: '5px 10px', borderRadius: 8,
@@ -2937,16 +3035,28 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
                   <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: groupLocked ? '#b0b0c8' : '#1a1a2e' }}>
                     {group.label}
                   </span>
+                  {group.isExternal && (
+                    <span style={{
+                      fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800,
+                      padding: '1px 6px', borderRadius: 4,
+                      background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a'
+                    }}>
+                      External
+                    </span>
+                  )}
                   {groupLocked && (
                     <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#dc2626', marginLeft: 'auto', fontWeight: 700 }}>
-                      ✕ Different site
+                      {lockReason}
                     </span>
                   )}
                 </div>
 
                 {group.rows.map(r => {
                   const checked = sel.includes(r._id);
-                  const disabled = groupLocked;
+                  const isExternalRow = isExtRow(r);
+                  const extMismatch = firstIsExternal !== undefined && isExternalRow !== firstIsExternal;
+                  const siteMismatch = firstSiteID !== undefined && r.siteID !== firstSiteID;
+                  const disabled = groupLocked || extMismatch || siteMismatch;
                   const { line1, line2 } = getSiteDisplayLines(r.siteObj, r.hoardingCode);
                   const selIdx = sel.indexOf(r._id);
                   return (
@@ -2970,8 +3080,19 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
                         {checked && <Check size={12} color="#fff" />}
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: groupLocked ? '#b0b0c8' : '#1a1a2e' }}>
-                          {line1 || r.hoardingCode}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: groupLocked ? '#b0b0c8' : '#1a1a2e' }}>
+                            {line1 || r.hoardingCode}
+                          </span>
+                          {isExternalRow && (
+                            <span style={{
+                              fontFamily: 'Nunito,sans-serif', fontSize: 9.5, fontWeight: 800,
+                              padding: '1px 5px', borderRadius: 3,
+                              background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a'
+                            }}>
+                              External
+                            </span>
+                          )}
                         </div>
                         {line2 && (
                           <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', marginTop: 1 }}>{line2}</div>
@@ -3016,30 +3137,55 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
               <div>
                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8' }}>Direction</div>
                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 900, color: '#7c3aed' }}>
-                  {dir === 'H' ? '↔ Horizontal' : '↕ Vertical'}
+                  {dir === 'S' ? '⊞ Square' : (dir === 'H' ? '↔ Horizontal' : '↕ Vertical')}
                 </div>
               </div>
             </div>
           </div>
         )}
 
+        {/* Validation Error Banner */}
+        {validationError && (
+          <div style={{
+            margin: '0 24px 10px',
+            padding: '8px 14px',
+            borderRadius: 8,
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#dc2626',
+            fontFamily: 'Nunito,sans-serif',
+            fontSize: 12,
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            flexShrink: 0
+          }}>
+            <AlertTriangle size={14} color="#dc2626" />
+            <span>{validationError}</span>
+          </div>
+        )}
+
         <div className="pg-modal__foot qt-merge-foot-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <div className="qt-merge-foot-text" style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
-            {sel.length < 2 ? 'Select at least 2 hoardings' : `${sel.length} hoardings will be merged`}
+            {dir === 'S'
+              ? (sel.length === 4 ? '4 hoardings selected for Square Merge' : 'Square merge requires exactly 4 hoardings')
+              : (sel.length < 2 ? 'Select at least 2 hoardings' : `${sel.length} hoardings will be merged`)}
           </div>
           <div className="qt-merge-foot-actions" style={{ display: 'flex', gap: 10 }}>
             <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
             <button
-              disabled={sel.length < 2}
+              disabled={!canMerge}
               onClick={() => {
+                if (!canMerge) return;
                 const selectedRowData = sel.map(id => rows.find(r => r._id === id)).filter(Boolean);
                 onMerge(selectedRowData, dir);
               }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 7,
                 padding: '9px 20px', borderRadius: 9, border: 'none',
-                background: sel.length >= 2 ? '#7c3aed' : '#d0d0e0',
-                color: '#fff', cursor: sel.length >= 2 ? 'pointer' : 'not-allowed',
+                background: canMerge ? '#7c3aed' : '#d0d0e0',
+                color: '#fff', cursor: canMerge ? 'pointer' : 'not-allowed',
                 fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
               }}
             >
@@ -3076,7 +3222,7 @@ function MergedHoardingsViewModal({ row, hoardings, siteMap, onClose }) {
             <div>
               <h5 className="pg-modal__title">Merged Hoardings Details</h5>
               <p className="pg-modal__subtitle">
-                {row.mergeDirection === 'H' ? 'Horizontal' : 'Vertical'} Merge · Size: {row.size} · {row.sqFt} sq.ft
+                {row.mergeDirection === 'S' ? 'Square' : (row.mergeDirection === 'H' ? 'Horizontal' : 'Vertical')} Merge · Size: {row.size} · {row.sqFt} sq.ft
               </p>
             </div>
           </div>
@@ -3419,13 +3565,18 @@ function CreateContractFromQuotModal({
           .map(m => hoardings.find(h => h.hoardingID === Number(m.hoardingID)))
           .filter(Boolean);
 
-        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const dir = records[0].mergeAlongFlag === 'S' ? 'S' : (records[0].mergeAlongFlag === 'H' ? 'H' : 'V');
 
         // Compute merged size
         const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
         const gaps = hoardingObjs.length - 1;
         let mw, mh;
-        if (dir === 'H') {
+        if (dir === 'S') {
+          const singleW = sizes[0]?.w || 0;
+          const singleH = sizes[0]?.h || 0;
+          mw = (singleW * 2) + 1;
+          mh = (singleH * 2) + 1;
+        } else if (dir === 'H') {
           mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
           mh = Math.max(...sizes.map(s => s.h));
         } else {
@@ -3749,12 +3900,14 @@ function CreateContractFromQuotModal({
         const lineNumToSend = lineCounter++;
         for (const m of validRecords) {
           const hID = Number(m.hoardingID ?? m.HoardingID);
+          const rawFlag = m.mergeAlongFlag ?? m.MergeAlongFlag ?? m.mergeDirection ?? '';
+          const flag = (rawFlag === 'S' || rawFlag === 's') ? 'S' : ((rawFlag === 'V' || rawFlag === 'v') ? 'V' : 'H');
           try {
             await apiService.createHoardingMerge({
               hoardingLineNumber: lineNumToSend,
               hoardingID: hID,
               customerContractID: Number(savedContractID),
-              mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
+              mergeAlongFlag: flag,
             });
           } catch (err) {
             console.error('[Merge] Failed:', hID, err?.message);
@@ -4601,7 +4754,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const records = byLine.get(ln);
         if (records.length < 2) continue;
 
-        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const dir = records[0].mergeAlongFlag === 'S' ? 'S' : (records[0].mergeAlongFlag === 'H' ? 'H' : 'V');
         const hoardingObjs = records
           .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
           .filter(Boolean);
@@ -4609,7 +4762,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
         const gaps = hoardingObjs.length - 1;
         let mw, mh;
-        if (dir === 'H') {
+        if (dir === 'S') {
+          const singleW = sizes[0]?.w || 0;
+          const singleH = sizes[0]?.h || 0;
+          mw = (singleW * 2) + 1;
+          mh = (singleH * 2) + 1;
+        } else if (dir === 'H') {
           mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
           mh = Math.max(...sizes.map(s => s.h));
         } else {
@@ -4808,7 +4966,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const records = byLine.get(ln);
         if (records.length < 2) continue;
 
-        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const dir = records[0].mergeAlongFlag === 'S' ? 'S' : (records[0].mergeAlongFlag === 'H' ? 'H' : 'V');
         const hoardingObjs = records
           .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
           .filter(Boolean);
@@ -4816,7 +4974,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
         const gaps = hoardingObjs.length - 1;
         let mw, mh;
-        if (dir === 'H') {
+        if (dir === 'S') {
+          const singleW = sizes[0]?.w || 0;
+          const singleH = sizes[0]?.h || 0;
+          mw = (singleW * 2) + 1;
+          mh = (singleH * 2) + 1;
+        } else if (dir === 'H') {
           mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
           mh = Math.max(...sizes.map(s => s.h));
         } else {
@@ -5427,13 +5590,14 @@ export default function QuotationPage({ onNavigateToContracts }) {
   };
 
   const handleAddExternal = (selectedExternalHoardings) => {
+    const withExtFlag = selectedExternalHoardings.map(h => ({ ...h, isExternal: true }));
     setHoardings(prev => {
       const existingIds = new Set(prev.map(h => h.hoardingID));
-      const newItems = selectedExternalHoardings.filter(h => !existingIds.has(h.hoardingID));
+      const newItems = withExtFlag.filter(h => !existingIds.has(h.hoardingID));
       return [...prev, ...newItems];
     });
 
-    const toAdd = selectedExternalHoardings
+    const toAdd = withExtFlag
       .filter(h => !rows.find(r => r.hoardingID === h.hoardingID))
       .map(h => newHoardingRow(h, globalStart, globalEnd, siteMap));
     const nextRows = [...rows, ...toAdd];
@@ -5445,6 +5609,23 @@ export default function QuotationPage({ onNavigateToContracts }) {
   };
 
   const handleMerge = useCallback((selectedRows, direction) => {
+    if (!selectedRows || selectedRows.length < 2) return;
+    const isExtRow = (r) => Boolean(
+      r?.isExternal === true ||
+      String(r?.isExternal).toLowerCase() === 'true' ||
+      r?.is_External === true ||
+      String(r?.is_External).toLowerCase() === 'true' ||
+      r?.IsExternal === true ||
+      String(r?.IsExternal).toLowerCase() === 'true' ||
+      r?.Is_External === true ||
+      String(r?.Is_External).toLowerCase() === 'true'
+    );
+    const firstExt = isExtRow(selectedRows[0]);
+    const allSameExt = selectedRows.every(r => isExtRow(r) === firstExt);
+    if (!allSameExt) {
+      showToast('Cannot merge internal and external hoardings together.', 'error');
+      return;
+    }
     const merged = newMergedRow(selectedRows, direction);
     setRows(prev => {
       const ids = new Set(selectedRows.map(r => r._id));
@@ -5453,13 +5634,13 @@ export default function QuotationPage({ onNavigateToContracts }) {
     setShowMergeModal(false);
     showToast(
       `${selectedRows.length} hoarding${selectedRows.length !== 1 ? 's' : ''} merged ` +
-      `(${direction === 'H' ? 'Horizontal' : 'Vertical'}) · Size: ${merged.size}`,
+      `(${direction === 'S' ? 'Square' : (direction === 'H' ? 'Horizontal' : 'Vertical')}) · Size: ${merged.size}`,
       'success'
     );
   }, [showToast]);
   const toggleMergeDirection = useCallback((rowId) => {
     setRows(prev => prev.map(r => {
-      if (r._id !== rowId || r.rowType !== 'merged') return r;
+      if (r._id !== rowId || r.rowType !== 'merged' || r.mergeDirection === 'S') return r;
 
       const newDir = r.mergeDirection === 'H' ? 'V' : 'H';
       const hIds = r.mergedHoardingIDs || [];
@@ -5648,6 +5829,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const siteID = h?.siteID ?? h?.site?.siteID ?? null;
         const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
 
+        const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
+          h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
+          h?.IsExternal === true || String(h?.IsExternal).toLowerCase() === 'true' ||
+          h?.Is_External === true || String(h?.Is_External).toLowerCase() === 'true';
+
         const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
         const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
@@ -5655,7 +5841,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
           _id: uid(),
           rowType: 'hoarding',
           hoardingID: l.hoardingID, siteID, siteObj,
-          location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+          isExternal: isExt,
+          location: isExt ? (h?.hoardingCode || '') : buildSiteAddress(siteObj, h?.hoardingCode || ''),
           hoardingCode: h?.hoardingCode || '',
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
@@ -5684,7 +5871,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
       for (const [ln, records] of byLine.entries()) {
         if (records.length < 2) continue;
 
-        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const dir = records[0].mergeAlongFlag === 'S' ? 'S' : (records[0].mergeAlongFlag === 'H' ? 'H' : 'V');
         const hoardingObjs = records
           .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
           .filter(Boolean);
@@ -5692,7 +5879,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
         const gaps = hoardingObjs.length - 1;
         let mw, mh;
-        if (dir === 'H') {
+        if (dir === 'S') {
+          const singleW = sizes[0]?.w || 0;
+          const singleH = sizes[0]?.h || 0;
+          mw = (singleW * 2) + 1;
+          mh = (singleH * 2) + 1;
+        } else if (dir === 'H') {
           mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
           mh = Math.max(...sizes.map(s => s.h));
         } else {
@@ -5735,10 +5927,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(savedLine?.purpose, totalRent);
         const days = calculateDays(savedLine?.periodBeginDate, savedLine?.periodEndDate) || 30;
 
+        const isExt = hoardingObjs.some(ho => ho.isExternal === true || String(ho.isExternal).toLowerCase() === 'true' || ho.is_External === true || String(ho.is_External).toLowerCase() === 'true' || ho.IsExternal === true || String(ho.IsExternal).toLowerCase() === 'true');
         mergedRows.push({
           _id: uid(),
           rowType: 'merged',
           isMerged: true,
+          isExternal: isExt,
           mergeDirection: dir,
           mergedHoardingIDs: hoardingObjs.map(ho => ho.hoardingID),
           hoardingID: 0, siteID: null,
@@ -5861,6 +6055,11 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const siteID = h?.siteID ?? h?.site?.siteID ?? null;
         const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
 
+        const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
+          h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
+          h?.IsExternal === true || String(h?.IsExternal).toLowerCase() === 'true' ||
+          h?.Is_External === true || String(h?.Is_External).toLowerCase() === 'true';
+
         const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
         const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
@@ -5870,7 +6069,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
           hoardingID: l.hoardingID,
           siteID,
           siteObj,
-          location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
+          isExternal: isExt,
+          location: isExt ? (h?.hoardingCode || '') : buildSiteAddress(siteObj, h?.hoardingCode || ''),
           hoardingCode: h?.hoardingCode || '',
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
@@ -5900,14 +6100,24 @@ export default function QuotationPage({ onNavigateToContracts }) {
       for (const [ln, records] of byLine.entries()) {
         if (records.length < 2) continue;
 
-        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const dir = records[0].mergeAlongFlag === 'S' ? 'S' : (records[0].mergeAlongFlag === 'H' ? 'H' : 'V');
         const hoardingObjs = records.map(r => hoardings.find(h => h.hoardingID === r.hoardingID)).filter(Boolean);
 
         const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
         const gaps = hoardingObjs.length - 1;
         let mw, mh;
-        if (dir === 'H') { mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps; mh = Math.max(...sizes.map(s => s.h)); }
-        else { mw = Math.max(...sizes.map(s => s.w)); mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps; }
+        if (dir === 'S') {
+          const singleW = sizes[0]?.w || 0;
+          const singleH = sizes[0]?.h || 0;
+          mw = (singleW * 2) + 1;
+          mh = (singleH * 2) + 1;
+        } else if (dir === 'H') {
+          mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+          mh = Math.max(...sizes.map(s => s.h));
+        } else {
+          mw = Math.max(...sizes.map(s => s.w));
+          mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+        }
 
         const locations = hoardingObjs.map(h => {
           const site = h.siteID ? siteMap.get(h.siteID) : null;
@@ -5944,10 +6154,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(savedLine?.purpose, totalRent);
         const days = calculateDays(savedLine?.periodBeginDate, savedLine?.periodEndDate) || 30;
 
+        const isExt = hoardingObjs.some(ho => ho.isExternal === true || String(ho.isExternal).toLowerCase() === 'true' || ho.is_External === true || String(ho.is_External).toLowerCase() === 'true' || ho.IsExternal === true || String(ho.IsExternal).toLowerCase() === 'true');
         mergedRows.push({
           _id: uid(),
           rowType: 'merged',
           isMerged: true,
+          isExternal: isExt,
           mergeDirection: dir,
           mergedHoardingIDs: hoardingObjs.map(h => h.hoardingID),
           hoardingID: 0, siteID: null,
@@ -6107,7 +6319,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const records = byLine.get(ln);
         if (records.length < 2) continue;
 
-        const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+        const dir = records[0].mergeAlongFlag === 'S' ? 'S' : (records[0].mergeAlongFlag === 'H' ? 'H' : 'V');
         const hoardingObjs = records
           .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
           .filter(Boolean);
@@ -6115,7 +6327,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
         const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
         const gaps = hoardingObjs.length - 1;
         let mw, mh;
-        if (dir === 'H') {
+        if (dir === 'S') {
+          const singleW = sizes[0]?.w || 0;
+          const singleH = sizes[0]?.h || 0;
+          mw = (singleW * 2) + 1;
+          mh = (singleH * 2) + 1;
+        } else if (dir === 'H') {
           mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
           mh = Math.max(...sizes.map(s => s.h));
         } else {
@@ -6481,7 +6698,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           ? mergedRow.mergedHoardingIDs.map(Number).filter(id => id > 0)
           : [];
         if (!hIds.length) continue;
-        const flag = mergedRow.mergeDirection === 'H' ? 'H' : 'V';
+        const flag = mergedRow.mergeDirection === 'S' ? 'S' : (mergedRow.mergeDirection === 'H' ? 'H' : 'V');
 
         const purpose = (mergedRow.location || '') + `|rate:${Number(mergedRow.ratePerMonth || 0)},print:${Number(mergedRow.printingCost || 0)},printType:${mergedRow.printType || ''},printRate:${Number(mergedRow.printRate || 0)}`;
 
@@ -6638,7 +6855,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           const records = byLine.get(ln);
           if (records.length < 2) continue;
 
-          const dir = records[0].mergeAlongFlag === 'H' ? 'H' : 'V';
+          const dir = records[0].mergeAlongFlag === 'S' ? 'S' : (records[0].mergeAlongFlag === 'H' ? 'H' : 'V');
           const hoardingObjs = records
             .map(r => hoardings.find(h => h.hoardingID === r.hoardingID))
             .filter(Boolean);
@@ -6646,7 +6863,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
           const sizes = hoardingObjs.map(h => ({ w: h.width || 0, h: h.height || 0 }));
           const gaps = hoardingObjs.length - 1;
           let mw, mh;
-          if (dir === 'H') {
+          if (dir === 'S') {
+            const singleW = sizes[0]?.w || 0;
+            const singleH = sizes[0]?.h || 0;
+            mw = (singleW * 2) + 1;
+            mh = (singleH * 2) + 1;
+          } else if (dir === 'H') {
             mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
             mh = Math.max(...sizes.map(s => s.h));
           } else {
@@ -7304,24 +7526,28 @@ export default function QuotationPage({ onNavigateToContracts }) {
                                         background: 'rgba(124,58,237,0.12)', color: '#7c3aed',
                                         border: '1px solid rgba(124,58,237,0.25)',
                                       }}>
-                                        {row.mergeDirection === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
+                                        {row.mergeDirection === 'S'
+                                          ? '⊞ Square Merge'
+                                          : (row.mergeDirection === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge')}
                                       </span>
 
-                                      {/* Direction toggle button */}
-                                      <button
-                                        onClick={e => { e.stopPropagation(); toggleMergeDirection(row._id); }}
-                                        title={`Switch to ${row.mergeDirection === 'H' ? 'Vertical' : 'Horizontal'}`}
-                                        style={{
-                                          display: 'flex', alignItems: 'center', gap: 3,
-                                          padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(124,58,237,0.30)',
-                                          background: 'rgba(124,58,237,0.06)', color: '#7c3aed',
-                                          cursor: 'pointer', fontFamily: 'Nunito,sans-serif',
-                                          fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
-                                        }}
-                                      >
-                                        <RefreshCw size={9} />
-                                        {row.mergeDirection === 'H' ? '↕ Switch V' : '↔ Switch H'}
-                                      </button>
+                                      {/* Direction toggle button — only for H / V merges */}
+                                      {row.mergeDirection !== 'S' && (
+                                        <button
+                                          onClick={e => { e.stopPropagation(); toggleMergeDirection(row._id); }}
+                                          title={`Switch to ${row.mergeDirection === 'H' ? 'Vertical' : 'Horizontal'}`}
+                                          style={{
+                                            display: 'flex', alignItems: 'center', gap: 3,
+                                            padding: '2px 8px', borderRadius: 4, border: '1px solid rgba(124,58,237,0.30)',
+                                            background: 'rgba(124,58,237,0.06)', color: '#7c3aed',
+                                            cursor: 'pointer', fontFamily: 'Nunito,sans-serif',
+                                            fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap',
+                                          }}
+                                        >
+                                          <RefreshCw size={9} />
+                                          {row.mergeDirection === 'H' ? '↕ Switch V' : '↔ Switch H'}
+                                        </button>
+                                      )}
 
                                       {/* Info button to see merged hoardings */}
                                       <button
@@ -7728,7 +7954,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
                         </div>
                         {rows.filter(r => r.rowType === 'merged').map(r => (
                           <div key={r._id} style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#5a5a78', marginBottom: 3 }}>
-                            {r.mergeDirection === 'H' ? '↔' : '↕'} {r.location} · <strong>{r.size}</strong> · {r.sqFt} sq.ft
+                            {r.mergeDirection === 'S' ? '⊞' : (r.mergeDirection === 'H' ? '↔' : '↕')} {r.location} · <strong>{r.size}</strong> · {r.sqFt} sq.ft
                           </div>
                         ))}
                       </div>

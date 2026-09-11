@@ -449,26 +449,20 @@ function buildJobPDFHTML({ company, job, customerName, supervisorName, tasks, at
   const unmergedTasks = [];
 
   tasks.forEach(task => {
-    const hid = Number(task.hoardingID);
-    const mergeInfo = mergeMap.get(hid);
-    if (mergeInfo) {
-      const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
-      const lineNum = Number(mergeInfo.hoardingLineNumber ?? mergeInfo.HoardingLineNumber ?? 0);
-      const hoarding = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
-      const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
-      const key = `${siteID}_${flag}_${lineNum}`;
-      if (!mergedGroups[key]) {
-        mergedGroups[key] = [];
-      }
+    const mergeInfo = mergeMap.get(Number(task.hoardingID));
+    const flag = task.mergeAlongFlag || mergeInfo?.mergeAlongFlag;
+    if (flag) {
+      const key = `${task.siteID || 0}_${flag}`;
+      if (!mergedGroups[key]) mergedGroups[key] = [];
       mergedGroups[key].push(task);
     } else {
       unmergedTasks.push(task);
     }
   });
 
-  // Process merged groups
   const mergedItems = Object.entries(mergedGroups).map(([key, groupTasks]) => {
     const [siteIDStr, flag] = key.split('_');
+    const isSquare = flag === 'S';
     const isHorizontalMerge = flag === 'H';
 
     const mergedHoardings = groupTasks.map(t => {
@@ -484,12 +478,19 @@ function buildJobPDFHTML({ company, job, customerName, supervisorName, tasks, at
 
     const sizes = mergedHoardings.map(h => ({ w: h.width, h: h.height }));
     const gaps = Math.max(groupTasks.length - 1, 0);
-    const mw = isHorizontalMerge
-      ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps
-      : Math.max(...sizes.map(s => s.w), 0);
-    const mh = isHorizontalMerge
-      ? Math.max(...sizes.map(s => s.h), 0)
-      : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+    let mw, mh;
+    if (isSquare) {
+      const singleW = sizes[0]?.w || 0;
+      const singleH = sizes[0]?.h || 0;
+      mw = (singleW * 2) + 1;
+      mh = (singleH * 2) + 1;
+    } else if (isHorizontalMerge) {
+      mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+      mh = Math.max(...sizes.map(s => s.h), 0);
+    } else {
+      mw = Math.max(...sizes.map(s => s.w), 0);
+      mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+    }
     const combinedSqFt = mw * mh;
 
     const hoardingCodes = mergedHoardings.map(h => h.hoardingCode).join(' + ');
@@ -702,7 +703,7 @@ function buildJobPDFHTML({ company, job, customerName, supervisorName, tasks, at
         <div class="hrd-title">
           <strong>${item.hoardingCodes}</strong>
           <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:#ede9fe;color:#7c3aed;font-size:10px;font-weight:800;margin-left:6px;border:1px solid #ddd6fe;">
-            ${item.direction === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
+            ${item.direction === 'S' ? '⊞ Square Merge' : item.direction === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
           </span>
           ${item.siteAddr ? `&nbsp;&mdash;&nbsp;${item.siteAddr}` : ''}
           ${item.size ? `&nbsp;&mdash;&nbsp;<strong>${item.size}</strong>` : ''}
@@ -1137,9 +1138,21 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
                 // Compute combined size
                 const sizes = groupHoardings.map(h => ({ w: Number(h.width) || 0, h: Number(h.height) || 0 }));
                 const gaps = Math.max(groupHoardings.length - 1, 0);
+                const isSquare = flag === 'S';
                 const isHorizontalMerge = flag === 'H';
-                const mw = isHorizontalMerge ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps : Math.max(...sizes.map(s => s.w), 0);
-                const mh = isHorizontalMerge ? Math.max(...sizes.map(s => s.h), 0) : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+                let mw, mh;
+                if (isSquare) {
+                  const singleW = sizes[0]?.w || 0;
+                  const singleH = sizes[0]?.h || 0;
+                  mw = (singleW * 2) + 1;
+                  mh = (singleH * 2) + 1;
+                } else if (isHorizontalMerge) {
+                  mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+                  mh = Math.max(...sizes.map(s => s.h), 0);
+                } else {
+                  mw = Math.max(...sizes.map(s => s.w), 0);
+                  mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+                }
                 const mergedSqFt = mw * mh;
 
                 return (
@@ -1150,9 +1163,9 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
                       borderBottom: '1px solid rgba(124,58,237,0.15)',
                       display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
                     }}>
-                      <span style={{ fontSize: 13 }}>{isHorizontalMerge ? '↔' : '↕'}</span>
+                      <span style={{ fontSize: 13 }}>{isSquare ? '⊞' : isHorizontalMerge ? '↔' : '↕'}</span>
                       <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>
-                        {isHorizontalMerge ? 'Horizontal' : 'Vertical'} Merge · {groupHoardings.length} hoardings
+                        {isSquare ? 'Square' : isHorizontalMerge ? 'Horizontal' : 'Vertical'} Merge · {groupHoardings.length} hoardings
                       </span>
                       <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#5a5a78' }}>
                         {mw} × {mh} ft
@@ -2306,7 +2319,7 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, hoardingMerges
               icon={Building2}
               getLabel={t => {
                 if (t._type === 'merged') {
-                  const flagStr = t.mergeFlag === 'H' ? 'Horizontal Merge' : 'Vertical Merge';
+                  const flagStr = t.mergeFlag === 'S' ? 'Square Merge' : t.mergeFlag === 'H' ? 'Horizontal Merge' : 'Vertical Merge';
                   const codes = t.tasks.map(tsk => {
                     const h = hoardings.find(hh => Number(hh.hoardingID) === Number(tsk.hoardingID));
                     return tsk.hoardingCode || h?.hoardingCode || `#${tsk.hoardingID}`;
@@ -2497,7 +2510,7 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
       if (groupTasks.length === 0) return;
       const [siteIDStr, flag] = key.split('_');
       const firstH = (allHoardings || []).find(hh => Number(hh.hoardingID) === Number(groupTasks[0].hoardingID));
-      const flagStr = flag === 'H' ? 'Horizontal Merge' : 'Vertical Merge';
+      const flagStr = flag === 'S' ? 'Square Merge' : flag === 'H' ? 'Horizontal Merge' : 'Vertical Merge';
       const codes = groupTasks.map(t => {
         const h = (allHoardings || []).find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
         return t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`;
@@ -3001,13 +3014,21 @@ export default function JobPage() {
       });
 
       const gaps = Math.max(groupTasks.length - 1, 0);
+      const isSquare = flag === 'S';
       const isHorizontalMerge = flag === 'H';
-      const mw = isHorizontalMerge
-        ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps
-        : Math.max(...sizes.map(s => s.w), 0);
-      const mh = isHorizontalMerge
-        ? Math.max(...sizes.map(s => s.h), 0)
-        : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+      let mw, mh;
+      if (isSquare) {
+        const singleW = sizes[0]?.w || 0;
+        const singleH = sizes[0]?.h || 0;
+        mw = (singleW * 2) + 1;
+        mh = (singleH * 2) + 1;
+      } else if (isHorizontalMerge) {
+        mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+        mh = Math.max(...sizes.map(s => s.h), 0);
+      } else {
+        mw = Math.max(...sizes.map(s => s.w), 0);
+        mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+      }
 
       result.push({
         _type: 'merged',
@@ -4182,7 +4203,7 @@ export default function JobPage() {
                                       color: '#7c3aed',
                                       fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 800,
                                     }}>
-                                      {row.mergeFlag === 'H' ? '↔' : '↕'} {row.mergeFlag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                                      {row.mergeFlag === 'S' ? '⊞' : row.mergeFlag === 'H' ? '↔' : '↕'} {row.mergeFlag === 'S' ? 'Square' : row.mergeFlag === 'H' ? 'Horizontal' : 'Vertical'} Merge
                                     </span>
                                     <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>
                                       {row.tasks.length} hoardings merged

@@ -9,7 +9,7 @@ import {
   IndianRupee, Clock, Trash2, ShieldCheck, MessageSquare,
   CreditCard, TrendingUp, MapPin, Tag, Percent, SlidersHorizontal,
   Users, Paperclip, Upload, Image, File, Download, AlertTriangle, GitMerge, ArrowLeftRight, ArrowUpDown,
-  UploadCloud, Layers, ImageIcon,
+  UploadCloud, Layers, ImageIcon, LayoutGrid,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import './Common1.css';
@@ -519,7 +519,7 @@ function buildContractPDFHTML({ company, customer, contract,
           <div class="hrd-title">
             ${idx + 1})&nbsp;<strong>${item.hoardingCodes}</strong>
             <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:#ede9fe;color:#7c3aed;font-size:10px;font-weight:800;margin-left:6px;border:1px solid #ddd6fe;">
-              ${item.direction === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
+              ${item.direction === 'S' ? '⊞ Square Merge' : (item.direction === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge')}
             </span>
             ${item.address ? `&nbsp;&mdash;&nbsp;${item.address}` : ''}
             ${item.combinedSize ? `&nbsp;&mdash;&nbsp;<strong>${item.combinedSize} ft</strong>` : ''}
@@ -530,7 +530,7 @@ function buildContractPDFHTML({ company, customer, contract,
               <span class="hrd-lbl">Merged Hoardings:</span>&nbsp;
               ${(item.mergedHoardings || []).map(h => `<span style="display:inline-block;background:#fff;padding:1px 6px;border-radius:4px;border:1px solid #e0d8f8;margin-right:4px;font-size:10.5px;">${h.hoardingCode} (${h.size || '—'} ft)</span>`).join('')}
             </div>
-            <div class="hrd-cell"><span class="hrd-lbl">Hoarding Type:</span>&nbsp;${item.hoardingTypeName || 'Hoarding'} (${item.direction === 'H' ? 'Horizontal' : 'Vertical'} Merge)</div>
+            <div class="hrd-cell"><span class="hrd-lbl">Hoarding Type:</span>&nbsp;${item.hoardingTypeName || 'Hoarding'} (${item.direction === 'S' ? 'Square' : (item.direction === 'H' ? 'Horizontal' : 'Vertical')} Merge)</div>
             <div class="hrd-cell">
               <span class="hrd-lbl">Availability:</span>&nbsp;
               <span class="hrd-green">${item.contractStatus || 'Available Now'}</span>
@@ -573,28 +573,12 @@ function buildContractPDFHTML({ company, customer, contract,
     const photoOn = photoSelections[photoKey] !== false;
     const photoUrl = photoUrlMap[photoKey] || (item.isMerged ? item.photoUrl : null);
 
-    /* Photo ON + URL exists → show image (plain <img src>, no auth needed) */
+    /* Photo ON + URL exists → show single image */
     if (photoOn && photoUrl) {
       return `
         <div class="hrd-section">
           <div class="hrd-photo">
             <img src="${photoUrl}" alt="${item.isMerged ? item.hoardingCodes : item.hoardingCode}" />
-          </div>
-          ${box(item, idx)}
-        </div>`;
-    }
-
-    /* Photo ON but merged group has subPhotos instead of single merge photo */
-    if (photoOn && !photoUrl && item.isMerged && item.subPhotos && item.subPhotos.length > 0) {
-      return `
-        <div class="hrd-section">
-          <div class="hrd-photo" style="display:flex;flex-direction:${item.direction === 'H' ? 'row' : 'column'};gap:4px;background:#e0e0e0;">
-            ${item.subPhotos.map(sp => `
-              <div style="flex:1;min-width:0;min-height:0;position:relative;overflow:hidden;background:#e0e0e0;">
-                <img src="${sp.url}" alt="${sp.code}" style="width:100%;height:100%;object-fit:contain;display:block;" />
-                <span style="position:absolute;bottom:4px;left:4px;background:rgba(0,0,0,0.65);color:#fff;font-size:9px;font-weight:bold;padding:1px 5px;border-radius:4px;">${sp.code}</span>
-              </div>
-            `).join('')}
           </div>
           ${box(item, idx)}
         </div>`;
@@ -2137,11 +2121,17 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
               h = allHoardingsRaw.find(hh => hh.hoardingCode === codeFromMap);
             }
           }
+          const isExternal = Boolean(
+            h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
+            h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
+            m?.isExternal === true || String(m?.isExternal).toLowerCase() === 'true'
+          );
           return {
             customerContractLineID: m.customerContractLineID ?? m.CustomerContractLineID ?? null,
             customerContractID: Number(m.customerContractID ?? m.CustomerContractID),
             customerID: Number(m.customerID ?? m.CustomerID),
             hoardingID: hid,
+            isExternal,
             // Hoarding info embedded — never needs a second lookup
             hoardingCode: h?.hoardingCode ?? `#${hid}`,
             material: h?.material ?? '',
@@ -2213,11 +2203,16 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
     if (mapsFromProps) {
       const newMaps = selectedHoardings.map((h, i) => {
         const tempId = `_temp_${Date.now()}_${i}`;
+        const isExternal = Boolean(
+          h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
+          h?.is_External === true || String(h?.is_External).toLowerCase() === 'true'
+        );
         return {
           customerContractLineID: tempId,
           customerContractID,
           customerID: Number(customerID),
           hoardingID: Number(h.hoardingID),
+          isExternal,
           hoardingCode: h.hoardingCode,
           material: h.material,
           width: h.width,
@@ -2437,23 +2432,30 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
     });
     const gaps = Math.max(groupMerges.length - 1, 0);
     let mw, mh;
-    if (direction === 'H') {
+    if (direction === 'S') {
+      const singleW = sizes[0]?.w || 0;
+      const singleH = sizes[0]?.h || 0;
+      mw = (singleW * 2) + 1;
+      mh = (singleH * 2) + 1;
+    } else if (direction === 'H') {
       mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
-      mh = Math.max(...sizes.map(s => s.h));
+      mh = Math.max(...sizes.map(s => s.h), 0);
     } else {
-      mw = Math.max(...sizes.map(s => s.w));
+      mw = Math.max(...sizes.map(s => s.w), 0);
       mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
     }
     const mergedSqFt = mw * mh;
     const mergeID = groupMerges[0]?.hoardingMergeID; // for direction toggle
 
+    const isSquareEligible = groupMerges.length === 4 && sizes.every(s => s.w === sizes[0]?.w && s.h === sizes[0]?.h);
+
     return (
       <div key={groupKey} style={{ border: '1.5px solid rgba(124,58,237,0.20)', borderRadius: 10, overflow: 'hidden', marginBottom: 10 }}>
         {/* Group header */}
         <div style={{ padding: '8px 13px', background: 'rgba(124,58,237,0.06)', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          {direction === 'H' ? <ArrowLeftRight size={12} color="#7c3aed" /> : <ArrowUpDown size={12} color="#7c3aed" />}
+          {direction === 'S' ? <LayoutGrid size={12} color="#7c3aed" /> : (direction === 'H' ? <ArrowLeftRight size={12} color="#7c3aed" /> : <ArrowUpDown size={12} color="#7c3aed" />)}
           <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, fontWeight: 800, color: '#7c3aed' }}>
-            {direction === 'H' ? '↔ Horizontal' : '↕ Vertical'} Merge · {groupMerges.length} hoarding{groupMerges.length !== 1 ? 's' : ''}
+            {direction === 'S' ? '⊞ Square' : (direction === 'H' ? '↔ Horizontal' : '↕ Vertical')} Merge · {groupMerges.length} hoarding{groupMerges.length !== 1 ? 's' : ''}
           </span>
 
           {/* Combined size + sq.ft */}
@@ -2469,10 +2471,13 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
           {/* Direction toggle button — hidden in readOnly mode */}
           {!readOnly && <button
             onClick={() => {
-              const newDir = direction === 'H' ? 'V' : 'H';
+              let newDir;
+              if (direction === 'H') newDir = 'V';
+              else if (direction === 'V') newDir = isSquareEligible ? 'S' : 'H';
+              else newDir = 'H';
               handleEditMerge(groupMerges, newDir);
             }}
-            title={`Switch to ${direction === 'H' ? 'Vertical' : 'Horizontal'}`}
+            title="Switch merge direction"
             style={{
               marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 4,
               padding: '3px 10px', borderRadius: 6,
@@ -2483,7 +2488,11 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
             }}
           >
             <RefreshCw size={10} />
-            {direction === 'H' ? '↕ Switch to Vertical' : '↔ Switch to Horizontal'}
+            {direction === 'H'
+              ? '↕ Switch to Vertical'
+              : direction === 'V'
+                ? (isSquareEligible ? '⊞ Switch to Square' : '↔ Switch to Horizontal')
+                : '↔ Switch to Horizontal'}
           </button>}
         </div>
 
@@ -2791,29 +2800,42 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
     )
     : available;
 
+  const isExtRow = (h) => Boolean(
+    h?.isExternal === true ||
+    String(h?.isExternal).toLowerCase() === 'true' ||
+    h?.is_External === true ||
+    String(h?.is_External).toLowerCase() === 'true'
+  );
+
   const siteGroups = useMemo(() => {
     const map = new Map();
     for (const h of filtered) {
       if (!h || h.hoardingID == null) continue; // ← guard
+      const isExt = isExtRow(h);
       const sid = h.siteID != null ? Number(h.siteID) : '__none__';
-      if (!map.has(sid)) {
+      const groupKey = `${sid}__${isExt ? 'EXT' : 'INT'}`;
+      if (!map.has(groupKey)) {
         const site = sid !== '__none__' ? siteMap[Number(sid)] : null;
-        const label = site
+        const baseLabel = site
           ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ')
           : sid === '__none__' ? 'Unknown Site' : `Site ${sid}`;
-        map.set(sid, { label, siteID: h.siteID != null ? Number(h.siteID) : null, rows: [] });
+        const label = `${baseLabel} (${isExt ? 'External' : 'Internal'})`;
+        map.set(groupKey, { label, siteID: h.siteID != null ? Number(h.siteID) : null, isExternal: isExt, rows: [] });
       }
-      map.get(sid).rows.push(h);
+      map.get(groupKey).rows.push(h);
     }
     return [...map.values()];
   }, [filtered, siteMap]);
 
-  const firstSiteID = selected.size > 0
-    ? (available.find(h => selected.has(Number(h.hoardingID)))?.siteID ?? null)
-    : undefined;
+  const firstSelectedHoarding = selected.size > 0
+    ? available.find(h => selected.has(Number(h.hoardingID)))
+    : null;
+  const firstSiteID = firstSelectedHoarding ? (firstSelectedHoarding.siteID ?? null) : null;
+  const firstIsExt = firstSelectedHoarding ? isExtRow(firstSelectedHoarding) : null;
 
-  const toggle = (id, siteID) => {
-    if (firstSiteID !== undefined && firstSiteID !== null && siteID !== firstSiteID) return;
+  const toggle = (id, siteID, isExt) => {
+    if (firstSiteID !== null && siteID !== firstSiteID) return;
+    if (firstIsExt !== null && isExt !== firstIsExt) return;
     setSelected(p => {
       const n = new Set(p);
       n.has(id) ? n.delete(id) : n.add(id);
@@ -2821,19 +2843,62 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
     });
   };
 
+  const validation = useMemo(() => {
+    if (selected.size === 0) return { canMerge: false, error: null };
+    const selHoardings = available.filter(h => h != null && selected.has(Number(h.hoardingID)));
+
+    const hasExt = selHoardings.some(h => isExtRow(h));
+    const hasNonExt = selHoardings.some(h => !isExtRow(h));
+    if (hasExt && hasNonExt) {
+      return { canMerge: false, error: 'Internal and external hoardings cannot be merged together.' };
+    }
+
+    if (direction === 'S') {
+      if (selHoardings.length !== 4) {
+        return {
+          canMerge: false,
+          error: `Square merge requires exactly 4 hoardings (${selHoardings.length} currently selected).`
+        };
+      }
+      const sizes = selHoardings.map(h => ({ w: Number(h.width) || 0, h: Number(h.height) || 0 }));
+      const firstW = sizes[0]?.w;
+      const firstH = sizes[0]?.h;
+      const allSameSize = sizes.every(s => s.w === firstW && s.h === firstH);
+      if (!allSameSize) {
+        return {
+          canMerge: false,
+          error: 'All 4 selected hoardings must be the exact same size (width and height).'
+        };
+      }
+      return { canMerge: true, error: null };
+    }
+
+    if (selHoardings.length < 2) {
+      return { canMerge: false, error: 'Select at least 2 hoardings to merge.' };
+    }
+
+    return { canMerge: true, error: null };
+  }, [selected, direction, available]);
+
   // Preview merged size
   const preview = useMemo(() => {
     if (selected.size < 2) return null;
-    const selHoardings = available.filter(h => h != null && selected.has(h.hoardingID));
+    const selHoardings = available.filter(h => h != null && selected.has(Number(h.hoardingID)));
     if (selHoardings.length < 2) return null; // ← guard
     const sizes = selHoardings.map(h => ({ w: Number(h.width) || 0, h: Number(h.height) || 0 }));
-    const gaps = selHoardings.length - 1;
     let mw, mh;
-    if (direction === 'H') {
+    if (direction === 'S') {
+      const singleW = sizes[0]?.w || 0;
+      const singleH = sizes[0]?.h || 0;
+      mw = (singleW * 2) + 1;
+      mh = (singleH * 2) + 1;
+    } else if (direction === 'H') {
+      const gaps = selHoardings.length - 1;
       mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
-      mh = Math.max(...sizes.map(s => s.h));
+      mh = Math.max(...sizes.map(s => s.h), 0);
     } else {
-      mw = Math.max(...sizes.map(s => s.w));
+      const gaps = selHoardings.length - 1;
+      mw = Math.max(...sizes.map(s => s.w), 0);
       mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
     }
     return { size: `${mw} × ${mh} ft`, sqFt: (mw * mh), count: selHoardings.length };
@@ -2849,7 +2914,7 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
 
   return ReactDOM.createPortal(
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 99998, background: 'rgba(15,23,42,0.58)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 700, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', overflow: 'hidden' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 720, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(0,0,0,0.22)', overflow: 'hidden' }}>
 
         {/* Head */}
         <div style={{ background: 'linear-gradient(135deg,#7c3aed,#6d28d9)', padding: '18px 24px 14px', display: 'flex', alignItems: 'center', gap: 14 }}>
@@ -2859,7 +2924,7 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: 16, color: '#fff' }}>Merge Hoardings</div>
             <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 700, color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>
-              Select 2+ hoardings from the <strong style={{ color: '#fff' }}>same site</strong> to merge
+              Select hoardings from the <strong style={{ color: '#fff' }}>same site</strong> to merge
             </div>
           </div>
           {selected.size > 0 && (
@@ -2879,19 +2944,20 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
             {[
               { val: 'H', label: 'Horizontal', sub: 'Side by side · sum widths + gaps', Icon: ArrowLeftRight },
               { val: 'V', label: 'Vertical', sub: 'Top to bottom · sum heights + gaps', Icon: ArrowUpDown },
+              { val: 'S', label: 'Square', sub: '2×2 grid · exact 4 same-size hoardings', Icon: LayoutGrid },
             ].map(({ val, label, sub, Icon }) => (
-              <button key={val} onClick={() => setDirection(val)} style={{
+              <button key={val} type="button" onClick={() => setDirection(val)} style={{
                 flex: 1, padding: '10px 14px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
                 border: `2px solid ${direction === val ? '#7c3aed' : '#e8e8f4'}`,
                 background: direction === val ? 'rgba(124,58,237,0.06)' : '#fff',
                 fontFamily: 'Nunito, sans-serif', display: 'flex', alignItems: 'center', gap: 10,
               }}>
                 <Icon size={18} color={direction === val ? '#7c3aed' : '#c0c0d8'} />
-                <div>
+                <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 800, color: direction === val ? '#7c3aed' : '#1a1a2e' }}>{label}</div>
-                  <div style={{ fontSize: 11, color: '#9090a8', marginTop: 1 }}>{sub}</div>
+                  <div style={{ fontSize: 10.5, color: '#9090a8', marginTop: 1, lineHeight: 1.2 }}>{sub}</div>
                 </div>
-                {direction === val && <Check size={14} color="#7c3aed" style={{ marginLeft: 'auto' }} />}
+                {direction === val && <Check size={14} color="#7c3aed" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
               </button>
             ))}
           </div>
@@ -2915,31 +2981,33 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
               <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700 }}>All hoardings already merged</div>
             </div>
           ) : siteGroups.map(group => {
-            const groupLocked = firstSiteID !== undefined && firstSiteID !== null &&
-              group.siteID !== firstSiteID;
+            const siteLocked = firstSiteID !== null && group.siteID !== firstSiteID;
+            const extLocked = firstIsExt !== null && group.isExternal !== firstIsExt;
+            const groupLocked = siteLocked || extLocked;
             return (
-              <div key={String(group.siteID ?? '__none__')} style={{ marginBottom: 16 }}>
+              <div key={`${String(group.siteID ?? '__none__')}__${group.isExternal ? 'EXT' : 'INT'}`} style={{ marginBottom: 16 }}>
                 {/* Site header */}
                 <div style={{
                   display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
                   padding: '6px 12px', borderRadius: 8,
-                  background: groupLocked ? '#f8f8f8' : 'rgba(124,58,237,0.05)',
-                  border: `1px solid ${groupLocked ? '#e8e8f0' : 'rgba(124,58,237,0.18)'}`,
+                  background: groupLocked ? '#f8f8f8' : (group.isExternal ? 'rgba(234,88,12,0.05)' : 'rgba(124,58,237,0.05)'),
+                  border: `1px solid ${groupLocked ? '#e8e8f0' : (group.isExternal ? 'rgba(234,88,12,0.18)' : 'rgba(124,58,237,0.18)')}`,
                   opacity: groupLocked ? 0.5 : 1,
                 }}>
-                  <MapPin size={12} color={groupLocked ? '#c0c0c8' : '#7c3aed'} />
+                  <MapPin size={12} color={groupLocked ? '#c0c0c8' : (group.isExternal ? '#ea580c' : '#7c3aed')} />
                   <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: groupLocked ? '#b0b0c8' : '#1a1a2e', flex: 1 }}>
                     {group.label}
                   </span>
                   {groupLocked && (
                     <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#dc2626', fontWeight: 700 }}>
-                      ✕ Different site — can't merge across sites
+                      {siteLocked ? "✕ Different site — can't merge across sites" : "✕ Cannot merge internal & external hoardings together"}
                     </span>
                   )}
                 </div>
 
                 {/* Hoarding rows */}
                 {group.rows.map((h, idx) => {
+                  const isExt = isExtRow(h);
                   const isChecked = selected.has(h.hoardingID);
                   const disabled = groupLocked;
                   const selIdx = [...selected].indexOf(h.hoardingID);
@@ -2952,7 +3020,7 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
 
                   return (
                     <div key={h.hoardingID}
-                      onClick={() => !disabled && toggle(Number(h.hoardingID), h.siteID != null ? Number(h.siteID) : null)}
+                      onClick={() => !disabled && toggle(Number(h.hoardingID), h.siteID != null ? Number(h.siteID) : null, isExt)}
                       style={{
                         display: 'flex', alignItems: 'center', gap: 12,
                         padding: '10px 12px', borderRadius: 10, marginBottom: 6,
@@ -3015,7 +3083,7 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
               <div>
                 <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8' }}>Direction</div>
                 <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 14, fontWeight: 900, color: '#7c3aed' }}>
-                  {direction === 'H' ? '↔ Horizontal' : '↕ Vertical'}
+                  {direction === 'S' ? '⊞ Square' : (direction === 'H' ? '↔ Horizontal' : '↕ Vertical')}
                 </div>
               </div>
             </div>
@@ -3024,22 +3092,24 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
 
         {/* Footer */}
         <div style={{ padding: '13px 20px', borderTop: '1px solid #f0f0f8', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fafafe' }}>
-          <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
-            {selected.size < 2 ? 'Select at least 2 hoardings from the same site' : `${selected.size} hoardings · ${direction === 'H' ? '↔ Horizontal' : '↕ Vertical'} merge`}
+          <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, color: validation.error ? '#dc2626' : '#9090a8', fontWeight: validation.error ? 700 : 600 }}>
+            {validation.error || (selected.size < 2
+              ? 'Select at least 2 hoardings from the same site'
+              : `${selected.size} hoardings · ${direction === 'S' ? '⊞ Square' : (direction === 'H' ? '↔ Horizontal' : '↕ Vertical')} merge`)}
           </span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={onClose} className="pg-btn-cancel" style={{ fontSize: 12 }}>Cancel</button>
             <button
-              disabled={selected.size < 2}
+              disabled={!validation.canMerge}
               onClick={() => onConfirm(Array.from(selected), direction)}
               style={{
                 padding: '8px 20px', borderRadius: 9,
-                background: selected.size >= 2 ? 'linear-gradient(135deg,#7c3aed,#6d28d9)' : '#e0e0f0',
-                color: selected.size >= 2 ? '#fff' : '#a0a0b8',
-                border: 'none', cursor: selected.size >= 2 ? 'pointer' : 'not-allowed',
+                background: validation.canMerge ? 'linear-gradient(135deg,#7c3aed,#6d28d9)' : '#e0e0f0',
+                color: validation.canMerge ? '#fff' : '#a0a0b8',
+                border: 'none', cursor: validation.canMerge ? 'pointer' : 'not-allowed',
                 fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 800,
                 display: 'flex', alignItems: 'center', gap: 6,
-                boxShadow: selected.size >= 2 ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
+                boxShadow: validation.canMerge ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
               }}
             >
               <GitMerge size={13} />
@@ -3080,13 +3150,17 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
       const mergeList = Array.isArray(allMerges) ? allMerges : [];
       setMerges(mergeList
         .filter(m => Number(m.customerContractID ?? m.CustomerContractID) === Number(customerContractID))
-        .map(m => ({
-          hoardingMergeID: m.hoardingMergeID ?? m.HoardingMergeID,
-          hoardingLineNumber: Number(m.hoardingLineNumber ?? m.HoardingLineNumber ?? 0),
-          hoardingID: Number(m.hoardingID ?? m.HoardingID),
-          customerContractID: Number(m.customerContractID ?? m.CustomerContractID),
-          mergeAlongFlag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
-        }))
+        .map(m => {
+          const rawFlag = m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H';
+          const flag = (rawFlag === 'S' || rawFlag === 's') ? 'S' : ((rawFlag === 'V' || rawFlag === 'v') ? 'V' : 'H');
+          return {
+            hoardingMergeID: m.hoardingMergeID ?? m.HoardingMergeID,
+            hoardingLineNumber: Number(m.hoardingLineNumber ?? m.HoardingLineNumber ?? 0),
+            hoardingID: Number(m.hoardingID ?? m.HoardingID),
+            customerContractID: Number(m.customerContractID ?? m.CustomerContractID),
+            mergeAlongFlag: flag,
+          };
+        })
       );
 
       // Contract's hoarding IDs
@@ -3100,7 +3174,15 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
   useEffect(() => { loadData(); }, [loadData]);
 
   // Hoardings available in this contract
-  const contractHoardings = hoardings.filter(h => contractHoardingIds.has(Number(h.hoardingID)));
+  const contractHoardings = (allHoardingsRaw.length > 0 ? allHoardingsRaw : hoardings)
+    .filter(h => contractHoardingIds.has(Number(h.hoardingID)))
+    .map(h => ({
+      ...h,
+      isExternal: Boolean(
+        h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' ||
+        h.is_External === true || String(h.is_External).toLowerCase() === 'true'
+      ),
+    }));
 
   // Already merged hoarding IDs
   const mergedHoardingIds = new Set(merges.map(m => m.hoardingID));
@@ -3142,7 +3224,8 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
     const groups = {};
     merges.forEach(m => {
       const lineNum = Number(m.hoardingLineNumber || 0);
-      const direction = m.mergeAlongFlag ?? 'H';
+      const rawFlag = m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H';
+      const direction = (rawFlag === 'S' || rawFlag === 's') ? 'S' : ((rawFlag === 'V' || rawFlag === 'v') ? 'V' : 'H');
       const key = lineNum > 0 ? `line_${lineNum}` : `legacy_${direction}`;
       if (!groups[key]) {
         groups[key] = {
@@ -3162,6 +3245,8 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
     const site = h ? siteMap[h.siteID] : null;
     const addr = site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '';
     const isDeleting = deletingId === m.hoardingMergeID;
+    const isSquare = m.mergeAlongFlag === 'S' || m.MergeAlongFlag === 'S';
+    const isH = m.mergeAlongFlag === 'H' || m.MergeAlongFlag === 'H';
     return (
       <div key={m.hoardingMergeID} style={{
         display: 'flex', alignItems: 'center', gap: 12,
@@ -3171,7 +3256,7 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
         opacity: isDeleting ? 0.5 : 1, transition: 'opacity 0.2s',
       }}>
         <div style={{ width: 34, height: 34, borderRadius: 9, background: 'rgba(124,58,237,0.08)', border: '1px solid rgba(124,58,237,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-          {m.mergeAlongFlag === 'H' ? <ArrowLeftRight size={15} color="#7c3aed" /> : <ArrowUpDown size={15} color="#7c3aed" />}
+          {isSquare ? <LayoutGrid size={15} color="#7c3aed" /> : (isH ? <ArrowLeftRight size={15} color="#7c3aed" /> : <ArrowUpDown size={15} color="#7c3aed" />)}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 13, color: '#7c3aed' }}>
@@ -3187,7 +3272,7 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
           )}
         </div>
         <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, fontWeight: 800, padding: '2px 9px', borderRadius: 12, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)', whiteSpace: 'nowrap' }}>
-          {m.mergeAlongFlag === 'H' ? '↔ Horizontal' : '↕ Vertical'}
+          {isSquare ? '⊞ Square' : (isH ? '↔ Horizontal' : '↕ Vertical')}
         </span>
         <button
           disabled={isDeleting}
@@ -3246,13 +3331,14 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
 
             {/* Merge groups */}
             {displayGroups.map((g) => {
+              const isSquare = g.direction === 'S';
               const isH = g.direction === 'H';
               return (
                 <div key={g.key} style={{ border: '1.5px solid rgba(124,58,237,0.20)', borderRadius: 12, overflow: 'hidden', marginBottom: 12 }}>
                   <div style={{ padding: '8px 14px', background: 'rgba(124,58,237,0.06)', borderBottom: '1px solid rgba(124,58,237,0.15)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {isH ? <ArrowLeftRight size={13} color="#7c3aed" /> : <ArrowUpDown size={13} color="#7c3aed" />}
+                    {isSquare ? <LayoutGrid size={13} color="#7c3aed" /> : (isH ? <ArrowLeftRight size={13} color="#7c3aed" /> : <ArrowUpDown size={13} color="#7c3aed" />)}
                     <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>
-                      {isH ? 'Horizontal' : 'Vertical'} Merge {g.lineNum > 0 ? `(Group ${g.lineNum})` : ''} · {g.merges.length} hoarding{g.merges.length !== 1 ? 's' : ''}
+                      {isSquare ? 'Square' : (isH ? 'Horizontal' : 'Vertical')} Merge {g.lineNum > 0 ? `(Group ${g.lineNum})` : ''} · {g.merges.length} hoarding{g.merges.length !== 1 ? 's' : ''}
                     </span>
                   </div>
                   {g.merges.map((m, i) => renderMergeRow(m, i, g.merges.length))}
@@ -3863,8 +3949,12 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
         return mergedApiImageMap[hid];
       }
     }
-    // 3. Fallback to existing photo logic
-    return photoUrlMap[item.mergeGroupKey] || photoUrlMap[item.primaryHoardingID] || null;
+    // 3. Fallback to existing photo logic (check each hoarding in the group)
+    if (photoUrlMap[item.mergeGroupKey]) return photoUrlMap[item.mergeGroupKey];
+    for (const hid of (item.hoardingIDs || [])) {
+      if (photoUrlMap[hid]) return photoUrlMap[hid];
+    }
+    return photoUrlMap[item.primaryHoardingID] || null;
   };
 
   // Group hoardings into Merged groups and Standalone hoardings
@@ -3918,7 +4008,8 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
       const hID = Number(m.hoardingID);
       const hInfo = fullHoardings.find(h => h.hoardingID === hID);
       const siteID = hInfo?.siteID ?? 0;
-      const direction = m.mergeAlongFlag ?? 'V';
+      const rawFlag = m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'V';
+      const direction = (rawFlag === 'S' || rawFlag === 's') ? 'S' : ((rawFlag === 'H' || rawFlag === 'h') ? 'H' : 'V');
       const lineNum = Number(m.hoardingLineNumber ?? 0);
       const key = lineNum > 0 ? `merge_line_${lineNum}` : `merge_${siteID}_${direction}`;
       if (!mergeGroups[key]) {
@@ -3951,7 +4042,12 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
 
       const gaps = Math.max(groupHoardings.length - 1, 0);
       let mw, mh;
-      if (group.direction === 'H') {
+      if (group.direction === 'S') {
+        const singleW = groupHoardings[0]?.width || 0;
+        const singleH = groupHoardings[0]?.height || 0;
+        mw = (singleW * 2) + 1;
+        mh = (singleH * 2) + 1;
+      } else if (group.direction === 'H') {
         mw = groupHoardings.reduce((s, h) => s + h.width, 0) + gaps;
         mh = Math.max(...groupHoardings.map(h => h.height), 0);
       } else {
@@ -3975,7 +4071,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
         isMerged: true,
         mergeGroupKey: group.mergeGroupKey,
         direction: group.direction,
-        directionLabel: group.direction === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge',
+        directionLabel: group.direction === 'S' ? '⊞ Square Merge' : (group.direction === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'),
         hoardingIDs: group.hoardingIDs,
         primaryHoardingID: primaryHid,
         hoardingCode: combinedCodes,
@@ -4057,18 +4153,12 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
         phone: selectedCompany.mobileNo || CONTRACT_COMPANY.phone,
       } : CONTRACT_COMPANY;
 
-      // Attach sub-photos to merged items for smart layout in print/pdf if no single merge photo
+      // Attach single photo to merged items
       const preparedHoardingItems = displayItems.map(item => {
         if (!item.isMerged) return item;
-        const subPhotos = (item.mergedHoardings || []).map(h => ({
-          code: h.hoardingCode,
-          url: photoUrlMap[h.hoardingID],
-        })).filter(sp => !!sp.url);
-
         return {
           ...item,
           photoUrl: getMergeGroupPhotoUrl(item),
-          subPhotos,
         };
       });
 
@@ -4284,7 +4374,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
                           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                         }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            {item.direction === 'H' ? <ArrowLeftRight size={13} color="#7c3aed" /> : <ArrowUpDown size={13} color="#7c3aed" />}
+                            {item.direction === 'S' ? <LayoutGrid size={13} color="#7c3aed" /> : (item.direction === 'H' ? <ArrowLeftRight size={13} color="#7c3aed" /> : <ArrowUpDown size={13} color="#7c3aed" />)}
                             <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, fontWeight: 800, color: '#7c3aed' }}>
                               {item.directionLabel} · {item.mergedHoardings.length} hoardings
                             </span>
@@ -4320,7 +4410,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
                                 fontSize: 10, fontWeight: 800, padding: '1px 7px', borderRadius: 10,
                                 background: 'rgba(124,58,237,0.10)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.25)',
                               }}>
-                                {item.direction === 'H' ? '↔ Horizontal' : '↕ Vertical'}
+                                {item.direction === 'S' ? '⊞ Square' : (item.direction === 'H' ? '↔ Horizontal' : '↕ Vertical')}
                               </span>
                             </div>
 
@@ -4858,11 +4948,17 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         const enriched = mapList.map(m => {
           const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
           let h = allHoardingsRaw.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? hh.id) === hid);
+          const isExternal = Boolean(
+            h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
+            h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
+            m?.isExternal === true || String(m?.isExternal).toLowerCase() === 'true'
+          );
           return {
             customerContractLineID: m.customerContractLineID ?? m.CustomerContractLineID ?? null,
             customerContractID: Number(m.customerContractID ?? m.CustomerContractID),
             customerID: Number(m.customerID ?? m.CustomerID),
             hoardingID: hid,
+            isExternal,
             hoardingCode: h?.hoardingCode ?? `#${hid}`,
             material: h?.material ?? '',
             width: h?.width ?? 0,

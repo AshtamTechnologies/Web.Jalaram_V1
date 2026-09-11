@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef, useMemo } from 'react';
 import ReactDOM from 'react-dom';
 import {
   UserCircle, Plus, Phone, Home, Globe,
@@ -228,51 +228,46 @@ function StatusDropdown({ value, onChange }) {
 /* ═══════════════════════════════════════════
    PORTAL DROPDOWN
    ═══════════════════════════════════════════ */
-function PortalDropdown({ children, open, triggerRef, panelRef }) {
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
+function PortalDropdown({ open, triggerRef, panelRef, children }) {
+  const [style, setStyle] = useState({ position: 'fixed', top: 0, left: 0, width: 0, zIndex: 99999 });
 
-  const updateCoords = useCallback(() => {
-    if (triggerRef.current) {
-      const rect = triggerRef.current.getBoundingClientRect();
-      const scrollY = window.scrollY;
-      const scrollX = window.scrollX;
-      setCoords({
-        top: rect.bottom + scrollY,
-        left: rect.left + scrollX,
-        width: rect.width
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const panelH = panelRef.current?.offsetHeight || 260;
+      const flipUp = (window.innerHeight - r.bottom) < panelH + 8 && r.top > panelH + 8;
+      setStyle({
+        position: 'fixed',
+        top: flipUp ? r.top - panelH - 4 : r.bottom + 4,
+        left: r.left,
+        width: r.width,
+        zIndex: 99999,
       });
-    }
-  }, [triggerRef]);
-
-  useEffect(() => {
-    if (open) {
-      updateCoords();
-      window.addEventListener('resize', updateCoords);
-      window.addEventListener('scroll', updateCoords, true);
-    }
-    return () => {
-      window.removeEventListener('resize', updateCoords);
-      window.removeEventListener('scroll', updateCoords, true);
     };
-  }, [open, updateCoords]);
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open, triggerRef, panelRef]);
 
   if (!open) return null;
+  return ReactDOM.createPortal(<div ref={panelRef} style={style}>{children}</div>, document.body);
+}
 
-  return ReactDOM.createPortal(
-    <div
-      ref={panelRef}
-      style={{
-        position: 'absolute',
-        top: coords.top + 4,
-        left: coords.left,
-        width: coords.width,
-        zIndex: 9999,
-      }}
-    >
-      {children}
-    </div>,
-    document.body
-  );
+function useOutsideClick(wrapRef, panelRef, open, onClose) {
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (!wrapRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) onClose();
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open, wrapRef, panelRef, onClose]);
 }
 
 /* ═══════════════════════════════════════════
@@ -297,18 +292,18 @@ function StateCombo({ value, onChange, onBlur, hasError }) {
     if (wasOpened) { onBlur?.(); setWasOpened(false); }
   }, [wasOpened, onBlur]);
 
-  useEffect(() => {
-    if (!open) return;
-    const h = (e) => {
-      if (!wrapRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) close();
-    };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open, close]);
+  useOutsideClick(wrapRef, panelRef, open, close);
 
-  const openDropdown = () => {
-    setOpen(true); setWasOpened(true); setQuery('');
-    setTimeout(() => inputRef.current?.focus(), 0);
+  const toggleDropdown = () => {
+    setOpen(prev => {
+      const next = !prev;
+      if (next) {
+        setWasOpened(true);
+        setQuery('');
+        setTimeout(() => inputRef.current?.focus(), 0);
+      }
+      return next;
+    });
   };
 
   const select = (state) => { onChange(state); setOpen(false); setQuery(''); setWasOpened(false); };
@@ -320,7 +315,7 @@ function StateCombo({ value, onChange, onBlur, hasError }) {
 
   const handleTriggerKeyDown = (e) => {
     if (!open) {
-      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDropdown(); }
+      if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleDropdown(); }
       return;
     }
     const items = listRef.current?.querySelectorAll('.pg-combo-option');
@@ -356,7 +351,7 @@ function StateCombo({ value, onChange, onBlur, hasError }) {
       <div
         ref={triggerRef}
         className={`pg-field-wrap pg-combo-trigger ${hasError ? 'pg-field-wrap--error' : 'pg-field-wrap--normal'}`}
-        onClick={openDropdown} tabIndex={0} onKeyDown={handleTriggerKeyDown}
+        onClick={toggleDropdown} tabIndex={0} onKeyDown={handleTriggerKeyDown}
         style={{ cursor: 'pointer' }}
       >
         <MapPin size={14} color={hasError ? '#ef4444' : '#c0c0d8'} style={{ flexShrink: 0 }} />
@@ -520,22 +515,16 @@ function HoardingMultiSelectCombo({ value, options, onChange, loading, hasError 
     setQuery('');
   }, []);
 
-  useEffect(() => {
-    if (!open) return;
-    const handleClickOutside = (e) => {
-      if (!wrapRef.current?.contains(e.target) && !panelRef.current?.contains(e.target)) {
-        close();
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [open, close]);
+  useOutsideClick(wrapRef, panelRef, open, close);
 
   const toggleOpen = () => {
-    setOpen(!open);
-    if (!open) {
-      setTimeout(() => inputRef.current?.focus(), 0);
-    }
+    setOpen(prev => {
+      const next = !prev;
+      if (next) {
+        setTimeout(() => inputRef.current?.focus(), 0);
+      }
+      return next;
+    });
   };
 
   const handleToggleOption = (id) => {
