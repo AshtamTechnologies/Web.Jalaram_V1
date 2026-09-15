@@ -108,6 +108,39 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
 
+function getContractGst(contract, quotations = []) {
+  if (!contract) return { cgstPct: 9, sgstPct: 9 };
+  const rawComments = contract.comments ?? contract.Comments ?? '';
+  if (!rawComments) return { cgstPct: 9, sgstPct: 9 };
+  const match = rawComments.match(/From Quotation\s+([^\s]+)(?:\s+Rev\.(\d+))?/i);
+  if (!match) return { cgstPct: 9, sgstPct: 9 };
+
+  const quotNoOrID = match[1].trim().toLowerCase();
+  const revNo = match[2] ? Number(match[2]) : null;
+
+  const found = quotations.find((q) => {
+    const qNo = String(q.quotationNumber ?? q.QuotationNumber ?? '').trim().toLowerCase();
+    const qID = String(q.quotationID ?? q.QuotationID ?? '');
+    const isNoMatch = qNo === quotNoOrID || qNo.replace(/[^a-z0-9]/g, '') === quotNoOrID.replace(/[^a-z0-9]/g, '');
+    const isIdMatch = qID === quotNoOrID;
+
+    if (!(isNoMatch || isIdMatch)) return false;
+    if (revNo !== null) {
+      const qRev = Number(q.quotationRevisionNumber ?? q.QuotationRevisionNumber ?? 0);
+      return qRev === revNo;
+    }
+    return true;
+  });
+
+  if (found) {
+    return {
+      cgstPct: Number(found.cGSTPercent ?? found.CGSTPercent ?? 9),
+      sgstPct: Number(found.sGSTPercent ?? found.SGSTPercent ?? 9),
+    };
+  }
+  return { cgstPct: 9, sgstPct: 9 };
+}
+
 export default function Dashboard({ changeTab }) {
   const [adminName, setAdminName] = useState('Admin');
   const [loading, setLoading] = useState(true);
@@ -617,7 +650,15 @@ export default function Dashboard({ changeTab }) {
   ══════════════════════════════════════════════════ */
   const monthlyStat = useMemo(() => {
     if (!showMonthlyValue) {
-      return { totalValue: 0, count: 0, hasData: false };
+      return {
+        totalValue: 0,
+        baseValue: 0,
+        cgstTotal: 0,
+        sgstTotal: 0,
+        totalGst: 0,
+        count: 0,
+        hasData: false,
+      };
     }
 
     const { month, year } = monthlyFilter;
@@ -631,24 +672,50 @@ export default function Dashboard({ changeTab }) {
     });
 
     if (matched.length === 0) {
-      return { totalValue: 0, count: 0, hasData: false };
+      return {
+        totalValue: 0,
+        baseValue: 0,
+        cgstTotal: 0,
+        sgstTotal: 0,
+        totalGst: 0,
+        count: 0,
+        hasData: false,
+      };
     }
 
-    const sum = matched.reduce((acc, c) => {
+    let sumBase = 0;
+    let sumCgst = 0;
+    let sumSgst = 0;
+    let sumTotalWithGst = 0;
+
+    matched.forEach((c) => {
       const finalVal = c.contractFinalValue ?? c.ContractFinalValue;
       const origVal = c.contractOrigValue ?? c.ContractOrigValue ?? 0;
-      const val = (finalVal !== null && finalVal !== undefined && Number(finalVal) > 0)
+      const baseVal = (finalVal !== null && finalVal !== undefined && Number(finalVal) > 0)
         ? Number(finalVal)
         : Number(origVal || 0);
-      return acc + val;
-    }, 0);
+
+      const { cgstPct, sgstPct } = getContractGst(c, quotations);
+      const cgstAmt = Math.round((baseVal * cgstPct) / 100);
+      const sgstAmt = Math.round((baseVal * sgstPct) / 100);
+      const totalWithGst = baseVal + cgstAmt + sgstAmt;
+
+      sumBase += baseVal;
+      sumCgst += cgstAmt;
+      sumSgst += sgstAmt;
+      sumTotalWithGst += totalWithGst;
+    });
 
     return {
-      totalValue: sum,
+      totalValue: sumTotalWithGst,
+      baseValue: sumBase,
+      cgstTotal: sumCgst,
+      sgstTotal: sumSgst,
+      totalGst: sumCgst + sumSgst,
       count: matched.length,
       hasData: true,
     };
-  }, [contracts, monthlyFilter, showMonthlyValue]);
+  }, [contracts, quotations, monthlyFilter, showMonthlyValue]);
 
   const handleApplyMonthlyFilter = () => {
     setShowMonthlyValue(true);
@@ -1888,7 +1955,7 @@ export default function Dashboard({ changeTab }) {
                         color: '#049edf',
                         fontFamily: 'Nunito, sans-serif',
                         lineHeight: 1.1,
-                        marginBottom: '8px',
+                        marginBottom: '4px',
                         letterSpacing: '-0.5px',
                       }}
                     >
@@ -1897,46 +1964,60 @@ export default function Dashboard({ changeTab }) {
 
                     <div
                       style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '5px 14px',
-                        borderRadius: '20px',
-                        background: '#e8faf3',
-                        border: '1px solid #a7f3d0',
-                        color: '#065f46',
-                        fontFamily: 'Nunito, sans-serif',
-                        fontSize: '12.5px',
+                        fontSize: '12px',
                         fontWeight: 800,
+                        color: '#059669',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                        marginBottom: '14px',
                       }}
                     >
-                      <Calendar size={13} />
-                      <span>{monthlyStat.count} {monthlyStat.count === 1 ? 'Contract' : 'Contracts'} Included</span>
+                      Total Contract Value (Incl. GST)
                     </div>
 
-                    <button
-                      onClick={() => setShowMonthlyValue(false)}
-                      style={{
-                        marginTop: '14px',
-                        padding: '4px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid #e2e8f0',
-                        background: '#fff',
-                        color: '#64748b',
-                        fontFamily: 'Nunito, sans-serif',
-                        fontSize: '11.5px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '5px',
-                        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-                        transition: 'all 0.15s ease',
-                      }}
-                      title="Hide contract value"
-                    >
-                      <EyeOff size={12} /> Hide Value
-                    </button>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          padding: '5px 14px',
+                          borderRadius: '20px',
+                          background: '#e8faf3',
+                          border: '1px solid #a7f3d0',
+                          color: '#065f46',
+                          fontFamily: 'Nunito, sans-serif',
+                          fontSize: '12.5px',
+                          fontWeight: 800,
+                        }}
+                      >
+                        <Calendar size={13} />
+                        <span>{monthlyStat.count} {monthlyStat.count === 1 ? 'Contract' : 'Contracts'} Included</span>
+                      </div>
+
+                      <button
+                        onClick={() => setShowMonthlyValue(false)}
+                        style={{
+                          padding: '5px 12px',
+                          borderRadius: '20px',
+                          border: '1px solid #e2e8f0',
+                          background: '#fff',
+                          color: '#64748b',
+                          fontFamily: 'Nunito, sans-serif',
+                          fontSize: '12px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '5px',
+                          boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                          transition: 'all 0.15s ease',
+                        }}
+                        title="Hide contract value"
+                      >
+                        <EyeOff size={12} /> Hide Value
+                      </button>
+                    </div>
                   </>
                 ) : (
                   <div
