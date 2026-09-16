@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   LogOut, Menu, X, ChevronDown, ChevronRight,
-  IndianRupee, Users, MapPin, Layers, UserCircle, Hash, FileX,
+  IndianRupee, Users, MapPin, Globe, Layers, UserCircle, Hash, FileX,
   FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard, UserRoundPlus, Lightbulb, BookOpen
 } from 'lucide-react';
 // import Chatbot from './Chatbot';
@@ -38,6 +38,7 @@ const MENU = [
   },
   { id: 'owners', icon: UserCircle, label: 'LandLord', badge: null },
   { id: 'sites', icon: MapPin, label: 'Sites', badge: null },
+  { id: 'external-sites', icon: Globe, label: 'External Sites', badge: null },
   { id: 'Registration', icon: UserRoundPlus, label: 'Registration', badge: null },
 
   {

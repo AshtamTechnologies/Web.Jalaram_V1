@@ -251,9 +251,25 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
 
   const fmtD = (d) => {
     if (!d) return '—';
-    return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', {
-      day: '2-digit', month: 'short', year: 'numeric',
-    });
+    try {
+      const s = String(d).trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+        const parts = s.split('T')[0].split('-');
+        const dt = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        return dt.toLocaleDateString('en-IN', {
+          day: '2-digit', month: 'short', year: 'numeric',
+        });
+      }
+      const dt = new Date(s);
+      if (!isNaN(dt.getTime())) {
+        return dt.toLocaleDateString('en-IN', {
+          day: '2-digit', month: 'short', year: 'numeric',
+        });
+      }
+      return s;
+    } catch {
+      return String(d);
+    }
   };
 
   const isSingleHoarding = hoardings.length === 1;
@@ -340,6 +356,7 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
     .hrd-cell{flex:0 0 50%;padding-right:8px;}
     .hrd-lbl{font-weight:700;}
     .hrd-green{color:#16a34a;font-weight:700;}
+    .hrd-orange{color:#d97706;font-weight:700;}
     .hrd-red{color:#dc2626;font-weight:700;font-size:12px;}
 
     /* Download bar */
@@ -388,7 +405,7 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
               <td style="padding:3px 0;">: ${fmtD(startDate)} &rarr; ${fmtD(endDate)}</td>
             </tr>
             <tr>
-              <td style="font-weight:bold; padding:3px 0;">Total Available Hoardings</td>
+              <td style="font-weight:bold; padding:3px 0;">Total Hoardings</td>
               <td style="padding:3px 0; font-weight:bold;">: ${hoardings.length} Location${hoardings.length !== 1 ? 's' : ''}</td>
             </tr>
             <tr>
@@ -400,7 +417,7 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
       </div>
       <div class="cov-foot">
         <span>${company.mobileNo || ''}</span>
-        <span>${hoardings.length} Available Hoarding${hoardings.length !== 1 ? 's' : ''}</span>
+        <span>${hoardings.length} Hoarding${hoardings.length !== 1 ? 's' : ''}</span>
       </div>
     </div>`;
 
@@ -409,6 +426,22 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
     const addr = [item.addressLine1, item.city, item.district].filter(Boolean).join(', ');
     const size = item.width && item.height ? `${item.width}×${item.height} ft` : '';
     const sqFt = item.width && item.height ? `${item.width * item.height} sq.ft` : '';
+
+    const isOccupied =
+      String(item.availabilityStatus || '').trim().toLowerCase() === 'occupied' ||
+      item.isAvailable === false ||
+      String(item.isAvailable).trim().toLowerCase() === 'false';
+
+    let availabilityHtml = '';
+    if (isOccupied) {
+      if (item.nextAvailableDate) {
+        availabilityHtml = `<span class="hrd-orange">Available on - ${fmtD(item.nextAvailableDate)}</span>`;
+      } else {
+        availabilityHtml = `<span class="hrd-red">Occupied</span>`;
+      }
+    } else {
+      availabilityHtml = `<span class="hrd-green">Available</span>`;
+    }
 
     return `
       <div class="hrd-box">
@@ -423,7 +456,7 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
           <div class="hrd-cell"><span class="hrd-lbl">Location:</span>&nbsp;${addr || '—'}</div>
           <div class="hrd-cell">
             <span class="hrd-lbl">Availability:</span>&nbsp;
-            <span class="hrd-green">Available Now</span>
+            ${availabilityHtml}
           </div>
           ${item.monthlyRent > 0 ? `
           <div class="hrd-cell" style="flex:0 0 100%;margin-top:2px;">

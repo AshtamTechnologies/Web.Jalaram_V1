@@ -3392,7 +3392,7 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
   );
 }
 
-function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], mergedApiImages = [], onPhotoSelected, onClose }) {
+function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], allHoardingsRaw = [], mergedApiImages = [], onPhotoSelected, onClose }) {
   const [activeTab, setActiveTab] = useState('existing');
   const [selectedPhotoId, setSelectedPhotoId] = useState(null);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState(null);
@@ -3403,6 +3403,8 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
   const [loadedPhotos, setLoadedPhotos] = useState(rawHoardingPhotos || []);
   const [fetchingPhotos, setFetchingPhotos] = useState(false);
   const fileInputRef = useRef(null);
+
+  const isMerged = !!mergeItem?.isMerged;
 
   useEffect(() => {
     (async () => {
@@ -3424,12 +3426,16 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
     })();
   }, [rawHoardingPhotos]);
 
-  // Filter existing photos that belong to any hoarding in this merge group
+  // Filter existing photos that belong to any hoarding in this merge group / single hoarding
   const existingPhotos = useMemo(() => {
-    const hIds = (mergeItem?.hoardingIDs || []).map(Number);
+    const baseHids = (mergeItem?.hoardingIDs || (mergeItem?.hoardingID ? [mergeItem.hoardingID] : [])).map(Number);
+    const hCode = mergeItem?.hoardingCode || mergeItem?.hoardingCodes;
+    const hIds = (!isMerged && allHoardingsRaw && allHoardingsRaw.length && hCode)
+      ? allHoardingsRaw.filter(h => h.hoardingCode === hCode).map(h => Number(h.hoardingID))
+      : baseHids;
     const result = [];
 
-    // 1. Add any previously uploaded merged images for this contract & hoarding
+    // 1. Add any previously uploaded merged/custom images for this contract & hoarding
     (mergedApiImages || []).forEach(img => {
       const hid = Number(img.hoardingID ?? img.HoardingID ?? 0);
       if (hIds.includes(hid)) {
@@ -3440,7 +3446,7 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
             hoardingPhotoID: `merged_${img.custContractAttachID || hid}`,
             isMergedImage: true,
             hoardingID: hid,
-            hoardingCode: `Merged Banner (Hoarding #${hid})`,
+            hoardingCode: isMerged ? `Merged Banner (Hoarding #${hid})` : `Contract Banner (${hCode || `#${hid}`})`,
             url,
             effdt: img.lastUpdateDttm || null,
           });
@@ -3454,7 +3460,7 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
       const path = p.photoPath ?? p.PhotoPath ?? p.photoFilePath ?? p.PhotoFilePath ?? '';
       if (!path) return;
       const url = path.startsWith('http') ? path : `${API_ROOT_URL}${path.startsWith('/') ? path : '/' + path}`;
-      const hObj = mergeItem?.mergedHoardings?.find(h => Number(h.hoardingID) === Number(p.hoardingID ?? p.HoardingID));
+      const hObj = mergeItem?.mergedHoardings?.find(h => Number(h.hoardingID) === Number(p.hoardingID ?? p.HoardingID)) || mergeItem;
       result.push({
         hoardingPhotoID: Number(p.hoardingPhotoID ?? p.HoardingPhotoID ?? 0),
         isMergedImage: false,
@@ -3466,7 +3472,7 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
     });
 
     return result;
-  }, [mergeItem, loadedPhotos, mergedApiImages]);
+  }, [mergeItem, isMerged, loadedPhotos, mergedApiImages, allHoardingsRaw]);
 
   const handleFileChange = (e) => {
     const file = e.target.files?.[0];
@@ -3480,6 +3486,9 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
   const handleSave = async () => {
     setError('');
     setSubmitting(true);
+    const primaryHid = mergeItem?.primaryHoardingID || mergeItem?.hoardingID;
+    const photoKey = isMerged ? mergeItem.mergeGroupKey : mergeItem?.hoardingID;
+
     try {
       if (activeTab === 'existing') {
         if (!selectedPhotoId) {
@@ -3488,39 +3497,41 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
           return;
         }
         const numericId = typeof selectedPhotoId === 'number' ? selectedPhotoId : Number(selectedPhotoId);
-        if (!isNaN(numericId) && numericId > 0) {
+        if (!isNaN(numericId) && numericId > 0 && primaryHid) {
           await apiService.selectMergePhoto({
             customerContractID: contractID,
-            hoardingID: mergeItem.primaryHoardingID,
+            hoardingID: primaryHid,
             existingHoardingPhotoID: numericId,
           });
         }
-        onPhotoSelected(mergeItem.mergeGroupKey, selectedPhotoUrl);
+        onPhotoSelected(photoKey, selectedPhotoUrl);
       } else {
         if (!uploadFile) {
           setError('Please select a photo file to upload.');
           setSubmitting(false);
           return;
         }
-        await apiService.selectMergePhoto({
-          customerContractID: contractID,
-          hoardingID: mergeItem.primaryHoardingID,
-          existingHoardingPhotoID: null,
-          newPhoto: uploadFile,
-        });
-        onPhotoSelected(mergeItem.mergeGroupKey, uploadPreview);
+        if (primaryHid) {
+          await apiService.selectMergePhoto({
+            customerContractID: contractID,
+            hoardingID: primaryHid,
+            existingHoardingPhotoID: null,
+            newPhoto: uploadFile,
+          });
+        }
+        onPhotoSelected(photoKey, uploadPreview);
       }
       onClose();
     } catch (err) {
       console.error('[SelectMergePhoto] error:', err);
       if (activeTab === 'existing' && selectedPhotoUrl) {
-        onPhotoSelected(mergeItem.mergeGroupKey, selectedPhotoUrl);
+        onPhotoSelected(photoKey, selectedPhotoUrl);
         onClose();
       } else if (activeTab === 'upload' && uploadPreview) {
-        onPhotoSelected(mergeItem.mergeGroupKey, uploadPreview);
+        onPhotoSelected(photoKey, uploadPreview);
         onClose();
       } else {
-        setError(err?.response?.data?.message || err?.message || 'Failed to select merge photo.');
+        setError(err?.response?.data?.message || err?.message || 'Failed to select photo.');
       }
     } finally {
       setSubmitting(false);
@@ -3545,17 +3556,25 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
         }}>
           <div style={{
             width: 42, height: 42, borderRadius: 12,
-            background: 'rgba(124,58,237,0.1)', border: '1px solid rgba(124,58,237,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed',
+            background: isMerged ? 'rgba(124,58,237,0.1)' : 'rgba(4,158,223,0.1)',
+            border: `1px solid ${isMerged ? 'rgba(124,58,237,0.2)' : 'rgba(4,158,223,0.2)'}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: isMerged ? '#7c3aed' : '#049edf',
           }}>
             <ImageIcon size={20} />
           </div>
           <div style={{ flex: 1 }}>
             <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 900, fontSize: 16, color: '#1a1a2e' }}>
-              Select Merge Banner Image
+              {isMerged ? 'Select Merge Banner Image' : 'Select Hoarding Banner Image'}
             </div>
-            <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, color: '#7c3aed', fontWeight: 700 }}>
-              {mergeItem?.hoardingCodes} ({mergeItem?.directionLabel})
+            <div style={{
+              fontFamily: 'Nunito, sans-serif', fontSize: 12,
+              color: isMerged ? '#7c3aed' : '#049edf',
+              fontWeight: 700,
+            }}>
+              {isMerged
+                ? `${mergeItem?.hoardingCodes} (${mergeItem?.directionLabel})`
+                : `${mergeItem?.hoardingCode} ${mergeItem?.size ? `(${mergeItem.size} ft)` : ''}`}
             </div>
           </div>
           <button onClick={onClose} style={{
@@ -3574,9 +3593,9 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
             onClick={() => { setActiveTab('existing'); setError(''); }}
             style={{
               flex: 1, padding: '11px 14px', border: 'none', background: activeTab === 'existing' ? '#fff' : 'transparent',
-              borderBottom: activeTab === 'existing' ? '2.5px solid #7c3aed' : '2.5px solid transparent',
+              borderBottom: activeTab === 'existing' ? `2.5px solid ${isMerged ? '#7c3aed' : '#049edf'}` : '2.5px solid transparent',
               fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800,
-              color: activeTab === 'existing' ? '#7c3aed' : '#7878a0', cursor: 'pointer',
+              color: activeTab === 'existing' ? (isMerged ? '#7c3aed' : '#049edf') : '#7878a0', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             }}>
             <Layers size={14} /> Existing Hoarding Photos ({existingPhotos.length})
@@ -3586,9 +3605,9 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
             onClick={() => { setActiveTab('upload'); setError(''); }}
             style={{
               flex: 1, padding: '11px 14px', border: 'none', background: activeTab === 'upload' ? '#fff' : 'transparent',
-              borderBottom: activeTab === 'upload' ? '2.5px solid #7c3aed' : '2.5px solid transparent',
+              borderBottom: activeTab === 'upload' ? `2.5px solid ${isMerged ? '#7c3aed' : '#049edf'}` : '2.5px solid transparent',
               fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 800,
-              color: activeTab === 'upload' ? '#7c3aed' : '#7878a0', cursor: 'pointer',
+              color: activeTab === 'upload' ? (isMerged ? '#7c3aed' : '#049edf') : '#7878a0', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             }}>
             <UploadCloud size={14} /> Upload Custom Photo
@@ -3618,7 +3637,7 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
                 <div style={{ textAlign: 'center', padding: '36px 10px', color: '#9090a8' }}>
                   <ImageIcon size={34} color="#d0d0e8" style={{ marginBottom: 8 }} />
                   <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: '#7878a0' }}>
-                    No photos found on these hoardings
+                    No photos found for this hoarding
                   </div>
                   <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#b0b0c8', marginTop: 4 }}>
                     Switch to &ldquo;Upload Custom Photo&rdquo; to upload a new banner image.
@@ -3637,10 +3656,10 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
                           setError('');
                         }}
                         style={{
-                          border: `2px solid ${isSelected ? '#7c3aed' : '#e8e8f4'}`,
+                          border: `2px solid ${isSelected ? (isMerged ? '#7c3aed' : '#049edf') : '#e8e8f4'}`,
                           borderRadius: 10, overflow: 'hidden', cursor: 'pointer',
-                          background: isSelected ? 'rgba(124,58,237,0.04)' : '#fff',
-                          boxShadow: isSelected ? '0 3px 12px rgba(124,58,237,0.2)' : 'none',
+                          background: isSelected ? (isMerged ? 'rgba(124,58,237,0.04)' : 'rgba(4,158,223,0.04)') : '#fff',
+                          boxShadow: isSelected ? (isMerged ? '0 3px 12px rgba(124,58,237,0.2)' : '0 3px 12px rgba(4,158,223,0.2)') : 'none',
                           transition: 'all 0.15s',
                         }}
                       >
@@ -3649,7 +3668,7 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
                           {isSelected && (
                             <div style={{
                               position: 'absolute', top: 4, right: 4, width: 22, height: 22,
-                              borderRadius: '50%', background: '#7c3aed', color: '#fff',
+                              borderRadius: '50%', background: isMerged ? '#7c3aed' : '#049edf', color: '#fff',
                               display: 'flex', alignItems: 'center', justifyContent: 'center',
                             }}>
                               <Check size={13} />
@@ -3657,7 +3676,7 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
                           )}
                         </div>
                         <div style={{ padding: '6px 8px' }}>
-                          <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 11.5, color: isSelected ? '#7c3aed' : '#1a1a2e' }}>
+                          <div style={{ fontFamily: 'Nunito, sans-serif', fontWeight: 800, fontSize: 11.5, color: isSelected ? (isMerged ? '#7c3aed' : '#049edf') : '#1a1a2e' }}>
                             {p.hoardingCode}
                           </div>
                           {p.effdt && (
@@ -3678,15 +3697,15 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
               <div
                 onClick={() => fileInputRef.current?.click()}
                 style={{
-                  border: '2px dashed rgba(124,58,237,0.35)', borderRadius: 12,
-                  padding: '30px 16px', textAlign: 'center', background: '#faf9ff',
+                  border: `2px dashed ${isMerged ? 'rgba(124,58,237,0.35)' : 'rgba(4,158,223,0.35)'}`, borderRadius: 12,
+                  padding: '30px 16px', textAlign: 'center', background: isMerged ? '#faf9ff' : '#f8fcff',
                   cursor: 'pointer', transition: 'border-color 0.15s',
                 }}
               >
                 {uploadPreview ? (
                   <div>
                     <img src={uploadPreview} alt="Preview" style={{ maxHeight: 160, maxWidth: '100%', borderRadius: 8, marginBottom: 10, objectFit: 'contain' }} />
-                    <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>
+                    <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 800, color: isMerged ? '#7c3aed' : '#049edf' }}>
                       {uploadFile?.name}
                     </div>
                     <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11, color: '#9090a8', marginTop: 3 }}>
@@ -3695,9 +3714,9 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
                   </div>
                 ) : (
                   <div>
-                    <UploadCloud size={38} color="#7c3aed" style={{ marginBottom: 8 }} />
+                    <UploadCloud size={38} color={isMerged ? '#7c3aed' : '#049edf'} style={{ marginBottom: 8 }} />
                     <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
-                      Click to select custom merge photo
+                      {isMerged ? 'Click to select custom merge photo' : 'Click to select custom hoarding photo'}
                     </div>
                     <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, color: '#9090a8', marginTop: 3 }}>
                       PNG, JPG, WebP supported
@@ -3730,7 +3749,9 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
             disabled={submitting || (activeTab === 'existing' ? !selectedPhotoId : !uploadFile)}
             style={{
               padding: '8px 22px', borderRadius: 8, border: 'none',
-              background: 'linear-gradient(135deg, #7c3aed, #6c63ff)',
+              background: isMerged
+                ? 'linear-gradient(135deg, #7c3aed, #6c63ff)'
+                : 'linear-gradient(135deg, #049edf, #6c63ff)',
               color: '#fff', fontFamily: 'Nunito, sans-serif', fontSize: 12.5,
               fontWeight: 800, cursor: submitting || (activeTab === 'existing' ? !selectedPhotoId : !uploadFile) ? 'not-allowed' : 'pointer',
               opacity: (activeTab === 'existing' ? selectedPhotoId : uploadFile) ? 1 : 0.6,
@@ -3907,10 +3928,6 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
     })();
   }, [maps, allHoardingsRaw]);
 
-  const photoUrlMap = useMemo(() => {
-    return { ...hoardingPhotos, ...customMergePhotos };
-  }, [hoardingPhotos, customMergePhotos]);
-
   const mergedApiImageMap = useMemo(() => {
     const map = {};
     if (!mergedApiImages || !mergedApiImages.length) return map;
@@ -3935,9 +3952,15 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
     return map;
   }, [mergedApiImages]);
 
+  const photoUrlMap = useMemo(() => {
+    return { ...hoardingPhotos, ...mergedApiImageMap, ...customMergePhotos };
+  }, [hoardingPhotos, mergedApiImageMap, customMergePhotos]);
+
   const getMergeGroupPhotoUrl = (item) => {
     if (!item) return null;
-    if (!item.isMerged) return photoUrlMap[item.hoardingID] || null;
+    if (!item.isMerged) {
+      return customMergePhotos[item.hoardingID] || mergedApiImageMap[item.hoardingID] || photoUrlMap[item.hoardingID] || null;
+    }
 
     // 1. Current session selection
     if (customMergePhotos[item.mergeGroupKey]) {
@@ -3969,16 +3992,8 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
         (rawSiteID != null ? siteMap[rawSiteID] : null) ||
         (rawSiteID != null ? siteMap[Number(rawSiteID)] : null) ||
         null;
-      const addrParts = [
-        site?.addressLine1,
-        site?.addressLine2,
-        site?.landmark ? `Nr. ${site.landmark}` : null,
-        [site?.city, site?.district].filter(Boolean).join(', ') || null,
-      ].filter(Boolean);
-      const address = isExternal ? '' : [...new Set(addrParts)].join(', ');
-      // Original code:
-      // const address = [...new Set(addrParts)].join(', ');
-      // END: Do not show site address for external hoardings in Contract PDF
+      const hoardingAddressLine1 = (site?.addressLine1 ?? site?.AddressLine1 ?? h?.addressLine1 ?? h?.AddressLine1 ?? '').trim();
+      const address = isExternal ? '' : hoardingAddressLine1;
       const hoardingCode = h?.hoardingCode ?? m.hoardingCode ?? `#${hid}`;
       const width = Number(h?.width ?? m.width ?? 0);
       const height = Number(h?.height ?? m.height ?? 0);
@@ -4153,9 +4168,8 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
         phone: selectedCompany.mobileNo || CONTRACT_COMPANY.phone,
       } : CONTRACT_COMPANY;
 
-      // Attach single photo to merged items
+      // Attach photo to merged & single items
       const preparedHoardingItems = displayItems.map(item => {
-        if (!item.isMerged) return item;
         return {
           ...item,
           photoUrl: getMergeGroupPhotoUrl(item),
@@ -4526,6 +4540,24 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
                           {!hasPhoto && (
                             <div style={S.noPhotoWarn}>⚠ No banner image uploaded</div>
                           )}
+
+                          {/* Change Image Button */}
+                          <div style={{ marginTop: 6 }}>
+                            <button
+                              type="button"
+                              onClick={() => setMergePhotoTarget(item)}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                padding: '3px 9px', borderRadius: 6,
+                                border: '1.5px solid rgba(4,158,223,0.30)',
+                                background: 'rgba(4,158,223,0.06)', color: '#049edf',
+                                fontFamily: 'Nunito, sans-serif', fontSize: 11, fontWeight: 800,
+                                cursor: 'pointer', transition: 'all 0.15s',
+                              }}
+                            >
+                              <RefreshCw size={10} /> Change / Select Image
+                            </button>
+                          </div>
                         </div>
 
                         {/* Toggle */}
@@ -4578,7 +4610,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
                       <button
                         onClick={() => setSelectedTermIds(new Set(allTerms.map(t => t.termID)))}
                         style={{
-                          padding: '3px 10px', borderRadius: 6, border: '1px solid #e8e8f4',
+                          padding: '3px 10px', borderRadius: 6, border: '1.5px solid #e8e8f4',
                           background: '#f8f8fd', cursor: 'pointer',
                           fontFamily: 'Nunito, sans-serif', fontSize: 11, fontWeight: 800, color: '#049edf',
                         }}>
@@ -4587,7 +4619,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
                       <button
                         onClick={() => setSelectedTermIds(new Set())}
                         style={{
-                          padding: '3px 10px', borderRadius: 6, border: '1px solid #e8e8f4',
+                          padding: '3px 10px', borderRadius: 6, border: '1.5px solid #e8e8f4',
                           background: '#f8f8fd', cursor: 'pointer',
                           fontFamily: 'Nunito, sans-serif', fontSize: 11, fontWeight: 800, color: '#9090a8',
                         }}>
@@ -4702,6 +4734,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
           mergeItem={mergePhotoTarget}
           contractID={contract?.customerContractID}
           rawHoardingPhotos={rawHoardingPhotos}
+          allHoardingsRaw={allHoardingsRaw}
           mergedApiImages={mergedApiImages}
           onPhotoSelected={handlePhotoSelected}
           onClose={() => setMergePhotoTarget(null)}

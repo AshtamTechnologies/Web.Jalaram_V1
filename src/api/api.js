@@ -1351,6 +1351,56 @@ export const apiService = {
   getAllExternalHoardings: () => api.get('/Hoarding/GetAllExternal'),
   getAllExternalAvailableForVendor: () => api.get('/Hoarding/GetAllExternalavailableforVendor'),
 
+  // OUTSIDE SITES (EXTERNAL SITES)
+  getAllOutsideSites: async () => {
+    try {
+      return await api.get('/OutsideSite');
+    } catch (err) {
+      if (err?.response?.status === 404) return [];
+      throw err;
+    }
+  },
+  getOutsideSiteById: (id) => api.get(`/OutsideSite/${id}`),
+  getOutsideSitesByVendorId: async (vendorId) => {
+    try {
+      return await api.get(`/OutsideSite/vendor/${vendorId}`);
+    } catch (err) {
+      if (err?.response?.status === 404) return [];
+      throw err;
+    }
+  },
+  createOutsideSite: (data) => api.post('/OutsideSite', {
+    outsideSiteID: 0,
+    addressLine1: data.addressLine1 || '',
+    addressLine2: data.addressLine2 || '',
+    addressLine3: data.addressLine3 || '',
+    landmark: data.landmark || '',
+    city: data.city || '',
+    district: data.district || '',
+    state: data.state || 'Gujarat',
+    pincode: data.pincode || '',
+    siteType: data.siteType || '',
+    country: data.country || 'India',
+    vendorID: Number(data.vendorID) || 0,
+    status: data.status === 'Active' || data.status === true,
+  }),
+  updateOutsideSite: (id, data) => api.put(`/OutsideSite/${id}`, {
+    outsideSiteID: Number(id),
+    addressLine1: data.addressLine1 || '',
+    addressLine2: data.addressLine2 || '',
+    addressLine3: data.addressLine3 || '',
+    landmark: data.landmark || '',
+    city: data.city || '',
+    district: data.district || '',
+    state: data.state || 'Gujarat',
+    pincode: data.pincode || '',
+    siteType: data.siteType || '',
+    country: data.country || 'India',
+    vendorID: Number(data.vendorID) || 0,
+    status: data.status === 'Active' || data.status === true,
+  }),
+  deleteOutsideSite: (id) => api.delete(`/OutsideSite/${id}`),
+
   // COMPANY DETAILS
   getAllCompanyDetails: () => api.get('/CompanyDetails'),
   getCompanyDetailsById: (id) => api.get(`/CompanyDetails/${id}`),

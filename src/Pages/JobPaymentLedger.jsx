@@ -390,6 +390,16 @@ function SupervisorComboField({ value, onChange, supervisors }) {
    MAIN COMPONENT: JobPaymentLedger
 ═══════════════════════════════════════════ */
 export default function JobPaymentLedger({ changeTab }) {
+  // Read saved filters from sessionStorage if available
+  const savedFilters = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem('ledger_filters');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   /* ── Data state ── */
   const [payments, setPayments] = useState([]);
   const [jobRequests, setJobRequests] = useState([]);
@@ -398,10 +408,20 @@ export default function JobPaymentLedger({ changeTab }) {
   const [companies, setCompanies] = useState([]);
 
   /* ── Filters state ── */
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  const [selectedSupervisor, setSelectedSupervisor] = useState('');
-  const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [fromDate, setFromDate] = useState(() => savedFilters?.fromDate || '');
+  const [toDate, setToDate] = useState(() => savedFilters?.toDate || '');
+  const [selectedSupervisor, setSelectedSupervisor] = useState(() => savedFilters?.selectedSupervisor || '');
+  const [selectedCompanyId, setSelectedCompanyId] = useState(() => savedFilters?.selectedCompanyId || '');
+
+  // Keep sessionStorage in sync whenever filters change
+  useEffect(() => {
+    sessionStorage.setItem('ledger_filters', JSON.stringify({
+      fromDate,
+      toDate,
+      selectedSupervisor,
+      selectedCompanyId,
+    }));
+  }, [fromDate, toDate, selectedSupervisor, selectedCompanyId]);
 
   /* ── UI state ── */
   const [loading, setLoading] = useState(true);
@@ -418,7 +438,10 @@ export default function JobPaymentLedger({ changeTab }) {
       setLoading(true);
       try {
         const [pRaw, jRaw, cRaw, uRaw, compRaw] = await Promise.all([
-          apiService.getFilteredJobPayments().catch(() => []),
+          apiService.getFilteredJobPayments({
+            fromDate: savedFilters?.fromDate || undefined,
+            toDate: savedFilters?.toDate || undefined,
+          }).catch(() => []),
           apiService.getAllJobRequests().catch(() => []),
           apiService.getAllCustomers().catch(() => []),
           apiService.getAllUsers().catch(() => []),
@@ -434,7 +457,7 @@ export default function JobPaymentLedger({ changeTab }) {
         const allCompanies = normalizeList(compRaw).map(normalizeCompany);
         const activeCompanies = allCompanies.filter(c => c.isActive);
         setCompanies(activeCompanies);
-        if (activeCompanies.length > 0) {
+        if (activeCompanies.length > 0 && !selectedCompanyId && !savedFilters?.selectedCompanyId) {
           setSelectedCompanyId(String(activeCompanies[0].companyID));
         }
       } catch (err) {
@@ -499,6 +522,21 @@ export default function JobPaymentLedger({ changeTab }) {
     }
   }, [fromDate, toDate, selectedCompanyId, showToast]);
 
+  /* ── Navigate to Job Step 2 (Hoardings & Tasks) ── */
+  const handleNavigateToJob = useCallback((jobRequestID) => {
+    if (!jobRequestID) return;
+    sessionStorage.setItem('ledger_filters', JSON.stringify({
+      fromDate,
+      toDate,
+      selectedSupervisor,
+      selectedCompanyId,
+    }));
+    sessionStorage.setItem('open_job_id', String(jobRequestID));
+    sessionStorage.setItem('open_job_step', '2');
+    sessionStorage.setItem('from_payment_ledger', 'true');
+    changeTab?.('Jobs');
+  }, [fromDate, toDate, selectedSupervisor, selectedCompanyId, changeTab]);
+
   /* ── Client-side supervisor filter (identical to JobPaymentPage) ── */
   const filteredPayments = useMemo(() => {
     return payments.filter(p => {
@@ -546,9 +584,11 @@ export default function JobPaymentLedger({ changeTab }) {
       };
     }
 
-    // ── Dr (Debit) side: 1 row per unique jobRequestID ──
+    // ── Dr / Credit (Cr) side: 1 row per unique jobRequestID Bill + extra payment rows ──
+    const drRows = [];
     const uniqueJobIds = Array.from(new Set(filteredPayments.map(p => p.jobRequestID)));
-    const drRows = uniqueJobIds.map(jobReqID => {
+    
+    uniqueJobIds.forEach(jobReqID => {
       const jobPayments = filteredPayments.filter(p => p.jobRequestID === jobReqID);
       const calculatedAmount = Number(jobPayments[0]?.calculatedAmount ?? 0);
       
@@ -560,38 +600,90 @@ export default function JobPaymentLedger({ changeTab }) {
       const earliestDate = validDates[0] || '';
       const custName = getCustomerName(jobReqID);
 
-      return {
+      // Main Job Bill row
+      drRows.push({
         jobRequestID: jobReqID,
         date: earliestDate,
         label: `Job #${jobReqID} Bill`,
         custName: custName,
+        comments: '',
         amount: calculatedAmount,
         isBalancing: false,
-      };
+        isExtra: false,
+      });
+
+      // Extra payment rows for this job (if any)
+      jobPayments.forEach(p => {
+        const rawExtra = p.extrapayment !== null && p.extrapayment !== undefined ? String(p.extrapayment).trim() : '';
+        const cleanExtraPayment = (rawExtra && rawExtra.toLowerCase() !== 'string' && rawExtra !== '0') ? rawExtra : '';
+        const extraVal = Number(cleanExtraPayment) || 0;
+        const cleanComments = (p.comments && p.comments.toLowerCase() !== 'string') ? p.comments.trim() : '';
+        const cleanPaidBy = (p.paidBY && p.paidBY.toLowerCase() !== 'string') ? p.paidBY.trim() : '';
+
+        if (extraVal > 0) {
+          drRows.push({
+            jobRequestID: jobReqID,
+            date: p.paymentDate || '',
+            label: `Job #${jobReqID} Extra Payment`,
+            custName: custName,
+            paidBy: cleanPaidBy,
+            comments: cleanComments,
+            amount: extraVal,
+            isBalancing: false,
+            isExtra: true,
+          });
+        }
+      });
     });
 
-    // ── Cr (Credit) side: 1 row per individual JobPayment record ──
-    const crRows = filteredPayments.map(p => {
+    // ── Cr (Credit) side: 1 row per individual JobPayment record, plus Extra Payment row if present ──
+    const crRows = [];
+    filteredPayments.forEach(p => {
       const custName = getCustomerName(p.jobRequestID);
       const cleanPaidBy = (p.paidBY && p.paidBY.toLowerCase() !== 'string') ? p.paidBY.trim() : '';
       const cleanComments = (p.comments && p.comments.toLowerCase() !== 'string') ? p.comments.trim() : '';
       const rawExtra = p.extrapayment !== null && p.extrapayment !== undefined ? String(p.extrapayment).trim() : '';
       const cleanExtraPayment = (rawExtra && rawExtra.toLowerCase() !== 'string' && rawExtra !== '0') ? rawExtra : '';
+      const extraVal = Number(cleanExtraPayment) || 0;
+      const paidVal = Number(p.paidAmount ?? 0);
 
-      return {
-        jobPaymentID: p.jobPaymentID,
-        jobRequestID: p.jobRequestID,
-        date: p.paymentDate || '',
-        label: `Job #${p.jobRequestID} Payment`,
-        custName: custName,
-        paidBy: cleanPaidBy,
-        comments: cleanComments,
-        extraPayment: cleanExtraPayment,
-        isAdvancePayment: !!p.isAdvancePayment,
-        isPartialPayment: !!p.isParicialPayment,
-        amount: Number(p.paidAmount ?? 0),
-        isBalancing: false,
-      };
+      // Main payment row (show if paidVal > 0 OR if there is no extra payment)
+      if (paidVal > 0 || extraVal === 0) {
+        crRows.push({
+          jobPaymentID: p.jobPaymentID,
+          jobRequestID: p.jobRequestID,
+          date: p.paymentDate || '',
+          label: `Job #${p.jobRequestID} Payment`,
+          custName: custName,
+          paidBy: cleanPaidBy,
+          comments: cleanComments,
+          extraPayment: '',
+          isAdvancePayment: !!p.isAdvancePayment,
+          isPartialPayment: !!p.isParicialPayment,
+          amount: paidVal,
+          isBalancing: false,
+          isExtra: false,
+        });
+      }
+
+      // Extra payment row (shown as its own entry with job number, customer, comment, and extra amount)
+      if (extraVal > 0) {
+        crRows.push({
+          jobPaymentID: `${p.jobPaymentID}_extra`,
+          jobRequestID: p.jobRequestID,
+          date: p.paymentDate || '',
+          label: `Job #${p.jobRequestID} Extra Payment`,
+          custName: custName,
+          paidBy: cleanPaidBy,
+          comments: cleanComments,
+          extraPayment: cleanExtraPayment,
+          isAdvancePayment: false,
+          isPartialPayment: false,
+          amount: extraVal,
+          isBalancing: false,
+          isExtra: true,
+        });
+      }
     });
 
     // Totals before balancing
@@ -605,8 +697,8 @@ export default function JobPaymentLedger({ changeTab }) {
     if (totalDrRaw > totalCrRaw) {
       const diff = totalDrRaw - totalCrRaw;
       crBalancing = {
-        label: 'Balance c/d',
-        subLabel: '(Difference to balance Cr)',
+        label: 'Balance Cr',
+        subLabel: '(Balance Payable)',
         date: '',
         amount: diff,
         isBalancing: true,
@@ -614,8 +706,8 @@ export default function JobPaymentLedger({ changeTab }) {
     } else if (totalCrRaw > totalDrRaw) {
       const diff = totalCrRaw - totalDrRaw;
       drBalancing = {
-        label: 'Balance c/d',
-        subLabel: '(Difference to balance Dr)',
+        label: 'Balance Dr',
+        subLabel: '(Advance Balance)',
         date: '',
         amount: diff,
         isBalancing: true,
@@ -701,19 +793,26 @@ export default function JobPaymentLedger({ changeTab }) {
       const estimateRowHeight = (pair) => {
         let drLines = 1;
         if (pair.dr) {
-          let drText = pair.dr.isBalancing ? 'Balance c/d' : pair.dr.label;
-          if (pair.dr.custName) drText += `\nCust: ${pair.dr.custName}`;
+          let drText = pair.dr.label;
+          if (!pair.dr.isBalancing) {
+            if (pair.dr.isExtra) drText += ' [EXTRA]';
+            if (pair.dr.custName) drText += `\nCust: ${pair.dr.custName}`;
+            if (pair.dr.paidBy) drText += `\nPaid by: ${pair.dr.paidBy}`;
+            if (pair.dr.comments) drText += `\nNote: ${pair.dr.comments}`;
+          }
           drLines = doc.splitTextToSize(drText, 235).length;
         }
 
         let crLines = 1;
         if (pair.cr) {
-          let crText = pair.cr.isBalancing ? 'Balance c/d' : pair.cr.label;
-          if (pair.cr.isAdvancePayment) crText += ' [ADVANCE]';
-          if (pair.cr.extraPayment) crText += ` [EXTRA PAYMENT: Rs. ${pair.cr.extraPayment}]`;
-          if (pair.cr.custName) crText += `\nCust: ${pair.cr.custName}`;
-          if (pair.cr.paidBy) crText += `\nPaid by: ${pair.cr.paidBy}`;
-          if (pair.cr.comments) crText += `\nNote: ${pair.cr.comments}`;
+          let crText = pair.cr.label;
+          if (!pair.cr.isBalancing) {
+            if (pair.cr.isAdvancePayment) crText += ' [ADVANCE]';
+            if (pair.cr.isExtra) crText += ' [EXTRA]';
+            if (pair.cr.custName) crText += `\nCust: ${pair.cr.custName}`;
+            if (pair.cr.paidBy) crText += `\nPaid by: ${pair.cr.paidBy}`;
+            if (pair.cr.comments) crText += `\nNote: ${pair.cr.comments}`;
+          }
           crLines = doc.splitTextToSize(crText, 235).length;
         }
 
@@ -834,24 +933,24 @@ export default function JobPaymentLedger({ changeTab }) {
           // Line 2: Financial Summary
           doc.setFont('helvetica', 'bold');
           doc.setTextColor(0, 0, 0);
-          doc.text('Total Dr:', margin + 12, 81);
+          doc.text('Total Cr:', margin + 12, 81);
           doc.setFont('helvetica', 'normal');
           doc.text(fmtCurrencyPdf(ledgerData.totalDrRaw), margin + 60, 81);
 
           doc.setFont('helvetica', 'bold');
-          doc.text('Total Cr:', margin + 180, 81);
+          doc.text('Total Dr:', margin + 180, 81);
           doc.setFont('helvetica', 'normal');
           doc.text(fmtCurrencyPdf(ledgerData.totalCrRaw), margin + 226, 81);
 
           doc.setFont('helvetica', 'bold');
-          doc.text('Unique Jobs (Dr):', margin + 340, 81);
+          doc.text('Jobs (Cr):', margin + 340, 81);
           doc.setFont('helvetica', 'normal');
           doc.text(String(ledgerData.uniqueJobCount || 0), margin + 424, 81);
 
           doc.setFont('helvetica', 'bold');
-          doc.text('Total Payments (Cr):', margin + 490, 81);
+          doc.text('Total Payments (Dr):', margin + 490, 81);
           doc.setFont('helvetica', 'normal');
-          doc.text(String(ledgerData.paymentCount || 0), margin + 594, 81);
+          doc.text(String(ledgerData.paymentCount || 0), margin + 600, 81);
         }
 
         // Build Table Body for this page
@@ -873,23 +972,22 @@ export default function JobPaymentLedger({ changeTab }) {
         pageRows.forEach(pair => {
           let drText = '';
           if (pair.dr) {
-            if (pair.dr.isBalancing) {
-              drText = 'Balance c/d';
-            } else {
-              drText = pair.dr.label;
+            drText = pair.dr.label;
+            if (!pair.dr.isBalancing) {
+              if (pair.dr.isExtra) drText += ' [EXTRA]';
               if (pair.dr.custName) drText += `\nCust: ${pair.dr.custName}`;
+              if (pair.dr.paidBy) drText += `\nPaid by: ${pair.dr.paidBy}`;
+              if (pair.dr.comments) drText += `\nNote: ${pair.dr.comments}`;
             }
             runningDr += Number(pair.dr.amount || 0);
           }
 
           let crText = '';
           if (pair.cr) {
-            if (pair.cr.isBalancing) {
-              crText = 'Balance c/d';
-            } else {
-              crText = pair.cr.label;
+            crText = pair.cr.label;
+            if (!pair.cr.isBalancing) {
               if (pair.cr.isAdvancePayment) crText += ' [ADVANCE]';
-              if (pair.cr.extraPayment) crText += ` [EXTRA PAYMENT: Rs. ${pair.cr.extraPayment}]`;
+              if (pair.cr.isExtra) crText += ' [EXTRA]';
               if (pair.cr.custName) crText += `\nCust: ${pair.cr.custName}`;
               if (pair.cr.paidBy) crText += `\nPaid by: ${pair.cr.paidBy}`;
               if (pair.cr.comments) crText += `\nNote: ${pair.cr.comments}`;
@@ -913,10 +1011,10 @@ export default function JobPaymentLedger({ changeTab }) {
           // On the final page, show true grand Total Dr / Total Cr
           footRow = [
             '',
-            'Total Dr',
+            'Total Cr',
             fmtCurrencyPdf(ledgerData.balancedTotal),
             '',
-            'Total Cr',
+            'Total Dr',
             fmtCurrencyPdf(ledgerData.balancedTotal),
           ];
         } else {
@@ -937,12 +1035,12 @@ export default function JobPaymentLedger({ changeTab }) {
           startY: startY,
           head: [
             [
-              { content: 'DEBIT (Dr)', colSpan: 3, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' } },
               { content: 'CREDIT (Cr)', colSpan: 3, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' } },
+              { content: 'DEBIT (Dr)', colSpan: 3, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' } },
             ],
             [
-              'Date', 'Particulars (Job Bill)', 'Amount (Dr)',
-              'Date', 'Particulars (Payment Details)', 'Amount (Cr)'
+              'Date', 'Particulars (Job Bill)', 'Amount (Cr)',
+              'Date', 'Particulars (Payment Details)', 'Amount (Dr)'
             ]
           ],
           body: tableBody,
@@ -1265,10 +1363,10 @@ export default function JobPaymentLedger({ changeTab }) {
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#5a5a78' }}>
-              Unique Jobs (Dr): <strong style={{ color: '#049edf' }}>{ledgerData.uniqueJobCount || 0}</strong>
+              Jobs (Cr): <strong style={{ color: '#049edf' }}>{ledgerData.uniqueJobCount || 0}</strong>
             </div>
             <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#5a5a78' }}>
-              Payments (Cr): <strong style={{ color: '#16a34a' }}>{ledgerData.paymentCount || 0}</strong>
+              Payments (Dr): <strong style={{ color: '#16a34a' }}>{ledgerData.paymentCount || 0}</strong>
             </div>
           </div>
         </div>
@@ -1324,7 +1422,8 @@ export default function JobPaymentLedger({ changeTab }) {
                         background: 'rgba(4,158,223,0.06)'
                       }}
                     >
-                      DEBIT (Dr) — Calculated Job Amounts
+                      {/* DEBIT (Dr) — Calculated Job Amounts */}
+                      CREDIT (Cr)
                     </th>
                     <th
                       colSpan={3}
@@ -1338,7 +1437,8 @@ export default function JobPaymentLedger({ changeTab }) {
                         background: 'rgba(22,163,74,0.06)'
                       }}
                     >
-                      CREDIT (Cr) — Received Payments
+                      {/* CREDIT (Cr) — Received Payments */}
+                      DEBIT (Dr)
                     </th>
                   </tr>
                   <tr style={{ background: '#f1f5f9', borderBottom: '1.5px solid #cbd5e1' }}>
@@ -1373,12 +1473,78 @@ export default function JobPaymentLedger({ changeTab }) {
                       <td style={{ padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#1a1a2e' }}>
                         {pair.dr && (
                           <div>
-                            <div style={{ fontWeight: pair.dr.isBalancing ? 800 : 700, color: pair.dr.isBalancing ? '#dc2626' : '#1a1a2e' }}>
-                              {pair.dr.label}
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              {pair.dr.jobRequestID && !pair.dr.isBalancing ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleNavigateToJob(pair.dr.jobRequestID)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 0,
+                                    fontFamily: 'Nunito,sans-serif',
+                                    fontSize: 13,
+                                    fontWeight: 800,
+                                    color: pair.dr.isExtra ? '#b45309' : '#049edf',
+                                    cursor: 'pointer',
+                                    textDecoration: 'underline',
+                                    textDecorationColor: pair.dr.isExtra ? 'rgba(180,83,9,0.35)' : 'rgba(4,158,223,0.35)',
+                                    textAlign: 'left',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4
+                                  }}
+                                  title={`Open Job #${pair.dr.jobRequestID} (Step 2: Hoardings & Tasks)`}
+                                >
+                                  {pair.dr.label}
+                                </button>
+                              ) : (
+                                <div style={{ fontWeight: pair.dr.isBalancing ? 800 : 700, color: pair.dr.isBalancing ? '#dc2626' : '#1a1a2e' }}>
+                                  {pair.dr.label}
+                                </div>
+                              )}
+                              {pair.dr.isExtra && (
+                                <span style={{
+                                  fontSize: 10,
+                                  fontWeight: 800,
+                                  padding: '1px 6px',
+                                  borderRadius: 10,
+                                  background: '#fffbeb',
+                                  color: '#b45309',
+                                  border: '1px solid #fde68a',
+                                  textTransform: 'uppercase'
+                                }}>
+                                  Extra
+                                </span>
+                              )}
                             </div>
-                            {pair.dr.custName && (
-                              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginTop: 2 }}>
-                                Cust: {pair.dr.custName}
+
+                            {!pair.dr.isBalancing && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 3 }}>
+                                {pair.dr.custName && (
+                                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                                    Cust: {pair.dr.custName}
+                                  </span>
+                                )}
+                                {pair.dr.paidBy && (
+                                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
+                                    Paid by: {pair.dr.paidBy}
+                                  </span>
+                                )}
+                                {pair.dr.comments && (
+                                  <span style={{
+                                    fontSize: 11,
+                                    color: '#0369a1',
+                                    background: '#f0f9ff',
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    display: 'inline-block',
+                                    width: 'fit-content',
+                                    border: '1px solid #e0f2fe'
+                                  }}>
+                                    💬 {pair.dr.comments}
+                                  </span>
+                                )}
                               </div>
                             )}
                           </div>
@@ -1403,14 +1569,40 @@ export default function JobPaymentLedger({ changeTab }) {
                         {pair.cr ? (pair.cr.date ? fmtDate(pair.cr.date) : (pair.cr.isBalancing ? '—' : '—')) : ''}
                       </td>
 
-                      {/* Cr Side Cell 2: Particulars (includes Advance tag, Extra Payment flag, Customer, PaidBy, Comments) */}
+                      {/* Cr Side Cell 2: Particulars (includes Advance tag, Extra tag, Customer, PaidBy, Comments) */}
                       <td style={{ padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 13, color: '#1a1a2e' }}>
                         {pair.cr && (
                           <div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                              <span style={{ fontWeight: pair.cr.isBalancing ? 800 : 700, color: pair.cr.isBalancing ? '#dc2626' : '#1a1a2e' }}>
-                                {pair.cr.label}
-                              </span>
+                              {pair.cr.jobRequestID && !pair.cr.isBalancing ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleNavigateToJob(pair.cr.jobRequestID)}
+                                  style={{
+                                    background: 'none',
+                                    border: 'none',
+                                    padding: 0,
+                                    fontFamily: 'Nunito,sans-serif',
+                                    fontSize: 13,
+                                    fontWeight: 800,
+                                    color: pair.cr.isExtra ? '#b45309' : '#1a1a2e',
+                                    cursor: 'pointer',
+                                    textDecoration: 'underline',
+                                    textDecorationColor: pair.cr.isExtra ? 'rgba(180,83,9,0.35)' : 'rgba(4,158,223,0.35)',
+                                    textAlign: 'left',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 4
+                                  }}
+                                  title={`Open Job #${pair.cr.jobRequestID} (Step 2: Hoardings & Tasks)`}
+                                >
+                                  {pair.cr.label}
+                                </button>
+                              ) : (
+                                <span style={{ fontWeight: pair.cr.isBalancing ? 800 : 700, color: pair.cr.isBalancing ? '#dc2626' : '#1a1a2e' }}>
+                                  {pair.cr.label}
+                                </span>
+                              )}
                               {pair.cr.isAdvancePayment && (
                                 <span style={{
                                   fontSize: 10,
@@ -1425,7 +1617,7 @@ export default function JobPaymentLedger({ changeTab }) {
                                   Advance
                                 </span>
                               )}
-                              {pair.cr.extraPayment && (
+                              {pair.cr.isExtra && (
                                 <span style={{
                                   fontSize: 10,
                                   fontWeight: 800,
@@ -1436,7 +1628,7 @@ export default function JobPaymentLedger({ changeTab }) {
                                   border: '1px solid #fde68a',
                                   textTransform: 'uppercase'
                                 }}>
-                                  Extra: ₹ {pair.cr.extraPayment}
+                                  Extra
                                 </span>
                               )}
                             </div>
@@ -1451,11 +1643,6 @@ export default function JobPaymentLedger({ changeTab }) {
                                 {pair.cr.paidBy && (
                                   <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>
                                     Paid by: {pair.cr.paidBy}
-                                  </span>
-                                )}
-                                {pair.cr.extraPayment && (
-                                  <span style={{ fontSize: 11, color: '#b45309', fontWeight: 700 }}>
-                                    ⚡ Extra Payment: ₹ {pair.cr.extraPayment}
                                   </span>
                                 )}
                                 {pair.cr.comments && (
@@ -1497,7 +1684,8 @@ export default function JobPaymentLedger({ changeTab }) {
                 <tfoot>
                   <tr style={{ background: '#f8fafc', borderTop: '2.5px solid #cbd5e1', borderBottom: '2.5px double #94a3b8' }}>
                     <td colSpan={2} style={{ padding: '12px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 900, color: '#1a1a2e', textAlign: 'right' }}>
-                      Total Dr (Debit):
+                      {/* Total Dr (Debit): */}
+                      Total Cr (Credit):
                     </td>
                     <td style={{
                       padding: '12px 14px',
@@ -1512,7 +1700,8 @@ export default function JobPaymentLedger({ changeTab }) {
                     </td>
 
                     <td colSpan={2} style={{ padding: '12px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 900, color: '#1a1a2e', textAlign: 'right' }}>
-                      Total Cr (Credit):
+                      {/* Total Cr (Credit): */}
+                      Total Dr (Debit):
                     </td>
                     <td style={{
                       padding: '12px 14px',

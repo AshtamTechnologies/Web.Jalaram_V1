@@ -433,11 +433,11 @@ function normalizeHoarding(raw) {
     monthlyRent: Number(raw.monthlyRent ?? raw.MonthlyRent ?? 0),
     width: Number(raw.width ?? raw.Width ?? 0),
     height: Number(raw.height ?? raw.Height ?? 0),
-    siteID: raw.siteID ?? raw.SiteID ?? null,
+    siteID: raw.siteID ?? raw.SiteID ?? raw.outsideSiteID ?? raw.OutsideSiteID ?? null,
     status: raw.status ?? raw.Status ?? '',
     material: raw.material ?? raw.Material ?? '',
     hoardingType: raw.hoardingType ?? raw.HoardingType ?? '',
-    site: raw.site ? normalizeSite(raw.site) : null,
+    site: raw.site ? (isExt ? normalizeOutsideSite(raw.site) : normalizeSite(raw.site)) : (raw.outsideSite ? normalizeOutsideSite(raw.outsideSite) : null),
     isExternal: isExt,
   };
 }
@@ -459,8 +459,8 @@ function parseSize(sizeStr) {
 
 
 
-// AFTER — collect UNIQUE siteIDs from BOTH sources, deduplicated
-function buildSiteColorMap(hoardings, sites = []) {
+// AFTER — collect UNIQUE siteIDs from ALL sources, deduplicated
+function buildSiteColorMap(hoardings, sites = [], outsideSites = []) {
   const map = new Map();
   let idx = 0;
 
@@ -473,9 +473,18 @@ function buildSiteColorMap(hoardings, sites = []) {
     }
   }
 
-  // Fill any remaining site IDs not already covered
+  // Fill any remaining internal site IDs not already covered
   for (const s of sites) {
     const sid = toSID(s.siteID ?? s.SiteID);
+    if (sid != null && !map.has(sid)) {
+      map.set(sid, SITE_PASTEL_PALETTE[idx % SITE_PASTEL_PALETTE.length]);
+      idx++;
+    }
+  }
+
+  // Fill any external outside site IDs not already covered
+  for (const os of outsideSites) {
+    const sid = toSID(os.outsideSiteID ?? os.siteID ?? os.SiteID);
     if (sid != null && !map.has(sid)) {
       map.set(sid, SITE_PASTEL_PALETTE[idx % SITE_PASTEL_PALETTE.length]);
       idx++;
@@ -498,6 +507,46 @@ function normalizeSite(raw) {
     country: raw.country ?? raw.Country ?? '',
     ownerID: raw.ownerID ?? raw.OwnerID ?? 0,
   };
+}
+
+function normalizeOutsideSite(raw) {
+  if (!raw) return null;
+  return {
+    outsideSiteID: Number(raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.siteID ?? raw.SiteID ?? 0),
+    siteID: Number(raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.siteID ?? raw.SiteID ?? 0),
+    addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? '',
+    addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? '',
+    addressLine3: raw.addressLine3 ?? raw.AddressLine3 ?? '',
+    landmark: raw.landmark ?? raw.Landmark ?? '',
+    city: raw.city ?? raw.City ?? '',
+    district: raw.district ?? raw.District ?? '',
+    state: raw.state ?? raw.State ?? '',
+    pincode: raw.pincode ?? raw.Pincode ?? '',
+    siteType: raw.siteType ?? raw.SiteType ?? '',
+    country: raw.country ?? raw.Country ?? '',
+    vendorID: Number(raw.vendorID ?? raw.VendorID ?? 0),
+  };
+}
+
+function getHoardingSite(h, siteMap, outsideSiteMap) {
+  if (!h) return null;
+  const isExt = h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' ||
+    h.is_External === true || String(h.is_External).toLowerCase() === 'true' ||
+    h.IsExternal === true || String(h.IsExternal).toLowerCase() === 'true' ||
+    h.Is_External === true || String(h.Is_External).toLowerCase() === 'true';
+  const rawSid = toSID(h.siteID ?? h.site?.siteID ?? h.site?.SiteID ?? h.site?.outsideSiteID ?? h.outsideSiteID);
+
+  if (isExt) {
+    if (rawSid != null && outsideSiteMap?.has(rawSid)) return outsideSiteMap.get(rawSid);
+    if (h.outsideSite) return normalizeOutsideSite(h.outsideSite);
+    if (h.site) return normalizeOutsideSite(h.site);
+    if (rawSid != null && siteMap?.has(rawSid)) return siteMap.get(rawSid);
+    return null;
+  } else {
+    if (rawSid != null && siteMap?.has(rawSid)) return siteMap.get(rawSid);
+    if (h.site) return normalizeSite(h.site);
+    return null;
+  }
 }
 
 function buildSiteAddress(site, fallback = '') {
@@ -534,12 +583,15 @@ function getSiteAddress(h) {
   return buildSiteAddress(h?.site, h?.hoardingCode || '');
 }
 
-const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = null) => {
-  const rawSiteID = toSID(h?.siteID ?? h?.site?.siteID ?? h?.site?.SiteID);
-  const site = h?.site
-    ? normalizeSite(h.site)
-    : (rawSiteID != null ? (siteMap?.get(rawSiteID) ?? null) : null);
-  const siteID = toSID(site?.siteID) ?? rawSiteID ?? null;
+const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = null, outsideSiteMap = null) => {
+  const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
+    h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
+    h?.IsExternal === true || String(h?.IsExternal).toLowerCase() === 'true' ||
+    h?.Is_External === true || String(h?.Is_External).toLowerCase() === 'true';
+
+  const rawSiteID = toSID(h?.siteID ?? h?.site?.siteID ?? h?.site?.SiteID ?? h?.site?.outsideSiteID ?? h?.outsideSiteID);
+  const site = getHoardingSite(h, siteMap, outsideSiteMap);
+  const siteID = toSID(site?.outsideSiteID ?? site?.siteID) ?? rawSiteID ?? null;
 
   const start = globalStart || '';
   const end = globalEnd || '';
@@ -547,11 +599,6 @@ const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = nu
   const computedEnd = end || (start ? calculateEndDate(start, days) : '');
   const nos = calcNOSFromDays(days);
   const baseRent = nos * (h?.monthlyRent || 0);
-
-  const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
-    h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
-    h?.IsExternal === true || String(h?.IsExternal).toLowerCase() === 'true' ||
-    h?.Is_External === true || String(h?.Is_External).toLowerCase() === 'true';
 
   return {
     _id: uid(),
@@ -561,9 +608,7 @@ const newHoardingRow = (h = null, globalStart = '', globalEnd = '', siteMap = nu
     siteObj: site,
     hoardingCode: h?.hoardingCode || '',
     isExternal: isExt,
-    location: isExt
-      ? (h?.hoardingCode || '')
-      : buildSiteAddress(site, h?.hoardingCode || ''),
+    location: buildSiteAddress(site, h?.hoardingCode || ''),
     size: h ? `${h.width} X ${h.height}` : '',
     sqFt: h ? (h.width * h.height) : 0,
     nos: nos,
@@ -654,23 +699,12 @@ function newMergedRow(rowsArr, direction) {
     mergedHoardingIDs: rowsArr.map(r => Number(r.hoardingID) || 0).filter(id => id > 0),
     hoardingID: 0,
     siteID: null,
-    // START: Do not show site address for external hoardings in Quotation/Proforma PDF
     location: [...new Set(rowsArr.map(r => {
-      const isExt = r.isExternal === true || String(r.isExternal).toLowerCase() === 'true' || r.is_External === true || String(r.is_External).toLowerCase() === 'true';
-      if (isExt) return r.hoardingCode || '';
       if (r.rowType === 'hoarding' && r.siteObj) {
         return `${r.siteObj.addressLine1 || ''}${r.siteObj.city ? `, ${r.siteObj.city}` : ''}`;
       }
       return r.location || '';
     }).filter(Boolean))].join(' + '),
-    // Original code:
-    // location: [...new Set(rowsArr.map(r => {
-    //   if (r.rowType === 'hoarding' && r.siteObj) {
-    //     return `${r.siteObj.addressLine1 || ''}${r.siteObj.city ? `, ${r.siteObj.city}` : ''}`;
-    //   }
-    //   return r.location || '';
-    // }).filter(Boolean))].join(' + '),
-    // END: Do not show site address for external hoardings in Quotation/Proforma PDF
     hoardingCode: rowsArr.map(r => r.hoardingCode || '').join(' + '),
     size: `${mw} X ${mh}`,
     sqFt,
@@ -1680,7 +1714,7 @@ function ManualHoardingModal({ allHoardings, existingIds, onAdd, onClose, siteCo
 /* ═══════════════════════════════════════════
    EXTERNAL HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
-function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteColorMap, siteMap, startDate, endDate, showToast }) {
+function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteColorMap, siteMap, outsideSiteMap, startDate, endDate, showToast }) {
   const [hoardingsList, setHoardingsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1741,8 +1775,8 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
       const mapped = filteredExternal.map(item => {
         const hid = item.hoardingID ?? item.HoardingID ?? item.hoardingId;
         const full = allHoardings.find(h => h.hoardingID === hid);
-        const sid = item.siteID ?? item.SiteID ?? item.siteId ?? full?.siteID;
-        const siteObj = sid != null ? siteMap.get(sid) : null;
+        const sid = toSID(item.siteID ?? item.SiteID ?? item.siteId ?? item.outsideSiteID ?? full?.siteID);
+        const siteObj = getHoardingSite({ ...item, ...full, isExternal: true, siteID: sid }, siteMap, outsideSiteMap);
         return {
           hoardingID: hid,
           hoardingCode: item.hoardingCode ?? full?.hoardingCode ?? item.HoardingCode ?? '',
@@ -1766,7 +1800,7 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, siteMap, allHoardings]);
+  }, [startDate, endDate, siteMap, outsideSiteMap, allHoardings]);
 
   useEffect(() => {
     fetchExternal();
@@ -1890,10 +1924,9 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
             filtered.map(h => {
               const checked = selected.has(h.hoardingID);
               const alreadyIn = existingIds.has(h.hoardingID);
-              const sid = h.siteID ?? h.site?.siteID;
+              const sid = h.siteID ?? h.site?.siteID ?? h.site?.outsideSiteID;
               const siteColor = toSID(sid) != null ? siteColorMap.get(toSID(sid)) : null;
-              const site = h.site ? normalizeSite(h.site) : null;
-              const resolvedSite = site ?? (toSID(sid) != null ? siteMap?.get(toSID(sid)) ?? null : null);
+              const resolvedSite = getHoardingSite(h, siteMap, outsideSiteMap);
               const { line1, line2 } = getSiteDisplayLines(resolvedSite, h.hoardingCode);
 
               return (
@@ -2955,15 +2988,15 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
 
   return ReactDOM.createPortal(
     <div className="pg-overlay">
-      <div className="pg-modal qt-merge-modal" style={{ maxWidth: 620, display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
-        <div className="pg-modal__head" style={{ flexShrink: 0 }}>
+      <div className="pg-modal qt-merge-modal" style={{ maxWidth: 640, width: '95%', display: 'flex', flexDirection: 'column', maxHeight: '90vh', overflow: 'hidden' }}>
+        <div className="pg-modal__head" style={{ flexShrink: 0, padding: '14px 20px' }}>
           <div className="pg-modal__head-left">
-            <div className="pg-modal__icon-wrap" style={{ background: 'rgba(124,58,237,0.10)' }}>
-              <Link2 size={20} color="#7c3aed" />
+            <div className="pg-modal__icon-wrap" style={{ background: 'rgba(124,58,237,0.10)', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Link2 size={18} color="#7c3aed" />
             </div>
             <div>
-              <h5 className="pg-modal__title">Merge Hoardings</h5>
-              <p className="pg-modal__subtitle">
+              <h5 className="pg-modal__title" style={{ fontSize: 16, fontWeight: 800 }}>Merge Hoardings</h5>
+              <p className="pg-modal__subtitle" style={{ fontSize: 11.5, color: '#9090a8', marginTop: 2 }}>
                 {dir === 'S'
                   ? <>Select <strong>exactly 4</strong> same-size hoardings from the <strong>same site</strong> (all internal or all external)</>
                   : <>Select <strong>2 or more</strong> hoardings from the <strong>same site</strong> (all internal or all external)</>
@@ -2974,206 +3007,226 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
           <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
         </div>
 
-        {/* Direction */}
-        <div className="qt-merge-pad-custom" style={{ padding: '14px 24px', borderBottom: '1px solid #f0f0f8', flexShrink: 0 }}>
-          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78', marginBottom: 10 }}>
-            Merge Direction
+        {/* Scrollable Modal Body */}
+        <div className="qt-merge-modal-body" style={{ flex: '1 1 auto', overflowY: 'auto', padding: '12px 20px', display: 'flex', flexDirection: 'column', gap: 12, minHeight: 0 }}>
+          {/* Direction */}
+          <div className="qt-merge-pad-custom" style={{ flexShrink: 0 }}>
+            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: 6 }}>
+              Merge Direction
+            </div>
+            <div className="qt-merge-dir-container" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+              {[
+                { val: 'H', label: 'Horizontal', sub: 'Side by side · sum(widths)', icon: '↔' },
+                { val: 'V', label: 'Vertical', sub: 'Top to bottom · sum(heights)', icon: '↕' },
+                { val: 'S', label: 'Square', sub: '2×2 grid · exact 4 same-size', icon: '⊞' },
+              ].map(({ val, label, sub, icon }) => {
+                const isActive = dir === val;
+                return (
+                  <button key={val} onClick={() => setDir(val)}
+                    type="button"
+                    className={`qt-merge-dir-btn ${isActive ? 'active' : ''}`}
+                    style={{
+                      padding: '8px 10px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                      border: `1.5px solid ${isActive ? '#7c3aed' : '#e2e8f0'}`,
+                      background: isActive ? '#f5f3ff' : '#ffffff',
+                      boxShadow: isActive ? '0 0 0 1px #7c3aed inset' : 'none',
+                      transition: 'all 0.15s ease',
+                      fontFamily: 'Nunito,sans-serif',
+                      display: 'flex', flexDirection: 'column', gap: 2
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="qt-merge-dir-icon" style={{ fontSize: 14, fontWeight: 900, color: isActive ? '#7c3aed' : '#64748b' }}>{icon}</span>
+                      <span className="qt-merge-dir-label" style={{ fontSize: 12.5, fontWeight: 800, color: isActive ? '#7c3aed' : '#1e293b' }}>{label}</span>
+                    </div>
+                    <div className="qt-merge-dir-sub" style={{ fontSize: 10, color: isActive ? '#6d28d9' : '#94a3b8', lineHeight: 1.2 }}>{sub}</div>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-          <div className="qt-merge-dir-container" style={{ display: 'flex', gap: 10 }}>
-            {[
-              { val: 'H', label: 'Horizontal', sub: 'Side by side · sum(widths) + gaps', icon: '↔' },
-              { val: 'V', label: 'Vertical', sub: 'Top to bottom · sum(heights) + gaps', icon: '↕' },
-              { val: 'S', label: 'Square', sub: '2×2 grid · exact 4 same-size hoardings', icon: '⊞' },
-            ].map(({ val, label, sub, icon }) => (
-              <button key={val} onClick={() => setDir(val)}
-                className="qt-merge-dir-btn"
-                style={{
-                  flex: 1, padding: '12px', borderRadius: 12, cursor: 'pointer', textAlign: 'left',
-                  border: `2px solid ${dir === val ? '#7c3aed' : '#e8e8f4'}`,
-                  background: dir === val ? 'rgba(124,58,237,0.06)' : '#fff',
-                  fontFamily: 'Nunito,sans-serif',
-                }}
-              >
-                <div className="qt-merge-dir-icon" style={{ fontSize: 22, marginBottom: 4 }}>{icon}</div>
-                <div className="qt-merge-dir-label" style={{ fontSize: 13, fontWeight: 800, color: dir === val ? '#7c3aed' : '#1a1a2e' }}>{label}</div>
-                <div className="qt-merge-dir-sub" style={{ fontSize: 11, color: '#9090a8', marginTop: 3 }}>{sub}</div>
-              </button>
-            ))}
-          </div>
-        </div>
 
-        <div className="qt-merge-pad-custom-top" style={{ padding: '14px 24px 0', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78', flexShrink: 0 }}>
-          Select hoardings from the Same Site
-          <span style={{ color: '#9090a8', fontWeight: 600, marginLeft: 6 }}>
-            ({sel.length} selected — {dir === 'S' ? 'exactly 4 required' : 'min. 2'})
-          </span>
-        </div>
+          {/* Hoardings Selection */}
+          <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minHeight: 0 }}>
+            <div className="qt-merge-pad-custom-top" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6, flexShrink: 0 }}>
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#4b5563', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                Select Hoardings
+              </span>
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 700, color: sel.length >= 2 ? '#7c3aed' : '#9090a8' }}>
+                {sel.length} selected — {dir === 'S' ? 'exactly 4 required' : 'min. 2 required'}
+              </span>
+            </div>
 
-        <div className="qt-merge-scroll-area" style={{ flex: '1 1 auto', overflowY: 'auto', maxHeight: 300, minHeight: 0, padding: '8px 24px 14px' }}>
-          {siteGroups.map(group => {
-            const groupColor = group.siteID != null ? siteColorMap.get(group.siteID) : null;
-            const siteMismatch = firstSiteID !== undefined && group.siteID !== firstSiteID;
-            const extMismatch = firstIsExternal !== undefined && group.isExternal !== firstIsExternal;
-            const groupLocked = siteMismatch || extMismatch;
-            const lockReason = siteMismatch
-              ? '✕ Different site'
-              : (group.isExternal ? '✕ External hoardings' : '✕ Internal hoardings');
-            return (
-              <div key={`${String(group.siteID ?? '__none__')}_${group.isExternal ? 'ext' : 'int'}`} style={{ marginBottom: 14 }}>
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6,
-                  padding: '5px 10px', borderRadius: 8,
-                  background: groupLocked ? '#f8f8f8' : (groupColor ? groupColor.bg : '#f4f4fb'),
-                  border: `1px solid ${groupLocked ? '#e8e8f0' : (groupColor ? groupColor.border : '#e8e8f4')}`,
-                  opacity: groupLocked ? 0.5 : 1,
-                  flexWrap: 'wrap',
-                }}>
-                  {groupColor && !groupLocked && (
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: groupColor.dot, flexShrink: 0 }} />
-                  )}
-                  <MapPin size={12} color={groupLocked ? '#c0c0d8' : (groupColor?.dot || '#9090a8')} />
-                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: groupLocked ? '#b0b0c8' : '#1a1a2e' }}>
-                    {group.label}
-                  </span>
-                  {group.isExternal && (
-                    <span style={{
-                      fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800,
-                      padding: '1px 6px', borderRadius: 4,
-                      background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a'
+            <div className="qt-merge-scroll-area" style={{ maxHeight: 260, minHeight: 130, overflowY: 'auto', border: '1px solid #eef0f6', borderRadius: 10, padding: '8px 10px', background: '#fbfbff' }}>
+              {siteGroups.map(group => {
+                const groupColor = group.siteID != null ? siteColorMap.get(group.siteID) : null;
+                const siteMismatch = firstSiteID !== undefined && group.siteID !== firstSiteID;
+                const extMismatch = firstIsExternal !== undefined && group.isExternal !== firstIsExternal;
+                const groupLocked = siteMismatch || extMismatch;
+                const lockReason = siteMismatch
+                  ? '✕ Different site'
+                  : (group.isExternal ? '✕ External hoardings' : '✕ Internal hoardings');
+                return (
+                  <div key={`${String(group.siteID ?? '__none__')}_${group.isExternal ? 'ext' : 'int'}`} style={{ marginBottom: 10 }}>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5,
+                      padding: '4px 8px', borderRadius: 6,
+                      background: groupLocked ? '#f8f8f8' : (groupColor ? groupColor.bg : '#f4f4fb'),
+                      border: `1px solid ${groupLocked ? '#e8e8f0' : (groupColor ? groupColor.border : '#e8e8f4')}`,
+                      opacity: groupLocked ? 0.5 : 1,
+                      flexWrap: 'wrap',
                     }}>
-                      External
-                    </span>
-                  )}
-                  {groupLocked && (
-                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#dc2626', marginLeft: 'auto', fontWeight: 700 }}>
-                      {lockReason}
-                    </span>
-                  )}
-                </div>
-
-                {group.rows.map(r => {
-                  const checked = sel.includes(r._id);
-                  const isExternalRow = isExtRow(r);
-                  const extMismatch = firstIsExternal !== undefined && isExternalRow !== firstIsExternal;
-                  const siteMismatch = firstSiteID !== undefined && r.siteID !== firstSiteID;
-                  const disabled = groupLocked || extMismatch || siteMismatch;
-                  const { line1, line2 } = getSiteDisplayLines(r.siteObj, r.hoardingCode);
-                  const selIdx = sel.indexOf(r._id);
-                  return (
-                    <div key={r._id}
-                      onClick={() => !disabled && toggle(r._id)}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        padding: '9px 12px', borderRadius: 10, marginBottom: 6,
-                        cursor: disabled ? 'not-allowed' : 'pointer',
-                        border: `1.5px solid ${checked ? '#7c3aed' : '#f0f0f0'}`,
-                        background: checked ? 'rgba(124,58,237,0.06)' : groupLocked ? '#f8f8f8' : '#fafafa',
-                        opacity: disabled ? 0.4 : 1,
-                      }}
-                    >
-                      <div style={{
-                        width: 20, height: 20, borderRadius: 6, flexShrink: 0,
-                        border: `2px solid ${checked ? '#7c3aed' : '#d0d0e0'}`,
-                        background: checked ? '#7c3aed' : '#fff',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {checked && <Check size={12} color="#fff" />}
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: groupLocked ? '#b0b0c8' : '#1a1a2e' }}>
-                            {line1 || r.hoardingCode}
-                          </span>
-                          {isExternalRow && (
-                            <span style={{
-                              fontFamily: 'Nunito,sans-serif', fontSize: 9.5, fontWeight: 800,
-                              padding: '1px 5px', borderRadius: 3,
-                              background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a'
-                            }}>
-                              External
-                            </span>
-                          )}
-                        </div>
-                        {line2 && (
-                          <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', marginTop: 1 }}>{line2}</div>
-                        )}
-                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#b0b0c8', marginTop: 1 }}>
-                          Code: {r.hoardingCode} · Size: {r.size} · {r.sqFt} sq.ft
-                        </div>
-                      </div>
-                      {checked && (
-                        <div style={{
-                          fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800,
-                          padding: '2px 8px', borderRadius: 5, flexShrink: 0,
-                          background: 'rgba(124,58,237,0.12)', color: '#7c3aed',
-                          border: '1px solid rgba(124,58,237,0.25)',
+                      {groupColor && !groupLocked && (
+                        <div style={{ width: 8, height: 8, borderRadius: '50%', background: groupColor.dot, flexShrink: 0 }} />
+                      )}
+                      <MapPin size={11} color={groupLocked ? '#c0c0d8' : (groupColor?.dot || '#9090a8')} />
+                      <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: groupLocked ? '#b0b0c8' : '#1a1a2e' }}>
+                        {group.label}
+                      </span>
+                      {group.isExternal && (
+                        <span style={{
+                          fontFamily: 'Nunito,sans-serif', fontSize: 9.5, fontWeight: 800,
+                          padding: '1px 5px', borderRadius: 3,
+                          background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a'
                         }}>
-                          #{selIdx + 1}
-                        </div>
+                          External
+                        </span>
+                      )}
+                      {groupLocked && (
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#dc2626', marginLeft: 'auto', fontWeight: 700 }}>
+                          {lockReason}
+                        </span>
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
 
-        {/* Preview */}
-        {preview && (
-          <div className="qt-merge-preview-block" style={{ margin: '0 24px 14px', padding: '12px 16px', borderRadius: 12, background: 'rgba(124,58,237,0.06)', border: '1.5px solid rgba(124,58,237,0.20)', flexShrink: 0 }}>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#7c3aed', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Link2 size={13} /> Merge Preview ({preview.count} hoardings)
+                    {group.rows.map(r => {
+                      const checked = sel.includes(r._id);
+                      const isExternalRow = isExtRow(r);
+                      const extMismatch = firstIsExternal !== undefined && isExternalRow !== firstIsExternal;
+                      const siteMismatch = firstSiteID !== undefined && r.siteID !== firstSiteID;
+                      const disabled = groupLocked || extMismatch || siteMismatch;
+                      const { line1, line2 } = getSiteDisplayLines(r.siteObj, r.hoardingCode);
+                      const selIdx = sel.indexOf(r._id);
+                      return (
+                        <div key={r._id}
+                          onClick={() => !disabled && toggle(r._id)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 10,
+                            padding: '7px 10px', borderRadius: 8, marginBottom: 5,
+                            cursor: disabled ? 'not-allowed' : 'pointer',
+                            border: `1.5px solid ${checked ? '#7c3aed' : '#e8e8f0'}`,
+                            background: checked ? '#f5f3ff' : (groupLocked ? '#f8f8f8' : '#ffffff'),
+                            opacity: disabled ? 0.45 : 1,
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <div style={{
+                            width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                            border: `2px solid ${checked ? '#7c3aed' : '#cbd5e1'}`,
+                            background: checked ? '#7c3aed' : '#fff',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          }}>
+                            {checked && <Check size={11} color="#fff" strokeWidth={3} />}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: groupLocked ? '#b0b0c8' : '#1e293b' }}>
+                                {line1 || r.hoardingCode}
+                              </span>
+                              {isExternalRow && (
+                                <span style={{
+                                  fontFamily: 'Nunito,sans-serif', fontSize: 9, fontWeight: 800,
+                                  padding: '1px 4px', borderRadius: 3,
+                                  background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a'
+                                }}>
+                                  External
+                                </span>
+                              )}
+                            </div>
+                            {line2 && (
+                              <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#64748b', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{line2}</div>
+                            )}
+                            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#94a3b8', marginTop: 1 }}>
+                              Code: <strong style={{ color: '#475569' }}>{r.hoardingCode}</strong> · Size: <strong style={{ color: '#475569' }}>{r.size}</strong> · <strong style={{ color: '#475569' }}>{r.sqFt} sq.ft</strong>
+                            </div>
+                          </div>
+                          {checked && (
+                            <div style={{
+                              fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 800,
+                              padding: '2px 7px', borderRadius: 5, flexShrink: 0,
+                              background: '#ede9fe', color: '#7c3aed',
+                              border: '1px solid #ddd6fe',
+                            }}>
+                              #{selIdx + 1}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
             </div>
-            <div style={{ display: 'flex', gap: '16px 24px', flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8' }}>Combined Size</div>
-                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 16, fontWeight: 900, color: '#1a1a2e' }}>{preview.size}</div>
-              </div>
-              <div>
-                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8' }}>Total Area</div>
-                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 16, fontWeight: 900, color: '#1a1a2e' }}>{preview.sqFt} sq.ft</div>
-              </div>
-              <div>
-                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8' }}>Direction</div>
-                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 900, color: '#7c3aed' }}>
-                  {dir === 'S' ? '⊞ Square' : (dir === 'H' ? '↔ Horizontal' : '↕ Vertical')}
+          </div>
+
+          {/* Preview */}
+          {preview && (
+            <div className="qt-merge-preview-block" style={{ padding: '8px 12px', borderRadius: 8, background: '#f5f3ff', border: '1px solid #ddd6fe', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#7c3aed', display: 'flex', alignItems: 'center', gap: 5 }}>
+                  <Link2 size={13} /> Merge Preview ({preview.count} hoardings):
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#64748b' }}>Size:</span>
+                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 900, color: '#1e293b' }}>{preview.size}</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#64748b' }}>Area:</span>
+                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 900, color: '#1e293b' }}>{preview.sqFt} sq.ft</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#64748b' }}>Dir:</span>
+                    <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>
+                      {dir === 'S' ? '⊞ Square' : (dir === 'H' ? '↔ Horizontal' : '↕ Vertical')}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Validation Error Banner */}
-        {validationError && (
-          <div style={{
-            margin: '0 24px 10px',
-            padding: '8px 14px',
-            borderRadius: 8,
-            background: '#fef2f2',
-            border: '1px solid #fecaca',
-            color: '#dc2626',
-            fontFamily: 'Nunito,sans-serif',
-            fontSize: 12,
-            fontWeight: 700,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            flexShrink: 0
-          }}>
-            <AlertTriangle size={14} color="#dc2626" />
-            <span>{validationError}</span>
-          </div>
-        )}
+          {/* Validation Error Banner */}
+          {validationError && (
+            <div style={{
+              padding: '6px 10px',
+              borderRadius: 6,
+              background: '#fef2f2',
+              border: '1px solid #fecaca',
+              color: '#dc2626',
+              fontFamily: 'Nunito,sans-serif',
+              fontSize: 11.5,
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              flexShrink: 0
+            }}>
+              <AlertTriangle size={13} color="#dc2626" />
+              <span>{validationError}</span>
+            </div>
+          )}
+        </div>
 
-        <div className="pg-modal__foot qt-merge-foot-container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <div className="qt-merge-foot-text" style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#9090a8', fontWeight: 600 }}>
+        {/* Footer */}
+        <div className="pg-modal__foot qt-merge-foot-container" style={{ padding: '10px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, borderTop: '1px solid #f0f0f8' }}>
+          <div className="qt-merge-foot-text" style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#64748b', fontWeight: 600 }}>
             {dir === 'S'
               ? (sel.length === 4 ? '4 hoardings selected for Square Merge' : 'Square merge requires exactly 4 hoardings')
               : (sel.length < 2 ? 'Select at least 2 hoardings' : `${sel.length} hoardings will be merged`)}
           </div>
           <div className="qt-merge-foot-actions" style={{ display: 'flex', gap: 10 }}>
-            <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
+            <button className="pg-btn-cancel" onClick={onClose} style={{ padding: '8px 16px', borderRadius: 8, fontSize: 12.5, fontWeight: 700 }}>Cancel</button>
             <button
               disabled={!canMerge}
               onClick={() => {
@@ -3182,14 +3235,15 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
                 onMerge(selectedRowData, dir);
               }}
               style={{
-                display: 'flex', alignItems: 'center', gap: 7,
-                padding: '9px 20px', borderRadius: 9, border: 'none',
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '8px 18px', borderRadius: 8, border: 'none',
                 background: canMerge ? '#7c3aed' : '#d0d0e0',
                 color: '#fff', cursor: canMerge ? 'pointer' : 'not-allowed',
-                fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800,
+                fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800,
+                transition: 'background 0.15s ease'
               }}
             >
-              <Link2 size={14} /> Merge {sel.length >= 2 ? `(${sel.length})` : ''}
+              <Link2 size={13} /> Merge {sel.length >= 2 ? `(${sel.length})` : ''}
             </button>
           </div>
         </div>
@@ -3203,7 +3257,7 @@ function MergeModal({ rows, onMerge, onClose, siteColorMap }) {
    MERGED HOARDINGS VIEW MODAL
    Show details of individual hoardings that are merged together in a row.
 ═══════════════════════════════════════════ */
-function MergedHoardingsViewModal({ row, hoardings, siteMap, onClose }) {
+function MergedHoardingsViewModal({ row, hoardings, siteMap, outsideSiteMap, onClose }) {
   const mergedItems = useMemo(() => {
     return (row.mergedHoardingIDs || [])
       .map(hid => hoardings.find(h => h.hoardingID === hid))
@@ -3257,10 +3311,7 @@ function MergedHoardingsViewModal({ row, hoardings, siteMap, onClose }) {
                   </tr>
                 ) : (
                   mergedItems.map((h, idx) => {
-                    const rawSid = h.siteID ?? h.site?.siteID ?? h.site?.SiteID;
-                    const sid = toSID(rawSid);
-                    const embeddedSite = h.site ? normalizeSite(h.site) : null;
-                    const resolvedSite = embeddedSite ?? (sid != null ? (siteMap?.get(sid) ?? null) : null);
+                    const resolvedSite = getHoardingSite(h, siteMap, outsideSiteMap);
                     const siteAddress = buildSiteAddress(resolvedSite, h.hoardingCode);
 
                     return (
@@ -3492,7 +3543,7 @@ async function addHoardingEffdtRows(hoardingIDs, allHoardings, effdt, status) {
 }
 
 function CreateContractFromQuotModal({
-  quot, quotLines, quotMerges = [], hoardings, customers, siteMap, paymentFreqs, onClose, onCreated, showToast,
+  quot, quotLines, quotMerges = [], hoardings, customers, siteMap, outsideSiteMap, paymentFreqs, onClose, onCreated, showToast,
 }) {
   const myLines = quotLines.filter(l =>
     Number(l.quotationID) === Number(quot.quotationID) &&
@@ -3528,8 +3579,7 @@ function CreateContractFromQuotModal({
     // Regular lines (non-merged)
     const regularRows = regularLines.map(l => {
       const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-      const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-      const siteObj = siteID != null ? siteMap.get(siteID) : null;
+      const siteObj = getHoardingSite(h, siteMap, outsideSiteMap);
       return {
         _id: uid(),
         selected: true,
@@ -3586,8 +3636,7 @@ function CreateContractFromQuotModal({
 
         // Combined location
         const locations = hoardingObjs.map(h => {
-          const sid = h.siteID ?? h.site?.siteID ?? null;
-          const siteObj = sid != null ? siteMap.get(sid) : null;
+          const siteObj = getHoardingSite(h, siteMap, outsideSiteMap);
           return buildSiteAddress(siteObj, h.hoardingCode || '');
         });
 
@@ -4376,6 +4425,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const [customers, setCustomers] = useState([]);
   const [hoardings, setHoardings] = useState([]);
   const [sites, setSites] = useState([]);
+  const [outsideSites, setOutsideSites] = useState([]);
   const [termsList, setTermsList] = useState([]);
   const [paymentFreqs, setPaymentFreqs] = useState([]);   // ← NEW
   const [loading, setLoading] = useState(true);
@@ -4643,11 +4693,21 @@ export default function QuotationPage({ onNavigateToContracts }) {
     return map;
   }, [sites, hoardings]);
 
+  /* ── Outside Site lookup map (for external hoardings) ── */
+  const outsideSiteMap = useMemo(() => {
+    const map = new Map();
+    for (const os of outsideSites) {
+      const sid = toSID(os?.outsideSiteID ?? os?.siteID ?? os?.id);
+      if (sid) map.set(sid, os);
+    }
+    return map;
+  }, [outsideSites]);
+
   /* ── Site colour map ── */
   const siteColorMap = useMemo(() => {
-    const map = buildSiteColorMap(hoardings, sites);
+    const map = buildSiteColorMap(hoardings, sites, outsideSites);
     return map;
-  }, [hoardings, sites]);
+  }, [hoardings, sites, outsideSites]);
 
   const getRowSiteColor = (row) => {
     const sid = toSID(row.siteID ?? row.siteObj?.siteID);
@@ -4697,24 +4757,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
           };
         }
         const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-        const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-        const siteObj = siteID != null
-          ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
-          : null;
+        const siteObj = getHoardingSite(h, siteMap, outsideSiteMap);
 
         const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
         const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
-        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
-        const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
-        const loc = isExt
-          ? (h?.hoardingCode || '')
-          : (siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '');
-        // Original code:
-        // const loc = siteObj
-        //   ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
-        //   : h?.hoardingCode || '';
-        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
+        const loc = siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '';
 
         return {
           rowType: 'hoarding',
@@ -4775,23 +4823,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
           mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
         }
 
-        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
         const locations = hoardingObjs.map(h => {
-          const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
-          if (isExt) return h.hoardingCode || '';
-          const site = h.siteID ? siteMap.get(h.siteID) : null;
+          const site = getHoardingSite(h, siteMap, outsideSiteMap);
           return site
             ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
-            : h.hoardingCode || '';
+            : h?.hoardingCode || '';
         });
-        // Original code:
-        // const locations = hoardingObjs.map(h => {
-        //   const site = h.siteID ? siteMap.get(h.siteID) : null;
-        //   return site
-        //     ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
-        //     : h.hoardingCode || '';
-        // });
-        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
         const locFallback = [...new Set(locations)].join(' + ');
@@ -4909,24 +4946,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
           };
         }
         const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-        const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-        const siteObj = siteID != null
-          ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
-          : null;
+        const siteObj = getHoardingSite(h, siteMap, outsideSiteMap);
 
         const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
         const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
-        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
-        const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
-        const loc = isExt
-          ? (h?.hoardingCode || '')
-          : (siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '');
-        // Original code:
-        // const loc = siteObj
-        //   ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
-        //   : h?.hoardingCode || '';
-        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
+        const loc = siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '';
 
         return {
           rowType: 'hoarding',
@@ -4987,23 +5012,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
           mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
         }
 
-        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
         const locations = hoardingObjs.map(h => {
-          const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
-          if (isExt) return h.hoardingCode || '';
-          const site = h.siteID ? siteMap.get(h.siteID) : null;
+          const site = getHoardingSite(h, siteMap, outsideSiteMap);
           return site
             ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
-            : h.hoardingCode || '';
+            : h?.hoardingCode || '';
         });
-        // Original code:
-        // const locations = hoardingObjs.map(h => {
-        //   const site = h.siteID ? siteMap.get(h.siteID) : null;
-        //   return site
-        //     ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
-        //     : h.hoardingCode || '';
-        // });
-        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
         const locFallback = [...new Set(locations)].join(' + ');
@@ -5227,11 +5241,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, hRaw, extRaw, sRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw, quotCustRaw, invoicesRaw, companyDetailsRaw, quotationCompRaw] = await Promise.all([
+        const [cRaw, hRaw, extRaw, sRaw, osRaw, tRaw, qRaw, qlRaw, pRaw, contractsRaw, mapsRaw, quotCustRaw, invoicesRaw, companyDetailsRaw, quotationCompRaw] = await Promise.all([
           apiService.getAllCustomers(),
           apiService.getAllHoardings(),
           apiService.getAllExternalHoardings().catch(() => []),
           apiService.getAllSites().catch(() => []),
+          apiService.getAllOutsideSites().catch(() => []),
           apiService.getAllCustomerTerms().catch(() => []),
           apiService.getAllQuotations().catch(() => []),
           apiService.getAllQuotationLines().catch(() => []),
@@ -5267,6 +5282,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         setHoardings(uniqueHoardings);
 
         setSites(normalizeList(sRaw).map(normalizeSite).filter(Boolean));
+        setOutsideSites(normalizeList(osRaw).map(normalizeOutsideSite).filter(Boolean));
         setTermsList(normalizeList(tRaw));
         setQuotations(normalizeList(qRaw).map(normalizeQuotation));
         setQuotLines(normalizeList(qlRaw).map(normalizeQuotLine));
@@ -5568,7 +5584,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const handleAddSelected = (selectedIds) => {
     const toAdd = hoardings
       .filter(h => selectedIds.has(h.hoardingID) && !rows.find(r => r.hoardingID === h.hoardingID))
-      .map(h => newHoardingRow(h, globalStart, globalEnd, siteMap));
+      .map(h => newHoardingRow(h, globalStart, globalEnd, siteMap, outsideSiteMap));
     const nextRows = [...rows, ...toAdd];
     setRows(nextRows);
     setShowHoardModal(false);
@@ -5580,7 +5596,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
   const handleAddManual = (selectedIds) => {
     const toAdd = hoardings
       .filter(h => selectedIds.has(h.hoardingID) && !rows.find(r => r.hoardingID === h.hoardingID))
-      .map(h => newHoardingRow(h, globalStart, globalEnd, siteMap));
+      .map(h => newHoardingRow(h, globalStart, globalEnd, siteMap, outsideSiteMap));
     const nextRows = [...rows, ...toAdd];
     setRows(nextRows);
     setShowManualModal(false);
@@ -5599,7 +5615,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
 
     const toAdd = withExtFlag
       .filter(h => !rows.find(r => r.hoardingID === h.hoardingID))
-      .map(h => newHoardingRow(h, globalStart, globalEnd, siteMap));
+      .map(h => newHoardingRow(h, globalStart, globalEnd, siteMap, outsideSiteMap));
     const nextRows = [...rows, ...toAdd];
     setRows(nextRows);
     setShowExternalModal(false);
@@ -5826,8 +5842,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
           };
         }
         const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-        const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-        const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
+        const siteObj = getHoardingSite(h, siteMap, outsideSiteMap);
+        const siteID = toSID(siteObj?.outsideSiteID ?? siteObj?.siteID) ?? toSID(h?.siteID) ?? null;
 
         const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
           h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
@@ -5842,7 +5858,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           rowType: 'hoarding',
           hoardingID: l.hoardingID, siteID, siteObj,
           isExternal: isExt,
-          location: isExt ? (h?.hoardingCode || '') : buildSiteAddress(siteObj, h?.hoardingCode || ''),
+          location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
           hoardingCode: h?.hoardingCode || '',
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
@@ -5893,7 +5909,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         }
 
         const locations = hoardingObjs.map(h => {
-          const site = h.siteID ? siteMap.get(h.siteID) : null;
+          const site = getHoardingSite(h, siteMap, outsideSiteMap);
           return site
             ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
             : h.hoardingCode || '';
@@ -6052,8 +6068,8 @@ export default function QuotationPage({ onNavigateToContracts }) {
           };
         }
         const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-        const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-        const siteObj = siteID != null ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null)) : null;
+        const siteObj = getHoardingSite(h, siteMap, outsideSiteMap);
+        const siteID = toSID(siteObj?.outsideSiteID ?? siteObj?.siteID) ?? toSID(h?.siteID) ?? null;
 
         const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
           h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
@@ -6070,7 +6086,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           siteID,
           siteObj,
           isExternal: isExt,
-          location: isExt ? (h?.hoardingCode || '') : buildSiteAddress(siteObj, h?.hoardingCode || ''),
+          location: buildSiteAddress(siteObj, h?.hoardingCode || ''),
           hoardingCode: h?.hoardingCode || '',
           size: h ? `${h.width} X ${h.height}` : '',
           sqFt: h ? (h.width * h.height) : 0,
@@ -6120,7 +6136,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
         }
 
         const locations = hoardingObjs.map(h => {
-          const site = h.siteID ? siteMap.get(h.siteID) : null;
+          const site = getHoardingSite(h, siteMap, outsideSiteMap);
           return site
             ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
             : h.hoardingCode || '';
@@ -6258,24 +6274,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
         }
         // ── Regular hoarding row ──
         const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-        const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-        const siteObj = siteID != null
-          ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
-          : null;
+        const siteObj = getHoardingSite(h, siteMap, outsideSiteMap);
 
         const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
         const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
-        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
-        const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
-        const loc = isExt
-          ? (h?.hoardingCode || '')
-          : (siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '');
-        // Original code:
-        // const loc = siteObj
-        //   ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
-        //   : h?.hoardingCode || '';
-        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
+        const loc = siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '';
 
         return {
           rowType: 'hoarding',
@@ -6340,23 +6344,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
           mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
         }
 
-        // START: Do not show site address for external hoardings in Quotation/Proforma PDF
         const locations = hoardingObjs.map(h => {
-          const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
-          if (isExt) return h.hoardingCode || '';
-          const site = h.siteID ? siteMap.get(h.siteID) : null;
+          const site = getHoardingSite(h, siteMap, outsideSiteMap);
           return site
             ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
-            : h.hoardingCode || '';
+            : h?.hoardingCode || '';
         });
-        // Original code:
-        // const locations = hoardingObjs.map(h => {
-        //   const site = h.siteID ? siteMap.get(h.siteID) : null;
-        //   return site
-        //     ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
-        //     : h.hoardingCode || '';
-        // });
-        // END: Do not show site address for external hoardings in Quotation/Proforma PDF
         const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
         const locFallback = [...new Set(locations)].join(' + ');
@@ -6804,24 +6797,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
             };
           }
           const h = hoardings.find(hh => hh.hoardingID === l.hoardingID);
-          const siteID = h?.siteID ?? h?.site?.siteID ?? null;
-          const siteObj = siteID != null
-            ? (siteMap.get(siteID) ?? (h?.site ? normalizeSite(h.site) : null))
-            : null;
+          const siteObj = getHoardingSite(h, siteMap, outsideSiteMap);
 
           const { ratePerMonth, printingCost, printType, printRate } = parsePurposeMeta(l.purpose, h?.monthlyRent || 0);
           const days = calculateDays(l.periodBeginDate, l.periodEndDate) || 30;
 
-          // START: Do not show site address for external hoardings in Quotation/Proforma PDF
-          const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
-          const loc = isExt
-            ? (h?.hoardingCode || '')
-            : (siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '');
-          // Original code:
-          // const loc = siteObj
-          //   ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}`
-          //   : h?.hoardingCode || '';
-          // END: Do not show site address for external hoardings in Quotation/Proforma PDF
+          const loc = siteObj ? `${siteObj.addressLine1 || ''}${siteObj.city ? `, ${siteObj.city}` : ''}` : h?.hoardingCode || '';
 
           return {
             rowType: 'hoarding',
@@ -6876,23 +6857,12 @@ export default function QuotationPage({ onNavigateToContracts }) {
             mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
           }
 
-          // START: Do not show site address for external hoardings in Quotation/Proforma PDF
           const locations = hoardingObjs.map(h => {
-            const isExt = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
-            if (isExt) return h.hoardingCode || '';
-            const site = h.siteID ? siteMap.get(h.siteID) : null;
+            const site = getHoardingSite(h, siteMap, outsideSiteMap);
             return site
               ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
-              : h.hoardingCode || '';
+              : h?.hoardingCode || '';
           });
-          // Original code:
-          // const locations = hoardingObjs.map(h => {
-          //   const site = h.siteID ? siteMap.get(h.siteID) : null;
-          //   return site
-          //     ? `${site.addressLine1 || ''}${site.city ? `, ${site.city}` : ''}`
-          //     : h.hoardingCode || '';
-          // });
-          // END: Do not show site address for external hoardings in Quotation/Proforma PDF
           const codes = hoardingObjs.map(h => h.hoardingCode || '').join(' + ');
 
           const locFallback = [...new Set(locations)].join(' + ');
@@ -8523,6 +8493,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           onClose={() => setShowExternalModal(false)}
           siteColorMap={siteColorMap}
           siteMap={siteMap}
+          outsideSiteMap={outsideSiteMap}
           startDate={globalStart}
           endDate={globalEnd}
           showToast={showToast} // ✅ MODIFIED: Pass showToast function
@@ -8576,6 +8547,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           row={viewMergedRow}
           hoardings={hoardings}
           siteMap={siteMap}
+          outsideSiteMap={outsideSiteMap}
           onClose={() => setViewMergedRow(null)}
         />
       )}
@@ -8597,6 +8569,7 @@ export default function QuotationPage({ onNavigateToContracts }) {
           hoardings={hoardings}
           customers={customers}
           siteMap={siteMap}
+          outsideSiteMap={outsideSiteMap}
           paymentFreqs={paymentFreqs}
           onClose={() => { setShowContractModal(false); setContractQuot(null); }}
           onCreated={() => {

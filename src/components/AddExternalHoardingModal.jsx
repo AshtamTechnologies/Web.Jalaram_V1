@@ -249,19 +249,17 @@ export default function AddExternalHoardingModal({
   });
   const [errors, setErrors] = useState({});
 
-  // Fetch lookups: Vendors, Sites, Hoarding Types, and Existing Hoardings
+  const [loadingSites, setLoadingSites] = useState(false);
+
+  // Fetch lookups: Vendors, Hoarding Types, and Existing Hoardings
   useEffect(() => {
     let active = true;
     const fetchLookups = async () => {
       setLoadingLookups(true);
       try {
-        const [vRes, sRes, tRes, hRes, extRes] = await Promise.all([
+        const [vRes, tRes, hRes, extRes] = await Promise.all([
           apiService.getAllVendors().catch(err => {
             console.error('Failed to load vendors:', err);
-            return [];
-          }),
-          apiService.getAllSites().catch(err => {
-            console.error('Failed to load sites:', err);
             return [];
           }),
           apiService.getAllHoardingTypes().catch(err => {
@@ -274,13 +272,11 @@ export default function AddExternalHoardingModal({
 
         if (active) {
           const vList = parseArray(vRes?.data ?? vRes);
-          const sList = parseArray(sRes?.data ?? sRes);
           const tList = parseArray(tRes?.data ?? tRes);
           const hList = parseArray(hRes?.data ?? hRes);
           const extList = parseArray(extRes?.data ?? extRes);
 
           setVendors(vList.filter(v => (v.isActive ?? v.is_Active ?? true)));
-          setSites(sList);
           setHoardingTypes(tList);
 
           const combinedHoardings = [
@@ -302,6 +298,46 @@ export default function AddExternalHoardingModal({
     fetchLookups();
     return () => { active = false; };
   }, [allHoardings]);
+
+  // Fetch Outside Sites dynamically based on selected vendor
+  useEffect(() => {
+    let active = true;
+    const fetchSitesForVendor = async () => {
+      setLoadingSites(true);
+      try {
+        const sRes = vendorID
+          ? await apiService.getOutsideSitesByVendorId(vendorID).catch(err => {
+              console.error('Failed to load outside sites for vendor:', err);
+              return [];
+            })
+          : await apiService.getAllOutsideSites().catch(err => {
+              console.error('Failed to load outside sites:', err);
+              return [];
+            });
+
+        if (active) {
+          const sList = parseArray(sRes?.data ?? sRes);
+          setSites(sList);
+          // If current selected site does not belong to the newly loaded sites, reset it
+          setForm(prev => {
+            if (!prev.siteID) return prev;
+            const exists = sList.some(s => {
+              const id = s.outsideSiteID ?? s.siteID ?? s.id;
+              return id === prev.siteID || id === Number(prev.siteID);
+            });
+            return exists ? prev : { ...prev, siteID: '' };
+          });
+        }
+      } catch (err) {
+        if (active) setSites([]);
+      } finally {
+        if (active) setLoadingSites(false);
+      }
+    };
+
+    fetchSitesForVendor();
+    return () => { active = false; };
+  }, [vendorID]);
 
   const handleHoardingCodeChange = (val) => {
     setForm(prev => ({ ...prev, hoardingCode: val }));
@@ -472,11 +508,14 @@ export default function AddExternalHoardingModal({
     sub: [v.city, v.mobileNo ?? v.mobile_No].filter(Boolean).join(' · '),
   }));
 
-  const siteOptions = sites.map(s => ({
-    value: s.siteID,
-    label: s.addressLine1 || s.siteCode || `Site #${s.siteID}`,
-    sub: [s.city, s.district, s.state].filter(Boolean).join(', '),
-  }));
+  const siteOptions = sites.map(s => {
+    const id = s.outsideSiteID ?? s.siteID ?? s.id;
+    return {
+      value: id,
+      label: s.addressLine1 || `Site #${id}`,
+      sub: [s.city, s.district, s.state].filter(Boolean).join(', '),
+    };
+  });
 
   const materialOptions = MATERIAL_OPTIONS.map(m => ({ value: m, label: m }));
 
@@ -638,11 +677,23 @@ export default function AddExternalHoardingModal({
                     value={form.siteID}
                     onChange={v => handleChange('siteID', Number(v))}
                     hasError={!!errors.siteID}
-                    placeholder="Select site…"
+                    placeholder={
+                      loadingSites
+                        ? 'Loading vendor sites…'
+                        : !vendorID
+                          ? 'Select vendor first or choose site…'
+                          : 'Select outside site…'
+                    }
                     icon={MapPin}
                     options={siteOptions}
                     searchable
-                    emptyText="No sites match"
+                    emptyText={
+                      loadingSites
+                        ? 'Loading sites…'
+                        : vendorID
+                          ? 'No outside sites found for this vendor'
+                          : 'No sites match'
+                    }
                   />
                   <FieldError msg={errors.siteID} />
                 </div>

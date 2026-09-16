@@ -6927,40 +6927,43 @@ select.exp-cell-input {
   }
 }
 
-/* Merge hoardings modal and contract modal responsiveness for mobile view */
+/* Merge hoardings modal and contract modal responsiveness for mobile and small screens */
 @media (max-width: 640px) {
   .qt-merge-modal {
     max-height: 95vh !important;
-    margin: 10px !important;
-    border-radius: 16px !important;
+    margin: 8px !important;
+    border-radius: 14px !important;
+  }
+  .qt-merge-modal-body {
+    padding: 10px 14px !important;
+    gap: 10px !important;
   }
   .qt-merge-pad-custom {
-    padding: 12px 16px !important;
+    padding: 0 !important;
   }
   .qt-merge-pad-custom-top {
-    padding: 12px 16px 0 !important;
+    padding: 0 !important;
   }
   .qt-merge-scroll-area {
-    padding: 8px 16px 12px !important;
-    min-height: 160px !important;
+    padding: 6px 8px !important;
+    max-height: 220px !important;
+    min-height: 120px !important;
   }
   .qt-merge-preview-block {
-    margin: 0 16px 12px !important;
-    padding: 10px 12px !important;
+    padding: 8px 10px !important;
   }
   .qt-merge-dir-container {
-    gap: 8px !important;
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 6px !important;
   }
   .qt-merge-dir-btn {
-    padding: 8px 12px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    gap: 8px !important;
+    padding: 6px 6px !important;
   }
   .qt-merge-dir-icon {
-    font-size: 16px !important;
-    margin-bottom: 0 !important;
+    font-size: 13px !important;
+  }
+  .qt-merge-dir-label {
+    font-size: 11px !important;
   }
   .qt-merge-dir-sub {
     display: none !important;
@@ -6968,8 +6971,8 @@ select.exp-cell-input {
   .qt-merge-foot-container {
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 12px !important;
-    padding: 12px 16px 16px !important;
+    gap: 10px !important;
+    padding: 10px 14px 14px !important;
   }
   .qt-merge-foot-text {
     text-align: center !important;
@@ -6981,6 +6984,26 @@ select.exp-cell-input {
   .qt-merge-foot-actions button {
     flex: 1 !important;
     justify-content: center !important;
+  }
+}
+
+@media (max-height: 750px) {
+  .qt-merge-modal {
+    max-height: 94vh !important;
+  }
+  .qt-merge-modal-body {
+    padding: 8px 16px !important;
+    gap: 8px !important;
+  }
+  .qt-merge-scroll-area {
+    max-height: 200px !important;
+    min-height: 110px !important;
+  }
+  .qt-merge-dir-btn {
+    padding: 6px 8px !important;
+  }
+  .qt-merge-dir-sub {
+    display: none !important;
   }
 }
 

@@ -1732,7 +1732,7 @@ export default function Dashboard({ changeTab }) {
         </div>
       )}
 
-      {/* ── 2-COLUMN DASHBOARD GRID ── */}
+      {/* ── 2-COLUMN DASHBOARD GRID (ROW 1): Expiring Contracts & Jobs Overview ── */}
       <div
         className="dashboard-main-grid"
         style={{
@@ -1743,7 +1743,7 @@ export default function Dashboard({ changeTab }) {
         }}
       >
         {/* ══════════════════════════════════════════════════
-            ROW 1 - LEFT: Expiring Hoarding Contracts
+            1. Expiring Hoarding Contracts
         ══════════════════════════════════════════════════ */}
         <DashboardCard
           title="Expiring Hoarding Contracts"
@@ -1811,295 +1811,7 @@ export default function Dashboard({ changeTab }) {
         </DashboardCard>
 
         {/* ══════════════════════════════════════════════════
-            ROW 1 - RIGHT: Monthly / Yearly Contract Value
-        ══════════════════════════════════════════════════ */}
-        <DashboardCard
-          title="Contract Value Analysis"
-          icon={IndianRupee}
-          rightContent={
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              {/* Month Select */}
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: '8px',
-                  border: '1.5px solid #e0e0f0',
-                  fontFamily: 'Nunito, sans-serif',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#334155',
-                  background: '#fff',
-                  cursor: 'pointer',
-                  outline: 'none',
-                }}
-              >
-                <option value="">All Months (Full Year)</option>
-                {MONTH_NAMES.map((mName, idx) => (
-                  <option key={idx + 1} value={idx + 1}>
-                    {mName}
-                  </option>
-                ))}
-              </select>
-
-              {/* Year Select */}
-              <select
-                value={selectedYear}
-                onChange={(e) => setSelectedYear(Number(e.target.value))}
-                style={{
-                  padding: '5px 10px',
-                  borderRadius: '8px',
-                  border: '1.5px solid #e0e0f0',
-                  fontFamily: 'Nunito, sans-serif',
-                  fontSize: '12px',
-                  fontWeight: 700,
-                  color: '#334155',
-                  background: '#fff',
-                  cursor: 'pointer',
-                  outline: 'none',
-                }}
-              >
-                {[2023, 2024, 2025, 2026, 2027, 2028].map((yr) => (
-                  <option key={yr} value={yr}>
-                    {yr}
-                  </option>
-                ))}
-              </select>
-
-              {/* View / Show / Hide Buttons */}
-              {showMonthlyValue && (
-                <button
-                  onClick={() => setShowMonthlyValue(false)}
-                  style={{
-                    padding: '5px 12px',
-                    borderRadius: '8px',
-                    border: '1.5px solid #e2e8f0',
-                    background: '#fff',
-                    color: '#64748b',
-                    fontFamily: 'Nunito, sans-serif',
-                    fontWeight: 800,
-                    fontSize: '12px',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    transition: 'all 0.15s ease',
-                  }}
-                  title="Hide contract value"
-                >
-                  <EyeOff size={12} /> Hide
-                </button>
-              )}
-
-              <button
-                onClick={handleApplyMonthlyFilter}
-                style={{
-                  padding: '5px 14px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: 'linear-gradient(135deg, #049edf, #6c63ff)',
-                  color: '#fff',
-                  fontFamily: 'Nunito, sans-serif',
-                  fontWeight: 800,
-                  fontSize: '12px',
-                  cursor: 'pointer',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  boxShadow: '0 2px 8px rgba(4, 158, 223, 0.25)',
-                }}
-              >
-                <Eye size={12} /> {showMonthlyValue ? 'Update' : 'View'}
-              </button>
-            </div>
-          }
-        >
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              justifyContent: 'center',
-              alignItems: 'center',
-              minHeight: '230px',
-              padding: '20px',
-              textAlign: 'center',
-              background: 'linear-gradient(180deg, #fafbfe 0%, #f4f6fb 100%)',
-              borderRadius: '12px',
-              border: '1px solid #edf0f8',
-            }}
-          >
-            {showMonthlyValue ? (
-              <>
-                <div
-                  style={{
-                    fontSize: '13px',
-                    fontWeight: 800,
-                    color: '#64748b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.6px',
-                    marginBottom: '8px',
-                  }}
-                >
-                  {monthlyFilter.month
-                    ? `Contract Value for ${MONTH_NAMES[monthlyFilter.month - 1]} ${monthlyFilter.year}`
-                    : `Contract Value for Full Year ${monthlyFilter.year}`}
-                </div>
-
-                {monthlyStat.hasData ? (
-                  <>
-                    <div
-                      style={{
-                        fontSize: 'clamp(28px, 4.5vw, 42px)',
-                        fontWeight: 900,
-                        color: '#049edf',
-                        fontFamily: 'Nunito, sans-serif',
-                        lineHeight: 1.1,
-                        marginBottom: '4px',
-                        letterSpacing: '-0.5px',
-                      }}
-                    >
-                      {fmtFullCurrency(monthlyStat.totalValue)}
-                    </div>
-
-                    <div
-                      style={{
-                        fontSize: '12px',
-                        fontWeight: 800,
-                        color: '#059669',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        marginBottom: '14px',
-                      }}
-                    >
-                      Total Contract Value (Incl. GST)
-                    </div>
-
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                      <div
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          padding: '5px 14px',
-                          borderRadius: '20px',
-                          background: '#e8faf3',
-                          border: '1px solid #a7f3d0',
-                          color: '#065f46',
-                          fontFamily: 'Nunito, sans-serif',
-                          fontSize: '12.5px',
-                          fontWeight: 800,
-                        }}
-                      >
-                        <Calendar size={13} />
-                        <span>{monthlyStat.count} {monthlyStat.count === 1 ? 'Contract' : 'Contracts'} Included</span>
-                      </div>
-
-                      <button
-                        onClick={() => setShowMonthlyValue(false)}
-                        style={{
-                          padding: '5px 12px',
-                          borderRadius: '20px',
-                          border: '1px solid #e2e8f0',
-                          background: '#fff',
-                          color: '#64748b',
-                          fontFamily: 'Nunito, sans-serif',
-                          fontSize: '12px',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '5px',
-                          boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
-                          transition: 'all 0.15s ease',
-                        }}
-                        title="Hide contract value"
-                      >
-                        <EyeOff size={12} /> Hide Value
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <div
-                    style={{
-                      padding: '16px 24px',
-                      color: '#94a3b8',
-                      fontSize: '14px',
-                      fontWeight: 700,
-                      fontStyle: 'italic',
-                    }}
-                  >
-                    No contracts for this period
-                  </div>
-                )}
-              </>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div
-                  style={{
-                    width: '46px',
-                    height: '46px',
-                    borderRadius: '12px',
-                    background: 'rgba(4, 158, 223, 0.1)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#049edf',
-                    marginBottom: '12px',
-                  }}
-                >
-                  <IndianRupee size={24} />
-                </div>
-                <div
-                  style={{
-                    fontFamily: 'Nunito, sans-serif',
-                    fontSize: '14px',
-                    fontWeight: 800,
-                    color: '#334155',
-                    marginBottom: '4px',
-                  }}
-                >
-                  Monthly Value Analysis
-                </div>
-                <p
-                  style={{
-                    fontFamily: 'Nunito, sans-serif',
-                    fontSize: '12px',
-                    color: '#9090a8',
-                    margin: '0 0 16px 0',
-                    maxWidth: '260px',
-                    lineHeight: 1.4,
-                  }}
-                >
-                  Pick a Month & Year and click <strong>View</strong> to display total contract value.
-                </p>
-                <button
-                  onClick={handleApplyMonthlyFilter}
-                  style={{
-                    padding: '8px 20px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    background: 'linear-gradient(135deg, #049edf, #6c63ff)',
-                    color: '#fff',
-                    fontFamily: 'Nunito, sans-serif',
-                    fontWeight: 800,
-                    fontSize: '12.5px',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(4, 158, 223, 0.28)',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <Eye size={14} /> View Contract Value
-                </button>
-              </div>
-            )}
-          </div>
-        </DashboardCard>
-
-        {/* ══════════════════════════════════════════════════
-            ROW 2 - LEFT: Workflow Overview (Jobs In-Progress Only)
+            2. Jobs Overview (In-Progress Only)
         ══════════════════════════════════════════════════ */}
         <DashboardCard
           title="Jobs Overview"
@@ -2136,41 +1848,10 @@ export default function Dashboard({ changeTab }) {
             maxHeight="250px"
           />
         </DashboardCard>
-
-        {/* ══════════════════════════════════════════════════
-            ROW 2 - RIGHT: Sales Pipeline (Quotations Pending Performa)
-        ══════════════════════════════════════════════════ */}
-        <DashboardCard
-          title="Quotation (Pending Performa)"
-          icon={TrendingUp}
-          rightContent={
-            <span
-              style={{
-                fontSize: '12px',
-                fontWeight: 800,
-                color: '#16a34a',
-                background: '#f0fdf4',
-                padding: '4px 10px',
-                borderRadius: '20px',
-                border: '1px solid #bbf7d0',
-              }}
-            >
-              {pendingQuotations.length} Pending
-            </span>
-          }
-        >
-          <DashboardTable
-            columns={salesPipelineColumns}
-            data={pendingQuotations}
-            loading={loading}
-            emptyMessage="No quotations currently pending Proforma Invoice creation."
-            maxHeight="250px"
-          />
-        </DashboardCard>
       </div>
 
       {/* ══════════════════════════════════════════════════
-          ROW 2.5: Landlord Payment Due (LandContract Next Due Payments)
+          3. Landlord Payment Due (LandContract Next Due Payments)
       ══════════════════════════════════════════════════ */}
       <DashboardCard
         title="Landlord Payment Due"
@@ -2334,7 +2015,39 @@ export default function Dashboard({ changeTab }) {
       </DashboardCard>
 
       {/* ══════════════════════════════════════════════════
-          ROW 3: Inventory Utilization (Most / Least Used Hoardings)
+          4. Quotation (Pending Performa)
+      ══════════════════════════════════════════════════ */}
+      <DashboardCard
+        title="Quotation (Pending Performa)"
+        icon={TrendingUp}
+        style={{ marginBottom: '24px' }}
+        rightContent={
+          <span
+            style={{
+              fontSize: '12px',
+              fontWeight: 800,
+              color: '#16a34a',
+              background: '#f0fdf4',
+              padding: '4px 10px',
+              borderRadius: '20px',
+              border: '1px solid #bbf7d0',
+            }}
+          >
+            {pendingQuotations.length} Pending
+          </span>
+        }
+      >
+        <DashboardTable
+          columns={salesPipelineColumns}
+          data={pendingQuotations}
+          loading={loading}
+          emptyMessage="No quotations currently pending Proforma Invoice creation."
+          maxHeight="250px"
+        />
+      </DashboardCard>
+
+      {/* ══════════════════════════════════════════════════
+          5. Hoarding Usage Overview
       ══════════════════════════════════════════════════ */}
       <DashboardCard
         title="Hoarding Usage Overview"
@@ -2439,6 +2152,295 @@ export default function Dashboard({ changeTab }) {
               maxHeight="220px"
             />
           </div>
+        </div>
+      </DashboardCard>
+
+      {/* ══════════════════════════════════════════════════
+          6. Monthly / Yearly Contract Value Analysis
+      ══════════════════════════════════════════════════ */}
+      <DashboardCard
+        title="Contract Value Analysis"
+        icon={IndianRupee}
+        style={{ marginBottom: '24px' }}
+        rightContent={
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {/* Month Select */}
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              style={{
+                padding: '5px 10px',
+                borderRadius: '8px',
+                border: '1.5px solid #e0e0f0',
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#334155',
+                background: '#fff',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              <option value="">All Months (Full Year)</option>
+              {MONTH_NAMES.map((mName, idx) => (
+                <option key={idx + 1} value={idx + 1}>
+                  {mName}
+                </option>
+              ))}
+            </select>
+
+            {/* Year Select */}
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(Number(e.target.value))}
+              style={{
+                padding: '5px 10px',
+                borderRadius: '8px',
+                border: '1.5px solid #e0e0f0',
+                fontFamily: 'Nunito, sans-serif',
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#334155',
+                background: '#fff',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              {[2023, 2024, 2025, 2026, 2027, 2028].map((yr) => (
+                <option key={yr} value={yr}>
+                  {yr}
+                </option>
+              ))}
+            </select>
+
+            {/* View / Show / Hide Buttons */}
+            {showMonthlyValue && (
+              <button
+                onClick={() => setShowMonthlyValue(false)}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '8px',
+                  border: '1.5px solid #e2e8f0',
+                  background: '#fff',
+                  color: '#64748b',
+                  fontFamily: 'Nunito, sans-serif',
+                  fontWeight: 800,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  transition: 'all 0.15s ease',
+                }}
+                title="Hide contract value"
+              >
+                <EyeOff size={12} /> Hide
+              </button>
+            )}
+
+            <button
+              onClick={handleApplyMonthlyFilter}
+              style={{
+                padding: '5px 14px',
+                borderRadius: '8px',
+                border: 'none',
+                background: 'linear-gradient(135deg, #049edf, #6c63ff)',
+                color: '#fff',
+                fontFamily: 'Nunito, sans-serif',
+                fontWeight: 800,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                boxShadow: '0 2px 8px rgba(4, 158, 223, 0.25)',
+              }}
+            >
+              <Eye size={12} /> {showMonthlyValue ? 'Update' : 'View'}
+            </button>
+          </div>
+        }
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            minHeight: '230px',
+            padding: '20px',
+            textAlign: 'center',
+            background: 'linear-gradient(180deg, #fafbfe 0%, #f4f6fb 100%)',
+            borderRadius: '12px',
+            border: '1px solid #edf0f8',
+          }}
+        >
+          {showMonthlyValue ? (
+            <>
+              <div
+                style={{
+                  fontSize: '13px',
+                  fontWeight: 800,
+                  color: '#64748b',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.6px',
+                  marginBottom: '8px',
+                }}
+              >
+                {monthlyFilter.month
+                  ? `Contract Value for ${MONTH_NAMES[monthlyFilter.month - 1]} ${monthlyFilter.year}`
+                  : `Contract Value for Full Year ${monthlyFilter.year}`}
+              </div>
+
+              {monthlyStat.hasData ? (
+                <>
+                  <div
+                    style={{
+                      fontSize: 'clamp(28px, 4.5vw, 42px)',
+                      fontWeight: 900,
+                      color: '#049edf',
+                      fontFamily: 'Nunito, sans-serif',
+                      lineHeight: 1.1,
+                      marginBottom: '4px',
+                      letterSpacing: '-0.5px',
+                    }}
+                  >
+                    {fmtFullCurrency(monthlyStat.totalValue)}
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      fontWeight: 800,
+                      color: '#059669',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      marginBottom: '14px',
+                    }}
+                  >
+                    Total Contract Value (Incl. GST)
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '5px 14px',
+                        borderRadius: '20px',
+                        background: '#e8faf3',
+                        border: '1px solid #a7f3d0',
+                        color: '#065f46',
+                        fontFamily: 'Nunito, sans-serif',
+                        fontSize: '12.5px',
+                        fontWeight: 800,
+                      }}
+                    >
+                      <Calendar size={13} />
+                      <span>{monthlyStat.count} {monthlyStat.count === 1 ? 'Contract' : 'Contracts'} Included</span>
+                    </div>
+
+                    <button
+                      onClick={() => setShowMonthlyValue(false)}
+                      style={{
+                        padding: '5px 12px',
+                        borderRadius: '20px',
+                        border: '1px solid #e2e8f0',
+                        background: '#fff',
+                        color: '#64748b',
+                        fontFamily: 'Nunito, sans-serif',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+                        transition: 'all 0.15s ease',
+                      }}
+                      title="Hide contract value"
+                    >
+                      <EyeOff size={12} /> Hide Value
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div
+                  style={{
+                    padding: '16px 24px',
+                    color: '#94a3b8',
+                    fontSize: '14px',
+                    fontWeight: 700,
+                    fontStyle: 'italic',
+                  }}
+                >
+                  No contracts for this period
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+              <div
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '12px',
+                  background: 'rgba(4, 158, 223, 0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#049edf',
+                  marginBottom: '12px',
+                }}
+              >
+                <IndianRupee size={24} />
+              </div>
+              <div
+                style={{
+                  fontFamily: 'Nunito, sans-serif',
+                  fontSize: '14px',
+                  fontWeight: 800,
+                  color: '#334155',
+                  marginBottom: '4px',
+                }}
+              >
+                Monthly Value Analysis
+              </div>
+              <p
+                style={{
+                  fontFamily: 'Nunito, sans-serif',
+                  fontSize: '12px',
+                  color: '#9090a8',
+                  margin: '0 0 16px 0',
+                  maxWidth: '260px',
+                  lineHeight: 1.4,
+                }}
+              >
+                Pick a Month & Year and click <strong>View</strong> to display total contract value.
+              </p>
+              <button
+                onClick={handleApplyMonthlyFilter}
+                style={{
+                  padding: '8px 20px',
+                  borderRadius: '10px',
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #049edf, #6c63ff)',
+                  color: '#fff',
+                  fontFamily: 'Nunito, sans-serif',
+                  fontWeight: 800,
+                  fontSize: '12.5px',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 12px rgba(4, 158, 223, 0.28)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <Eye size={14} /> View Contract Value
+              </button>
+            </div>
+          )}
         </div>
       </DashboardCard>
 

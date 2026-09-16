@@ -387,11 +387,14 @@ function ComboDropdown({
    VERSION FORM
 ───────────────────────────────────────── */
 function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes }) {
-  const siteOptions = sites.map(s => ({
-    value: s.siteID,
-    label: s.addressLine1,
-    sub: s.city || '',
-  }));
+  const siteOptions = sites.map(s => {
+    const id = s.outsideSiteID ?? s.siteID ?? s.id;
+    return {
+      value: id,
+      label: s.addressLine1 || `Site #${id}`,
+      sub: [s.city, s.district, s.state].filter(Boolean).join(', ') || '',
+    };
+  });
 
   const materialOptions = MATERIAL_OPTIONS.map(m => ({ value: m, label: m }));
 
@@ -872,7 +875,10 @@ function EffdtHistory({ versions, sites, hoardingTypeMap, activePanel, onView, o
         const gi = globalIdx(i);
         const isLatest = gi === 0;
         const isSelected = activePanel !== null && activePanel.idx === gi;
-        const site = sites.find(s => s.siteID === v.siteID);
+        const site = sites.find(s => {
+          const id = s.outsideSiteID ?? s.siteID ?? s.id;
+          return id === v.siteID || id === Number(v.siteID);
+        });
         return (
           <div key={`${v.hoardingID ?? ''}-${v.effdt ?? ''}-${gi}`} className={`hd-effdt-row ${isSelected ? 'is-selected' : ''}`}>
             <div className="row align-items-center g-2">
@@ -1424,7 +1430,16 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                           <div className="row g-3">
                             {[
                               { label: 'Effective Date', value: fmtDate(activeVersion.effdt) },
-                              { label: 'Site', value: sites.find(s => s.siteID === activeVersion.siteID)?.addressLine1 || `Site ${activeVersion.siteID}` },
+                              {
+                                label: 'Site',
+                                value: (() => {
+                                  const site = sites.find(s => {
+                                    const id = s.outsideSiteID ?? s.siteID ?? s.id;
+                                    return id === activeVersion.siteID || id === Number(activeVersion.siteID);
+                                  });
+                                  return site ? `${site.addressLine1}${site.city ? ', ' + site.city : ''}` : `Site ${activeVersion.siteID}`;
+                                })()
+                              },
                               { label: 'Material', value: activeVersion.material },
                               { label: 'Type', value: hoardingTypeMap[activeVersion.hoardingType] || '—' },
                               { label: 'Monthly Rent', value: fmtCurrency(activeVersion.monthlyRent) },
@@ -1685,7 +1700,7 @@ export default function HoardingPage() {
     try {
       const [rawHoardings, rawSites, rawTypes] = await Promise.all([
         apiService.getAllExternalHoardings(),
-        apiService.getAllSites(),
+        apiService.getAllOutsideSites(),
         apiService.getAllHoardingTypes(),
       ]);
 
@@ -1718,7 +1733,10 @@ export default function HoardingPage() {
 
   const rows = hoardings.map(h => {
     const latest = latestVersion(h);
-    const site = sites.find(s => s.siteID === latest?.siteID);
+    const site = sites.find(s => {
+      const id = s.outsideSiteID ?? s.siteID ?? s.id;
+      return id === latest?.siteID || id === Number(latest?.siteID);
+    });
     return {
       hoardingCode: h.hoardingCode,
       siteLabel: site ? `${site.addressLine1}${site.city ? ', ' + site.city : ''}` : latest?.siteID ? `Site ${latest.siteID}` : '—',

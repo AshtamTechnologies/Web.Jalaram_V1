@@ -2816,8 +2816,7 @@ const getJobDraft = () => {
 /* ═══════════════════════════════════════════
    MAIN JOB PAGE
 ═══════════════════════════════════════════ */
-export default function JobPage() {
-
+export default function JobPage({ changeTab }) {
   const jobDraft = useMemo(() => getJobDraft(), []);
 
   /* ── API data ── */
@@ -3486,7 +3485,7 @@ export default function JobPage() {
   };
 
   /* ── Edit existing ── */
-  const handleEdit = (job) => {
+  const handleEdit = useCallback((job, targetStep = 1) => {
     const cust = customers.find(c => c.customerID === job.customerID) || null;
     const cont = contracts.find(c => c.customerContractID === job.customerContractID) || null;
     const sup = supervisors.find(u => String(u.userID) === String(job.supervisorID)) || null;
@@ -3511,7 +3510,7 @@ export default function JobPage() {
         jobTaskID: jt.jobTaskID,
         hoardingID: jt.hoardingID,
         hoardingCode: h?.hoardingCode || '',
-        siteAddress: getSiteAddress(h),
+        siteAddress: getSiteAddress(h, siteMap),
         size: h ? `${h.width} X ${h.height}` : '',
         sqFt: h ? (h.width * h.height) : 0,
         actualCompletionDate: jt.actualCompletionDate || '',
@@ -3522,9 +3521,24 @@ export default function JobPage() {
     }));
 
     setStep1Error(''); setStep2Error('');
-    setStep(1); setIsCreating(true);
+    setStep(targetStep); setIsCreating(true);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-  };
+  }, [customers, contracts, supervisors, allJobTasks, hoardings, siteMap]);
+
+  /* ── Automatic Navigation from Ledger / external link ── */
+  useEffect(() => {
+    const openJobId = sessionStorage.getItem('open_job_id');
+    const openJobStep = sessionStorage.getItem('open_job_step');
+    if (openJobId && !loading && jobRequests.length > 0) {
+      const targetJob = jobRequests.find(j => String(j.jobRequestID) === String(openJobId));
+      if (targetJob) {
+        const stepNum = openJobStep ? Number(openJobStep) : 2;
+        handleEdit(targetJob, stepNum);
+      }
+      sessionStorage.removeItem('open_job_id');
+      sessionStorage.removeItem('open_job_step');
+    }
+  }, [loading, jobRequests, handleEdit]);
 
   /* ── Step navigation ── */
   const goNext = () => {
@@ -3552,15 +3566,21 @@ export default function JobPage() {
   };
   const goBack = () => setStep(s => Math.max(1, s - 1));
   const handleBackToList = () => {
-    // Original code:
-    // setIsCreating(false);
-    // setStep1Error(''); setStep2Error('');
-    // setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
     sessionStorage.removeItem('job_form_draft');
     setStep(1);
     resetForm();
     setIsCreating(false);
     setStep1Error(''); setStep2Error('');
+
+    const fromLedger = sessionStorage.getItem('from_payment_ledger');
+    if (fromLedger === 'true') {
+      sessionStorage.removeItem('from_payment_ledger');
+      if (changeTab) {
+        changeTab('JobPaymentLedger');
+        return;
+      }
+    }
+
     setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
   };
 
@@ -4626,14 +4646,7 @@ export default function JobPage() {
                     {editingJobID && (
                       <button
                         className="pg-btn-cancel"
-                        onClick={() => {
-                          // Original code:
-                          // setIsCreating(false);
-                          sessionStorage.removeItem('job_form_draft');
-                          setStep(1);
-                          resetForm();
-                          setIsCreating(false);
-                        }}
+                        onClick={handleBackToList}
                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                       >
                         <LayoutGrid size={13} /> Done
