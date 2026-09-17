@@ -387,14 +387,19 @@ function ComboDropdown({
    VERSION FORM
 ───────────────────────────────────────── */
 function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes }) {
-  const siteOptions = sites.map(s => {
-    const id = s.outsideSiteID ?? s.siteID ?? s.id;
-    return {
-      value: id,
-      label: s.addressLine1 || `Site #${id}`,
-      sub: [s.city, s.district, s.state].filter(Boolean).join(', ') || '',
-    };
-  });
+  const siteOptions = sites
+    .filter(s => {
+      const st = s.status ?? s.Status;
+      return st === true || st === 1 || st === '1' || String(st ?? '').toLowerCase() === 'active';
+    })
+    .map(s => {
+      const id = s.outsideSiteID ?? s.siteID ?? s.id;
+      return {
+        value: id,
+        label: s.addressLine1 || `Site #${id}`,
+        sub: [s.city, s.district, s.state].filter(Boolean).join(', ') || '',
+      };
+    });
 
   const materialOptions = MATERIAL_OPTIONS.map(m => ({ value: m, label: m }));
 

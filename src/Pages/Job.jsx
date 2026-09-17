@@ -244,6 +244,26 @@ function normalizeSite(raw) {
   };
 }
 
+function normalizeOutsideSite(raw) {
+  if (!raw) return null;
+  return {
+    outsideSiteID: Number(raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.siteID ?? raw.SiteID ?? 0),
+    siteID: Number(raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.siteID ?? raw.SiteID ?? 0),
+    addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? '',
+    addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? '',
+    addressLine3: raw.addressLine3 ?? raw.AddressLine3 ?? '',
+    landmark: raw.landmark ?? raw.Landmark ?? '',
+    city: raw.city ?? raw.City ?? '',
+    district: raw.district ?? raw.District ?? '',
+    state: raw.state ?? raw.State ?? '',
+    pincode: raw.pincode ?? raw.Pincode ?? '',
+    siteType: raw.siteType ?? raw.SiteType ?? '',
+    country: raw.country ?? raw.Country ?? '',
+    vendorID: Number(raw.vendorID ?? raw.VendorID ?? 0),
+    status: raw.status ?? raw.Status ?? true,
+  };
+}
+
 function normalizeUser(raw) {
   const firstName = raw.first_Name ?? raw.First_Name ?? raw.firstName ?? raw.FirstName ?? '';
   const lastName = raw.last_Name ?? raw.Last_Name ?? raw.lastName ?? raw.LastName ?? '';
@@ -290,14 +310,29 @@ function normalizeJobTask(raw) {
   };
 }
 
-function getSiteAddress(h, siteMap = null) {
+function getSiteAddress(h, siteMap = null, outsideSiteMap = null) {
   if (!h) return '';
 
-  // 1. Try nested site object (if populated) or lookup in siteMap
-  const rawSite = h.site || (siteMap && (h.siteID || h.SiteID) ? siteMap.get(Number(h.siteID ?? h.SiteID)) : null);
-  const s = rawSite ? normalizeSite(rawSite) : null;
+  const isExt = Boolean(
+    h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' ||
+    h.is_External === true || String(h.is_External).toLowerCase() === 'true' ||
+    h.IsExternal === true || String(h.IsExternal).toLowerCase() === 'true' ||
+    h.Is_External === true || String(h.Is_External).toLowerCase() === 'true'
+  );
+  const sid = Number(h.siteID ?? h.SiteID ?? h.outsideSiteID ?? h.OutsideSiteID ?? 0);
+
+  // 1. Try outsideSiteMap or siteMap lookup
+  let s = null;
+  if (isExt) {
+    const rawOutSite = h.outsideSite || (outsideSiteMap && sid ? (typeof outsideSiteMap.get === 'function' ? outsideSiteMap.get(sid) : outsideSiteMap[sid]) : null) || (siteMap && sid ? (typeof siteMap.get === 'function' ? siteMap.get(sid) : siteMap[sid]) : null) || h.site;
+    s = rawOutSite ? normalizeOutsideSite(rawOutSite) : null;
+  } else {
+    const rawSite = h.site || (siteMap && sid ? (typeof siteMap.get === 'function' ? siteMap.get(sid) : siteMap[sid]) : null);
+    s = rawSite ? normalizeSite(rawSite) : null;
+  }
+
   if (s) {
-    const addr = [s.addressLine1, s.addressLine2].filter(Boolean).join(', ');
+    const addr = [s.addressLine1, s.addressLine2, s.addressLine3].filter(Boolean).join(', ');
     const city = [s.city, s.district].filter(Boolean).join(', ');
     const full = [addr, city].filter(Boolean).join(' — ');
     if (full) return full;
@@ -311,6 +346,7 @@ function getSiteAddress(h, siteMap = null) {
   const flatAddr = [
     h.addressLine1 ?? h.AddressLine1 ?? h.siteAddress ?? h.SiteAddress ?? '',
     h.addressLine2 ?? h.AddressLine2 ?? '',
+    h.addressLine3 ?? h.AddressLine3 ?? '',
   ].filter(Boolean).join(', ');
 
   const flatCity = [
@@ -335,12 +371,12 @@ function getSiteAddress(h, siteMap = null) {
   return h.hoardingCode ?? h.HoardingCode ?? '';
 }
 
-const newTaskRow = (h = null, siteMap = null) => ({
+const newTaskRow = (h = null, siteMap = null, outsideSiteMap = null) => ({
   _id: uid(),
   jobTaskID: 0,
   hoardingID: h?.hoardingID || 0,
   hoardingCode: h?.hoardingCode || '',
-  siteAddress: getSiteAddress(h, siteMap),
+  siteAddress: getSiteAddress(h, siteMap, outsideSiteMap),
   size: h ? `${h.width} X ${h.height}` : '',
   sqFt: h ? (h.width * h.height) : 0,
   actualCompletionDate: '',
@@ -412,6 +448,34 @@ const JOB_COMPANY = {
   phone: 'Parag Patel # 9428151123',
 };
 
+function getHoardingAddressLine1(h, task = null) {
+  if (h) {
+    const s = h.site || h.outsideSite || null;
+    if (s) {
+      const line1 = s.addressLine1 ?? s.AddressLine1 ?? s.address_line1 ?? s.address ?? s.Address ?? '';
+      if (line1) return String(line1).trim();
+    }
+    const directLine1 = h.addressLine1 ?? h.AddressLine1 ?? h.address_line1 ?? h.address ?? h.Address ?? '';
+    if (directLine1) return String(directLine1).trim();
+  }
+
+  if (task) {
+    const taskLine1 = task.addressLine1 ?? task.AddressLine1 ?? '';
+    if (taskLine1) return String(taskLine1).trim();
+
+    if (task.siteAddress) {
+      const parts = String(task.siteAddress).split(' — ');
+      if (parts[0]) {
+        const subParts = parts[0].split(', ');
+        return (subParts[0] || parts[0]).trim();
+      }
+      return String(task.siteAddress).trim();
+    }
+  }
+
+  return '';
+}
+
 function buildJobPDFHTML({ company, job, customerName, supervisorName, tasks, attachments, hoardings, hoardingMerges = [] }) {
   const comp = company || JOB_COMPANY;
   const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
@@ -467,11 +531,12 @@ function buildJobPDFHTML({ company, job, customerName, supervisorName, tasks, at
 
     const mergedHoardings = groupTasks.map(t => {
       const h = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === Number(t.hoardingID));
+      const addrLine1 = getHoardingAddressLine1(h, t);
       return {
         hoardingCode: t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`,
         width: Number(h?.width ?? h?.Width ?? 0),
         height: Number(h?.height ?? h?.Height ?? 0),
-        siteAddress: t.siteAddress || getSiteAddress(h),
+        siteAddress: addrLine1,
         taskID: Number(t.jobTaskID),
       };
     });
@@ -526,7 +591,7 @@ function buildJobPDFHTML({ company, job, customerName, supervisorName, tasks, at
     const hoardingCode = t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`;
     const size = h ? `${h.width} × ${h.height} ft` : (t.size || '—');
     const sqFt = h ? (Number(h.width) * Number(h.height)) : (Number(t.sqFt) || 0);
-    const siteAddr = t.siteAddress || getSiteAddress(h);
+    const siteAddr = getHoardingAddressLine1(h, t);
     const taskID = Number(t.jobTaskID);
     const photos = taskPhotoMap[taskID] || { near: null, far: null };
     return {
@@ -935,7 +1000,7 @@ function ComboField({ value, onChange, options, placeholder, icon: Icon, disable
 /* ═══════════════════════════════════════════
    HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
-function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAdd, onClose, anyIdToLatestId, hoardingMerges, siteMap }) {
+function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAdd, onClose, anyIdToLatestId, hoardingMerges, siteMap, outsideSiteMap }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
   const isFiltered = filteredHoardingIds !== null;
@@ -977,10 +1042,10 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
     if (!q) return base;
     return base.filter(h =>
       (h.hoardingCode || '').toLowerCase().includes(q) ||
-      getSiteAddress(h, siteMap).toLowerCase().includes(q) ||
+      getSiteAddress(h, siteMap, outsideSiteMap).toLowerCase().includes(q) ||
       (h.site?.city || '').toLowerCase().includes(q)
     );
-  }, [base, search, siteMap]);
+  }, [base, search, siteMap, outsideSiteMap]);
 
   // Group display: merged hoardings shown together by line/site & flag, unmerged shown individually
   const { mergeGroups, unmerged } = useMemo(() => {
@@ -1047,9 +1112,11 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
   const renderRow = (h, isMerged = false, mergeFlag = null) => {
     const checked = selected.has(h.hoardingID);
     const alreadyIn = existingIds.has(h.hoardingID);
-    const siteObj = h.site ?? (h.siteID ? siteMap?.get(Number(h.siteID)) : null);
+    const isExt = Boolean(h.isExternal === true || String(h.isExternal).toLowerCase() === 'true');
+    const sid = Number(h.siteID ?? h.SiteID ?? h.outsideSiteID ?? h.OutsideSiteID ?? 0);
+    const siteObj = h.site ?? (isExt ? (outsideSiteMap?.get(sid) || siteMap?.get(sid) || null) : (siteMap?.get(sid) || null));
     const enrichedH = siteObj ? { ...h, site: siteObj } : h;
-    const addr = getSiteAddress(enrichedH, siteMap);
+    const addr = getSiteAddress(enrichedH, siteMap, outsideSiteMap);
     const siteCity = [siteObj?.city ?? h.siteCity ?? h.city, siteObj?.district ?? h.siteDistrict ?? h.district].filter(Boolean).join(', ');
 
     return (
@@ -2824,6 +2891,7 @@ export default function JobPage({ changeTab }) {
   const [contracts, setContracts] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [sites, setSites] = useState([]);
+  const [outsideSites, setOutsideSites] = useState([]);
   const [hoardings, setHoardings] = useState([]);
   const [availableHoardings, setAvailableHoardings] = useState([]);
   const [supervisors, setSupervisors] = useState([]);
@@ -2840,6 +2908,10 @@ export default function JobPage({ changeTab }) {
   const siteMap = useMemo(() => new Map(
     sites.map(s => [Number(s.siteID ?? s.SiteID ?? 0), normalizeSite(s)])
   ), [sites]);
+
+  const outsideSiteMap = useMemo(() => new Map(
+    outsideSites.map(s => [Number(s.outsideSiteID ?? s.siteID ?? 0), normalizeOutsideSite(s)])
+  ), [outsideSites]);
 
 
   /* ── UI ── */
@@ -3269,7 +3341,7 @@ export default function JobPage({ changeTab }) {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, conRaw, hRaw, avhRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw, extRaw, compRaw] = await Promise.all([
+        const [cRaw, conRaw, hRaw, avhRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw, extRaw, compRaw, osRaw] = await Promise.all([
           apiService.getAllCustomers().catch(() => []),
           apiService.getAllCustomerContracts().catch(() => []),
           apiService.getAllHoardings().catch(() => []), // All Hoardings for info/other
@@ -3283,6 +3355,7 @@ export default function JobPage({ changeTab }) {
           apiService.getAllHoardingMerges().catch(() => []),   // ← ADD
           apiService.getAllExternalHoardings().catch(() => []), // ← NEW
           apiService.getAllCompanyDetails().catch(() => []),   // ← Companies
+          apiService.getAllOutsideSites().catch(() => []),     // ← Outside Sites
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
@@ -3297,9 +3370,20 @@ export default function JobPage({ changeTab }) {
             normalizeSite(s)
           ])
         );
+        const outsideSiteList = normalizeList(osRaw).map(normalizeOutsideSite).filter(Boolean);
+        setOutsideSites(outsideSiteList);
+        const outsideSiteMapLocal = new Map(
+          outsideSiteList.map(s => [
+            Number(s.outsideSiteID ?? s.siteID ?? 0),
+            s
+          ])
+        );
+
+        const internalHoardings = normalizeList(hRaw);
+        const externalHoardings = normalizeList(extRaw).map(eh => ({ ...eh, isExternal: true }));
         const rawHoardings = [
-          ...normalizeList(hRaw),
-          ...normalizeList(extRaw),
+          ...internalHoardings,
+          ...externalHoardings,
         ];
 
         // ── 1. Build code → latest hoarding
@@ -3332,13 +3416,23 @@ export default function JobPage({ changeTab }) {
 
         // ── 3. Enrich with site data
         const enrichedHoardings = Array.from(latestByCode.values()).map(h => {
-          const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
-          const foundSite = siteMapLocal.get(siteID) || null;
-          const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
-          return {
-            ...h,
-            site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
-          };
+          const isExt = Boolean(h.isExternal === true || String(h.isExternal).toLowerCase() === 'true');
+          const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.outsideSiteID ?? 0);
+          if (isExt) {
+            const foundSite = outsideSiteMapLocal.get(siteID) || siteMapLocal.get(siteID) || null;
+            return {
+              ...h,
+              isExternal: true,
+              site: foundSite ? normalizeOutsideSite(foundSite) : (h.site ? normalizeOutsideSite(h.site) : null),
+            };
+          } else {
+            const foundSite = siteMapLocal.get(siteID) || null;
+            const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+            return {
+              ...h,
+              site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+            };
+          }
         });
 
         setHoardings(enrichedHoardings);
@@ -3347,7 +3441,7 @@ export default function JobPage({ changeTab }) {
         // Deduplicate and enrich available hoardings:
         const rawAvailable = [
           ...normalizeList(avhRaw),
-          ...normalizeList(extRaw),
+          ...externalHoardings,
         ];
         const latestAvailableByCode = new Map();
         rawAvailable.forEach(h => {
@@ -3358,13 +3452,23 @@ export default function JobPage({ changeTab }) {
           if (!existing || thisDate > existDate) latestAvailableByCode.set(code, h);
         });
         const enrichedAvailable = Array.from(latestAvailableByCode.values()).map(h => {
-          const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
-          const foundSite = siteMapLocal.get(siteID) || null;
-          const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
-          return {
-            ...h,
-            site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
-          };
+          const isExt = Boolean(h.isExternal === true || String(h.isExternal).toLowerCase() === 'true');
+          const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.outsideSiteID ?? 0);
+          if (isExt) {
+            const foundSite = outsideSiteMapLocal.get(siteID) || siteMapLocal.get(siteID) || null;
+            return {
+              ...h,
+              isExternal: true,
+              site: foundSite ? normalizeOutsideSite(foundSite) : (h.site ? normalizeOutsideSite(h.site) : null),
+            };
+          } else {
+            const foundSite = siteMapLocal.get(siteID) || null;
+            const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+            return {
+              ...h,
+              site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+            };
+          }
         });
         setAvailableHoardings(enrichedAvailable);
 
@@ -3397,9 +3501,11 @@ export default function JobPage({ changeTab }) {
   }, []);
   const refreshAvailableHoardings = useCallback(async () => {
     try {
-      const [hRaw, sRaw] = await Promise.all([
+      const [hRaw, sRaw, extRaw, osRaw] = await Promise.all([
         apiService.getAllavailableforJob().catch(() => []),
         apiService.getAllSites().catch(() => []),
+        apiService.getAllExternalHoardings().catch(() => []),
+        apiService.getAllOutsideSites().catch(() => []),
       ]);
       const siteList = normalizeList(sRaw);
       const siteMap = new Map(
@@ -3408,7 +3514,17 @@ export default function JobPage({ changeTab }) {
           normalizeSite(s)
         ])
       );
-      const rawHoardings = normalizeList(hRaw);
+      const outsideSiteList = normalizeList(osRaw).map(normalizeOutsideSite).filter(Boolean);
+      const outsideSiteMap = new Map(
+        outsideSiteList.map(s => [
+          Number(s.outsideSiteID ?? s.siteID ?? 0),
+          s
+        ])
+      );
+      const rawHoardings = [
+        ...normalizeList(hRaw),
+        ...normalizeList(extRaw).map(eh => ({ ...eh, isExternal: true }))
+      ];
 
       // ── 1. Build code → latest hoarding
       const latestByCode = new Map();
@@ -3422,13 +3538,23 @@ export default function JobPage({ changeTab }) {
 
       // ── 3. Enrich with site data
       const enrichedHoardings = Array.from(latestByCode.values()).map(h => {
-        const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
-        const foundSite = siteMap.get(siteID) || null;
-        const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
-        return {
-          ...h,
-          site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
-        };
+        const isExt = Boolean(h.isExternal === true || String(h.isExternal).toLowerCase() === 'true');
+        const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.outsideSiteID ?? 0);
+        if (isExt) {
+          const foundSite = outsideSiteMap.get(siteID) || siteMap.get(siteID) || null;
+          return {
+            ...h,
+            isExternal: true,
+            site: foundSite ? normalizeOutsideSite(foundSite) : (h.site ? normalizeOutsideSite(h.site) : null),
+          };
+        } else {
+          const foundSite = siteMap.get(siteID) || null;
+          const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+          return {
+            ...h,
+            site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+          };
+        }
       });
 
       setAvailableHoardings(enrichedHoardings);
@@ -3510,7 +3636,7 @@ export default function JobPage({ changeTab }) {
         jobTaskID: jt.jobTaskID,
         hoardingID: jt.hoardingID,
         hoardingCode: h?.hoardingCode || '',
-        siteAddress: getSiteAddress(h, siteMap),
+        siteAddress: getSiteAddress(h, siteMap, outsideSiteMap),
         size: h ? `${h.width} X ${h.height}` : '',
         sqFt: h ? (h.width * h.height) : 0,
         actualCompletionDate: jt.actualCompletionDate || '',
@@ -3523,7 +3649,7 @@ export default function JobPage({ changeTab }) {
     setStep1Error(''); setStep2Error('');
     setStep(targetStep); setIsCreating(true);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-  }, [customers, contracts, supervisors, allJobTasks, hoardings, siteMap]);
+  }, [customers, contracts, supervisors, allJobTasks, hoardings, siteMap, outsideSiteMap]);
 
   /* ── Automatic Navigation from Ledger / external link ── */
   useEffect(() => {
@@ -3589,7 +3715,7 @@ export default function JobPage({ changeTab }) {
     const existingHoardingIDs = new Set(tasks.map(t => t.hoardingID));
     const toAdd = hoardings
       .filter(h => selectedIds.has(h.hoardingID) && !existingHoardingIDs.has(h.hoardingID))
-      .map(h => newTaskRow(h, siteMap));
+      .map(h => newTaskRow(h, siteMap, outsideSiteMap));
     setTasks(p => [...p, ...toAdd]);
     setShowHoardModal(false);
   };
@@ -4817,7 +4943,7 @@ export default function JobPage({ changeTab }) {
                                       jobTaskID: jt.jobTaskID,
                                       hoardingID: jt.hoardingID,
                                       hoardingCode: h?.hoardingCode || '',
-                                      siteAddress: getSiteAddress(h),
+                                      siteAddress: getHoardingAddressLine1(h, jt),
                                       size: h ? `${h.width} X ${h.height}` : '',
                                       sqFt: h ? (h.width * h.height) : 0,
                                       status: jt.status,
@@ -4964,6 +5090,7 @@ export default function JobPage({ changeTab }) {
         <HoardingSelectModal
           hoardings={hoardings}
           siteMap={siteMap}
+          outsideSiteMap={outsideSiteMap}
           filteredHoardingIds={filteredHoardingIds}
           existingIds={existingTaskHoardingIds}
           onAdd={handleAddHoardings}

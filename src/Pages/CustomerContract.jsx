@@ -954,6 +954,86 @@ function normalizeCompany(raw) {
   };
 }
 
+function normalizeOutsideSite(raw) {
+  if (!raw) return null;
+  return {
+    outsideSiteID: Number(raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.siteID ?? raw.SiteID ?? 0),
+    siteID: Number(raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.siteID ?? raw.SiteID ?? 0),
+    addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? '',
+    addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? '',
+    addressLine3: raw.addressLine3 ?? raw.AddressLine3 ?? '',
+    landmark: raw.landmark ?? raw.Landmark ?? '',
+    city: raw.city ?? raw.City ?? '',
+    district: raw.district ?? raw.District ?? '',
+    state: raw.state ?? raw.State ?? '',
+    pincode: raw.pincode ?? raw.Pincode ?? '',
+    siteType: raw.siteType ?? raw.SiteType ?? '',
+    country: raw.country ?? raw.Country ?? '',
+    vendorID: Number(raw.vendorID ?? raw.VendorID ?? 0),
+    status: raw.status ?? raw.Status ?? true,
+  };
+}
+
+function getHoardingSite(h, siteMap, outsideSiteMap) {
+  if (!h) return null;
+  const isExt = Boolean(
+    h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' ||
+    h.is_External === true || String(h.is_External).toLowerCase() === 'true' ||
+    h.IsExternal === true || String(h.IsExternal).toLowerCase() === 'true' ||
+    h.Is_External === true || String(h.Is_External).toLowerCase() === 'true'
+  );
+  const rawSid = Number(
+    h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.SiteId ??
+    h.outsideSiteID ?? h.OutsideSiteID ?? h.outsideSiteId ?? h.OutsideSiteId ?? 0
+  );
+
+  const getFromMap = (map, id) => {
+    if (!map || !id) return null;
+    if (typeof map.get === 'function') {
+      return map.get(id) || map.get(Number(id)) || map.get(String(id)) || null;
+    }
+    return map[id] || map[Number(id)] || map[String(id)] || null;
+  };
+
+  if (isExt) {
+    if (rawSid) {
+      const found = getFromMap(outsideSiteMap, rawSid);
+      if (found) return found;
+      const foundInSite = getFromMap(siteMap, rawSid);
+      if (foundInSite) return foundInSite;
+    }
+    if (h.outsideSite) return normalizeOutsideSite(h.outsideSite);
+    if (h.site) return normalizeOutsideSite(h.site);
+    return null;
+  } else {
+    if (rawSid) {
+      const found = getFromMap(siteMap, rawSid);
+      if (found) return found;
+      const foundInOutside = getFromMap(outsideSiteMap, rawSid);
+      if (foundInOutside) return foundInOutside;
+    }
+    if (h.site) return h.site;
+    if (h.outsideSite) return h.outsideSite;
+    return null;
+  }
+}
+
+function getHoardingAddress(h, siteMap, outsideSiteMap) {
+  if (!h) return '—';
+  const site = getHoardingSite(h, siteMap, outsideSiteMap);
+  if (site) {
+    const parts = [site.addressLine1, site.addressLine2, site.city, site.district].filter(Boolean);
+    if (parts.length > 0) return parts.join(', ');
+  }
+  if (h._inlineAddr) return h._inlineAddr;
+  const direct = [h.addressLine1 ?? h.AddressLine1, h.addressLine2 ?? h.AddressLine2, h.city ?? h.City, h.district ?? h.District].filter(Boolean);
+  if (direct.length > 0) return direct.join(', ');
+  if (h.landmark ?? h.Landmark) return h.landmark ?? h.Landmark;
+  const sid = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.outsideSiteID ?? 0);
+  if (sid) return `Site #${sid}`;
+  return '—';
+}
+
 /* ═══════════════════════════════════════════
    CUSTOMER SEARCH WIDGET
 ═══════════════════════════════════════════ */
@@ -1061,19 +1141,54 @@ function CustomerSearchWidget({ customers, value, onChange, error, disabled }) {
 /* ═══════════════════════════════════════════
    HOARDING LOOKUP MODAL
 ═══════════════════════════════════════════ */
-function HoardingLookupModal({ hoardings, sites, onSelect, onClose }) {
+function HoardingLookupModal({ hoardings, sites, outsideSites = [], onSelect, onClose }) {
   const [query, setQuery] = useState('');
   const [sortK, setSortK] = useState('hoardingCode');
   const [sortD, setSortD] = useState('asc');
+  const [localOutsideSites, setLocalOutsideSites] = useState([]);
   const inputRef = useRef(null);
 
-  const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
+  useEffect(() => {
+    if (!outsideSites || outsideSites.length === 0) {
+      apiService.getAllOutsideSites()
+        .then(res => {
+          const list = Array.isArray(res) ? res : res?.data ?? [];
+          setLocalOutsideSites(list.map(normalizeOutsideSite).filter(Boolean));
+        })
+        .catch(() => {});
+    }
+  }, [outsideSites]);
+
+  const effectiveOutsideSites = (outsideSites && outsideSites.length > 0) ? outsideSites : localOutsideSites;
+
+  const siteMap = useMemo(() => {
+    const map = new Map();
+    (sites || []).forEach(s => {
+      const id = Number(s.siteID ?? s.SiteID ?? s.id ?? 0);
+      if (id) {
+        map.set(id, s);
+        map.set(String(id), s);
+      }
+    });
+    return map;
+  }, [sites]);
+
+  const outsideSiteMap = useMemo(() => {
+    const map = new Map();
+    (effectiveOutsideSites || []).forEach(s => {
+      const id = Number(s.outsideSiteID ?? s.OutsideSiteID ?? s.siteID ?? s.SiteID ?? s.id ?? 0);
+      if (id) {
+        map.set(id, s);
+        map.set(String(id), s);
+      }
+    });
+    return map;
+  }, [effectiveOutsideSites]);
 
   const filtered = hoardings.filter(h => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
-    const site = siteMap[h.siteID];
-    const addr = [site?.addressLine1, site?.addressLine2, site?.city, site?.district].filter(Boolean).join(' ').toLowerCase();
+    const addr = getHoardingAddress(h, siteMap, outsideSiteMap).toLowerCase();
     return (
       (h.hoardingCode || '').toLowerCase().includes(q) ||
       (h.material || '').toLowerCase().includes(q) ||
@@ -1154,8 +1269,7 @@ function HoardingLookupModal({ hoardings, sites, onSelect, onClose }) {
               </thead>
               <tbody>
                 {sorted.map((h, idx) => {
-                  const site = siteMap[h.siteID];
-                  const addr = site ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ') : `Site ${h.siteID}`;
+                  const addr = getHoardingAddress(h, siteMap, outsideSiteMap);
                   const st = hSt(h.status);
                   return (
                     <tr key={h.hoardingID} onClick={() => onSelect(h)} style={{ cursor: 'pointer', background: idx % 2 === 0 ? '#fff' : '#fafafe', transition: 'background 0.12s' }}
@@ -1204,10 +1318,11 @@ function HoardingLookupModal({ hoardings, sites, onSelect, onClose }) {
 /* ═══════════════════════════════════════════
    HOARDING PICKER FIELD
 ═══════════════════════════════════════════ */
-function HoardingPickerField({ hoardings, sites, value, onChange, error, disabled }) {
+function HoardingPickerField({ hoardings, sites, outsideSites = [], value, onChange, error, disabled }) {
   const [modalOpen, setModalOpen] = useState(false);
   const selected = hoardings.find(h => h.hoardingID === Number(value) || h.hoardingID === value);
   const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
+  const outsideSiteMap = Object.fromEntries((outsideSites || []).map(s => [s.outsideSiteID ?? s.siteID, s]));
 
   const hSt = selected?.status ? (() => {
     switch (selected.status) {
@@ -1237,8 +1352,7 @@ function HoardingPickerField({ hoardings, sites, value, onChange, error, disable
         </button>
       )}
       {value && selected && (() => {
-        const site = siteMap[selected.siteID];
-        const addr = site ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ') : '';
+        const addr = getHoardingAddress(selected, siteMap, outsideSiteMap);
         return (
           <div className="lc-selected-card" style={{ marginTop: 8 }}>
             <div className="lc-selected-card__icon"><Building2 size={15} color="#6c63ff" /></div>
@@ -1265,7 +1379,7 @@ function HoardingPickerField({ hoardings, sites, value, onChange, error, disable
           </div>
         );
       })()}
-      {modalOpen && <HoardingLookupModal hoardings={hoardings} sites={sites} onSelect={(h) => { onChange(h.hoardingID); setModalOpen(false); }} onClose={() => setModalOpen(false)} />}
+      {modalOpen && <HoardingLookupModal hoardings={hoardings} sites={sites} outsideSites={outsideSites} onSelect={(h) => { onChange(h.hoardingID); setModalOpen(false); }} onClose={() => setModalOpen(false)} />}
     </div>
   );
 }
@@ -1794,22 +1908,55 @@ function AttachmentSection({ customerContractID, hoardingID, ownerID, onAttachme
 /* ═══════════════════════════════════════════
    MULTI-SELECT HOARDING LOOKUP MODAL
 ═══════════════════════════════════════════ */
-function MultiHoardingLookupModal({ hoardings, sites, selectedIds = [], onSelectMultiple, onClose }) {
+function MultiHoardingLookupModal({ hoardings, sites, outsideSites = [], selectedIds = [], onSelectMultiple, onClose }) {
   const [query, setQuery] = useState('');
   const [sortK, setSortK] = useState('hoardingCode');
   const [sortD, setSortD] = useState('asc');
   const [selected, setSelected] = useState(() => new Set((selectedIds || []).map(Number)));
+  const [localOutsideSites, setLocalOutsideSites] = useState([]);
   const inputRef = useRef(null);
 
-  const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
+  useEffect(() => {
+    if (!outsideSites || outsideSites.length === 0) {
+      apiService.getAllOutsideSites()
+        .then(res => {
+          const list = Array.isArray(res) ? res : res?.data ?? [];
+          setLocalOutsideSites(list.map(normalizeOutsideSite).filter(Boolean));
+        })
+        .catch(() => {});
+    }
+  }, [outsideSites]);
+
+  const effectiveOutsideSites = (outsideSites && outsideSites.length > 0) ? outsideSites : localOutsideSites;
+
+  const siteMap = useMemo(() => {
+    const map = new Map();
+    (sites || []).forEach(s => {
+      const id = Number(s.siteID ?? s.SiteID ?? s.id ?? 0);
+      if (id) {
+        map.set(id, s);
+        map.set(String(id), s);
+      }
+    });
+    return map;
+  }, [sites]);
+
+  const outsideSiteMap = useMemo(() => {
+    const map = new Map();
+    (effectiveOutsideSites || []).forEach(s => {
+      const id = Number(s.outsideSiteID ?? s.OutsideSiteID ?? s.siteID ?? s.SiteID ?? s.id ?? 0);
+      if (id) {
+        map.set(id, s);
+        map.set(String(id), s);
+      }
+    });
+    return map;
+  }, [effectiveOutsideSites]);
 
   const filtered = hoardings.filter(h => {
     if (!query.trim()) return true;
     const q = query.toLowerCase();
-    const site = siteMap[h.siteID];
-    const addr = (h._inlineAddr ||
-      [site?.addressLine1, site?.city, site?.district].filter(Boolean).join(' ')
-    ).toLowerCase();
+    const addr = getHoardingAddress(h, siteMap, outsideSiteMap).toLowerCase();
     return (
       (h.hoardingCode || '').toLowerCase().includes(q) ||
       (h.material || '').toLowerCase().includes(q) ||
@@ -1981,9 +2128,7 @@ function MultiHoardingLookupModal({ hoardings, sites, selectedIds = [], onSelect
               <tbody>
                 {sorted.map((h, idx) => {
                   const isChecked = selected.has(Number(h.hoardingID));
-                  const site = siteMap[h.siteID];
-                  const addr = h._inlineAddr ||
-                    (site ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ') : `Site ${h.siteID}`);
+                  const addr = getHoardingAddress(h, siteMap, outsideSiteMap);
                   const st = hSt(h.status);
                   return (
                     <tr key={h.hoardingID} onClick={() => toggleOne(h.hoardingID)}
@@ -2059,7 +2204,7 @@ function MultiHoardingLookupModal({ hoardings, sites, selectedIds = [], onSelect
     document.body
   );
 }
-function CustomerContractHoardingMapSection({ customerContractID, customerID, hoardings, allHoardingsRaw = hoardings, sites, startDate, endDate, maps: mapsFromProps, setMaps: setMapsFromProps, setDeletedMapIDs: setDeletedMapIDsFromProps, readOnly = false }) {
+function CustomerContractHoardingMapSection({ customerContractID, customerID, hoardings, allHoardingsRaw = hoardings, sites, outsideSites = [], startDate, endDate, maps: mapsFromProps, setMaps: setMapsFromProps, setDeletedMapIDs: setDeletedMapIDsFromProps, readOnly = false }) {
   const [localMaps, setLocalMaps] = useState([]);
   const maps = mapsFromProps || localMaps;
   const setMaps = setMapsFromProps || setLocalMaps;
@@ -2081,6 +2226,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
   const [loadingAvailable, setLoadingAvailable] = useState(false);
 
   const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
+  const outsideSiteMap = Object.fromEntries((outsideSites || []).map(s => [s.outsideSiteID ?? s.siteID, s]));
   const mappedHoardingIds = new Set(maps.map(m => Number(m.hoardingID)));
   const mergedHoardingIds = new Set(merges.map(m => Number(m.hoardingID)));
   /* ── Edit merge direction ── */
@@ -2126,6 +2272,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
             h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
             m?.isExternal === true || String(m?.isExternal).toLowerCase() === 'true'
           );
+          const resolvedSite = getHoardingSite({ ...h, isExternal, siteID: h?.siteID ?? m.siteID }, siteMap, outsideSiteMap);
           return {
             customerContractLineID: m.customerContractLineID ?? m.CustomerContractLineID ?? null,
             customerContractID: Number(m.customerContractID ?? m.CustomerContractID),
@@ -2140,6 +2287,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
             status: h?.status === 'Occupied' ? 'Available' : (h?.status ?? 'Available'),
             siteID: h?.siteID ?? null,
             monthlyRent: h?.monthlyRent ?? 0,
+            _inlineAddr: resolvedSite ? [resolvedSite.addressLine1, resolvedSite.city, resolvedSite.district].filter(Boolean).join(', ') : '',
           };
         });
         setMaps(enriched);
@@ -2184,18 +2332,31 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
         if (cancelled) return;
         const raw = Array.isArray(res) ? res : res?.data ?? [];
         // Normalize: availability API uses 'hoardingId' (camelCase), modal needs 'hoardingID'
-        const list = raw.map(h => ({
-          ...h,
-          hoardingID: h.hoardingId ?? h.hoardingID ?? 0,
-          status: h.status || 'Available',
-          _inlineAddr: [h.addressLine1, h.city, h.district].filter(Boolean).join(', '),
-        }));
+        const list = raw.map(h => {
+          const hid = Number(h.hoardingId ?? h.hoardingID ?? h.id ?? 0);
+          const rawMatch = allHoardingsRaw.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? hh.id) === hid);
+          const isExternal = Boolean(
+            h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' ||
+            h.is_External === true || String(h.is_External).toLowerCase() === 'true' ||
+            rawMatch?.isExternal === true || String(rawMatch?.isExternal).toLowerCase() === 'true'
+          );
+          const siteID = h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.SiteId ?? h.outsideSiteID ?? h.OutsideSiteID ?? rawMatch?.siteID ?? rawMatch?.SiteID ?? rawMatch?.siteId ?? rawMatch?.outsideSiteID ?? 0;
+          return {
+            ...rawMatch,
+            ...h,
+            hoardingID: hid,
+            isExternal,
+            siteID,
+            status: h.status || 'Available',
+            _inlineAddr: [h.addressLine1, h.city, h.district].filter(Boolean).join(', ') || rawMatch?._inlineAddr || '',
+          };
+        });
         setAvailableHoardings(list);
       })
       .catch(() => { if (!cancelled) setAvailableHoardings([]); })
       .finally(() => { if (!cancelled) setLoadingAvailable(false); });
     return () => { cancelled = true; };
-  }, [startDate, endDate]);
+  }, [startDate, endDate, allHoardingsRaw]);
 
   /* ── Add hoardings ── */
   const handleAddMultiple = async (selectedHoardings) => {
@@ -2207,6 +2368,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
           h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
           h?.is_External === true || String(h?.is_External).toLowerCase() === 'true'
         );
+        const resolvedSite = getHoardingSite(h, siteMap, outsideSiteMap);
         return {
           customerContractLineID: tempId,
           customerContractID,
@@ -2220,7 +2382,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
           status: 'Available',
           siteID: h.siteID,
           monthlyRent: h.monthlyRent,
-          _inlineAddr: h._inlineAddr || [h.addressLine1, h.city, h.district].filter(Boolean).join(', '),
+          _inlineAddr: resolvedSite ? [resolvedSite.addressLine1, resolvedSite.city, resolvedSite.district].filter(Boolean).join(', ') : (h._inlineAddr || [h.addressLine1, h.city, h.district].filter(Boolean).join(', ')),
           _isNew: true,
         };
       });
@@ -2499,8 +2661,8 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
         {/* Rows */}
         {groupMerges.map((m, idx) => {
           const mapEntry = maps.find(mp => Number(mp.hoardingID) === Number(m.hoardingID));
-          const site = mapEntry?.siteID != null ? siteMap[mapEntry.siteID] : null;
-          const addr = mapEntry?._inlineAddr || (site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '');
+          const site = getHoardingSite(mapEntry || { siteID: m.siteID, isExternal: mapEntry?.isExternal }, siteMap, outsideSiteMap);
+          const addr = (site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '') || mapEntry?._inlineAddr || '';
           const isDeleting = deletingMergeId === m.hoardingMergeID;
           const sqFt = (mapEntry?.width || 0) * (mapEntry?.height || 0);
 
@@ -2603,8 +2765,8 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
                   </thead>
                   <tbody>
                     {maps.filter(m => !mergedHoardingIds.has(m.hoardingID)).map((m, idx) => {
-                      const site = m.siteID != null ? siteMap[m.siteID] : null;
-                      const addr = m._inlineAddr || (site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '');
+                      const site = getHoardingSite(m, siteMap, outsideSiteMap);
+                      const addr = (site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '') || m._inlineAddr || '';
                       const isDeleting = deletingMapId === m.customerContractLineID;
                       const isMerged = mergedHoardingIds.has(m.hoardingID);
                       const st = hSt(m.status);
@@ -2735,6 +2897,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
         <MultiHoardingLookupModal
           hoardings={hoardingsForPicker}
           sites={sites}
+          outsideSites={outsideSites}
           onSelectMultiple={async (picked) => { setPickOpen(false); await handleAddMultiple(picked); }}
           onClose={() => setPickOpen(false)}
         />
@@ -2745,6 +2908,7 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
         <MergePickerModal
           hoardings={contractHoardingObjs}
           sites={sites}
+          outsideSites={outsideSites}
           existingMergeHoardingIds={mergedHoardingIds}
           onConfirm={handleMerge}
           onClose={() => setMergePickOpen(false)}
@@ -2780,12 +2944,13 @@ function CustomerContractHoardingMapSection({ customerContractID, customerID, ho
 /* ═══════════════════════════════════════════
    MERGE PICKER MODAL
 ═══════════════════════════════════════════ */
-function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfirm, onClose }) {
+function MergePickerModal({ hoardings, sites, outsideSites = [], existingMergeHoardingIds, onConfirm, onClose }) {
   const [selected, setSelected] = useState(new Set());
   const [direction, setDirection] = useState('H');
   const [query, setQuery] = useState('');
 
   const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
+  const outsideSiteMap = Object.fromEntries((outsideSites || []).map(s => [s.outsideSiteID ?? s.siteID, s]));
 
   const available = hoardings.filter(h =>
     h != null && h.hoardingID != null &&
@@ -2815,7 +2980,7 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
       const sid = h.siteID != null ? Number(h.siteID) : '__none__';
       const groupKey = `${sid}__${isExt ? 'EXT' : 'INT'}`;
       if (!map.has(groupKey)) {
-        const site = sid !== '__none__' ? siteMap[Number(sid)] : null;
+        const site = sid !== '__none__' ? getHoardingSite({ siteID: sid, isExternal: isExt }, siteMap, outsideSiteMap) : null;
         const baseLabel = site
           ? [site.addressLine1, site.city, site.district].filter(Boolean).join(', ')
           : sid === '__none__' ? 'Unknown Site' : `Site ${sid}`;
@@ -2825,7 +2990,7 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
       map.get(groupKey).rows.push(h);
     }
     return [...map.values()];
-  }, [filtered, siteMap]);
+  }, [filtered, siteMap, outsideSiteMap]);
 
   const firstSelectedHoarding = selected.size > 0
     ? available.find(h => selected.has(Number(h.hoardingID)))
@@ -3011,7 +3176,7 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
                   const isChecked = selected.has(h.hoardingID);
                   const disabled = groupLocked;
                   const selIdx = [...selected].indexOf(h.hoardingID);
-                  const site = siteMap[h.siteID];
+                  const site = getHoardingSite(h, siteMap, outsideSiteMap);
                   const addr = site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '';
                   const sqFt = (h.width || 0) * (h.height || 0);
                   const st = h.status === 'Active'
@@ -3126,7 +3291,7 @@ function MergePickerModal({ hoardings, sites, existingMergeHoardingIds, onConfir
 /* ═══════════════════════════════════════════
    HOARDING MERGE SECTION
 ═══════════════════════════════════════════ */
-function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw = hoardings, sites }) {
+function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw = hoardings, sites, outsideSites = [] }) {
   const [merges, setMerges] = useState([]);
   const [contractHoardingIds, setContractHoardingIds] = useState(new Set());
   const [loading, setLoading] = useState(true);
@@ -3136,6 +3301,7 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
   const [pickOpen, setPickOpen] = useState(false);
 
   const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
+  const outsideSiteMap = Object.fromEntries((outsideSites || []).map(s => [s.outsideSiteID ?? s.siteID, s]));
 
   const loadData = useCallback(async () => {
     if (!customerContractID) { setLoading(false); return; }
@@ -3242,7 +3408,7 @@ function HoardingMergeSection({ customerContractID, hoardings, allHoardingsRaw =
 
   const renderMergeRow = (m, idx, total) => {
     const h = allHoardingsRaw.find(hh => hh.hoardingID === m.hoardingID);
-    const site = h ? siteMap[h.siteID] : null;
+    const site = getHoardingSite(h, siteMap, outsideSiteMap);
     const addr = site ? [site.addressLine1, site.city].filter(Boolean).join(', ') : '';
     const isDeleting = deletingId === m.hoardingMergeID;
     const isSquare = m.mergeAlongFlag === 'S' || m.MergeAlongFlag === 'S';
@@ -3766,7 +3932,7 @@ function SelectMergePhotoModal({ mergeItem, contractID, rawHoardingPhotos = [], 
   );
 }
 
-function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [], companies = [], onClose }) {
+function ContractPDFModal({ contract, customer, hoardings, sites, outsideSites = [], quotations = [], companies = [], onClose }) {
   const [maps, setMaps] = useState([]);
   const [merges, setMerges] = useState([]);
   const [mergedApiImages, setMergedApiImages] = useState([]);
@@ -3782,10 +3948,15 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
   const [hoardingPhotos, setHoardingPhotos] = useState({});
   const [customMergePhotos, setCustomMergePhotos] = useState({});
   const [mergePhotoTarget, setMergePhotoTarget] = useState(null);
+  const [modalOutsideSites, setModalOutsideSites] = useState([]);
 
   const siteMap = useMemo(
     () => Object.fromEntries(sites.map(s => [s.siteID, s])),
     [sites]
+  );
+  const outsideSiteMap = useMemo(
+    () => Object.fromEntries((outsideSites.length ? outsideSites : modalOutsideSites).map(s => [s.outsideSiteID ?? s.siteID, s])),
+    [outsideSites, modalOutsideSites]
   );
 
   const hoardingTypeMap = useMemo(() => {
@@ -3795,10 +3966,11 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
   useEffect(() => {
     (async () => {
       try {
-        const [res, extRes, rawTypes] = await Promise.all([
+        const [res, extRes, rawTypes, rawOutside] = await Promise.all([
           apiService.getAllHoardings(),
           apiService.getAllExternalHoardings().catch(() => []),
           apiService.getAllHoardingTypes(),
+          apiService.getAllOutsideSites().catch(() => []),
         ]);
         const extractArray = (r) => {
           if (Array.isArray(r)) return r;
@@ -3810,6 +3982,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
         const externalList = extractArray(extRes).map(eh => ({ ...eh, isExternal: true }));
         setAllHoardingsRaw([...internalList, ...externalList]);
         setHoardingTypes(extractArray(rawTypes));
+        setModalOutsideSites(extractArray(rawOutside).map(normalizeOutsideSite).filter(Boolean));
       } catch { /* silent */ }
     })();
   }, []);
@@ -3985,15 +4158,15 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
     const fullHoardings = maps.map(m => {
       const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
       const h = allHoardingsRaw.find(hh => Number(hh.hoardingID) === hid);
-      // START: Do not show site address for external hoardings in Contract PDF
-      const isExternal = h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' || h?.is_External === true || String(h?.is_External).toLowerCase() === 'true';
+      const isExternal = Boolean(
+        h?.isExternal === true || String(h?.isExternal).toLowerCase() === 'true' ||
+        h?.is_External === true || String(h?.is_External).toLowerCase() === 'true' ||
+        m?.isExternal === true || String(m?.isExternal).toLowerCase() === 'true'
+      );
       const rawSiteID = h?.siteID ?? m.siteID ?? null;
-      const site =
-        (rawSiteID != null ? siteMap[rawSiteID] : null) ||
-        (rawSiteID != null ? siteMap[Number(rawSiteID)] : null) ||
-        null;
+      const site = getHoardingSite({ ...h, ...m, isExternal, siteID: rawSiteID }, siteMap, outsideSiteMap);
       const hoardingAddressLine1 = (site?.addressLine1 ?? site?.AddressLine1 ?? h?.addressLine1 ?? h?.AddressLine1 ?? '').trim();
-      const address = isExternal ? '' : hoardingAddressLine1;
+      const address = hoardingAddressLine1;
       const hoardingCode = h?.hoardingCode ?? m.hoardingCode ?? `#${hid}`;
       const width = Number(h?.width ?? m.width ?? 0);
       const height = Number(h?.height ?? m.height ?? 0);
@@ -4075,12 +4248,7 @@ function ContractPDFModal({ contract, customer, hoardings, sites, quotations = [
       const totalRent = groupHoardings.reduce((s, h) => s + h.monthlyRent, 0);
       const primaryHid = groupHoardings[0]?.hoardingID;
 
-      // START: Do not show site address for external hoardings in Contract PDF
-      const nonExtHoardings = groupHoardings.filter(h => !h.isExternal);
-      const mergedAddress = nonExtHoardings.length > 0 ? (nonExtHoardings[0]?.address || '') : '';
-      // Original code:
-      // const mergedAddress = groupHoardings[0]?.address || '';
-      // END: Do not show site address for external hoardings in Contract PDF
+      const mergedAddress = groupHoardings[0]?.address || '';
 
       result.push({
         isMerged: true,
@@ -4814,7 +4982,7 @@ async function saveHoardingLinkWithPhotosRows(hoardingIDs, allHoardings, effdt, 
 /* ═══════════════════════════════════════════
    CONTRACT FORM
 ═══════════════════════════════════════════ */
-function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = [], sites, paymentFreqs, contracts, landContracts = [], hoardingMaps = [], quotations = [], companies = [], onBack, onSave }) {
+function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = [], sites, outsideSites = [], paymentFreqs, contracts, landContracts = [], hoardingMaps = [], quotations = [], companies = [], onBack, onSave }) {
   const isAdd = mode === 'add';
   const viewOnly = !isAdd; // edit mode = view-only (attachments still editable)
   const currentContractID = isAdd ? null : (contract?.customerContractID ?? null);
@@ -5040,13 +5208,25 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         if (cancelled) return;
         const raw = Array.isArray(res) ? res : res?.data ?? [];
         // Normalize: availability API uses 'hoardingId' (camelCase), modal needs 'hoardingID'
-        const list = raw.map(h => ({
-          ...h,
-          hoardingID: h.hoardingId ?? h.hoardingID ?? 0,
-          status: h.status || 'Available',
-          // Build inline address string for modal display (no siteID in availability API)
-          _inlineAddr: [h.addressLine1, h.city, h.district].filter(Boolean).join(', '),
-        }));
+        const list = raw.map(h => {
+          const hid = Number(h.hoardingId ?? h.hoardingID ?? h.id ?? 0);
+          const rawMatch = allHoardingsRaw.find(hh => Number(hh.hoardingID ?? hh.HoardingID ?? hh.id) === hid);
+          const isExternal = Boolean(
+            h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' ||
+            h.is_External === true || String(h.is_External).toLowerCase() === 'true' ||
+            rawMatch?.isExternal === true || String(rawMatch?.isExternal).toLowerCase() === 'true'
+          );
+          const siteID = h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.SiteId ?? h.outsideSiteID ?? h.OutsideSiteID ?? rawMatch?.siteID ?? rawMatch?.SiteID ?? rawMatch?.siteId ?? rawMatch?.outsideSiteID ?? 0;
+          return {
+            ...rawMatch,
+            ...h,
+            hoardingID: hid,
+            isExternal,
+            siteID,
+            status: h.status || 'Available',
+            _inlineAddr: [h.addressLine1, h.city, h.district].filter(Boolean).join(', ') || rawMatch?._inlineAddr || '',
+          };
+        });
         setAvailableHoardings(list);
         // Remove previously selected hoardings that are no longer available
         const availableIds = new Set(list.map(h => Number(h.hoardingID)));
@@ -5061,7 +5241,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
       .finally(() => { if (!cancelled) setLoadingAvailable(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.startDate, form.endDate, isAdd]);
+  }, [form.startDate, form.endDate, isAdd, allHoardingsRaw]);
 
   const set = (key, val) => {
     setForm(p => {
@@ -5812,7 +5992,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                   <thead>
                                     <tr style={{ background: '#f8f8fd' }}>
-                                      {['Code', 'Material', 'Size', 'Status', ''].map((h, i) => (
+                                      {['Code', 'Material', 'Size', 'Address', 'Status', ''].map((h, i) => (
                                         <th key={i} style={{ padding: '8px 11px', textAlign: 'left', fontSize: 10.5, fontFamily: 'Nunito, sans-serif', fontWeight: 800, color: '#9090a8', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1.5px solid #e8e8f4' }}>{h}</th>
                                       ))}
                                     </tr>
@@ -5820,6 +6000,9 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                                   <tbody>
                                     {selectedExternalHoardings.map((h, idx) => {
                                       const st = hSt(h.status);
+                                      const siteMap = Object.fromEntries(sites.map(s => [s.siteID, s]));
+                                      const outsideSiteMap = Object.fromEntries((outsideSites || []).map(s => [s.outsideSiteID ?? s.siteID, s]));
+                                      const addr = getHoardingAddress(h, siteMap, outsideSiteMap);
                                       return (
                                         <tr key={h.hoardingID} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafe' }}>
                                           <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8' }}>
@@ -5832,6 +6015,11 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                                             <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 12, fontWeight: 700, color: '#4a5568' }}>
                                               {h.width && h.height ? `${h.width}×${h.height} ft` : '—'}
                                             </span>
+                                          </td>
+                                          <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8', maxWidth: 180 }}>
+                                            <div style={{ fontFamily: 'Nunito, sans-serif', fontSize: 11.5, fontWeight: 600, color: '#4a5568', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={addr}>
+                                              <MapPin size={10} color="#c0c0d8" style={{ marginRight: 3, verticalAlign: 'middle' }} />{addr}
+                                            </div>
                                           </td>
                                           <td style={{ padding: '9px 11px', borderBottom: '1px solid #f0f0f8' }}>
                                             <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 8px', borderRadius: 20, background: st.bg, color: st.color, border: `1px solid ${st.border}`, fontSize: 10.5, fontWeight: 800, fontFamily: 'Nunito, sans-serif', whiteSpace: 'nowrap' }}>
@@ -5862,7 +6050,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                       /* Edit mode: show the original single picker (locked) */
                       <div className="col-12 col-md-6">
                         <FieldLabel label="Hoarding" required />
-                        <HoardingPickerField hoardings={allHoardingsRaw} sites={sites} value={form.hoardingID} onChange={val => set('hoardingID', val)} error={errors.hoardingID} disabled={true} />
+                        <HoardingPickerField hoardings={allHoardingsRaw} sites={sites} outsideSites={outsideSites} value={form.hoardingID} onChange={val => set('hoardingID', val)} error={errors.hoardingID} disabled={true} />
                         <FieldError msg={errors.hoardingID} />
                       </div>
                     )}
@@ -6032,6 +6220,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                   hoardings={hoardings}
                   allHoardingsRaw={allHoardingsRaw}
                   sites={sites}
+                  outsideSites={outsideSites}
                   startDate={form.startDate}
                   endDate={form.endDate}
                   maps={localMaps}
@@ -6091,6 +6280,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
                     hoardings={hoardings}
                     allHoardingsRaw={allHoardingsRaw}
                     sites={sites}
+                    outsideSites={outsideSites}
                     startDate={form.startDate}
                     endDate={form.endDate}
                     maps={localMaps}
@@ -6154,6 +6344,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         <MultiHoardingLookupModal
           hoardings={availableHoardings.length > 0 ? availableHoardings.filter(h => h.isExternal !== true && String(h.isExternal).toLowerCase() !== 'true') : []}
           sites={sites}
+          outsideSites={outsideSites}
           selectedIds={selectedHoardings.map(h => h.hoardingID)}
           onSelectMultiple={(picked) => {
             setSelectedHoardings(picked);
@@ -6165,6 +6356,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
         <MultiHoardingLookupModal
           hoardings={availableHoardings.length > 0 ? availableHoardings.filter(h => h.isExternal === true || String(h.isExternal).toLowerCase() === 'true') : []}
           sites={sites}
+          outsideSites={outsideSites}
           selectedIds={selectedExternalHoardings.map(h => h.hoardingID)}
           onSelectMultiple={(picked) => {
             setSelectedExternalHoardings(picked);
@@ -6178,6 +6370,7 @@ function ContractForm({ mode, contract, customers, hoardings, allHoardingsRaw = 
           customer={selectedCustomerObj || { customerName: 'Customer' }}
           hoardings={hoardings}
           sites={sites}
+          outsideSites={outsideSites}
           quotations={quotations}
           companies={companies}
           onClose={() => setShowContractPDF(false)}
@@ -6263,6 +6456,7 @@ export default function CustomerContractPage() {
   const [hoardings, setHoardings] = useState([]);
   const [allHoardingsRaw, setAllHoardingsRaw] = useState([]);
   const [sites, setSites] = useState([]);
+  const [outsideSites, setOutsideSites] = useState([]);
   const [paymentFreqs, setPaymentFreqs] = useState([]);
   const [contracts, setContracts] = useState([]);
   const [landContracts, setLandContracts] = useState([]);      // ← add
@@ -6301,11 +6495,12 @@ export default function CustomerContractPage() {
   const fetchAll = useCallback(async () => {
     setLoadingMeta(true); setLoadError('');
     try {
-      const [rawCustomers, rawHoardings, rawExternalHoardings, rawSites, rawContracts, rawFreqs, rawLandContracts, rawMaps, rawQuotations, rawCompanies] = await Promise.all([
+      const [rawCustomers, rawHoardings, rawExternalHoardings, rawSites, rawOutsideSites, rawContracts, rawFreqs, rawLandContracts, rawMaps, rawQuotations, rawCompanies] = await Promise.all([
         apiService.getAllCustomers(),
         apiService.getAllHoardings(),
         apiService.getAllExternalHoardings().catch(() => []),
         apiService.getAllSites(),
+        apiService.getAllOutsideSites().catch(() => []),
         apiService.getAllCustomerContracts(),
         apiService.getAllPaymentFreqs(),
         apiService.getAllLandContracts(),
@@ -6324,6 +6519,8 @@ export default function CustomerContractPage() {
       setAllHoardingsRaw(rawHList);
       setHoardings(deduplicateHoardings(rawHList));
       setSites(Array.isArray(rawSites) ? rawSites : rawSites?.data ?? []);
+      const osList = Array.isArray(rawOutsideSites) ? rawOutsideSites : rawOutsideSites?.data ?? [];
+      setOutsideSites(osList.map(normalizeOutsideSite).filter(Boolean));
       const freqList = Array.isArray(rawFreqs) ? rawFreqs : rawFreqs?.data ?? [];
       setPaymentFreqs(freqList.map(f => ({
         value: f.paymentFreqID ?? f.PaymentFreqID ?? f.id,
@@ -6454,6 +6651,7 @@ export default function CustomerContractPage() {
         hoardings={hoardings}
         allHoardingsRaw={allHoardingsRaw}
         sites={sites}
+        outsideSites={outsideSites}
         paymentFreqs={freqOptions}
         contracts={contracts}
         landContracts={landContracts}

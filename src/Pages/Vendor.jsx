@@ -776,7 +776,7 @@ function ViewModal({ vendor, onClose, onEdit }) {
 /* ═══════════════════════════════════════════
    ADD / EDIT MODAL
  ═══════════════════════════════════════════ */
-function VendorFormModal({ onClose, onSaved, editData }) {
+function VendorFormModal({ onClose, onSaved, editData, changeTab }) {
   const isEdit = !!editData;
   const [form, setForm] = useState(() => {
     if (isEdit) return { ...editData };
@@ -795,6 +795,15 @@ function VendorFormModal({ onClose, onSaved, editData }) {
 
   const handleCancel = () => {
     sessionStorage.removeItem('unsaved_vendor_form');
+    sessionStorage.removeItem('open_vendor_modal');
+    const returnTab = sessionStorage.getItem('redirect_after_vendor_save');
+    if (returnTab) {
+      sessionStorage.removeItem('redirect_after_vendor_save');
+      if (typeof changeTab === 'function') {
+        changeTab(returnTab);
+        return;
+      }
+    }
     onClose();
   };
   const [errors, setErrors] = useState({});
@@ -916,6 +925,19 @@ function VendorFormModal({ onClose, onSaved, editData }) {
       await new Promise(r => setTimeout(r, 600));
       // ── START: Clear unsaved draft on save success ──
       sessionStorage.removeItem('unsaved_vendor_form');
+      sessionStorage.removeItem('open_vendor_modal');
+      const newlyCreatedId = saved?.vendorID ?? saved?.vendor_ID ?? saved?.id ?? null;
+      if (newlyCreatedId) {
+        sessionStorage.setItem('newly_created_vendor_id', String(newlyCreatedId));
+      }
+      const returnTab = sessionStorage.getItem('redirect_after_vendor_save');
+      if (returnTab) {
+        sessionStorage.removeItem('redirect_after_vendor_save');
+        if (typeof changeTab === 'function') {
+          changeTab(returnTab);
+          return;
+        }
+      }
       // ── END: Clear unsaved draft on save success ──
       onSaved(saved, isEdit);
       onClose();
@@ -1034,7 +1056,7 @@ function VendorFormModal({ onClose, onSaved, editData }) {
 /* ═══════════════════════════════════════════
    MAIN VENDOR PAGE
  ═══════════════════════════════════════════ */
-export default function VendorPage() {
+export default function VendorPage({ changeTab }) {
   const [vendors, setVendors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState('');
@@ -1049,14 +1071,21 @@ export default function VendorPage() {
 
   /* -- Modals -- */
   const [detailVendor, setDetailVendor] = useState(null);
-  // ── START: Restore formVendor if unsaved vendor form exists ──
-  // const [formVendor, setFormVendor] = useState(null);
+  // ── START: Restore formVendor if unsaved vendor form exists or open_vendor_modal is set ──
   const [formVendor, setFormVendor] = useState(() => {
     const saved = sessionStorage.getItem('unsaved_vendor_form');
     if (saved) return EMPTY_FORM;
+    if (sessionStorage.getItem('open_vendor_modal') === 'true') return EMPTY_FORM;
     return null;
   });
-  // ── END: Restore formVendor if unsaved vendor form exists ──
+
+  useEffect(() => {
+    if (sessionStorage.getItem('open_vendor_modal') === 'true') {
+      sessionStorage.removeItem('open_vendor_modal');
+      setFormVendor(EMPTY_FORM);
+    }
+  }, []);
+  // ── END: Restore formVendor if unsaved vendor form exists or open_vendor_modal is set ──
 
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
@@ -1160,6 +1189,7 @@ export default function VendorPage() {
           editData={formVendor.vendorID ? formVendor : null}
           onClose={() => setFormVendor(null)}
           onSaved={handleSaved}
+          changeTab={changeTab}
         />
       )}
 

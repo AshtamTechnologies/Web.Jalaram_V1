@@ -130,7 +130,7 @@ export default function App() {
       case 'DissloveContract': return <DissloveContract />;
       case 'Registration': return <RegistrationPage />;
       case 'ExpenseType': return <ExpenseType />;
-      case 'vendors': return <VendorPage />;
+      case 'vendors': return <VendorPage changeTab={changeTab} />;
       case 'CompanyDetails': return <CompanyDetailsPage />;
       // ── START: Pass changeTab to OpportunityPage ──
       // case 'opportunity': return <OpportunityPage />;

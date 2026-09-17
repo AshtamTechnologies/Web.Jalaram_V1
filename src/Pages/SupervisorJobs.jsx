@@ -633,12 +633,47 @@ function normalizeSite(raw) {
   };
 }
 
-function getSiteAddress(h, siteMap = null) {
+function normalizeOutsideSite(raw) {
+  if (!raw) return null;
+  return {
+    outsideSiteID: Number(raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.siteID ?? raw.SiteID ?? 0),
+    siteID: Number(raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.siteID ?? raw.SiteID ?? 0),
+    addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? raw.address_line1 ?? raw.address ?? raw.Address ?? '',
+    addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? raw.address_line2 ?? '',
+    addressLine3: raw.addressLine3 ?? raw.AddressLine3 ?? '',
+    landmark: raw.landmark ?? raw.Landmark ?? '',
+    city: raw.city ?? raw.City ?? '',
+    district: raw.district ?? raw.District ?? '',
+    state: raw.state ?? raw.State ?? '',
+    pincode: raw.pincode ?? raw.Pincode ?? '',
+    siteType: raw.siteType ?? raw.SiteType ?? '',
+    country: raw.country ?? raw.Country ?? '',
+    vendorID: Number(raw.vendorID ?? raw.VendorID ?? 0),
+    status: raw.status ?? raw.Status ?? true,
+  };
+}
+
+function getSiteAddress(h, siteMap = null, outsideSiteMap = null) {
   if (!h) return '';
-  const rawSite = h.site || (siteMap && (h.siteID || h.SiteID) ? siteMap.get(Number(h.siteID ?? h.SiteID)) : null);
-  const s = rawSite ? normalizeSite(rawSite) : null;
+  const isExt = Boolean(
+    h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' ||
+    h.is_External === true || String(h.is_External).toLowerCase() === 'true' ||
+    h.IsExternal === true || String(h.IsExternal).toLowerCase() === 'true' ||
+    h.Is_External === true || String(h.Is_External).toLowerCase() === 'true'
+  );
+  const sid = Number(h.siteID ?? h.SiteID ?? h.outsideSiteID ?? h.OutsideSiteID ?? 0);
+
+  let s = null;
+  if (isExt) {
+    const rawOutSite = h.outsideSite || (outsideSiteMap && sid ? (typeof outsideSiteMap.get === 'function' ? outsideSiteMap.get(sid) : outsideSiteMap[sid]) : null) || (siteMap && sid ? (typeof siteMap.get === 'function' ? siteMap.get(sid) : siteMap[sid]) : null) || h.site;
+    s = rawOutSite ? normalizeOutsideSite(rawOutSite) : null;
+  } else {
+    const rawSite = h.site || (siteMap && sid ? (typeof siteMap.get === 'function' ? siteMap.get(sid) : siteMap[sid]) : null);
+    s = rawSite ? normalizeSite(rawSite) : null;
+  }
+
   if (s) {
-    const addr = [s.addressLine1, s.addressLine2].filter(Boolean).join(', ');
+    const addr = [s.addressLine1, s.addressLine2, s.addressLine3].filter(Boolean).join(', ');
     const city = [s.city, s.district].filter(Boolean).join(', ');
     const full = [addr, city].filter(Boolean).join(' — ');
     if (full) return full;
@@ -650,6 +685,7 @@ function getSiteAddress(h, siteMap = null) {
   const flatAddr = [
     h.addressLine1 ?? h.AddressLine1 ?? h.siteAddress ?? h.SiteAddress ?? '',
     h.addressLine2 ?? h.AddressLine2 ?? '',
+    h.addressLine3 ?? h.AddressLine3 ?? '',
   ].filter(Boolean).join(', ');
   const flatCity = [
     h.city ?? h.City ?? h.siteCity ?? h.SiteCity ?? '',
@@ -2315,7 +2351,7 @@ export default function SupervisorJobsPage() {
     try {
       const userId = parseInt(localStorage.getItem('userId') || '0', 10);
 
-      const [res, hRaw, mergeRaw, sRaw, attRaw, cRaw, extRaw] = await Promise.all([
+      const [res, hRaw, mergeRaw, sRaw, attRaw, cRaw, extRaw, osRaw] = await Promise.all([
         apiService.getJobRequestsByUserId(userId),
         apiService.getAllHoardings(),
         apiService.getAllHoardingMerges(),
@@ -2323,16 +2359,20 @@ export default function SupervisorJobsPage() {
         apiService.getAllJobTaskAttachments().catch(() => []),
         apiService.getAllCustomers().catch(() => []),
         apiService.getAllExternalHoardings().catch(() => []),
+        apiService.getAllOutsideSites().catch(() => []),
       ]);
 
       // Build site lookup map
       const siteList = extractArray(sRaw).map(normalizeSite).filter(Boolean);
       const siteMap = new Map(siteList.map(s => [Number(s.siteID ?? s.SiteID ?? 0), s]));
 
+      const outsideSiteList = extractArray(osRaw).map(normalizeOutsideSite).filter(Boolean);
+      const outsideSiteMap = new Map(outsideSiteList.map(s => [Number(s.outsideSiteID ?? s.siteID ?? 0), s]));
+
       // Enrich hoardings with site data
       const rawHoardingList = [
         ...extractArray(hRaw),
-        ...extractArray(extRaw)
+        ...extractArray(extRaw).map(eh => ({ ...eh, isExternal: true }))
       ];
 
       // Build latestByCode and anyIdToLatest map (matching Job.jsx)
@@ -2358,13 +2398,23 @@ export default function SupervisorJobsPage() {
 
       const enrichHoarding = (h) => {
         if (!h) return null;
-        const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.site?.siteID ?? 0);
-        const foundSite = siteMap.get(siteID) || null;
-        const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
-        return {
-          ...h,
-          site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
-        };
+        const isExt = Boolean(h.isExternal === true || String(h.isExternal).toLowerCase() === 'true');
+        const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.outsideSiteID ?? h.site?.siteID ?? 0);
+        if (isExt) {
+          const foundSite = outsideSiteMap.get(siteID) || siteMap.get(siteID) || null;
+          return {
+            ...h,
+            isExternal: true,
+            site: foundSite ? normalizeOutsideSite(foundSite) : (h.site ? normalizeOutsideSite(h.site) : null),
+          };
+        } else {
+          const foundSite = siteMap.get(siteID) || null;
+          const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+          return {
+            ...h,
+            site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+          };
+        }
       };
 
       const enrichedHoardings = rawHoardingList.map(enrichHoarding);
@@ -2410,7 +2460,7 @@ export default function SupervisorJobsPage() {
                 material: h?.material || h?.Material || '',
                 width: h?.width || h?.Width || 0,
                 height: h?.height || h?.Height || 0,
-                siteAddress: getSiteAddress(h, siteMap),         // ← now uses enriched h and siteMap
+                siteAddress: getSiteAddress(h, siteMap, outsideSiteMap),         // ← now uses enriched h, siteMap and outsideSiteMap
                 siteID: h ? Number(h.siteID ?? h.SiteID ?? 0) : 0,
                 mergeAlongFlag: merge?.mergeAlongFlag ?? merge?.MergeAlongFlag ?? null,
                 hoardingLineNumber: Number(merge?.hoardingLineNumber ?? merge?.HoardingLineNumber ?? 0),

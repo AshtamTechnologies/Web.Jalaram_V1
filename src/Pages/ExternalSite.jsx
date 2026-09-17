@@ -1174,8 +1174,17 @@ export default function ExternalSitePage({ changeTab }) {
   const [fetchError, setFetchError] = useState('');
   
   const [showModal, setShowModal] = useState(() => {
-    return sessionStorage.getItem('unsaved_external_site_form') !== null;
+    return (
+      sessionStorage.getItem('unsaved_external_site_form') !== null ||
+      sessionStorage.getItem('newly_created_vendor_id') !== null
+    );
   });
+
+  useEffect(() => {
+    if (sessionStorage.getItem('unsaved_external_site_form') !== null || sessionStorage.getItem('newly_created_vendor_id') !== null) {
+      setShowModal(true);
+    }
+  }, []);
 
   const [editSite, setEditSite] = useState(null);
   const [search, setSearch] = useState('');

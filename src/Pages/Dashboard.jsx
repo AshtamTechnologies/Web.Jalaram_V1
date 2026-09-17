@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
+import ReactDOM from 'react-dom';
 import {
   RefreshCw,
   CalendarCheck,
@@ -15,6 +16,10 @@ import {
   TrendingDown,
   Landmark,
   CreditCard,
+  ChevronDown,
+  Search,
+  X,
+  Check,
 } from 'lucide-react';
 import { apiService } from '../api/api';
 import DashboardCard from '../components/dashboard/DashboardCard';
@@ -107,6 +112,318 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December'
 ];
+
+/* ═══════════════════════════════════════════
+   PORTAL DROPDOWN (System Combo Pattern)
+═══════════════════════════════════════════ */
+function PortalDropdown({ open, triggerRef, panelRef, children }) {
+  const [style, setStyle] = useState({ position: 'fixed', top: 0, left: 0, width: 0, zIndex: 99999 });
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return;
+    const update = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const panelH = panelRef.current?.offsetHeight || 260;
+      const flipUp = (window.innerHeight - r.bottom) < panelH + 8 && r.top > panelH + 8;
+      setStyle({
+        position: 'fixed',
+        top: flipUp ? r.top - panelH - 4 : r.bottom + 4,
+        left: r.left,
+        width: Math.max(r.width, 170),
+        zIndex: 99999,
+      });
+    };
+    update();
+    window.addEventListener('scroll', update, true);
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update, true);
+      window.removeEventListener('resize', update);
+    };
+  }, [open, triggerRef, panelRef]);
+
+  if (!open) return null;
+  return ReactDOM.createPortal(<div ref={panelRef} style={style}>{children}</div>, document.body);
+}
+
+function useOutsideClick(wrapRef, panelRef, open, onClose) {
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => {
+      if (!(wrapRef.current?.contains(e.target)) && !(panelRef.current?.contains(e.target))) onClose();
+    };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [open, wrapRef, panelRef, onClose]);
+}
+
+function MonthDropdown({ value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery('');
+  }, []);
+
+  useOutsideClick(wrapRef, panelRef, open, close);
+
+  const options = useMemo(() => {
+    const all = [{ value: '', label: 'All Months (Full Year)' }];
+    MONTH_NAMES.forEach((name, idx) => {
+      all.push({ value: idx + 1, label: name });
+    });
+    return all;
+  }, []);
+
+  const filtered = options.filter(opt =>
+    opt.label.toLowerCase().includes(query.toLowerCase())
+  );
+
+  const selectedOption = options.find(opt => String(opt.value) === String(value)) || options[0];
+
+  const openDD = () => {
+    setOpen(true);
+    setQuery('');
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const select = (opt) => {
+    onChange(opt.value);
+    setOpen(false);
+    setQuery('');
+  };
+
+  const nav = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      (items[idx + 1] || items[0])?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      (items[idx - 1] || items[items.length - 1])?.focus();
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef} style={{ minWidth: '190px' }}>
+      <div
+        ref={triggerRef}
+        className="pg-field-wrap pg-combo-trigger pg-field-wrap--normal"
+        onClick={openDD}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (!open) {
+            if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openDD();
+            }
+          } else {
+            nav(e);
+          }
+        }}
+        style={{ padding: '8px 12px', minHeight: '38px' }}
+      >
+        <Calendar size={14} color="#c0c0d8" style={{ flexShrink: 0 }} />
+        <span className="pg-combo-display">{selectedOption.label}</span>
+        <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0, marginLeft: 'auto' }} />
+      </div>
+
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static' }}>
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              className="pg-combo-search__input"
+              placeholder="Search month…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  listRef.current?.querySelectorAll('.pg-combo-option')?.[0]?.focus();
+                } else if (e.key === 'Escape') {
+                  close();
+                }
+              }}
+            />
+            {query && (
+              <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />
+            )}
+          </div>
+          <div className="pg-combo-list" ref={listRef}>
+            {filtered.length === 0 ? (
+              <div className="pg-combo-empty">No months match</div>
+            ) : (
+              filtered.map((opt) => {
+                const isActive = String(opt.value) === String(value);
+                return (
+                  <div
+                    key={opt.value}
+                    className={`pg-combo-option${isActive ? ' pg-combo-option--active' : ''}`}
+                    onClick={() => select(opt)}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        select(opt);
+                      } else {
+                        nav(e);
+                      }
+                    }}
+                  >
+                    <span className="pg-combo-option__name">{opt.label}</span>
+                    {isActive && (
+                      <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
+
+function YearDropdown({ value, onChange, availableYears }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setQuery('');
+  }, []);
+
+  useOutsideClick(wrapRef, panelRef, open, close);
+
+  const filtered = availableYears.filter((yr) => String(yr).includes(query));
+
+  const openDD = () => {
+    setOpen(true);
+    setQuery('');
+    setTimeout(() => inputRef.current?.focus(), 0);
+  };
+
+  const select = (yr) => {
+    onChange(Number(yr));
+    setOpen(false);
+    setQuery('');
+  };
+
+  const nav = (e) => {
+    const items = listRef.current?.querySelectorAll('.pg-combo-option');
+    const idx = Array.from(items || []).indexOf(document.activeElement);
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      (items[idx + 1] || items[0])?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      (items[idx - 1] || items[items.length - 1])?.focus();
+    } else if (e.key === 'Escape') {
+      close();
+    }
+  };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef} style={{ minWidth: '120px' }}>
+      <div
+        ref={triggerRef}
+        className="pg-field-wrap pg-combo-trigger pg-field-wrap--normal"
+        onClick={openDD}
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (!open) {
+            if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openDD();
+            }
+          } else {
+            nav(e);
+          }
+        }}
+        style={{ padding: '8px 12px', minHeight: '38px' }}
+      >
+        <span className="pg-combo-display" style={{ fontWeight: 700 }}>
+          {value || 'Year'}
+        </span>
+        <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0, marginLeft: 'auto' }} />
+      </div>
+
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static' }}>
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              className="pg-combo-search__input"
+              placeholder="Search year…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  listRef.current?.querySelectorAll('.pg-combo-option')?.[0]?.focus();
+                } else if (e.key === 'Escape') {
+                  close();
+                }
+              }}
+            />
+            {query && (
+              <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />
+            )}
+          </div>
+          <div className="pg-combo-list" ref={listRef}>
+            {filtered.length === 0 ? (
+              <div className="pg-combo-empty">No years match</div>
+            ) : (
+              filtered.map((yr) => {
+                const isActive = Number(yr) === Number(value);
+                return (
+                  <div
+                    key={yr}
+                    className={`pg-combo-option${isActive ? ' pg-combo-option--active' : ''}`}
+                    onClick={() => select(yr)}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        select(yr);
+                      } else {
+                        nav(e);
+                      }
+                    }}
+                  >
+                    <span className="pg-combo-option__name">{yr}</span>
+                    {isActive && (
+                      <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
 
 function getContractGst(contract, quotations = []) {
   if (!contract) return { cgstPct: 9, sgstPct: 9 };
@@ -716,6 +1033,25 @@ export default function Dashboard({ changeTab }) {
       hasData: true,
     };
   }, [contracts, quotations, monthlyFilter, showMonthlyValue]);
+
+  const availableYears = useMemo(() => {
+    const currentY = new Date().getFullYear();
+    const contractYears = contracts
+      .map((c) => {
+        const s = String(c.startDate ?? c.StartDate ?? '').split('T')[0];
+        return s ? parseInt(s.substring(0, 4), 10) : null;
+      })
+      .filter((y) => y && !isNaN(y));
+
+    const minYear = Math.min(2023, ...contractYears);
+    const maxYear = Math.max(currentY + 5, 2030, ...contractYears);
+
+    const years = [];
+    for (let y = minYear; y <= maxYear; y++) {
+      years.push(y);
+    }
+    return years;
+  }, [contracts]);
 
   const handleApplyMonthlyFilter = () => {
     setShowMonthlyValue(true);
@@ -2164,63 +2500,28 @@ export default function Dashboard({ changeTab }) {
         style={{ marginBottom: '24px' }}
         rightContent={
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            {/* Month Select */}
-            <select
+            {/* Month Custom Dropdown */}
+            <MonthDropdown
               value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              style={{
-                padding: '5px 10px',
-                borderRadius: '8px',
-                border: '1.5px solid #e0e0f0',
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '12px',
-                fontWeight: 700,
-                color: '#334155',
-                background: '#fff',
-                cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              <option value="">All Months (Full Year)</option>
-              {MONTH_NAMES.map((mName, idx) => (
-                <option key={idx + 1} value={idx + 1}>
-                  {mName}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedMonth(val)}
+            />
 
-            {/* Year Select */}
-            <select
+            {/* Year Custom Dropdown */}
+            <YearDropdown
               value={selectedYear}
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              style={{
-                padding: '5px 10px',
-                borderRadius: '8px',
-                border: '1.5px solid #e0e0f0',
-                fontFamily: 'Nunito, sans-serif',
-                fontSize: '12px',
-                fontWeight: 700,
-                color: '#334155',
-                background: '#fff',
-                cursor: 'pointer',
-                outline: 'none',
-              }}
-            >
-              {[2023, 2024, 2025, 2026, 2027, 2028].map((yr) => (
-                <option key={yr} value={yr}>
-                  {yr}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedYear(val)}
+              availableYears={availableYears}
+            />
 
             {/* View / Show / Hide Buttons */}
             {showMonthlyValue && (
               <button
                 onClick={() => setShowMonthlyValue(false)}
                 style={{
-                  padding: '5px 12px',
-                  borderRadius: '8px',
-                  border: '1.5px solid #e2e8f0',
+                  padding: '8px 12px',
+                  minHeight: '38px',
+                  borderRadius: '11px',
+                  border: '1.5px solid #e8e8f4',
                   background: '#fff',
                   color: '#64748b',
                   fontFamily: 'Nunito, sans-serif',
@@ -2234,15 +2535,16 @@ export default function Dashboard({ changeTab }) {
                 }}
                 title="Hide contract value"
               >
-                <EyeOff size={12} /> Hide
+                <EyeOff size={13} /> Hide
               </button>
             )}
 
             <button
               onClick={handleApplyMonthlyFilter}
               style={{
-                padding: '5px 14px',
-                borderRadius: '8px',
+                padding: '8px 16px',
+                minHeight: '38px',
+                borderRadius: '11px',
                 border: 'none',
                 background: 'linear-gradient(135deg, #049edf, #6c63ff)',
                 color: '#fff',
@@ -2252,11 +2554,12 @@ export default function Dashboard({ changeTab }) {
                 cursor: 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: '4px',
+                gap: '5px',
                 boxShadow: '0 2px 8px rgba(4, 158, 223, 0.25)',
+                transition: 'all 0.15s ease',
               }}
             >
-              <Eye size={12} /> {showMonthlyValue ? 'Update' : 'View'}
+              <Eye size={13} /> {showMonthlyValue ? 'Update' : 'View'}
             </button>
           </div>
         }
