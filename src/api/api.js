@@ -210,7 +210,14 @@ export const apiService = {
   getAllExternalHoardings: () => api.get('/Hoarding/GetAllExternal'),
   getAllExternalAvailableForVendor: () => api.get('/Hoarding/GetAllExternalavailableforVendor'),
   getAvailableHoardings: (startDate, endDate) => api.get(`/Hoarding/available?startDate=${startDate}&endDate=${endDate}`),
-  getAvailableHoardingListPhoto: (startDate, endDate) => api.get(`/Hoarding/GetAvailableHoardingListPhoto?startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`),
+  getAvailableHoardingListPhoto: (startDate) => {
+    return api.get(`/Hoarding/GetAvailableHoardingListPhoto?startDate=${encodeURIComponent(startDate || '')}`);
+  },
+  getAllHoardingsStatusListPhoto: (startDate, endDate) => {
+    let url = `/Hoarding/GetAllHoardingsStatusListPhoto?startDate=${encodeURIComponent(startDate || '')}`;
+    if (endDate) url += `&endDate=${encodeURIComponent(endDate)}`;
+    return api.get(url);
+  },
   getAllavailableforJob: () => api.get('/Hoarding/availableforJob'), //Show the hoarding available
   getHoardingById: (hoardingID) => api.get(`/Hoarding/${hoardingID}`),
   getHoardingAvailabilityDetails: (hoardingID) => api.get(`/Hoarding/${hoardingID}/HoardingAvailabilityDetails`),

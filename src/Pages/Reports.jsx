@@ -15,9 +15,20 @@ const REPORTS = [
     id: 'available-hoardings',
     title: 'Available Hoardings Report',
     description:
-      'All hoardings currently available for booking — includes site details, dimensions, type, and rental information with default photos.',
+      'All hoardings currently available for booking — includes site details, dimensions, type, and default photos.',
     icon: TrendingUp,
     color: '#049edf',
+    pdfOnly: true,
+    customPDF: true,
+  },
+  {
+    id: 'hoardings-status-daterange',
+    // title: 'Hoarding Available in Date Range Report',
+    title: 'Hoarding Availability Date Range Report',
+    description:
+      'Comprehensive status of all hoardings within a date range — showing available hoardings and upcoming availability dates for occupied hoardings.',
+    icon: Calendar,
+    color: '#10b981',
     pdfOnly: true,
     customPDF: true,
   },
@@ -244,7 +255,7 @@ function resolvePhotoSrc(p) {
 /* ─────────────────────────────────────────
    BUILD PDF HTML (CustomerContract.jsx style)
 ───────────────────────────────────────── */
-function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings }) {
+function buildAvailableHoardingsPDFHTML({ reportTitle = 'Available Hoardings Report', company, startDate, endDate, hoardings }) {
   const today = new Date().toLocaleDateString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric',
   });
@@ -384,6 +395,18 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
     [company.addressLine2, company.city, company.state, company.pincode].filter(Boolean).join(', '),
   ].filter(Boolean);
 
+  const reportPeriod = endDate
+    ? `${fmtD(startDate)} &rarr; ${fmtD(endDate)}`
+    : `From ${fmtD(startDate)}`;
+
+  const pageTitle = endDate
+    ? `${reportTitle} &mdash; ${fmtD(startDate)} to ${fmtD(endDate)}`
+    : `${reportTitle} &mdash; From ${fmtD(startDate)}`;
+
+  const barText = endDate
+    ? `${reportTitle} (${fmtD(startDate)} &rarr; ${fmtD(endDate)})`
+    : `${reportTitle} (From ${fmtD(startDate)})`;
+
   /* ── COVER ── */
   const cover = `
     <div class="page cov">
@@ -395,14 +418,14 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
         <div class="cov-date">${today}</div>
       </div>
       <div class="cov-body">
-        <div class="cov-name">Available Hoardings Report</div>
+        <div class="cov-name">${reportTitle}</div>
         ${company.mobileNo ? `<div class="cov-phone">Contact: ${company.mobileNo}</div>` : ''}
         ${company.gstin ? `<div class="cov-phone">GSTIN: ${company.gstin}</div>` : ''}
         <div class="cov-info">
           <table style="width:100%; border-collapse:collapse; font-size:13px;">
             <tr>
               <td style="width:180px; font-weight:bold; padding:3px 0;">Report Period</td>
-              <td style="padding:3px 0;">: ${fmtD(startDate)} &rarr; ${fmtD(endDate)}</td>
+              <td style="padding:3px 0;">: ${reportPeriod}</td>
             </tr>
             <tr>
               <td style="font-weight:bold; padding:3px 0;">Total Hoardings</td>
@@ -429,6 +452,8 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
 
     const isOccupied =
       String(item.availabilityStatus || '').trim().toLowerCase() === 'occupied' ||
+      item.isOccupied === true ||
+      String(item.isOccupied).trim().toLowerCase() === 'true' ||
       item.isAvailable === false ||
       String(item.isAvailable).trim().toLowerCase() === 'false';
 
@@ -443,10 +468,13 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
       availabilityHtml = `<span class="hrd-green">Available</span>`;
     }
 
+    const isExt = item.isExternal === true || String(item.isExternal).toLowerCase() === 'true';
+    const extBadge = isExt ? `&nbsp;<span style="display:inline-block;padding:1px 6px;font-size:10px;font-weight:700;background:#e0f2fe;color:#0284c7;border-radius:4px;border:1px solid #bae6fd;vertical-align:middle;">External</span>` : '';
+
     return `
       <div class="hrd-box">
         <div class="hrd-title">
-          ${idx + 1})&nbsp;<strong>${item.hoardingCode || `Hoarding #${item.hoardingId || ''}`}</strong>
+          ${idx + 1})&nbsp;<strong>${item.hoardingCode || `Hoarding #${item.hoardingId || ''}`}</strong>${extBadge}
           ${addr ? `&nbsp;&mdash;&nbsp;${addr}` : ''}
           ${size ? `&nbsp;&mdash;&nbsp;<strong>${size}</strong>` : ''}
           ${sqFt ? `&nbsp;(${sqFt})` : ''}
@@ -458,11 +486,6 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
             <span class="hrd-lbl">Availability:</span>&nbsp;
             ${availabilityHtml}
           </div>
-          ${item.monthlyRent > 0 ? `
-          <div class="hrd-cell" style="flex:0 0 100%;margin-top:2px;">
-            <span class="hrd-lbl">Monthly Rent:</span>&nbsp;
-            <span class="hrd-red">&#8377;${Number(item.monthlyRent).toLocaleString('en-IN')}</span>
-          </div>` : ''}
         </div>
       </div>`;
   };
@@ -509,12 +532,12 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Available Hoardings Report &mdash; ${fmtD(startDate)} to ${fmtD(endDate)}</title>
+  <title>${pageTitle}</title>
   <style>${css}</style>
 </head>
 <body style="padding-top:44px;">
   <div id="dl-bar">
-    <span><strong>${company.companyName}</strong> &mdash; Available Hoardings Report (${fmtD(startDate)} &rarr; ${fmtD(endDate)})</span>
+    <span><strong>${company.companyName}</strong> &mdash; ${barText}</span>
     <button class="dl-btn" onclick="window.print()">&#8681; Download / Print PDF</button>
   </div>
   ${cover}
@@ -524,14 +547,17 @@ function buildAvailableHoardingsPDFHTML({ company, startDate, endDate, hoardings
 }
 
 /* ─────────────────────────────────────────
-   AVAILABLE HOARDINGS MODAL
+   HOARDINGS DATE RANGE MODAL
 ───────────────────────────────────────── */
-function AvailableHoardingsModal({ onClose }) {
+function HoardingsDateRangeModal({ report, onClose }) {
+  const isAvailableHoardings = report?.id === 'available-hoardings';
+
   const [startDate, setStartDate] = useState(() => {
     const now = new Date();
     return now.toISOString().split('T')[0];
   });
   const [endDate, setEndDate] = useState(() => {
+    if (isAvailableHoardings) return '';
     const now = new Date();
     now.setMonth(now.getMonth() + 1);
     return now.toISOString().split('T')[0];
@@ -541,6 +567,10 @@ function AvailableHoardingsModal({ onClose }) {
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const reportTitle = report?.title || 'Available Hoardings Report';
+  const reportColor = report?.color || '#049edf';
+  const Icon = report?.icon || TrendingUp;
 
   useEffect(() => {
     (async () => {
@@ -560,14 +590,20 @@ function AvailableHoardingsModal({ onClose }) {
     })();
   }, []);
 
-  const canGenerate = startDate && endDate && selectedCompany && !generating;
+  const canGenerate = startDate && (isAvailableHoardings || endDate) && selectedCompany && !generating;
 
   const handleGenerate = async () => {
     if (!canGenerate) return;
     setGenerating(true);
     setErrorMsg('');
     try {
-      const response = await apiService.getAvailableHoardingListPhoto(startDate, endDate);
+      let response;
+      if (report?.id === 'hoardings-status-daterange') {
+        response = await apiService.getAllHoardingsStatusListPhoto(startDate, endDate);
+      } else {
+        response = await apiService.getAvailableHoardingListPhoto(startDate);
+      }
+
       const list = Array.isArray(response)
         ? response
         : Array.isArray(response?.data)
@@ -577,15 +613,16 @@ function AvailableHoardingsModal({ onClose }) {
             : [];
 
       if (!list || list.length === 0) {
-        setErrorMsg('No available hoardings found for this period.');
+        setErrorMsg('No hoardings found for this period.');
         setGenerating(false);
         return;
       }
 
       const html = buildAvailableHoardingsPDFHTML({
+        reportTitle,
         company: selectedCompany,
         startDate,
-        endDate,
+        endDate: isAvailableHoardings ? '' : endDate,
         hoardings: list,
       });
 
@@ -598,7 +635,7 @@ function AvailableHoardingsModal({ onClose }) {
         alert('Popup blocked. Please allow popups for this site and try again.');
       }
     } catch (err) {
-      setErrorMsg(err?.response?.data?.message || err?.message || 'Failed to fetch available hoardings data.');
+      setErrorMsg(err?.response?.data?.message || err?.message || 'Failed to fetch hoardings data.');
     } finally {
       setGenerating(false);
     }
@@ -628,16 +665,16 @@ function AvailableHoardingsModal({ onClose }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{
               width: 38, height: 38, borderRadius: 10,
-              background: 'rgba(4,158,223,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: `${reportColor}18`, display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <TrendingUp size={20} color="#049edf" />
+              <Icon size={20} color={reportColor} />
             </div>
             <div>
               <h3 style={{ margin: 0, fontSize: 16.5, fontWeight: 900, color: '#1a1a2e' }}>
-                Available Hoardings PDF
+                {reportTitle} PDF
               </h3>
               <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#7878a0' }}>
-                Select period and company for the report
+                {isAvailableHoardings ? 'Select start date and company for the report' : 'Select period and company for the report'}
               </p>
             </div>
           </div>
@@ -646,9 +683,9 @@ function AvailableHoardingsModal({ onClose }) {
           </button>
         </div>
 
-        {/* Date Range */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-          <div>
+        {/* Date Selection */}
+        {isAvailableHoardings ? (
+          <div style={{ marginBottom: 14 }}>
             <label style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: '#4a5568', marginBottom: 5 }}>
               Start Date <span style={{ color: '#ef4444' }}>*</span>
             </label>
@@ -656,7 +693,7 @@ function AvailableHoardingsModal({ onClose }) {
               display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
               border: '1.5px solid #e0e7ff', borderRadius: 10, background: '#fff',
             }}>
-              <Calendar size={14} color="#049edf" />
+              <Calendar size={14} color={reportColor} />
               <input
                 type="date"
                 value={startDate}
@@ -668,27 +705,50 @@ function AvailableHoardingsModal({ onClose }) {
               />
             </div>
           </div>
-          <div>
-            <label style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: '#4a5568', marginBottom: 5 }}>
-              End Date <span style={{ color: '#ef4444' }}>*</span>
-            </label>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
-              border: '1.5px solid #e0e7ff', borderRadius: 10, background: '#fff',
-            }}>
-              <Calendar size={14} color="#049edf" />
-              <input
-                type="date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                style={{
-                  border: 'none', outline: 'none', width: '100%',
-                  fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1a1a2e',
-                }}
-              />
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: '#4a5568', marginBottom: 5 }}>
+                Start Date <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                border: '1.5px solid #e0e7ff', borderRadius: 10, background: '#fff',
+              }}>
+                <Calendar size={14} color={reportColor} />
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={e => setStartDate(e.target.value)}
+                  style={{
+                    border: 'none', outline: 'none', width: '100%',
+                    fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1a1a2e',
+                  }}
+                />
+              </div>
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 11.5, fontWeight: 800, color: '#4a5568', marginBottom: 5 }}>
+                End Date <span style={{ color: '#ef4444' }}>*</span>
+              </label>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px',
+                border: '1.5px solid #e0e7ff', borderRadius: 10, background: '#fff',
+              }}>
+                <Calendar size={14} color={reportColor} />
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={e => setEndDate(e.target.value)}
+                  style={{
+                    border: 'none', outline: 'none', width: '100%',
+                    fontFamily: 'Nunito, sans-serif', fontSize: 12.5, fontWeight: 700, color: '#1a1a2e',
+                  }}
+                />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Company Picker */}
         <div style={{ marginBottom: 18 }}>
@@ -734,10 +794,10 @@ function AvailableHoardingsModal({ onClose }) {
             disabled={!canGenerate}
             style={{
               padding: '9px 20px', border: 'none', borderRadius: 10,
-              background: canGenerate ? 'linear-gradient(135deg, #049edf, #0284c7)' : '#cbd5e1',
+              background: canGenerate ? `linear-gradient(135deg, ${reportColor}, #0284c7)` : '#cbd5e1',
               color: '#fff', fontWeight: 800, cursor: canGenerate ? 'pointer' : 'not-allowed',
               display: 'flex', alignItems: 'center', gap: 8,
-              boxShadow: canGenerate ? '0 4px 14px rgba(4,158,223,0.35)' : 'none',
+              boxShadow: canGenerate ? `0 4px 14px ${reportColor}40` : 'none',
             }}
           >
             {generating ? (
@@ -915,7 +975,7 @@ function DownloadDropdown({ onExportExcel, onExportPDF, excelOnly, pdfOnly, onOp
 /* ─────────────────────────────────────────
    REPORT CARD
 ───────────────────────────────────────── */
-function ReportCard({ report, onOpenAvailableModal }) {
+function ReportCard({ report, onOpenCustomModal }) {
   const [exportError, setExportError] = useState('');
   const Icon = report.icon;
 
@@ -927,20 +987,16 @@ function ReportCard({ report, onOpenAvailableModal }) {
 
   const handlePDF = useCallback(async () => {
     if (report.customPDF) {
-      onOpenAvailableModal();
+      onOpenCustomModal(report);
       return;
     }
     setExportError('');
     try { await report.exportPDF(); }
     catch (err) { setExportError(err?.response?.data?.message || err?.message || 'Export failed.'); }
-  }, [report, onOpenAvailableModal]);
+  }, [report, onOpenCustomModal]);
 
-  const iconBg = report.color === '#7c3aed'
-    ? 'rgba(124,58,237,0.10)'
-    : 'rgba(4,158,223,0.10)';
-  const iconBdr = report.color === '#7c3aed'
-    ? 'rgba(124,58,237,0.22)'
-    : 'rgba(4,158,223,0.22)';
+  const iconBg = `${report.color}15`;
+  const iconBdr = `${report.color}35`;
 
   return (
     <div className="pg-container" style={{ borderRadius: 18, overflow: 'visible', marginBottom: 16 }}>
@@ -1011,8 +1067,8 @@ function ReportCard({ report, onOpenAvailableModal }) {
               {report.pdfOnly && (
                 <span style={{
                   fontSize: 10.5, fontWeight: 700, fontFamily: 'Nunito, sans-serif',
-                  color: '#049edf', background: 'rgba(4,158,223,0.10)',
-                  border: '1px solid rgba(4,158,223,0.22)',
+                  color: report.color, background: `${report.color}15`,
+                  border: `1px solid ${report.color}35`,
                   borderRadius: 6, padding: '1px 7px', lineHeight: 1.8,
                   letterSpacing: 0.3,
                 }}>
@@ -1046,7 +1102,7 @@ function ReportCard({ report, onOpenAvailableModal }) {
             onExportPDF={handlePDF}
             excelOnly={report.excelOnly}
             pdfOnly={report.pdfOnly}
-            onOpenCustomPDF={report.customPDF ? onOpenAvailableModal : null}
+            onOpenCustomPDF={report.customPDF ? () => onOpenCustomModal(report) : null}
           />
         </div>
       </div>
@@ -1071,7 +1127,7 @@ function ReportCard({ report, onOpenAvailableModal }) {
    REPORT PAGE
 ═══════════════════════════════════════════ */
 export default function ReportPage() {
-  const [showAvailableModal, setShowAvailableModal] = useState(false);
+  const [activeModalReport, setActiveModalReport] = useState(null);
 
   return (
     <div className="pg-page">
@@ -1102,12 +1158,15 @@ export default function ReportPage() {
         <ReportCard
           key={report.id}
           report={report}
-          onOpenAvailableModal={() => setShowAvailableModal(true)}
+          onOpenCustomModal={(r) => setActiveModalReport(r)}
         />
       ))}
 
-      {showAvailableModal && (
-        <AvailableHoardingsModal onClose={() => setShowAvailableModal(false)} />
+      {activeModalReport && (
+        <HoardingsDateRangeModal
+          report={activeModalReport}
+          onClose={() => setActiveModalReport(null)}
+        />
       )}
     </div>
   );

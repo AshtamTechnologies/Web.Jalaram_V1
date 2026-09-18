@@ -1246,9 +1246,13 @@ export default function WorkerTasksPage() {
                     const h = enrichHoarding(rawH);
                     const jobObj = jobMap[task.jobRequestID] ?? null;
                     const contractID = Number(jobObj?.customerContractID ?? 0);
-                    const contractMerges = contractID ? mergeList.filter(x => Number(x.customerContractID ?? x.CustomerContractID) === contractID) : [];
-                    const mergePool = contractMerges.length > 0 ? contractMerges : mergeList;
-                    const merge = (contractID ? contractMerges.find(m => Number(m.hoardingID ?? m.HoardingID) === Number(task.hoardingID)) : null)
+                    const customerID = Number(jobObj?.customerID ?? contractMap[contractID]?.customerID ?? 0);
+                    const isMounting = (jobObj?.jobType || '').toLowerCase() === 'mounting';
+                    const shouldMerge = isMounting ? Boolean(customerID) : Boolean(contractID && customerID);
+                    const contractMerges = (shouldMerge && contractID) ? mergeList.filter(x => Number(x.customerContractID ?? x.CustomerContractID) === contractID) : [];
+                    const mergePool = contractMerges.length > 0 ? contractMerges : (shouldMerge ? mergeList : []);
+                    const merge = !shouldMerge ? null : (
+                        (contractID ? contractMerges.find(m => Number(m.hoardingID ?? m.HoardingID) === Number(task.hoardingID)) : null)
                         || mergeMap.get(Number(task.hoardingID))
                         || mergePool.find(x => {
                             const xHid = Number(x.hoardingID ?? x.HoardingID);
@@ -1259,7 +1263,8 @@ export default function WorkerTasksPage() {
                                 return true;
                             }
                             return false;
-                        });
+                        })
+                    );
                     const supervisorId = jobObj ? Number(jobObj.iD) : 0;
                     const supervisorName = supervisorId ? (userMap.get(supervisorId) || `User #${supervisorId}`) : '—';
                     return {

@@ -2440,10 +2440,13 @@ export default function SupervisorJobsPage() {
 
               const allMerges = extractArray(mergeRaw);
               const jContractID = Number(job.customerContractID ?? 0);
-              const contractMerges = jContractID ? allMerges.filter(x => Number(x.customerContractID ?? x.CustomerContractID) === jContractID) : [];
-              const mergePool = contractMerges.length > 0 ? contractMerges : allMerges;
+              const jCustomerID = Number(job.customerID ?? 0);
+              const isMounting = (job.jobType || '').toLowerCase() === 'mounting';
+              const shouldMerge = isMounting ? Boolean(jCustomerID) : Boolean(jContractID && jCustomerID);
+              const contractMerges = (shouldMerge && jContractID) ? allMerges.filter(x => Number(x.customerContractID ?? x.CustomerContractID) === jContractID) : [];
+              const mergePool = contractMerges.length > 0 ? contractMerges : (shouldMerge ? allMerges : []);
 
-              const merge = mergePool.find(x => {
+              const merge = !shouldMerge ? null : mergePool.find(x => {
                 const xHid = Number(x.hoardingID ?? x.HoardingID);
                 if (xHid === Number(task.hoardingID)) return true;
                 if (rawH && Number(rawH.hoardingID ?? rawH.HoardingID) === xHid) return true;
