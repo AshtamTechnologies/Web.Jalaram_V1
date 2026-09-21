@@ -1714,14 +1714,37 @@ function ManualHoardingModal({ allHoardings, existingIds, onAdd, onClose, siteCo
 /* ═══════════════════════════════════════════
    EXTERNAL HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
-function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteColorMap, siteMap, outsideSiteMap, startDate, endDate, showToast }) {
+function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose, siteColorMap, siteMap, outsideSiteMap, startDate, endDate, showToast, changeTab }) {
   const [hoardingsList, setHoardingsList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
   const [mappedHoardingIDs, setMappedHoardingIDs] = useState(new Set()); // ✅ MODIFIED: Track mapped external hoardings
-  const [showAddNewModal, setShowAddNewModal] = useState(false);
+  const [showAddNewModal, setShowAddNewModal] = useState(() => {
+    return (
+      sessionStorage.getItem('reopen_quotation_external_hoarding_modal') === 'true' ||
+      sessionStorage.getItem('unsaved_add_external_hoarding_form') !== null ||
+      sessionStorage.getItem('newly_created_external_site_id') !== null
+    );
+  });
+
+  useEffect(() => {
+    if (
+      sessionStorage.getItem('reopen_quotation_external_hoarding_modal') === 'true' ||
+      sessionStorage.getItem('unsaved_add_external_hoarding_form') !== null ||
+      sessionStorage.getItem('newly_created_external_site_id') !== null
+    ) {
+      setShowAddNewModal(true);
+    }
+  }, []);
+
+  const handleClose = () => {
+    sessionStorage.removeItem('reopen_quotation_external_hoarding_modal');
+    sessionStorage.removeItem('unsaved_add_external_hoarding_form');
+    sessionStorage.removeItem('newly_created_external_site_id');
+    onClose();
+  };
 
   const fetchExternal = useCallback(async () => {
     if (!startDate || !endDate) {
@@ -1855,7 +1878,7 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
               <p className="pg-modal__subtitle">{loading ? 'Loading...' : `${hoardingsList.length} external hoardings`} · Colour-coded by site</p>
             </div>
           </div>
-          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          <button className="pg-modal__close" onClick={handleClose}><X size={15} /></button>
         </div>
 
         <div style={{ padding: '12px 24px', borderBottom: '1px solid #f0f0f8', flexShrink: 0 }}>
@@ -2006,7 +2029,7 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
             {selected.size} selected
           </span>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
+            <button className="pg-btn-cancel" onClick={handleClose}>Cancel</button>
             <button
               className="pg-btn-save"
               onClick={() => {
@@ -2044,6 +2067,7 @@ function ExternalHoardingSelectModal({ allHoardings, existingIds, onAdd, onClose
           onClose={() => setShowAddNewModal(false)}
           onSuccess={handleHoardingCreated}
           showToast={showToast}
+          changeTab={changeTab}
         />
       )}
     </div>,
@@ -4417,7 +4441,7 @@ const getQuotationDraft = () => {
 /* ═══════════════════════════════════════════
    MAIN PAGE
 ═══════════════════════════════════════════ */
-export default function QuotationPage({ onNavigateToContracts }) {
+export default function QuotationPage({ onNavigateToContracts, changeTab }) {
 
   const quotationDraft = useMemo(() => getQuotationDraft(), []);
 
@@ -4531,7 +4555,23 @@ export default function QuotationPage({ onNavigateToContracts }) {
   /* ── Modals ── */
   const [showHoardModal, setShowHoardModal] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
-  const [showExternalModal, setShowExternalModal] = useState(false);
+  const [showExternalModal, setShowExternalModal] = useState(() => {
+    return (
+      sessionStorage.getItem('reopen_quotation_external_hoarding_modal') === 'true' ||
+      sessionStorage.getItem('unsaved_add_external_hoarding_form') !== null ||
+      sessionStorage.getItem('newly_created_external_site_id') !== null
+    );
+  });
+
+  useEffect(() => {
+    if (
+      sessionStorage.getItem('reopen_quotation_external_hoarding_modal') === 'true' ||
+      sessionStorage.getItem('unsaved_add_external_hoarding_form') !== null ||
+      sessionStorage.getItem('newly_created_external_site_id') !== null
+    ) {
+      setShowExternalModal(true);
+    }
+  }, []);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showTermsConfirmModal, setShowTermsConfirmModal] = useState(false); // ✅ MODIFIED: Show Terms & Conditions confirmation modal if terms are missing
   const [showMergeModal, setShowMergeModal] = useState(false);
@@ -8490,13 +8530,19 @@ export default function QuotationPage({ onNavigateToContracts }) {
           allHoardings={hoardings}
           existingIds={existingHoardingIds}
           onAdd={handleAddExternal}
-          onClose={() => setShowExternalModal(false)}
+          onClose={() => {
+            setShowExternalModal(false);
+            sessionStorage.removeItem('reopen_quotation_external_hoarding_modal');
+            sessionStorage.removeItem('unsaved_add_external_hoarding_form');
+            sessionStorage.removeItem('newly_created_external_site_id');
+          }}
           siteColorMap={siteColorMap}
           siteMap={siteMap}
           outsideSiteMap={outsideSiteMap}
           startDate={globalStart}
           endDate={globalEnd}
           showToast={showToast} // ✅ MODIFIED: Pass showToast function
+          changeTab={changeTab}
         />
       )}
       {/* Hoarding date conflict modal */}

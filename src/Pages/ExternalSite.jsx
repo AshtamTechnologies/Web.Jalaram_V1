@@ -783,20 +783,25 @@ function ExternalSiteModal({ onClose, onSaved, editData, vendors, changeTab }) {
     if (isEdit) return { ...editData };
     const saved = sessionStorage.getItem('unsaved_external_site_form');
     const newVendorId = sessionStorage.getItem('newly_created_vendor_id');
+    const prefillVendorId = sessionStorage.getItem('prefill_external_site_vendor_id');
     if (newVendorId) {
       sessionStorage.removeItem('newly_created_vendor_id');
     }
+    if (prefillVendorId) {
+      sessionStorage.removeItem('prefill_external_site_vendor_id');
+    }
+    const resolvedVendorId = newVendorId || prefillVendorId;
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (newVendorId) {
-          parsed.vendorID = Number(newVendorId);
+        if (resolvedVendorId) {
+          parsed.vendorID = Number(resolvedVendorId);
         }
         return parsed;
       } catch (e) {}
     }
-    if (newVendorId) {
-      return { ...EMPTY_FORM, vendorID: Number(newVendorId) };
+    if (resolvedVendorId) {
+      return { ...EMPTY_FORM, vendorID: Number(resolvedVendorId) };
     }
     return { ...EMPTY_FORM };
   });
@@ -810,6 +815,16 @@ function ExternalSiteModal({ onClose, onSaved, editData, vendors, changeTab }) {
   const handleCancel = () => {
     sessionStorage.removeItem('unsaved_external_site_form');
     sessionStorage.removeItem('newly_created_vendor_id');
+    sessionStorage.removeItem('prefill_external_site_vendor_id');
+    const returnTab = sessionStorage.getItem('redirect_after_external_site_save');
+    if (returnTab) {
+      sessionStorage.removeItem('redirect_after_external_site_save');
+      onClose();
+      if (typeof changeTab === 'function') {
+        changeTab(returnTab);
+      }
+      return;
+    }
     onClose();
   };
 
@@ -893,15 +908,35 @@ function ExternalSiteModal({ onClose, onSaved, editData, vendors, changeTab }) {
     setSubmitting(true);
     setApiError('');
     try {
+      let savedResponse;
       if (isEdit) {
-        await apiService.updateOutsideSite(editData.outsideSiteID, form);
+        savedResponse = await apiService.updateOutsideSite(editData.outsideSiteID, form);
       } else {
-        await apiService.createOutsideSite(form);
+        savedResponse = await apiService.createOutsideSite(form);
       }
 
       setSuccess(true);
       await new Promise(r => setTimeout(r, 600));
       sessionStorage.removeItem('unsaved_external_site_form');
+      sessionStorage.removeItem('prefill_external_site_vendor_id');
+
+      const raw = savedResponse?.data ?? savedResponse;
+      const createdSiteID = raw?.outsideSiteID ?? raw?.OutsideSiteID ?? raw?.id ?? raw?.Id ?? null;
+      if (createdSiteID) {
+        sessionStorage.setItem('newly_created_external_site_id', String(createdSiteID));
+      }
+
+      const returnTab = sessionStorage.getItem('redirect_after_external_site_save');
+      if (returnTab) {
+        sessionStorage.removeItem('redirect_after_external_site_save');
+        onSaved();
+        onClose();
+        if (typeof changeTab === 'function') {
+          changeTab(returnTab);
+        }
+        return;
+      }
+
       onSaved();
       onClose();
     } catch (err) {
@@ -1176,12 +1211,18 @@ export default function ExternalSitePage({ changeTab }) {
   const [showModal, setShowModal] = useState(() => {
     return (
       sessionStorage.getItem('unsaved_external_site_form') !== null ||
-      sessionStorage.getItem('newly_created_vendor_id') !== null
+      sessionStorage.getItem('newly_created_vendor_id') !== null ||
+      sessionStorage.getItem('open_external_site_modal') === 'true'
     );
   });
 
   useEffect(() => {
-    if (sessionStorage.getItem('unsaved_external_site_form') !== null || sessionStorage.getItem('newly_created_vendor_id') !== null) {
+    if (
+      sessionStorage.getItem('unsaved_external_site_form') !== null ||
+      sessionStorage.getItem('newly_created_vendor_id') !== null ||
+      sessionStorage.getItem('open_external_site_modal') === 'true'
+    ) {
+      sessionStorage.removeItem('open_external_site_modal');
       setShowModal(true);
     }
   }, []);

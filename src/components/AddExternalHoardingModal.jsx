@@ -223,6 +223,7 @@ export default function AddExternalHoardingModal({
   onSuccess,
   showToast,
   allHoardings = [],
+  changeTab,
 }) {
   const [loadingLookups, setLoadingLookups] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -235,18 +236,73 @@ export default function AddExternalHoardingModal({
   const [existingHoardings, setExistingHoardings] = useState(allHoardings || []);
 
   // Form state
-  const [vendorID, setVendorID] = useState('');
-  const [form, setForm] = useState({
-    hoardingCode: '',
-    effdt: new Date().toISOString().split('T')[0],
-    siteID: '',
-    material: '',
-    hoardingType: '',
-    status: 'Active',
-    monthlyRent: '',
-    width: '',
-    height: '',
+  const [vendorID, setVendorID] = useState(() => {
+    const saved = sessionStorage.getItem('unsaved_add_external_hoarding_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.vendorID ?? '';
+      } catch (e) {}
+    }
+    return '';
   });
+
+  const [form, setForm] = useState(() => {
+    const defaultForm = {
+      hoardingCode: '',
+      effdt: new Date().toISOString().split('T')[0],
+      siteID: '',
+      material: '',
+      hoardingType: '',
+      status: 'Active',
+      monthlyRent: '',
+      width: '',
+      height: '',
+    };
+    const saved = sessionStorage.getItem('unsaved_add_external_hoarding_form');
+    const newSiteId = sessionStorage.getItem('newly_created_external_site_id');
+    if (newSiteId) {
+      sessionStorage.removeItem('newly_created_external_site_id');
+    }
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const f = parsed.form || parsed;
+        if (newSiteId) {
+          f.siteID = Number(newSiteId);
+        }
+        return { ...defaultForm, ...f };
+      } catch (e) {}
+    }
+    if (newSiteId) {
+      return { ...defaultForm, siteID: Number(newSiteId) };
+    }
+    return defaultForm;
+  });
+
+  useEffect(() => {
+    sessionStorage.setItem('unsaved_add_external_hoarding_form', JSON.stringify({ form, vendorID }));
+  }, [form, vendorID]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_add_external_hoarding_form');
+    sessionStorage.removeItem('newly_created_external_site_id');
+    sessionStorage.removeItem('reopen_quotation_external_hoarding_modal');
+    onClose();
+  };
+
+  const handleAddNewSite = () => {
+    sessionStorage.setItem('unsaved_add_external_hoarding_form', JSON.stringify({ form, vendorID }));
+    sessionStorage.setItem('redirect_after_external_site_save', 'quotation');
+    sessionStorage.setItem('open_external_site_modal', 'true');
+    sessionStorage.setItem('reopen_quotation_external_hoarding_modal', 'true');
+    if (vendorID) {
+      sessionStorage.setItem('prefill_external_site_vendor_id', String(vendorID));
+    }
+    if (typeof changeTab === 'function') {
+      changeTab('external-sites');
+    }
+  };
   const [errors, setErrors] = useState({});
 
   const [loadingSites, setLoadingSites] = useState(false);
@@ -472,6 +528,11 @@ export default function AddExternalHoardingModal({
       await apiService.updateVendor(updatedVendorPayload);
 
       // Step e: All succeeded!
+      sessionStorage.removeItem('unsaved_add_external_hoarding_form');
+      sessionStorage.removeItem('newly_created_external_site_id');
+      sessionStorage.removeItem('reopen_quotation_external_hoarding_modal');
+      sessionStorage.removeItem('prefill_external_site_vendor_id');
+
       if (showToast) {
         showToast(`External Hoarding "${form.hoardingCode}" created and mapped to vendor successfully!`, 'success');
       }
@@ -589,7 +650,7 @@ export default function AddExternalHoardingModal({
           </div>
           <button
             className="pg-modal__close"
-            onClick={onClose}
+            onClick={handleCancel}
             disabled={saving}
             style={{ border: 'none', background: 'transparent', cursor: 'pointer' }}
           >
@@ -677,7 +738,33 @@ export default function AddExternalHoardingModal({
 
                 {/* Site */}
                 <div className="col-12">
-                  <FieldLabel label="Site Location" required />
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                    <FieldLabel label="Site Location" required />
+                    <button
+                      type="button"
+                      onClick={handleAddNewSite}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        background: 'none',
+                        border: 'none',
+                        color: '#049edf',
+                        fontFamily: 'Nunito,sans-serif',
+                        fontSize: 12.5,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        padding: '2px 6px',
+                        borderRadius: 6,
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                      onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                    >
+                      <Plus size={13} color="#049edf" />
+                      <span>Add New External Site</span>
+                    </button>
+                  </div>
                   <PortalDropdown
                     value={form.siteID}
                     onChange={v => handleChange('siteID', Number(v))}
@@ -829,7 +916,7 @@ export default function AddExternalHoardingModal({
             <button
               type="button"
               className="pg-btn-cancel"
-              onClick={onClose}
+              onClick={handleCancel}
               disabled={saving}
             >
               Cancel

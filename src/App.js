@@ -117,7 +117,7 @@ export default function App() {
       case 'sites': return <SitePage changeTab={changeTab} />;
       case 'external-sites': return <ExternalSitePage changeTab={changeTab} />;
       case 'reports': return <Reports />;
-      case 'quotation': return <Quotation onNavigateToContracts={() => changeTab('customer-contract')} />;
+      case 'quotation': return <Quotation onNavigateToContracts={() => changeTab('customer-contract')} changeTab={changeTab} />;
       case 'terms': return <Terms />;
       case 'FinancialYear': return <FinancialYear />;
       case 'Jobs': return <Jobs changeTab={changeTab} />;
