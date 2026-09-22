@@ -11,6 +11,8 @@ import {
   User
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
+import MaintenanceStatusBadge from '../components/hoardingMaintenance/StatusBadge';
+import MaintenancePriorityBadge from '../components/hoardingMaintenance/PriorityBadge';
 import './Common1.css';
 
 /* ─────────────────────────────────────────
@@ -1272,6 +1274,35 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
   const [saveOk, setSaveOk] = useState(false);
   const [apiErr, setApiErr] = useState('');
   const [availabilityConflict, setAvailabilityConflict] = useState(null);
+  const [maintenanceData, setMaintenanceData] = useState(null);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
+
+  useEffect(() => {
+    const targetHoardingId = sortedVersions[0]?.hoardingID || hoarding?.hoardingID;
+    if (isEdit && targetHoardingId) {
+      setMaintenanceLoading(true);
+      apiService
+        .getHoardingIsInMaintenance(targetHoardingId)
+        .then((res) => {
+          if (res) {
+            setMaintenanceData(res);
+          }
+        })
+        .catch((err) => console.warn('Failed to fetch maintenance status:', err))
+        .finally(() => setMaintenanceLoading(false));
+    }
+  }, [isEdit, sortedVersions[0]?.hoardingID, hoarding?.hoardingID]);
+
+  const isInMaintenance = Boolean(
+    maintenanceData?.is_In_Maintenance ||
+    maintenanceData?.isInMaintenance ||
+    maintenanceData?.is_in_maintenance
+  );
+  const activeRequests =
+    maintenanceData?.active_Maintenance_Requests ||
+    maintenanceData?.activeMaintenanceRequests ||
+    maintenanceData?.active_maintenance_requests ||
+    [];
 
   const [versionPhotos, setVersionPhotos] = useState([]);
   const [stagedNewPhotos, setStagedNewPhotos] = useState([]);
@@ -1623,7 +1654,11 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
         <div className="hd-topbar-left">
           <button className="hd-back-btn" onClick={handleCancel}>
             <ArrowLeft size={14} />
-            <span className="d-none d-sm-inline">Back to Hoardings</span>
+            <span className="d-none d-sm-inline">
+              {sessionStorage.getItem('hoarding_return_tab') === 'hoarding-maintenance'
+                ? 'Back to Maintenance'
+                : 'Back to Hoardings'}
+            </span>
             <span className="d-inline d-sm-none">Back</span>
           </button>
           <div className="hd-topbar-divider" />
@@ -1709,10 +1744,137 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
 
           {/* ══ EDIT MODE ══ */}
           {isEdit && (
-            <div className="row g-4">
-              <div className="col-12 col-xl-3">
-                <div className="hd-section-card">
+            <>
+              {/* Under Maintenance Section Card */}
+              {isInMaintenance && (
+                <div className="hd-section-card mb-4">
                   <div className="hd-section-head">
+                    <div
+                      className="hd-section-icon-wrap"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(217, 119, 6, 0.15), rgba(245, 158, 11, 0.08))',
+                      }}
+                    >
+                      <Wrench size={15} color="#d97706" />
+                    </div>
+                    <div className="flex-grow-1">
+                      <div className="hd-section-title">
+                        <span>Under Maintenance</span>
+                        <span
+                          className="hd-count-pill"
+                          style={{
+                            background: 'rgba(217, 119, 6, 0.1)',
+                            color: '#d97706',
+                            borderColor: 'rgba(217, 119, 6, 0.22)',
+                          }}
+                        >
+                          {activeRequests.length} Active {activeRequests.length === 1 ? 'Request' : 'Requests'}
+                        </span>
+                      </div>
+                      <div className="hd-section-sub">
+                        This hoarding is currently undergoing physical maintenance or site repairs
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: 0 }}>
+                    {activeRequests.map((req, idx) => {
+                      const reqId = req.maintenance_ID || req.maintenanceID || req.id;
+                      const reason = req.reason_Name || req.reasonName || 'Maintenance';
+                      const priority = req.priority || 'Normal';
+                      const status = req.status || 'Open';
+                      const reportedBy =
+                        req.reported_By_Name ||
+                        req.reportedByName ||
+                        (req.reported_By ? `User #${req.reported_By}` : 'Admin');
+                      const reportedDate = req.reported_Date || req.reportedDate;
+
+                      return (
+                        <div
+                          key={reqId || idx}
+                          style={{
+                            padding: '12px 18px',
+                            borderBottom: idx < activeRequests.length - 1 ? '1px solid #f0f0f8' : 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 12,
+                            background: '#ffffff',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <span
+                              style={{
+                                fontFamily: 'Nunito, sans-serif',
+                                fontWeight: 800,
+                                fontSize: 13,
+                                color: '#049edf',
+                              }}
+                            >
+                              #{reqId}
+                            </span>
+                            <span
+                              style={{
+                                fontFamily: 'Nunito, sans-serif',
+                                fontWeight: 800,
+                                fontSize: 13,
+                                color: '#1a1a2e',
+                              }}
+                            >
+                              {reason}
+                            </span>
+                            {req.description && (
+                              <span
+                                style={{
+                                  fontFamily: 'Nunito, sans-serif',
+                                  fontSize: 12,
+                                  color: '#7878a0',
+                                  fontStyle: 'italic',
+                                }}
+                              >
+                                "{req.description}"
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                fontSize: 12,
+                                color: '#7878a0',
+                                fontFamily: 'Nunito, sans-serif',
+                              }}
+                            >
+                              <Calendar size={12} color="#9090a8" />
+                              <span>
+                                Reported:{' '}
+                                <strong style={{ color: '#1a1a2e', fontWeight: 700 }}>
+                                  {fmtDate(reportedDate ? reportedDate.split('T')[0] : '')}
+                                </strong>{' '}
+                                by{' '}
+                                <strong style={{ color: '#1a1a2e', fontWeight: 700 }}>
+                                  {reportedBy}
+                                </strong>
+                              </span>
+                            </div>
+                            <MaintenancePriorityBadge priority={priority} />
+                            <MaintenanceStatusBadge status={status} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="row g-4">
+                <div className="col-12 col-xl-3">
+                  <div className="hd-section-card">
+                    <div className="hd-section-head">
                     <div className="hd-section-icon-wrap"><Hash size={14} color="#049edf" /></div>
                     <div>
                       <div className="hd-section-title">Identity</div>
@@ -1879,6 +2041,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                 )}
               </div>
             </div>
+            </>
           )}
         </div>
       </div>
@@ -1986,7 +2149,7 @@ function useResizableColumns(tableRef, tableReady) {
   }, [tableReady]);
 }
 
-export default function HoardingPage() {
+export default function HoardingPage({ changeTab }) {
   const [hoardings, setHoardings] = useState([]);
   const [sites, setSites] = useState([]);
   const [hoardingTypes, setHoardingTypes] = useState([]);
@@ -2065,6 +2228,26 @@ export default function HoardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoardings]);
 
+  // Deep-linking from Maintenance List/Details
+  useEffect(() => {
+    const targetCode = sessionStorage.getItem('open_hoarding_code');
+    const targetId = sessionStorage.getItem('open_hoarding_id');
+    if ((targetCode || targetId) && hoardings.length > 0) {
+      sessionStorage.removeItem('open_hoarding_code');
+      sessionStorage.removeItem('open_hoarding_id');
+      const found = hoardings.find(h =>
+        (targetCode && (h.hoardingCode || '').toLowerCase().trim() === targetCode.toLowerCase().trim()) ||
+        (targetCode && (h.hoardingCode || '').toLowerCase().replace(/[\s\-_]/g, '') === targetCode.toLowerCase().replace(/[\s\-_]/g, '')) ||
+        (targetId && h.versions?.some(v => String(v.hoardingID) === String(targetId)))
+      );
+      if (found) {
+        setFormMode('edit');
+        setEditTarget(found);
+        setView('form');
+      }
+    }
+  }, [hoardings]);
+
   const hoardingTypeMap = Object.fromEntries(hoardingTypes.map(t => [t.hoardingType, t.typeName]));
 
   const rows = hoardings.map(h => {
@@ -2125,7 +2308,32 @@ export default function HoardingPage() {
     sessionStorage.removeItem('hd_view');
     sessionStorage.removeItem('hd_formMode');
     sessionStorage.removeItem('hd_editTarget');
-    setView('grid'); setFormMode(null); setEditTarget(null);
+
+    const returnTab = sessionStorage.getItem('hoarding_return_tab');
+    if (returnTab) {
+      sessionStorage.removeItem('hoarding_return_tab');
+      const returnMaintView = sessionStorage.getItem('hoarding_return_maint_view');
+      const returnMaintId = sessionStorage.getItem('hoarding_return_maint_id');
+      if (returnMaintView) {
+        sessionStorage.setItem('hoarding_maint_view', returnMaintView);
+        sessionStorage.removeItem('hoarding_return_maint_view');
+      }
+      if (returnMaintId) {
+        sessionStorage.setItem('hoarding_maint_selected_id', returnMaintId);
+        sessionStorage.removeItem('hoarding_return_maint_id');
+      }
+      if (changeTab) {
+        changeTab(returnTab);
+      } else {
+        sessionStorage.setItem('dashTab', returnTab);
+        window.location.reload();
+      }
+      return;
+    }
+
+    setView('grid');
+    setFormMode(null);
+    setEditTarget(null);
   };
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)

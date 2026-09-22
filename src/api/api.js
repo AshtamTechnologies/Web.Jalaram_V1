@@ -1,12 +1,12 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://api.jalaram-ad.ashtamtechnologies.com/api';
-export const API_ROOT_URL = 'https://api.jalaram-ad.ashtamtechnologies.com';
+export const API_BASE_URL = 'https://api.jalaram-ad.ashtamtechnologies.com/api';
+export const API_ROOT_URL = API_BASE_URL.replace(/\/api\/?$/i, '');
 
 // https://uatapi.jalaram-ad.ashtamtechnologies.com/swagger/index.htmls
 
-// const API_BASE_URL = 'https://uatapi.jalaram-ad.ashtamtechnologies.com/api';
-// export const API_ROOT_URL = 'https://uatapi.jalaram-ad.ashtamtechnologies.com';
+// export const API_BASE_URL = 'https://uatapi.jalaram-ad.ashtamtechnologies.com/api';
+// export const API_ROOT_URL = API_BASE_URL.replace(/\/api\/?$/i, '');
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -18,6 +18,9 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('authToken');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type'];
+  }
   return config;
 });
 
@@ -64,6 +67,389 @@ const getLoggedInUserID = () => {
   const id = localStorage.getItem('userId');
   const parsed = parseInt(id, 10);
   return isNaN(parsed) ? 0 : parsed;
+};
+
+/* ─────────────────────────────────────────
+   HOARDING MAINTENANCE HELPERS & NORMALIZERS
+───────────────────────────────────────── */
+export const resolveMaintenancePhotoSrc = (p) => {
+  if (!p) return '';
+  const raw = typeof p === 'string' ? p : (p.photoPath ?? p.photo_Path ?? p.path ?? p.photoUrl ?? p.url ?? '');
+  if (!raw) return '';
+  if (raw.startsWith('data:') || raw.startsWith('blob:') || raw.startsWith('http://') || raw.startsWith('https://')) {
+    return raw;
+  }
+  const base = (API_ROOT_URL || API_BASE_URL.replace(/\/api\/?$/i, '')).replace(/\/+$/, '');
+  const rel = '/' + raw.replace(/^\/+/, '');
+  return `${base}${rel}`;
+};
+
+export function normalizeReason(raw) {
+  if (!raw) return null;
+  return {
+    maintenanceReasonID: Number(raw.maintenance_Reason_ID ?? raw.maintenanceReasonID ?? raw.maintenanceReasonId ?? raw.id ?? 0),
+    reasonName: raw.reason_Name ?? raw.reasonName ?? raw.name ?? raw.reason ?? raw.description ?? '',
+    isActive: raw.is_Active ?? raw.isActive ?? true,
+  };
+}
+
+export function normalizeMaintenancePhoto(raw) {
+  if (!raw) return null;
+  const rawType =
+    raw.photo_Type ??
+    raw.Photo_Type ??
+    raw.PhotoType ??
+    raw.photoType ??
+    raw.photo_type ??
+    raw.Photo_type ??
+    raw.type ??
+    raw.Type ??
+    raw.photoCategory ??
+    raw.PhotoCategory ??
+    '';
+
+  const typeStr = typeof rawType === 'string' && rawType.trim() ? rawType.trim() : 'Before';
+  const normalizedType =
+    typeStr.toLowerCase() === 'after'
+      ? 'After'
+      : typeStr.toLowerCase() === 'before'
+      ? 'Before'
+      : typeStr.charAt(0).toUpperCase() + typeStr.slice(1);
+
+  return {
+    photoID: Number(raw.maintenance_Photo_ID ?? raw.maintenancePhotoID ?? raw.Photo_ID ?? raw.photoID ?? raw.photoId ?? raw.id ?? 0),
+    maintenanceID: Number(raw.maintenance_ID ?? raw.maintenanceID ?? raw.maintenanceId ?? 0),
+    photoType: normalizedType,
+    photoPath: raw.photo_Path ?? raw.Photo_Path ?? raw.PhotoPath ?? raw.photoPath ?? raw.path ?? raw.photoUrl ?? raw.url ?? '',
+    filename: raw.filename ?? raw.fileName ?? raw.FileName ?? '',
+    uploadedOn: raw.uploaded_On ?? raw.Uploaded_On ?? raw.createdAt ?? raw.createdDate ?? raw.uploadDate ?? '',
+    createdAt: raw.uploaded_On ?? raw.Uploaded_On ?? raw.createdAt ?? raw.createdDate ?? raw.uploadDate ?? '',
+    uploadedBy: raw.uploaded_By ?? raw.Uploaded_By ?? raw.createdBy ?? null,
+    uploadedByName: raw.uploaded_By_Name ?? raw.Uploaded_By_Name ?? raw.createdByName ?? '',
+    isDeleted: raw.is_Deleted ?? raw.isDeleted ?? false,
+  };
+}
+
+export function normalizeStatusLog(raw) {
+  if (!raw) return null;
+  return {
+    logID: Number(raw.status_Log_ID ?? raw.statusLogID ?? raw.logID ?? raw.logId ?? raw.id ?? 0),
+    maintenanceID: Number(raw.maintenance_ID ?? raw.maintenanceID ?? raw.maintenanceId ?? 0),
+    oldStatus: raw.old_Status ?? raw.oldStatus ?? '',
+    newStatus: raw.new_Status ?? raw.newStatus ?? '',
+    remarks: raw.remarks ?? raw.comment ?? '',
+    changedBy: raw.changed_By ?? raw.changedBy ?? 0,
+    changedByName: raw.changed_By_Name ?? raw.changedByName ?? raw.createdByName ?? raw.userName ?? (raw.changed_By ? `User #${raw.changed_By}` : 'System'),
+    changedDate: raw.changed_On ?? raw.changedDate ?? raw.createdAt ?? raw.createdDate ?? raw.date ?? '',
+  };
+}
+
+export function normalizeMaintenance(raw) {
+  if (!raw) return null;
+  
+  const rawPhotos = raw.photos ?? raw.maintenancePhotos ?? raw.$values ?? [];
+  const photos = Array.isArray(rawPhotos)
+    ? rawPhotos.map(normalizeMaintenancePhoto).filter(Boolean)
+    : (rawPhotos?.$values ? rawPhotos.$values.map(normalizeMaintenancePhoto).filter(Boolean) : []);
+
+  const rawLogs = raw.statusLogs ?? raw.statusLog ?? raw.history ?? raw.maintenanceStatusLogs ?? [];
+  const statusLogs = Array.isArray(rawLogs)
+    ? rawLogs.map(normalizeStatusLog).filter(Boolean)
+    : (rawLogs?.$values ? rawLogs.$values.map(normalizeStatusLog).filter(Boolean) : []);
+
+  const reportedDate = raw.reported_Date ?? raw.reportedDate ?? raw.createdAt ?? raw.createdDate ?? '';
+  const rawTargetDate = raw.target_Date ?? raw.targetDate ?? '';
+  const rawCompletedDate = raw.completed_Date ?? raw.completedDate ?? raw.completionDate ?? '';
+  const rawClosedDate = raw.closed_Date ?? raw.closedDate ?? '';
+  const reportedByName = raw.reported_By_Name ?? raw.reportedByName ?? raw.createdByName ?? raw.userName ?? (raw.reported_By ? `User #${raw.reported_By}` : 'Admin');
+
+  const hoardingObj = raw.hoarding || raw.Hoarding || null;
+  const siteObj = raw.site || raw.Site || hoardingObj?.site || hoardingObj?.Site || null;
+
+  const rawSiteAddress =
+    raw.siteAddress ??
+    raw.SiteAddress ??
+    raw.site_Address ??
+    raw.address ??
+    raw.Address ??
+    siteObj?.addressLine1 ??
+    siteObj?.AddressLine1 ??
+    hoardingObj?.addressLine1 ??
+    hoardingObj?.AddressLine1 ??
+    hoardingObj?.siteAddress ??
+    '';
+
+  const rawCity =
+    raw.city ??
+    raw.City ??
+    siteObj?.city ??
+    siteObj?.City ??
+    hoardingObj?.city ??
+    hoardingObj?.City ??
+    '';
+
+  const fullAddress = [
+    siteObj?.addressLine1 || raw.addressLine1 || raw.AddressLine1 || rawSiteAddress,
+    siteObj?.addressLine2 || raw.addressLine2 || raw.AddressLine2 || hoardingObj?.addressLine2,
+    siteObj?.addressLine3 || raw.addressLine3 || raw.AddressLine3,
+    siteObj?.landmark || raw.landmark || raw.Landmark || hoardingObj?.landmark,
+    siteObj?.city || raw.city || raw.City || rawCity,
+    siteObj?.district || raw.district || raw.District,
+    siteObj?.state || raw.state || raw.State,
+  ]
+    .filter(Boolean)
+    .join(', ') || rawSiteAddress || '';
+
+  return {
+    maintenanceID: Number(raw.maintenance_ID ?? raw.maintenanceID ?? raw.maintenanceId ?? raw.hoardingMaintenanceID ?? raw.id ?? 0),
+    hoardingID: Number(raw.hoarding_ID ?? raw.hoardingID ?? raw.hoardingId ?? hoardingObj?.hoardingID ?? 0),
+    hoardingCode: raw.hoarding_Code ?? raw.hoardingCode ?? hoardingObj?.hoardingCode ?? (raw.hoarding_ID || raw.hoardingID ? `HD-${raw.hoarding_ID || raw.hoardingID}` : '—'),
+    hoarding: hoardingObj,
+    site: siteObj,
+    siteAddress: fullAddress,
+    siteCity: rawCity || siteObj?.city || '',
+    maintenanceReasonID: Number(raw.maintenance_Reason_ID ?? raw.maintenanceReasonID ?? raw.maintenanceReasonId ?? 0),
+    reasonName: raw.reason_Name ?? raw.reasonName ?? raw.maintenanceReason?.reasonName ?? raw.maintenanceReason?.name ?? '—',
+    maintenanceReason: raw.maintenanceReason || null,
+    description: raw.description ?? '',
+    priority: raw.priority ?? 'Normal',
+    status: raw.status ?? 'Open',
+    targetDate: rawTargetDate ? (rawTargetDate.includes('T') ? rawTargetDate.split('T')[0] : rawTargetDate) : '',
+    completedDate: rawCompletedDate ? (rawCompletedDate.includes('T') ? rawCompletedDate.split('T')[0] : rawCompletedDate) : '',
+    closedDate: rawClosedDate ? (rawClosedDate.includes('T') ? rawClosedDate.split('T')[0] : rawClosedDate) : '',
+    reportedBy: raw.reported_By ?? raw.reportedBy ?? 0,
+    reportedByName: reportedByName,
+    reportedDate: reportedDate,
+    remarks: raw.completion_Remarks ?? raw.completionRemarks ?? raw.remarks ?? '',
+    completionRemarks: raw.completion_Remarks ?? raw.completionRemarks ?? '',
+    cost: raw.maintenance_Cost != null ? Number(raw.maintenance_Cost) : (raw.cost != null ? Number(raw.cost) : (raw.maintenanceCost != null ? Number(raw.maintenanceCost) : null)),
+    assignedTo: raw.assigned_To ?? raw.assignedTo ?? null,
+    assignedToName: raw.assigned_To_Name ?? raw.assignedToName ?? '',
+    isActive: raw.is_Active ?? raw.isActive ?? true,
+    lastUpdateDttm: raw.last_Update_Dttm ?? raw.lastUpdateDttm ?? '',
+    lastUpdatedByName: raw.last_Updated_By_Name ?? raw.lastUpdatedByName ?? '',
+    photos,
+    statusLogs,
+  };
+}
+
+let _hoardingAddressCache = null;
+let _hoardingAddressPromise = null;
+
+export const getHoardingAddressMap = async (forceRefresh = false) => {
+  if (_hoardingAddressCache && !forceRefresh) return _hoardingAddressCache;
+  if (_hoardingAddressPromise && !forceRefresh) return _hoardingAddressPromise;
+
+  _hoardingAddressPromise = (async () => {
+    try {
+      const [hRes, sRes] = await Promise.all([
+        api.get('/Hoarding').catch(() => []),
+        api.get('/Site').catch(() => []),
+      ]);
+
+      const extract = (res) => {
+        if (Array.isArray(res)) return res;
+        if (Array.isArray(res?.data)) return res.data;
+        if (Array.isArray(res?.$values)) return res.$values;
+        return [];
+      };
+
+      const sList = extract(sRes);
+      const siteMap = new Map();
+      sList.forEach((s) => {
+        const sId = s.siteID ?? s.siteId ?? s.SiteID ?? s.id;
+        if (sId != null) {
+          siteMap.set(String(sId), s);
+          siteMap.set(Number(sId), s);
+        }
+      });
+
+      const hList = extract(hRes);
+      const byIdMap = new Map();
+      const byCodeMap = new Map();
+      const uniqueHoardings = [];
+
+      // Group flat hoarding records by hoarding code (same logic as Hoarding.jsx)
+      const groupMap = new Map();
+      hList.forEach((rec) => {
+        const hId = rec.hoardingID ?? rec.hoardingId ?? rec.HoardingID ?? rec.id;
+        const code = String(rec.hoardingCode ?? rec.HoardingCode ?? '').trim();
+        const groupKey = (code || (hId ? `HD-${hId}` : '')).toLowerCase();
+        if (!groupKey) return;
+
+        if (!groupMap.has(groupKey)) {
+          groupMap.set(groupKey, {
+            canonicalCode: code || (hId ? `HD-${hId}` : ''),
+            versions: [],
+          });
+        }
+        groupMap.get(groupKey).versions.push(rec);
+      });
+
+      groupMap.forEach((group) => {
+        // Sort versions by effdt descending (latest first)
+        const sortedVersions = [...group.versions].sort((a, b) => {
+          const dateA = new Date(a.effdt || a.effdtRaw || 0).getTime();
+          const dateB = new Date(b.effdt || b.effdtRaw || 0).getTime();
+          return dateB - dateA;
+        });
+
+        const latest = sortedVersions[0] || {};
+        // Find best siteID (check latest version first, fallback to any version with a siteID)
+        let resolvedSiteId = latest.siteID ?? latest.siteId ?? latest.SiteID ?? latest.site_ID ?? latest.site?.siteID ?? latest.Site?.siteID;
+        if (resolvedSiteId == null || resolvedSiteId === 0 || resolvedSiteId === '') {
+          for (const v of sortedVersions) {
+            const vSiteId = v.siteID ?? v.siteId ?? v.SiteID ?? v.site_ID ?? v.site?.siteID ?? v.Site?.siteID;
+            if (vSiteId != null && vSiteId !== 0 && vSiteId !== '') {
+              resolvedSiteId = vSiteId;
+              break;
+            }
+          }
+        }
+
+        const s = (resolvedSiteId != null ? siteMap.get(String(resolvedSiteId)) : null) || latest.site || latest.Site || {};
+
+        const addressParts = [
+          s.addressLine1 || s.AddressLine1 || latest.addressLine1 || latest.AddressLine1,
+          s.addressLine2 || s.AddressLine2 || latest.addressLine2 || latest.AddressLine2,
+          s.addressLine3 || s.AddressLine3 || latest.addressLine3,
+          s.landmark || s.Landmark || latest.landmark || latest.Landmark,
+          s.city || s.City || latest.city || latest.City,
+          s.district || s.District || latest.district || latest.District,
+          s.state || s.State || latest.state || latest.State,
+        ]
+          .map((x) => (typeof x === 'string' ? x.trim() : x))
+          .filter(Boolean);
+
+        const fullAddress =
+          addressParts.length > 0
+            ? addressParts.join(', ')
+            : s.addressLine1 || s.AddressLine1 || (s.city ? `${s.city}` : (latest.siteAddress || ''));
+
+        const latestHId = latest.hoardingID ?? latest.hoardingId ?? latest.HoardingID ?? latest.id;
+        const info = {
+          hoardingID: Number(latestHId || 0),
+          hoardingCode: group.canonicalCode,
+          width: latest.width ?? latest.Width ?? '',
+          height: latest.height ?? latest.Height ?? '',
+          siteID: resolvedSiteId,
+          site: s,
+          addressLine1: s.addressLine1 || latest.addressLine1 || '',
+          city: s.city || latest.city || '',
+          fullAddress: fullAddress,
+        };
+
+        // Register all version IDs in byIdMap
+        sortedVersions.forEach((v) => {
+          const vId = v.hoardingID ?? v.hoardingId ?? v.HoardingID ?? v.id;
+          if (vId != null) {
+            byIdMap.set(String(vId), info);
+            byIdMap.set(Number(vId), info);
+          }
+        });
+
+        // Register all code variants in byCodeMap
+        const rawCode = group.canonicalCode;
+        const codeLower = rawCode.toLowerCase();
+        const codeAlphanum = codeLower.replace(/[\s\-_]/g, '');
+        byCodeMap.set(codeLower, info);
+        byCodeMap.set(rawCode, info);
+        byCodeMap.set(codeAlphanum, info);
+
+        uniqueHoardings.push(info);
+      });
+
+      // Ensure any standalone raw record from hList is mapped in byIdMap
+      hList.forEach((h) => {
+        const hId = h.hoardingID ?? h.hoardingId ?? h.HoardingID ?? h.id;
+        if (hId != null && !byIdMap.has(String(hId))) {
+          const sId = h.siteID ?? h.siteId ?? h.SiteID ?? h.site_ID ?? h.site?.siteID ?? h.Site?.siteID;
+          const s = (sId != null ? siteMap.get(String(sId)) : null) || h.site || h.Site || {};
+          const fullAddress = [
+            s.addressLine1 || s.AddressLine1 || h.addressLine1,
+            s.addressLine2 || s.AddressLine2 || h.addressLine2,
+            s.landmark || s.Landmark || h.landmark,
+            s.city || s.City || h.city,
+            s.district || s.District || h.district,
+            s.state || s.State || h.state,
+          ]
+            .map((x) => (typeof x === 'string' ? x.trim() : x))
+            .filter(Boolean)
+            .join(', ');
+
+          const info = {
+            hoardingID: Number(hId),
+            hoardingCode: String(h.hoardingCode ?? h.HoardingCode ?? `HD-${hId}`).trim(),
+            width: h.width ?? h.Width ?? '',
+            height: h.height ?? h.Height ?? '',
+            siteID: sId,
+            site: s,
+            addressLine1: s.addressLine1 || h.addressLine1 || '',
+            city: s.city || h.city || '',
+            fullAddress: fullAddress || s.addressLine1 || '',
+          };
+          byIdMap.set(String(hId), info);
+          byIdMap.set(Number(hId), info);
+        }
+      });
+
+      uniqueHoardings.sort((a, b) => a.hoardingCode.localeCompare(b.hoardingCode));
+
+      _hoardingAddressCache = { byIdMap, byCodeMap, uniqueHoardings, hList, sList };
+      return _hoardingAddressCache;
+    } catch (err) {
+      console.error('Failed to load hoarding address map:', err);
+      return { byIdMap: new Map(), byCodeMap: new Map(), uniqueHoardings: [], hList: [], sList: [] };
+    } finally {
+      _hoardingAddressPromise = null;
+    }
+  })();
+
+  return _hoardingAddressPromise;
+};
+
+export const enrichItemWithHoardingAddress = (m, addressData) => {
+  if (!m) return m;
+  const { byIdMap, byCodeMap } = addressData || {};
+  if (!byIdMap && !byCodeMap) return m;
+
+  const hIdStr = m.hoardingID ? String(m.hoardingID) : '';
+  const rawCode = String(m.hoardingCode || '').trim();
+  const codeLower = rawCode.toLowerCase();
+  const codeAlphanum = codeLower.replace(/[\s\-_]/g, '');
+
+  let matched = null;
+  if (hIdStr && byIdMap) {
+    matched = byIdMap.get(hIdStr) || byIdMap.get(Number(hIdStr));
+  }
+  if (!matched && codeLower && byCodeMap) {
+    matched = byCodeMap.get(codeLower) || byCodeMap.get(codeAlphanum) || byCodeMap.get(rawCode);
+  }
+
+  // Fallback for code formats like "HD-5" or numeric codes
+  if (!matched && byIdMap) {
+    const numMatch = rawCode.match(/\d+/);
+    if (numMatch) {
+      matched = byIdMap.get(numMatch[0]) || byIdMap.get(Number(numMatch[0]));
+    }
+  }
+
+  if (matched) {
+    if (matched.fullAddress && (!m.siteAddress || m.siteAddress === '—' || m.siteAddress === `HD-${m.hoardingID}`)) {
+      m.siteAddress = matched.fullAddress;
+    }
+    if (!m.site && matched.site) {
+      m.site = matched.site;
+    }
+    if ((!m.hoardingCode || m.hoardingCode === '—' || m.hoardingCode.startsWith('HD-')) && matched.hoardingCode) {
+      m.hoardingCode = matched.hoardingCode;
+    }
+    if ((!m.hoardingID || m.hoardingID === 0) && matched.hoardingID) {
+      m.hoardingID = matched.hoardingID;
+    }
+  }
+
+  return m;
 };
 
 export const apiService = {
@@ -757,7 +1143,7 @@ export const apiService = {
       ? 'application/pdf'
       : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel';
     const response = await fetch(
-      `${API_ROOT_URL}/api/Report/ExportReport?reportType=${reportType}&format=${format}`,
+      `${API_BASE_URL}/Report/ExportReport?reportType=${reportType}&format=${format}`,
       { method: 'GET', headers: { 'Accept': acceptHeader, ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
     );
     if (!response.ok) {
@@ -802,7 +1188,7 @@ export const apiService = {
     const token = localStorage.getItem('authToken');
     const today = new Date().toISOString().slice(0, 10);
     const response = await fetch(
-      `${API_ROOT_URL}/api/Report/ExportPDF`,
+      `${API_BASE_URL}/Report/ExportPDF`,
       { method: 'GET', headers: { 'Accept': 'application/pdf', ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
     );
     if (!response.ok) {
@@ -1453,6 +1839,204 @@ export const apiService = {
   // NOTIFICATIONS
   getNotificationsByUser: (userId) => api.get(`/Notification/User/${userId}`),
   readNotification: (id) => api.put(`/Notification/Read/${id}`),
+
+  // HOARDING MAINTENANCE
+  getMaintenanceReasons: async () => {
+    try {
+      const res = await api.get('/maintenance-reasons');
+      const list = Array.isArray(res) ? res : (res?.data ?? res?.$values ?? []);
+      return (Array.isArray(list) ? list : []).map(normalizeReason).filter(Boolean);
+    } catch (err) {
+      console.error('Failed to load maintenance reasons:', err);
+      return [];
+    }
+  },
+
+  getHoardingAddressMap: (forceRefresh) => getHoardingAddressMap(forceRefresh),
+
+  getHoardingMaintenances: async (params = {}) => {
+    const cleanParams = {};
+    if (params.status) cleanParams.Status = params.status;
+    if (params.hoardingId) cleanParams.HoardingId = params.hoardingId;
+    if (params.priority) cleanParams.Priority = params.priority;
+    if (params.fromDate) cleanParams.FromDate = params.fromDate;
+    if (params.toDate) cleanParams.ToDate = params.toDate;
+    if (params.page || params.pageNumber) cleanParams.PageNumber = params.page || params.pageNumber;
+    if (params.pageSize) cleanParams.PageSize = params.pageSize;
+
+    const [res, addressData] = await Promise.all([
+      api.get('/hoarding-maintenance', { params: cleanParams }),
+      getHoardingAddressMap().catch(() => ({ byIdMap: new Map(), byCodeMap: new Map() })),
+    ]);
+
+    let items = [];
+    let totalCount = 0;
+    let page = params.page || params.pageNumber || 1;
+    let pageSize = params.pageSize || 10;
+    let totalPages = 1;
+
+    if (Array.isArray(res)) {
+      items = res;
+      totalCount = res.length;
+      totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    } else if (res && typeof res === 'object') {
+      const rawList = res.items ?? res.data ?? res.records ?? res.$values ?? (Array.isArray(res) ? res : []);
+      items = Array.isArray(rawList) ? rawList : [];
+      totalCount = res.totalCount ?? res.total ?? res.count ?? items.length;
+      page = res.pageNumber ?? res.page ?? page;
+      pageSize = res.pageSize ?? pageSize;
+      totalPages = res.totalPages ?? Math.max(1, Math.ceil(totalCount / pageSize));
+    }
+
+    const normalizedItems = items
+      .map((raw) => {
+        const m = normalizeMaintenance(raw);
+        return m ? enrichItemWithHoardingAddress(m, addressData) : null;
+      })
+      .filter(Boolean);
+
+    return {
+      items: normalizedItems,
+      totalCount,
+      page,
+      pageSize,
+      totalPages,
+    };
+  },
+
+  getHoardingMaintenanceById: async (id) => {
+    const [res, addressData] = await Promise.all([
+      api.get(`/hoarding-maintenance/${id}`),
+      getHoardingAddressMap().catch(() => ({ byIdMap: new Map(), byCodeMap: new Map() })),
+    ]);
+    const raw = res?.data ?? res;
+    const item = normalizeMaintenance(raw);
+    return item ? enrichItemWithHoardingAddress(item, addressData) : null;
+  },
+
+  createHoardingMaintenance: async (formData) => {
+    const res = await api.post('/hoarding-maintenance', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res?.data ?? res;
+  },
+
+  addMaintenancePhotos: async (id, formData) => {
+    let pType = '';
+    try {
+      if (formData instanceof FormData) {
+        pType = formData.get('photoType') || formData.get('PhotoType') || formData.get('Photo_Type') || '';
+      }
+    } catch {
+      // ignore
+    }
+
+    const query = pType
+      ? `?photoType=${encodeURIComponent(pType)}&PhotoType=${encodeURIComponent(pType)}&photo_Type=${encodeURIComponent(pType)}&Photo_Type=${encodeURIComponent(pType)}`
+      : '';
+
+    const res = await api.post(`/hoarding-maintenance/${id}/photos${query}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res?.data ?? res;
+  },
+
+  deleteMaintenancePhoto: async (photoId) => {
+    const res = await api.delete(`/hoarding-maintenance/photos/${photoId}`);
+    return res?.data ?? res;
+  },
+
+  updateMaintenanceStatus: async (id, formDataOrObj) => {
+    let payload = formDataOrObj;
+    if (formDataOrObj instanceof FormData) {
+      payload = formDataOrObj;
+      const status =
+        payload.get('New_Status') ||
+        payload.get('NewStatus') ||
+        payload.get('newStatus') ||
+        payload.get('Status') ||
+        payload.get('status') ||
+        '';
+      const remarks =
+        payload.get('Remarks') ||
+        payload.get('remarks') ||
+        payload.get('CompletionRemarks') ||
+        payload.get('completionRemarks') ||
+        payload.get('Completion_Remarks') ||
+        '';
+      const cost =
+        payload.get('Maintenance_Cost') ||
+        payload.get('MaintenanceCost') ||
+        payload.get('maintenanceCost') ||
+        payload.get('cost') ||
+        '0';
+
+      if (status) {
+        if (!payload.has('NewStatus')) payload.append('NewStatus', status);
+        if (!payload.has('newStatus')) payload.append('newStatus', status);
+        if (!payload.has('New_Status')) payload.append('New_Status', status);
+        if (!payload.has('new_status')) payload.append('new_status', status);
+        if (!payload.has('Status')) payload.append('Status', status);
+        if (!payload.has('status')) payload.append('status', status);
+      }
+      if (remarks) {
+        if (!payload.has('Remarks')) payload.append('Remarks', remarks);
+        if (!payload.has('remarks')) payload.append('remarks', remarks);
+        if (!payload.has('CompletionRemarks')) payload.append('CompletionRemarks', remarks);
+        if (!payload.has('completionRemarks')) payload.append('completionRemarks', remarks);
+        if (!payload.has('Completion_Remarks')) payload.append('Completion_Remarks', remarks);
+      }
+      if (cost != null) {
+        if (!payload.has('Maintenance_Cost')) payload.append('Maintenance_Cost', String(cost));
+        if (!payload.has('MaintenanceCost')) payload.append('MaintenanceCost', String(cost));
+        if (!payload.has('maintenanceCost')) payload.append('maintenanceCost', String(cost));
+        if (!payload.has('Cost')) payload.append('Cost', String(cost));
+      }
+    }
+
+    const res = await api.put(`/hoarding-maintenance/${id}/status`, payload);
+    return res?.data ?? res;
+  },
+
+  getHoardingIsInMaintenance: async (hoardingId) => {
+    try {
+      const res = await api.get(`/hoarding-maintenance/is-in-maintenance/${hoardingId}`);
+      return res?.data ?? res;
+    } catch (err) {
+      console.error('Failed to fetch hoarding maintenance status:', err);
+      return null;
+    }
+  },
+  getMaintenanceReport: async (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.Status) q.append('Status', params.Status);
+    else if (params.status) q.append('Status', params.status);
+
+    if (params.Priority) q.append('Priority', params.Priority);
+    else if (params.priority) q.append('Priority', params.priority);
+
+    if (params.FromDate) q.append('FromDate', params.FromDate);
+    else if (params.fromDate) q.append('FromDate', params.fromDate);
+
+    if (params.ToDate) q.append('ToDate', params.ToDate);
+    else if (params.toDate) q.append('ToDate', params.toDate);
+
+    const queryStr = q.toString() ? `?${q.toString()}` : '';
+    const res = await api.get(`/hoarding-maintenance/report${queryStr}`);
+    return res?.data ?? res;
+  },
+};
+
+export const hoardingMaintenanceService = {
+  getMaintenanceReasons: () => apiService.getMaintenanceReasons(),
+  getHoardingMaintenances: (params) => apiService.getHoardingMaintenances(params),
+  getHoardingMaintenanceById: (id) => apiService.getHoardingMaintenanceById(id),
+  createHoardingMaintenance: (formData) => apiService.createHoardingMaintenance(formData),
+  addMaintenancePhotos: (id, formData) => apiService.addMaintenancePhotos(id, formData),
+  deleteMaintenancePhoto: (photoId) => apiService.deleteMaintenancePhoto(photoId),
+  updateMaintenanceStatus: (id, formData) => apiService.updateMaintenanceStatus(id, formData),
+  getHoardingIsInMaintenance: (hoardingId) => apiService.getHoardingIsInMaintenance(hoardingId),
+  getMaintenanceReport: (params) => apiService.getMaintenanceReport(params),
 };
 
 export default api;

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   LogOut, Menu, X, ChevronDown, ChevronRight,
   IndianRupee, Users, MapPin, Globe, Layers, UserCircle, Hash, FileX,
-  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard, UserRoundPlus, Lightbulb, BookOpen
+  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard, UserRoundPlus, Lightbulb, BookOpen, Wrench
 } from 'lucide-react';
 // import Chatbot from './Chatbot';
 import Notification from './Notification';
@@ -50,6 +50,7 @@ const MENU = [
       { id: 'new-hoarding', icon: PlusSquare, label: 'Maintain Hoarding' },
       { id: 'external-hoarding', icon: PlusSquare, label: 'External Hoardings' },
       { id: 'hoarding-expense', icon: IndianRupee, label: 'Hoarding Expense' },
+      { id: 'hoarding-maintenance', icon: Wrench, label: 'Hoarding Maintenance' },
       // { id: 'hoarding-merge', icon: Layers, label: 'Hoarding Merge' },
     ],
   },

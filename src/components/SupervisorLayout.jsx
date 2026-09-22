@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     LogOut, Menu, X, ChevronDown, ChevronRight,
-    Layers, MapPin, Briefcase, BarChart3, CheckSquare, HardHat, CreditCard, Lightbulb
+    Layers, MapPin, Briefcase, BarChart3, CheckSquare, HardHat, CreditCard, Lightbulb, Wrench
 } from 'lucide-react';
 import Notification from './Notification';
 import './SupervisorLayout.css';
@@ -15,6 +15,7 @@ const SUP_MENU = [
     { id: 'workers', icon: HardHat, label: 'Workers' },
     { id: 'sup-payment', icon: CreditCard, label: 'Payments' },
     { id: 'opportunity', icon: Lightbulb, label: 'Opportunity' },
+    { id: 'hoarding-maintenance', icon: Wrench, label: 'Hoarding Maintenance' },
 ];
 
 /* ── Lookup maps ── */

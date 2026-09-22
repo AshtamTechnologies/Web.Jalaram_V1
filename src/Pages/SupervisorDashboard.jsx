@@ -5,6 +5,7 @@ import WorkersPage from './Workers.jsx';
 import SupervisorJobsPage from './SupervisorJobs.jsx';
 import SupervisorPaymentPage from './SupervisorPayment.jsx';
 import OpportunityPage from './Opportunity.jsx';
+import HoardingMaintenancePage from './HoardingMaintenance/HoardingMaintenancePage.jsx';
 
 import { BarChart3, Layers, MapPin, Briefcase, CheckSquare } from 'lucide-react';
 
@@ -53,6 +54,9 @@ export default function SupervisorDashboard({ onLogout }) {
 
       case 'opportunity':
         return <OpportunityPage />;
+
+      case 'hoarding-maintenance':
+        return <HoardingMaintenancePage changeTab={changeTab} />;
 
       default:
         return <SupervisorJobsPage />;

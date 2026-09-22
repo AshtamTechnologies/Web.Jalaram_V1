@@ -31,6 +31,7 @@ import ExpenseType from './Pages/ExpenseType.jsx';
 import VendorPage from './Pages/Vendor.jsx';
 import CompanyDetailsPage from './Pages/CompanyDetails.jsx';
 import OpportunityPage from './Pages/Opportunity.jsx';
+import HoardingMaintenancePage from './Pages/HoardingMaintenance/HoardingMaintenancePage.jsx';
 
 import { CalendarCheck, Users, CreditCard } from 'lucide-react';
 import './App.css';
@@ -102,9 +103,10 @@ export default function App() {
   const renderPage = () => {
     switch (tab) {
       case 'dashboard': return <Dashboard changeTab={changeTab} />;
-      case 'new-hoarding': return <Hoarding />;
+      case 'new-hoarding': return <Hoarding changeTab={changeTab} />;
       case 'external-hoarding': return <ExternalHoarding />;
       case 'hoarding-expense': return <Hoardingexpense />;
+      case 'hoarding-maintenance': return <HoardingMaintenancePage changeTab={changeTab} />;
       case 'hoarding-merge': return <HoardingMerge />;
       case 'land-contracts': return <LandContract />;
       case 'land-payment': return <LandPayment />;
