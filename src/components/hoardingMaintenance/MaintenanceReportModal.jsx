@@ -12,8 +12,10 @@ import {
   ChevronDown,
   Layers,
   Flag,
+  MapPin,
 } from 'lucide-react';
-import { apiService, API_ROOT_URL } from '../../api/api';
+import { apiService, API_ROOT_URL, enrichItemWithHoardingAddress } from '../../api/api';
+import SearchableSelect from './SearchableSelect';
 import {
   MAINTENANCE_STATUSES,
   MAINTENANCE_PRIORITIES,
@@ -75,6 +77,7 @@ function buildMaintenancePDFHTML({
   company,
   statusFilter,
   priorityFilter,
+  hoardingFilterLabel,
   fromDate,
   toDate,
   records,
@@ -289,6 +292,11 @@ function buildMaintenancePDFHTML({
               <td style="width:180px; font-weight:bold; padding:3px 0;">Date Period</td>
               <td style="padding:3px 0;">: ${periodStr}</td>
             </tr>
+            ${hoardingFilterLabel ? `
+            <tr>
+              <td style="font-weight:bold; padding:3px 0;">Hoarding Filter</td>
+              <td style="padding:3px 0;">: ${hoardingFilterLabel}</td>
+            </tr>` : ''}
             <tr>
               <td style="font-weight:bold; padding:3px 0;">Status Filter</td>
               <td style="padding:3px 0;">: ${statusFilter || 'All Statuses'}</td>
@@ -335,10 +343,24 @@ function buildMaintenancePDFHTML({
   const box = (item, recIdx) => {
     const code = item.hoarding_Code || item.hoardingCode || `Hoarding #${item.hoarding_ID || item.hoardingID || ''}`;
     const codeKey = (code || '').toLowerCase().trim();
-    const addr =
-      addressMap[codeKey] ||
-      addressMap[String(item.hoarding_ID || item.hoardingID)] ||
-      '';
+    const codeClean = codeKey.replace(/[\s\-_]/g, '');
+    const idKey = String(item.hoarding_ID || item.hoardingID || '');
+
+    let addr = '';
+    if (item.siteAddress && item.siteAddress !== '—' && !item.siteAddress.startsWith('HD-')) {
+      addr = item.siteAddress;
+    } else if (item.site_Address && item.site_Address !== '—' && !item.site_Address.startsWith('HD-')) {
+      addr = item.site_Address;
+    } else if (idKey && addressMap[idKey]) {
+      addr = addressMap[idKey];
+    } else if (codeKey && addressMap[codeKey]) {
+      addr = addressMap[codeKey];
+    } else if (codeClean && addressMap[codeClean]) {
+      addr = addressMap[codeClean];
+    }
+
+    const displayAddr = (addr && addr.trim() && addr !== '—' && !addr.startsWith('HD-')) ? addr.trim() : '—';
+
     const reason = item.reason_Name || item.reasonName || 'Maintenance';
     const reqId = item.maintenance_ID || item.maintenanceID;
     const priority = item.priority || 'Normal';
@@ -354,8 +376,12 @@ function buildMaintenancePDFHTML({
       <div class="hrd-box">
         <div class="hrd-title">
           ${recIdx + 1})&nbsp;<strong>#${reqId}</strong>&nbsp;&mdash;&nbsp;<strong>${code}</strong>
-          ${addr ? `&nbsp;(${addr})` : ''}
           &nbsp;&mdash;&nbsp;<strong>${reason}</strong>
+        </div>
+        <div class="hrd-row" style="margin-bottom:2px; font-size:11px;">
+          <div style="flex:0 0 100%; color:#1f2937;">
+            <span class="hrd-lbl">Site Address:</span>&nbsp;<span>${displayAddr}</span>
+          </div>
         </div>
         <div class="hrd-row">
           <div class="hrd-cell">
@@ -371,7 +397,7 @@ function buildMaintenancePDFHTML({
             <span class="hrd-lbl">Target Date:</span>&nbsp;${fmtD(targetDate)}
             ${completedDate ? `&nbsp;|&nbsp;<span class="hrd-lbl">Completed:</span>&nbsp;${fmtD(completedDate)}` : ''}
           </div>
-          ${item.assigned_To_Name ? `<div class="hrd-cell"><span class="hrd-lbl">Assigned To:</span>&nbsp;${item.assigned_To_Name}</div>` : ''}
+          ${item.assigned_To_Name || item.assignedToName ? `<div class="hrd-cell"><span class="hrd-lbl">Assigned To:</span>&nbsp;${item.assigned_To_Name || item.assignedToName}</div>` : ''}
         </div>
         ${desc ? `<div class="hrd-row" style="font-style:italic; color:#4b5563; margin-top:2px;"><span class="hrd-lbl" style="font-style:normal;">Notes:</span>&nbsp;"${desc}"</div>` : ''}
         ${remarks ? `<div class="hrd-row" style="font-style:italic; color:#16a34a; margin-top:2px;"><span class="hrd-lbl" style="font-style:normal; color:#16a34a;">Completion:</span>&nbsp;"${remarks}"</div>` : ''}
@@ -828,15 +854,18 @@ function SelectCombo({ value, onChange, options, placeholder, icon: Icon, color 
 export default function MaintenanceReportModal({ onClose }) {
   const [status, setStatus] = useState('');
   const [priority, setPriority] = useState('');
+  const [hoardingFilter, setHoardingFilter] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
   const [companies, setCompanies] = useState([]);
   const [selectedCompany, setSelectedCompany] = useState(null);
+  const [hoardings, setHoardings] = useState([]);
   const [loadingCompanies, setLoadingCompanies] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [addressMap, setAddressMap] = useState({});
+  const [addressDataRef, setAddressDataRef] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -857,8 +886,34 @@ export default function MaintenanceReportModal({ onClose }) {
         const activeDefault = activeOnly[0] || null;
         if (activeDefault) setSelectedCompany(activeDefault);
 
-        if (addrData?.addressMap) {
-          setAddressMap(addrData.addressMap);
+        if (addrData) {
+          setAddressDataRef(addrData);
+          const list = addrData.uniqueHoardings || [];
+          setHoardings(list);
+
+          const map = {};
+          list.forEach((h) => {
+            const fullAddr = h.fullAddress || h.addressLine1 || '';
+            if (h.hoardingID) map[String(h.hoardingID)] = fullAddr;
+            if (h.hoardingCode) {
+              map[h.hoardingCode.toLowerCase().trim()] = fullAddr;
+              map[h.hoardingCode.toLowerCase().replace(/[\s\-_]/g, '')] = fullAddr;
+            }
+          });
+          if (addrData.byIdMap) {
+            addrData.byIdMap.forEach((info, key) => {
+              if (info?.fullAddress) map[String(key)] = info.fullAddress;
+            });
+          }
+          if (addrData.byCodeMap) {
+            addrData.byCodeMap.forEach((info, key) => {
+              if (info?.fullAddress) {
+                map[String(key).toLowerCase().trim()] = info.fullAddress;
+                map[String(key).toLowerCase().replace(/[\s\-_]/g, '')] = info.fullAddress;
+              }
+            });
+          }
+          setAddressMap(map);
         }
       } catch (err) {
         console.error('Failed to initialize report modal data:', err);
@@ -871,6 +926,15 @@ export default function MaintenanceReportModal({ onClose }) {
       active = false;
     };
   }, []);
+
+  const hoardingOptions = useMemo(() => [
+    { value: '', label: 'All Hoardings' },
+    ...hoardings.map((h) => ({
+      value: String(h.hoardingID),
+      label: h.hoardingCode || `Hoarding #${h.hoardingID}`,
+      subtext: h.fullAddress || h.addressLine1 || '',
+    })),
+  ], [hoardings]);
 
   const statusOptions = useMemo(() => [
     { value: '', label: 'All Statuses' },
@@ -897,11 +961,12 @@ export default function MaintenanceReportModal({ onClose }) {
       const params = {};
       if (status) params.Status = status;
       if (priority) params.Priority = priority;
+      if (hoardingFilter) params.HoardingID = hoardingFilter;
       if (fromDate) params.FromDate = fromDate;
       if (toDate) params.ToDate = toDate;
 
       const res = await apiService.getMaintenanceReport(params);
-      const list = Array.isArray(res)
+      let list = Array.isArray(res)
         ? res
         : Array.isArray(res?.data)
         ? res.data
@@ -909,11 +974,67 @@ export default function MaintenanceReportModal({ onClose }) {
         ? res.$values
         : [];
 
+      // Local fallback filter if hoardingFilter was chosen
+      if (hoardingFilter && list.length > 0) {
+        list = list.filter((item) => {
+          const hId = String(item.hoarding_ID ?? item.hoardingID ?? item.hoardingId ?? '');
+          return hId === String(hoardingFilter);
+        });
+      }
+
       if (!list || list.length === 0) {
         setErrorMsg('No maintenance records found for the selected criteria.');
         setGenerating(false);
         return;
       }
+
+      // Ensure address mapping is fully loaded
+      let currentAddrData = addressDataRef;
+      let currentAddrMap = { ...addressMap };
+      if (!currentAddrData || Object.keys(currentAddrMap).length === 0) {
+        try {
+          currentAddrData = await apiService.getHoardingAddressMap();
+          if (currentAddrData?.byIdMap) {
+            currentAddrData.byIdMap.forEach((info, key) => {
+              if (info?.fullAddress) currentAddrMap[String(key)] = info.fullAddress;
+            });
+          }
+          if (currentAddrData?.byCodeMap) {
+            currentAddrData.byCodeMap.forEach((info, key) => {
+              if (info?.fullAddress) {
+                currentAddrMap[String(key).toLowerCase().trim()] = info.fullAddress;
+                currentAddrMap[String(key).toLowerCase().replace(/[\s\-_]/g, '')] = info.fullAddress;
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Failed to refresh address map on generate:', e);
+        }
+      }
+
+      // Enrich each record with hoarding address
+      const enrichedRecords = list.map((item) => {
+        const copy = { ...item };
+        if (currentAddrData) {
+          enrichItemWithHoardingAddress(copy, currentAddrData);
+        }
+        const hId = copy.hoarding_ID ?? copy.hoardingID ?? copy.hoardingId;
+        const code = String(copy.hoarding_Code ?? copy.hoardingCode ?? copy.HoardingCode ?? '').trim();
+        const codeKey = code.toLowerCase();
+        const codeClean = codeKey.replace(/[\s\-_]/g, '');
+
+        if (!copy.siteAddress || copy.siteAddress === '—' || copy.siteAddress.startsWith('HD-')) {
+          const resolved =
+            (hId && currentAddrMap[String(hId)]) ||
+            (codeKey && currentAddrMap[codeKey]) ||
+            (codeClean && currentAddrMap[codeClean]) ||
+            copy.site_Address ||
+            copy.SiteAddress ||
+            '';
+          copy.siteAddress = resolved && resolved !== '—' && !resolved.startsWith('HD-') ? resolved : '—';
+        }
+        return copy;
+      });
 
       const defaultComp =
         selectedCompany ||
@@ -925,14 +1046,22 @@ export default function MaintenanceReportModal({ onClose }) {
           gstin: '',
         };
 
+      const selectedHoarding = hoardings.find((h) => String(h.hoardingID) === String(hoardingFilter));
+      const hoardingFilterLabel = selectedHoarding
+        ? `${selectedHoarding.hoardingCode || `Hoarding #${selectedHoarding.hoardingID}`}${
+            selectedHoarding.fullAddress ? ` — ${selectedHoarding.fullAddress}` : ''
+          }`
+        : '';
+
       const html = buildMaintenancePDFHTML({
         company: defaultComp,
         statusFilter: status,
         priorityFilter: priority,
+        hoardingFilterLabel,
         fromDate,
         toDate,
-        records: list,
-        addressMap,
+        records: enrichedRecords,
+        addressMap: currentAddrMap,
       });
 
       const win = window.open('', '_blank');
@@ -1086,6 +1215,30 @@ export default function MaintenanceReportModal({ onClose }) {
               onChange={setSelectedCompany}
               companies={companies}
               disabled={loadingCompanies}
+            />
+          </div>
+
+          {/* Hoarding Selection */}
+          <div>
+            <label
+              style={{
+                fontSize: 11.5,
+                fontWeight: 800,
+                color: '#4a5568',
+                marginBottom: 5,
+                display: 'block',
+              }}
+            >
+              Hoarding (Optional)
+            </label>
+            <SearchableSelect
+              value={hoardingFilter}
+              onChange={setHoardingFilter}
+              options={hoardingOptions}
+              placeholder="All Hoardings"
+              icon={Layers}
+              clearable={true}
+              dropdownZIndex={100002}
             />
           </div>
 

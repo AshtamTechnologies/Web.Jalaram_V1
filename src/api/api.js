@@ -426,11 +426,11 @@ export const enrichItemWithHoardingAddress = (m, addressData) => {
     matched = byCodeMap.get(codeLower) || byCodeMap.get(codeAlphanum) || byCodeMap.get(rawCode);
   }
 
-  // Fallback for code formats like "HD-5" or numeric codes
+  // Strict fallback only for explicit code formats like "HD-5"
   if (!matched && byIdMap) {
-    const numMatch = rawCode.match(/\d+/);
-    if (numMatch) {
-      matched = byIdMap.get(numMatch[0]) || byIdMap.get(Number(numMatch[0]));
+    const hdMatch = rawCode.match(/^hd-?(\d+)$/i);
+    if (hdMatch) {
+      matched = byIdMap.get(hdMatch[1]) || byIdMap.get(Number(hdMatch[1]));
     }
   }
 
@@ -2014,6 +2014,10 @@ export const apiService = {
 
     if (params.Priority) q.append('Priority', params.Priority);
     else if (params.priority) q.append('Priority', params.priority);
+
+    if (params.HoardingID) q.append('HoardingID', params.HoardingID);
+    else if (params.hoardingId) q.append('HoardingID', params.hoardingId);
+    else if (params.hoardingID) q.append('HoardingID', params.hoardingID);
 
     if (params.FromDate) q.append('FromDate', params.FromDate);
     else if (params.fromDate) q.append('FromDate', params.fromDate);
