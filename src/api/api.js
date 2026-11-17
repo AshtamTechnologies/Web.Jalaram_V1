@@ -1616,6 +1616,8 @@ export const apiService = {
   createJobPayment: (data) => api.post('/JobPayment', {
     jobPaymentID: 0,
     jobRequestID: Number(data.jobRequestID ?? 0),
+    companyID: Number(data.companyID ?? 0),
+    companyName: String(data.companyName ?? ''),
     paymentDate: data.paymentDate ?? new Date().toISOString().split('T')[0],
     calculatedAmount: Number(data.calculatedAmount ?? 0),
     paidAmount: Number(data.paidAmount ?? 0),
@@ -1633,6 +1635,8 @@ export const apiService = {
   updateJobPayment: (id, data) => api.put(`/JobPayment/${id}`, {
     jobPaymentID: Number(id),
     jobRequestID: Number(data.jobRequestID ?? 0),
+    companyID: Number(data.companyID ?? 0),
+    companyName: String(data.companyName ?? ''),
     paymentDate: data.paymentDate ?? new Date().toISOString().split('T')[0],
     calculatedAmount: Number(data.calculatedAmount ?? 0),
     paidAmount: Number(data.paidAmount ?? 0),

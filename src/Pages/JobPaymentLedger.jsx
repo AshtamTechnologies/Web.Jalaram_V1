@@ -114,6 +114,8 @@ function normalizePayment(raw) {
   return {
     jobPaymentID: raw.jobPaymentID ?? raw.JobPaymentID ?? 0,
     jobRequestID: raw.jobRequestID ?? raw.JobRequestID ?? 0,
+    companyID: Number(raw.companyID ?? raw.CompanyID ?? raw.company_ID ?? 0),
+    companyName: raw.companyName ?? raw.CompanyName ?? raw.company_Name ?? '',
     paymentDate: (raw.paymentDate ?? raw.PaymentDate ?? '').split('T')[0],
     calculatedAmount: Number(raw.calculatedAmount ?? raw.CalculatedAmount ?? 0),
     paidAmount: Number(raw.paidAmount ?? raw.PaidAmount ?? 0),
@@ -238,8 +240,8 @@ function CompanyComboField({ value, onChange, companies }) {
         }}
       >
         <Building2 size={14} color="#049edf" style={{ flexShrink: 0 }} />
-        <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`} style={{ fontSize: 12.5, fontWeight: 700, color: selected ? '#1a1a2e' : '#9090a8' }}>
-          {selected ? selected.companyName : 'Select Company…'}
+        <span className="pg-combo-display" style={{ fontSize: 12.5, fontWeight: 700, color: selected ? '#1a1a2e' : '#5a5a78' }}>
+          {selected ? selected.companyName : 'All Companies'}
         </span>
         {selected ? (
           <X size={12} className="pg-combo-clear" onClick={clear} />
@@ -262,26 +264,32 @@ function CompanyComboField({ value, onChange, companies }) {
             {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
           </div>
           <div className="pg-combo-list" ref={listRef}>
-            {filtered.length === 0 ? (
-              <div className="pg-combo-empty">No companies found</div>
-            ) : (
-              filtered.map(c => (
-                <div
-                  key={c.companyID}
-                  className={`pg-combo-option${String(c.companyID) === String(value) ? ' pg-combo-option--active' : ''}`}
-                  onClick={() => select(c)}
-                  tabIndex={0}
-                >
-                  <div style={{ flex: 1 }}>
-                    <span className="pg-combo-option__name">{c.companyName}</span>
-                    {c.city && <span className="pg-combo-option__id">{c.city}</span>}
-                  </div>
-                  {String(c.companyID) === String(value) && (
-                    <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
-                  )}
+            <div
+              className={`pg-combo-option${!selected ? ' pg-combo-option--active' : ''}`}
+              onClick={() => select(null)}
+              tabIndex={0}
+            >
+              <div style={{ flex: 1 }}>
+                <span className="pg-combo-option__name">All Companies</span>
+              </div>
+              {!selected && <Check size={12} color="#049edf" />}
+            </div>
+            {filtered.map(c => (
+              <div
+                key={c.companyID}
+                className={`pg-combo-option${String(c.companyID) === String(value) ? ' pg-combo-option--active' : ''}`}
+                onClick={() => select(c)}
+                tabIndex={0}
+              >
+                <div style={{ flex: 1 }}>
+                  <span className="pg-combo-option__name">{c.companyName}</span>
+                  {c.city && <span className="pg-combo-option__id">{c.city}</span>}
                 </div>
-              ))
-            )}
+                {String(c.companyID) === String(value) && (
+                  <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+                )}
+              </div>
+            ))}
           </div>
         </div>
       </PortalDropdown>
@@ -452,14 +460,11 @@ export default function JobPaymentLedger({ changeTab }) {
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
         const allUsers = normalizeList(uRaw).map(normalizeUser);
         setSupervisors(allUsers.filter(u => u.role.toLowerCase() === 'supervisor'));
-        
+
         // Active Companies only
         const allCompanies = normalizeList(compRaw).map(normalizeCompany);
         const activeCompanies = allCompanies.filter(c => c.isActive);
         setCompanies(activeCompanies);
-        if (activeCompanies.length > 0 && !selectedCompanyId && !savedFilters?.selectedCompanyId) {
-          setSelectedCompanyId(String(activeCompanies[0].companyID));
-        }
       } catch (err) {
         setApiError(err?.message || 'Failed to load ledger data.');
       } finally {
@@ -506,13 +511,10 @@ export default function JobPaymentLedger({ changeTab }) {
       setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
       const allUsers = normalizeList(uRaw).map(normalizeUser);
       setSupervisors(allUsers.filter(u => u.role.toLowerCase() === 'supervisor'));
-      
+
       const allCompanies = normalizeList(compRaw).map(normalizeCompany);
       const activeCompanies = allCompanies.filter(c => c.isActive);
       setCompanies(activeCompanies);
-      if (activeCompanies.length > 0 && !selectedCompanyId) {
-        setSelectedCompanyId(String(activeCompanies[0].companyID));
-      }
 
       showToast('Ledger refreshed', 'success');
     } catch {
@@ -537,16 +539,19 @@ export default function JobPaymentLedger({ changeTab }) {
     changeTab?.('Jobs');
   }, [fromDate, toDate, selectedSupervisor, selectedCompanyId, changeTab]);
 
-  /* ── Client-side supervisor filter (identical to JobPaymentPage) ── */
+  /* ── Client-side supervisor & company filter ── */
   const filteredPayments = useMemo(() => {
     return payments.filter(p => {
       const job = jobRequests.find(j => j.jobRequestID === p.jobRequestID);
       if (selectedSupervisor && String(job?.supervisorID) !== String(selectedSupervisor)) {
         return false;
       }
+      if (selectedCompanyId && String(p.companyID) !== String(selectedCompanyId)) {
+        return false;
+      }
       return true;
     });
-  }, [payments, jobRequests, selectedSupervisor]);
+  }, [payments, jobRequests, selectedSupervisor, selectedCompanyId]);
 
   /* ── Helper Lookups ── */
   const getCustomerName = useCallback((jobReqID) => {
@@ -562,9 +567,9 @@ export default function JobPaymentLedger({ changeTab }) {
   }, [selectedSupervisor, supervisors]);
 
   const selectedCompany = useMemo(() => {
-    if (!companies.length) return null;
+    if (!companies.length || !selectedCompanyId) return null;
     const found = companies.find(c => String(c.companyID) === String(selectedCompanyId));
-    return found || companies[0] || null;
+    return found || null;
   }, [companies, selectedCompanyId]);
 
   /* ═══════════════════════════════════════════
@@ -587,11 +592,11 @@ export default function JobPaymentLedger({ changeTab }) {
     // ── Dr / Credit (Cr) side: 1 row per unique jobRequestID Bill + extra payment rows ──
     const drRows = [];
     const uniqueJobIds = Array.from(new Set(filteredPayments.map(p => p.jobRequestID)));
-    
+
     uniqueJobIds.forEach(jobReqID => {
       const jobPayments = filteredPayments.filter(p => p.jobRequestID === jobReqID);
       const calculatedAmount = Number(jobPayments[0]?.calculatedAmount ?? 0);
-      
+
       // Earliest paymentDate found among that job's records in the filtered set
       const validDates = jobPayments
         .map(p => p.paymentDate)
@@ -755,6 +760,11 @@ export default function JobPaymentLedger({ changeTab }) {
      - Final page ends with "Total Dr" / "Total Cr" grand total
   ═══════════════════════════════════════════ */
   const handleExportPDF = useCallback(() => {
+    if (!selectedCompanyId) {
+      showToast('Export the data after selecting the company', 'error');
+      return;
+    }
+
     if (!filteredPayments.length) {
       showToast('No ledger data available to export', 'error');
       return;
@@ -1122,7 +1132,7 @@ export default function JobPaymentLedger({ changeTab }) {
     } finally {
       setExporting(false);
     }
-  }, [filteredPayments, fromDate, toDate, selectedSupervisorName, selectedCompany, ledgerData, showToast]);
+  }, [filteredPayments, selectedCompanyId, fromDate, toDate, selectedSupervisorName, selectedCompany, ledgerData, showToast]);
 
   /* ═══════════════════════════════════════════
      RENDER
@@ -1183,7 +1193,7 @@ export default function JobPaymentLedger({ changeTab }) {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <button
               onClick={handleExportPDF}
-              disabled={!hasData || exporting}
+              disabled={exporting}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -1191,18 +1201,18 @@ export default function JobPaymentLedger({ changeTab }) {
                 padding: '9px 18px',
                 borderRadius: 10,
                 border: 'none',
-                background: !hasData
+                background: !hasData || !selectedCompanyId || exporting
                   ? '#e2e8f0'
                   : 'linear-gradient(135deg, #049edf, #0284c7)',
-                color: !hasData ? '#94a3b8' : '#ffffff',
+                color: !hasData || !selectedCompanyId || exporting ? '#94a3b8' : '#ffffff',
                 fontFamily: 'Nunito,sans-serif',
                 fontSize: 13,
                 fontWeight: 800,
-                cursor: !hasData || exporting ? 'not-allowed' : 'pointer',
-                boxShadow: hasData ? '0 4px 14px rgba(4,158,223,0.32)' : 'none',
+                cursor: !hasData || !selectedCompanyId || exporting ? 'not-allowed' : 'pointer',
+                boxShadow: hasData && selectedCompanyId && !exporting ? '0 4px 14px rgba(4,158,223,0.32)' : 'none',
                 transition: 'all 0.18s ease',
               }}
-              title={!hasData ? 'No data to export' : 'Download formatted Ledger PDF'}
+              title={!selectedCompanyId ? 'Export the data after selecting the company' : !hasData ? 'No data to export' : 'Download formatted Ledger PDF'}
             >
               {exporting ? <Loader2 size={15} className="pg-spin" /> : <Download size={15} />}
               {exporting ? 'Generating PDF…' : 'Export PDF'}
@@ -1346,19 +1356,15 @@ export default function JobPaymentLedger({ changeTab }) {
               </span>
             </div>
 
-            {selectedCompany && (
-              <>
-                <div style={{ width: 1, height: 16, background: '#e2e8f0' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#9090a8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    Company:
-                  </span>
-                  <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>
-                    {selectedCompany.companyName}
-                  </span>
-                </div>
-              </>
-            )}
+            <div style={{ width: 1, height: 16, background: '#e2e8f0' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#9090a8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                Company:
+              </span>
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#1a1a2e' }}>
+                {selectedCompany ? selectedCompany.companyName : 'All Companies'}
+              </span>
+            </div>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>

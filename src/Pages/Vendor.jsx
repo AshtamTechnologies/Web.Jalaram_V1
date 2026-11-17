@@ -70,7 +70,7 @@ const FIELDS = [
   { key: 'branchName', label: 'Branch Name', icon: Building2, placeholder: 'e.g. Naroda Branch', col: 6, required: false, type: 'text' },
   { key: 'accountNo', label: 'Account Number', icon: CreditCard, placeholder: 'e.g. 123456789012', col: 6, required: false, type: 'text' },
   { key: 'ifscCode', label: 'IFSC Code', icon: Hash, placeholder: 'e.g. SBIN0001234', col: 6, required: false, type: 'ifsc' },
-  { key: 'hoardingId', label: 'External Hoardings', icon: Building2, placeholder: '', col: 12, required: true, type: 'combo-hoarding' },
+  { key: 'hoardingId', label: 'External Hoardings', icon: Building2, placeholder: '', col: 12, required: false, type: 'combo-hoarding' },
   { key: 'isActive', label: 'Status', icon: ShieldCheck, placeholder: '', col: 6, required: true, type: 'combo-status' },
 ];
 
@@ -152,11 +152,12 @@ function normalizeVendor(raw) {
     accountNo: raw.account_No ?? raw.accountNo ?? '',
     ifscCode: raw.ifsC_Code ?? raw.ifscCode ?? '',
     isActive: raw.is_Active ?? raw.isActive ?? true,
-    hoardingId: parseArray(raw.hoardingId ?? raw.hoardingID ?? raw.hoarding_Id),
+    hoardingId: parseArray(raw.hoardingId ?? raw.hoardingID ?? raw.hoarding_Id).map(Number).filter(id => id > 0),
   };
 }
 
-function toPayload(form) {
+function toPayload(form, isEdit = false) {
+  const selectedHoardings = (form.hoardingId || []).map(Number).filter(id => id > 0);
   return {
     vendorID: Number(form.vendorID ?? 0),
     vendorName: String(form.vendorName || '').trim(),
@@ -174,7 +175,7 @@ function toPayload(form) {
     accountNo: String(form.accountNo || '').trim(),
     ifscCode: String(form.ifscCode || '').trim().toUpperCase(),
     isActive: !!form.isActive,
-    hoardingId: (form.hoardingId || []).map(Number),
+    hoardingId: isEdit && selectedHoardings.length === 0 ? [0] : selectedHoardings,
   };
 }
 
@@ -655,8 +656,11 @@ function ViewModal({ vendor, onClose, onEdit }) {
 
   useEffect(() => {
     const fetchHoardingDetails = async () => {
-      const ids = vendor.hoardingId || [];
-      if (ids.length === 0) return;
+      const ids = (vendor.hoardingId || []).filter(id => Number(id) > 0);
+      if (ids.length === 0) {
+        setHoardingDetails([]);
+        return;
+      }
       setLoading(true);
       try {
         const data = await apiService.getAllExternalHoardings();
@@ -905,7 +909,7 @@ function VendorFormModal({ onClose, onSaved, editData, changeTab }) {
     setApiError('');
 
     try {
-      const payload = toPayload(form);
+      const payload = toPayload(form, isEdit);
       let saved;
 
       if (isEdit) {
