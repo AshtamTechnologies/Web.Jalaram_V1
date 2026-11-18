@@ -401,12 +401,11 @@ export default function ExpenseTypePage() {
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
-  useResizableColumns(tableRef, tableReady, [60, 100, 320, 180, 140]);
+  useResizableColumns(tableRef, tableReady, [60, 420, 180, 140]);
 
   const COLS = [
     { key: '_idx', label: '#', w: '8%', noSort: true },
-    { key: 'expenseTypeID', label: 'Type ID', w: '12%' },
-    { key: 'expenseTypeName', label: 'Expense Type Name', w: '48%' },
+    { key: 'expenseTypeName', label: 'Expense Type Name', w: '60%' },
     { key: 'status', label: 'Status', w: '20%' },
     { key: '_action', label: 'Actions', w: '12%', noSort: true },
   ];
@@ -668,13 +667,6 @@ export default function ExpenseTypePage() {
                           {(safePage - 1) * pageSize + idx + 1}
                         </td>
 
-                        {/* ID Badge */}
-                        <td className="pg-td">
-                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#9090a8' }}>
-                            #{id}
-                          </span>
-                        </td>
-
                         {/* Name */}
                         <td className="pg-td pg-td--overflow">
                           <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 700, color: '#1a1a2e' }}>
@@ -739,7 +731,6 @@ export default function ExpenseTypePage() {
                   <div className="pg-card__header">
                     <div className="pg-card__title-wrap">
                       <div className="pg-card__title">{name}</div>
-                      <div className="pg-card__subtitle">ID: #{id}</div>
                     </div>
                     <div className="pg-card__actions">
                       <button className="pg-card__btn-view" onClick={() => setViewType(item)}><Eye size={13} /></button>

@@ -747,7 +747,7 @@ export default function JobPaymentLedger({ changeTab }) {
       crBalancing,
       pairedRows,
       uniqueJobCount: uniqueJobIds.length,
-      paymentCount: filteredPayments.length,
+      paymentCount: crRows.length,
     };
   }, [filteredPayments, getCustomerName]);
 
@@ -856,6 +856,8 @@ export default function JobPaymentLedger({ changeTab }) {
       const totalPages = Math.max(1, pages.length);
       let runningDr = 0;
       let runningCr = 0;
+      let globalDrIndex = 0;
+      let globalCrIndex = 0;
 
       // ── Render each page ──
       pages.forEach((pageRows, pageIdx) => {
@@ -911,56 +913,41 @@ export default function JobPaymentLedger({ changeTab }) {
           doc.roundedRect(margin, 50, contentWidth, 42, 2, 2, 'FD');
 
           doc.setFontSize(8.5);
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(0, 0, 0);
 
-          doc.text('Date Period:', margin + 12, 64);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(60, 60, 60);
-          doc.text(periodText, margin + 74, 64);
+          // 4-column balanced grid
+          const colWidth = (contentWidth - 24) / 4;
+          const c1X = margin + 12;
+          const c2X = c1X + colWidth;
+          const c3X = c1X + colWidth * 2;
+          const c4X = c1X + colWidth * 3;
 
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(0, 0, 0);
-          doc.text('Supervisor:', margin + 240, 64);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(60, 60, 60);
-          doc.text(selectedSupervisorName, margin + 300, 64);
+          const renderMetaField = (label, val, x, y, maxValWidth = colWidth - 8) => {
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(0, 0, 0);
+            doc.text(label, x, y);
+            const labelWidth = doc.getTextWidth(label);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(60, 60, 60);
+            const valStr = String(val ?? '');
+            let displayVal = valStr;
+            if (maxValWidth && (labelWidth + 3 + doc.getTextWidth(displayVal) > maxValWidth)) {
+              while (displayVal.length > 3 && (labelWidth + 3 + doc.getTextWidth(displayVal + '…') > maxValWidth)) {
+                displayVal = displayVal.slice(0, -1);
+              }
+              displayVal += '…';
+            }
+            doc.text(displayVal, x + labelWidth + 3, y);
+          };
 
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(0, 0, 0);
-          doc.text('Company:', margin + 440, 64);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(60, 60, 60);
-          doc.text(companyName, margin + 495, 64);
-
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(0, 0, 0);
-          doc.text('Generated:', margin + 640, 64);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(60, 60, 60);
-          doc.text(new Date().toLocaleDateString('en-IN'), margin + 695, 64);
+          // Line 1: Basic Information
+          renderMetaField('Date Period:', periodText, c1X, 64);
+          renderMetaField('Supervisor:', selectedSupervisorName, c2X, 64);
+          renderMetaField('Company:', companyName, c3X, 64);
+          renderMetaField('Generated:', new Date().toLocaleDateString('en-IN'), c4X, 64);
 
           // Line 2: Financial Summary
-          doc.setFont('helvetica', 'bold');
-          doc.setTextColor(0, 0, 0);
-          doc.text('Total Cr:', margin + 12, 81);
-          doc.setFont('helvetica', 'normal');
-          doc.text(fmtCurrencyPdf(ledgerData.totalDrRaw), margin + 60, 81);
-
-          doc.setFont('helvetica', 'bold');
-          doc.text('Total Dr:', margin + 180, 81);
-          doc.setFont('helvetica', 'normal');
-          doc.text(fmtCurrencyPdf(ledgerData.totalCrRaw), margin + 226, 81);
-
-          doc.setFont('helvetica', 'bold');
-          doc.text('Jobs (Cr):', margin + 340, 81);
-          doc.setFont('helvetica', 'normal');
-          doc.text(String(ledgerData.uniqueJobCount || 0), margin + 424, 81);
-
-          doc.setFont('helvetica', 'bold');
-          doc.text('Total Payments (Dr):', margin + 490, 81);
-          doc.setFont('helvetica', 'normal');
-          doc.text(String(ledgerData.paymentCount || 0), margin + 600, 81);
+          renderMetaField('Total Cr:', fmtCurrencyPdf(ledgerData.totalDrRaw), c1X, 81);
+          renderMetaField('Total Dr:', fmtCurrencyPdf(ledgerData.totalCrRaw), c2X, 81);
         }
 
         // Build Table Body for this page
@@ -970,8 +957,10 @@ export default function JobPaymentLedger({ changeTab }) {
         if (!isFirstPage) {
           tableBody.push([
             '—',
+            '—',
             'Balance b/f (Brought Forward)',
             fmtCurrencyPdf(runningDr),
+            '—',
             '—',
             'Balance b/f (Brought Forward)',
             fmtCurrencyPdf(runningCr),
@@ -980,8 +969,15 @@ export default function JobPaymentLedger({ changeTab }) {
 
         // Process this page's rows and accumulate running totals
         pageRows.forEach(pair => {
+          let drIdxStr = '';
           let drText = '';
           if (pair.dr) {
+            if (!pair.dr.isBalancing) {
+              globalDrIndex++;
+              drIdxStr = String(globalDrIndex);
+            } else {
+              drIdxStr = '—';
+            }
             drText = pair.dr.label;
             if (!pair.dr.isBalancing) {
               if (pair.dr.isExtra) drText += ' [EXTRA]';
@@ -992,8 +988,15 @@ export default function JobPaymentLedger({ changeTab }) {
             runningDr += Number(pair.dr.amount || 0);
           }
 
+          let crIdxStr = '';
           let crText = '';
           if (pair.cr) {
+            if (!pair.cr.isBalancing) {
+              globalCrIndex++;
+              crIdxStr = String(globalCrIndex);
+            } else {
+              crIdxStr = '—';
+            }
             crText = pair.cr.label;
             if (!pair.cr.isBalancing) {
               if (pair.cr.isAdvancePayment) crText += ' [ADVANCE]';
@@ -1006,9 +1009,11 @@ export default function JobPaymentLedger({ changeTab }) {
           }
 
           tableBody.push([
+            drIdxStr,
             pair.dr?.date ? fmtDate(pair.dr.date) : (pair.dr?.isBalancing ? '—' : ''),
             drText,
             pair.dr ? fmtCurrencyPdf(pair.dr.amount) : '',
+            crIdxStr,
             pair.cr?.date ? fmtDate(pair.cr.date) : (pair.cr?.isBalancing ? '—' : ''),
             crText,
             pair.cr ? fmtCurrencyPdf(pair.cr.amount) : '',
@@ -1021,8 +1026,10 @@ export default function JobPaymentLedger({ changeTab }) {
           // On the final page, show true grand Total Dr / Total Cr
           footRow = [
             '',
+            '',
             'Total Cr',
             fmtCurrencyPdf(ledgerData.balancedTotal),
+            '',
             '',
             'Total Dr',
             fmtCurrencyPdf(ledgerData.balancedTotal),
@@ -1031,8 +1038,10 @@ export default function JobPaymentLedger({ changeTab }) {
           // On non-final pages, show "Total c/f" with the running subtotal as of this page
           footRow = [
             '',
+            '',
             'Total c/f (Carried Forward)',
             fmtCurrencyPdf(runningDr),
+            '',
             '',
             'Total c/f (Carried Forward)',
             fmtCurrencyPdf(runningCr),
@@ -1045,12 +1054,12 @@ export default function JobPaymentLedger({ changeTab }) {
           startY: startY,
           head: [
             [
-              { content: 'CREDIT (Cr)', colSpan: 3, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' } },
-              { content: 'DEBIT (Dr)', colSpan: 3, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' } },
+              { content: 'CREDIT (Cr)', colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' } },
+              { content: 'DEBIT (Dr)', colSpan: 4, styles: { halign: 'center', fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' } },
             ],
             [
-              'Date', 'Particulars (Job Bill)', 'Amount (Cr)',
-              'Date', 'Particulars (Payment Details)', 'Amount (Dr)'
+              '#', 'Date', 'Particulars (Job Bill)', 'Amount (Cr)',
+              '#', 'Date', 'Particulars (Payment Details)', 'Amount (Dr)'
             ]
           ],
           body: tableBody,
@@ -1087,20 +1096,22 @@ export default function JobPaymentLedger({ changeTab }) {
             lineWidth: 0.8,
           },
           columnStyles: {
-            0: { cellWidth: 68, halign: 'center' },
-            1: { cellWidth: 'auto', halign: 'left' },
-            2: { cellWidth: 85, halign: 'right', fontStyle: 'bold' },
-            3: { cellWidth: 68, halign: 'center' },
-            4: { cellWidth: 'auto', halign: 'left' },
-            5: { cellWidth: 85, halign: 'right', fontStyle: 'bold' },
+            0: { cellWidth: 22, halign: 'center' },
+            1: { cellWidth: 62, halign: 'center' },
+            2: { cellWidth: 'auto', halign: 'left' },
+            3: { cellWidth: 80, halign: 'right', fontStyle: 'bold' },
+            4: { cellWidth: 22, halign: 'center' },
+            5: { cellWidth: 62, halign: 'center' },
+            6: { cellWidth: 'auto', halign: 'left' },
+            7: { cellWidth: 80, halign: 'right', fontStyle: 'bold' },
           },
           didParseCell: (data) => {
             // Style Balance b/f and Balance c/d rows
             if (data.section === 'body') {
               const rowData = tableBody[data.row.index];
               if (rowData) {
-                const isBf = rowData[1]?.includes('Balance b/f');
-                const isCd = rowData[1]?.includes('Balance c/d') || rowData[4]?.includes('Balance c/d');
+                const isBf = rowData[2]?.includes('Balance b/f');
+                const isCd = rowData[2]?.includes('Balance c/d') || rowData[6]?.includes('Balance c/d');
                 if (isBf || isCd) {
                   data.cell.styles.fontStyle = 'bold';
                   if (isBf) {
@@ -1366,15 +1377,6 @@ export default function JobPaymentLedger({ changeTab }) {
               </span>
             </div>
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#5a5a78' }}>
-              Jobs (Cr): <strong style={{ color: '#049edf' }}>{ledgerData.uniqueJobCount || 0}</strong>
-            </div>
-            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#5a5a78' }}>
-              Payments (Dr): <strong style={{ color: '#16a34a' }}>{ledgerData.paymentCount || 0}</strong>
-            </div>
-          </div>
         </div>
 
         {/* ── Main Ledger Display ── */}
@@ -1416,7 +1418,7 @@ export default function JobPaymentLedger({ changeTab }) {
                 <thead>
                   <tr style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                     <th
-                      colSpan={3}
+                      colSpan={4}
                       style={{
                         padding: '12px 16px',
                         textAlign: 'center',
@@ -1432,7 +1434,7 @@ export default function JobPaymentLedger({ changeTab }) {
                       CREDIT (Cr)
                     </th>
                     <th
-                      colSpan={3}
+                      colSpan={4}
                       style={{
                         padding: '12px 16px',
                         textAlign: 'center',
@@ -1449,20 +1451,44 @@ export default function JobPaymentLedger({ changeTab }) {
                   </tr>
                   <tr style={{ background: '#f1f5f9', borderBottom: '1.5px solid #cbd5e1' }}>
                     {/* Dr Subheaders */}
-                    <th style={{ width: '12%', padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Date</th>
-                    <th style={{ width: '23%', padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Particulars</th>
-                    <th style={{ width: '15%', padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase', textAlign: 'right', borderRight: '2px solid #cbd5e1' }}>Amount (₹)</th>
+                    <th style={{ width: '3.5%', padding: '10px 8px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textAlign: 'center', textTransform: 'uppercase' }}>#</th>
+                    <th style={{ width: '11%', padding: '10px 12px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Date</th>
+                    <th style={{ width: '21.5%', padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Particulars</th>
+                    <th style={{ width: '14%', padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase', textAlign: 'right', borderRight: '2px solid #cbd5e1' }}>Amount (₹)</th>
 
                     {/* Cr Subheaders */}
-                    <th style={{ width: '12%', padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Date</th>
-                    <th style={{ width: '23%', padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Particulars</th>
-                    <th style={{ width: '15%', padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase', textAlign: 'right' }}>Amount (₹)</th>
+                    <th style={{ width: '3.5%', padding: '10px 8px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textAlign: 'center', textTransform: 'uppercase' }}>#</th>
+                    <th style={{ width: '11%', padding: '10px 12px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Date</th>
+                    <th style={{ width: '21.5%', padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase' }}>Particulars</th>
+                    <th style={{ width: '14%', padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 11.5, fontWeight: 800, color: '#475569', textTransform: 'uppercase', textAlign: 'right' }}>Amount (₹)</th>
                   </tr>
                 </thead>
 
                 {/* Ledger Body Rows */}
                 <tbody>
-                  {ledgerData.pairedRows.map((pair, idx) => (
+                  {(() => {
+                    let drCounter = 0;
+                    let crCounter = 0;
+                    return ledgerData.pairedRows.map((pair, idx) => {
+                      let drNum = '';
+                      if (pair.dr) {
+                        if (!pair.dr.isBalancing) {
+                          drCounter++;
+                          drNum = drCounter;
+                        } else {
+                          drNum = '—';
+                        }
+                      }
+                      let crNum = '';
+                      if (pair.cr) {
+                        if (!pair.cr.isBalancing) {
+                          crCounter++;
+                          crNum = crCounter;
+                        } else {
+                          crNum = '—';
+                        }
+                      }
+                      return (
                     <tr
                       key={idx}
                       style={{
@@ -1470,8 +1496,13 @@ export default function JobPaymentLedger({ changeTab }) {
                         background: idx % 2 === 0 ? '#ffffff' : '#fafafa',
                       }}
                     >
+                      {/* Dr Side Cell 0: Index */}
+                      <td style={{ padding: '10px 8px', textAlign: 'center', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#94a3b8' }}>
+                        {drNum}
+                      </td>
+
                       {/* Dr Side Cell 1: Date */}
-                      <td style={{ padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#475569' }}>
+                      <td style={{ padding: '10px 12px', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#475569' }}>
                         {pair.dr ? (pair.dr.date ? fmtDate(pair.dr.date) : (pair.dr.isBalancing ? '—' : '—')) : ''}
                       </td>
 
@@ -1570,8 +1601,13 @@ export default function JobPaymentLedger({ changeTab }) {
                         {pair.dr ? fmtCurrency(pair.dr.amount) : ''}
                       </td>
 
+                      {/* Cr Side Cell 0: Index */}
+                      <td style={{ padding: '10px 8px', textAlign: 'center', fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#94a3b8' }}>
+                        {crNum}
+                      </td>
+
                       {/* Cr Side Cell 1: Date */}
-                      <td style={{ padding: '10px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#475569' }}>
+                      <td style={{ padding: '10px 12px', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#475569' }}>
                         {pair.cr ? (pair.cr.date ? fmtDate(pair.cr.date) : (pair.cr.isBalancing ? '—' : '—')) : ''}
                       </td>
 
@@ -1683,13 +1719,15 @@ export default function JobPaymentLedger({ changeTab }) {
                         {pair.cr ? fmtCurrency(pair.cr.amount) : ''}
                       </td>
                     </tr>
-                  ))}
+                      );
+                    });
+                  })()}
                 </tbody>
 
                 {/* Ledger Balancing Grand Totals Footer */}
                 <tfoot>
                   <tr style={{ background: '#f8fafc', borderTop: '2.5px solid #cbd5e1', borderBottom: '2.5px double #94a3b8' }}>
-                    <td colSpan={2} style={{ padding: '12px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 900, color: '#1a1a2e', textAlign: 'right' }}>
+                    <td colSpan={3} style={{ padding: '12px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 900, color: '#1a1a2e', textAlign: 'right' }}>
                       {/* Total Dr (Debit): */}
                       Total Cr (Credit):
                     </td>
@@ -1705,7 +1743,7 @@ export default function JobPaymentLedger({ changeTab }) {
                       {fmtCurrency(ledgerData.balancedTotal)}
                     </td>
 
-                    <td colSpan={2} style={{ padding: '12px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 900, color: '#1a1a2e', textAlign: 'right' }}>
+                    <td colSpan={3} style={{ padding: '12px 14px', fontFamily: 'Nunito,sans-serif', fontSize: 13.5, fontWeight: 900, color: '#1a1a2e', textAlign: 'right' }}>
                       {/* Total Cr (Credit): */}
                       Total Dr (Debit):
                     </td>
