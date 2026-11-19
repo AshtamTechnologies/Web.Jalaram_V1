@@ -112,6 +112,30 @@ const fmtDateTime = (d) => {
   } catch { return d; }
 };
 
+const validateTargetDate = (selectedDate, contractStart) => {
+  if (!selectedDate || !contractStart) return { isValid: true };
+  const target = new Date(selectedDate + 'T00:00:00');
+  const start = new Date(contractStart + 'T00:00:00');
+
+  // If target date is before start date, it is allowed (valid)
+  if (target < start) {
+    return { isValid: true };
+  }
+
+  // If target date is on or after start date, it must be within 7 days of start date
+  const diffTime = target.getTime() - start.getTime();
+  const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  if (diffDays > 7) {
+    return {
+      isValid: false,
+      reason: 'greater_than_7_days',
+      message: `Target Completion Date must be within 7 days after the Contract Start Date.`
+    };
+  }
+
+  return { isValid: true };
+};
+
 
 
 function buildImageUrl(att) {
@@ -147,14 +171,64 @@ function normalizeCustomer(raw) {
 }
 
 function normalizeContract(raw) {
+  const rawComments = raw.comments ?? raw.Comments ?? '';
+  const matchCompany = rawComments.match(/\[CompanyID:\s*(\d+)\]/i);
+  const commentsCompanyID = matchCompany ? Number(matchCompany[1]) : '';
+  const comments = rawComments.replace(/\[CompanyID:\s*\d+\]/gi, '').trim();
+  const directCompanyID = raw.companyID ?? raw.CompanyID ?? raw.company_ID ?? raw.Company_ID ?? '';
+
   return {
-    customerContractID: raw.customerContractID ?? raw.CustomerContractID ?? 0,
-    customerID: raw.customerID ?? raw.CustomerID ?? 0,
-    hoardingID: raw.hoardingID ?? raw.HoardingID ?? 0,
+    customerContractID: Number(raw.customerContractID ?? raw.CustomerContractID ?? 0),
+    customerID: Number(raw.customerID ?? raw.CustomerID ?? 0),
+    hoardingID: Number(raw.hoardingID ?? raw.HoardingID ?? 0),
     startDate: (raw.startDate ?? raw.StartDate ?? '').split('T')[0],
     endDate: (raw.endDate ?? raw.EndDate ?? '').split('T')[0],
     status: raw.status ?? raw.Status ?? '',
     amountPerFreq: Number(raw.amountPerFreq ?? raw.AmountPerFreq ?? 0),
+    comments: comments,
+    companyID: directCompanyID !== '' ? Number(directCompanyID) : (commentsCompanyID !== '' ? Number(commentsCompanyID) : ''),
+  };
+}
+
+function normalizeCompany(raw) {
+  if (!raw) return null;
+  return {
+    companyID: Number(raw.company_ID ?? raw.Company_ID ?? raw.companyID ?? raw.CompanyID ?? 0),
+    companyName: raw.company_Name ?? raw.Company_Name ?? raw.companyName ?? raw.CompanyName ?? '',
+    addressLine1: raw.address_Line1 ?? raw.Address_Line1 ?? raw.addressLine1 ?? raw.AddressLine1 ?? '',
+    addressLine2: raw.address_Line2 ?? raw.Address_Line2 ?? raw.addressLine2 ?? raw.AddressLine2 ?? '',
+    city: raw.city ?? raw.City ?? '',
+    state: raw.state ?? raw.State ?? '',
+    country: raw.country ?? raw.Country ?? '',
+    pincode: raw.pincode ?? raw.Pincode ?? '',
+    contactPerson: raw.contact_Person ?? raw.Contact_Person ?? raw.contactPerson ?? raw.ContactPerson ?? '',
+    mobileNo: raw.mobile_No ?? raw.Mobile_No ?? raw.mobileNo ?? raw.MobileNo ?? '',
+    email: raw.email ?? raw.Email ?? '',
+    website: raw.website ?? raw.Website ?? '',
+    gstin: raw.gstin ?? raw.GSTIN ?? raw.Gstin ?? '',
+    panNo: raw.paN_No ?? raw.PAN_No ?? raw.panNo ?? raw.PanNo ?? raw.pan ?? '',
+  };
+}
+
+function getCompanyInfo(company) {
+  if (!company) return JOB_COMPANY;
+  const line2Parts = [
+    company.addressLine2,
+    company.city,
+    [company.state, company.pincode].filter(Boolean).join(' - '),
+    company.country
+  ].filter(Boolean);
+
+  const phoneParts = [
+    company.contactPerson ? `${company.contactPerson} # ` : '',
+    company.mobileNo || ''
+  ].filter(Boolean).join('');
+
+  return {
+    name: company.companyName || JOB_COMPANY.name,
+    line1: company.addressLine1 || JOB_COMPANY.line1,
+    line2: line2Parts.join(', ') || JOB_COMPANY.line2,
+    phone: phoneParts || company.mobileNo || JOB_COMPANY.phone,
   };
 }
 
@@ -167,6 +241,26 @@ function normalizeSite(raw) {
     landmark: raw.landmark ?? raw.Landmark ?? '',
     city: raw.city ?? raw.City ?? '',
     district: raw.district ?? raw.District ?? '',
+  };
+}
+
+function normalizeOutsideSite(raw) {
+  if (!raw) return null;
+  return {
+    outsideSiteID: Number(raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.siteID ?? raw.SiteID ?? 0),
+    siteID: Number(raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.siteID ?? raw.SiteID ?? 0),
+    addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? '',
+    addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? '',
+    addressLine3: raw.addressLine3 ?? raw.AddressLine3 ?? '',
+    landmark: raw.landmark ?? raw.Landmark ?? '',
+    city: raw.city ?? raw.City ?? '',
+    district: raw.district ?? raw.District ?? '',
+    state: raw.state ?? raw.State ?? '',
+    pincode: raw.pincode ?? raw.Pincode ?? '',
+    siteType: raw.siteType ?? raw.SiteType ?? '',
+    country: raw.country ?? raw.Country ?? '',
+    vendorID: Number(raw.vendorID ?? raw.VendorID ?? 0),
+    status: raw.status ?? raw.Status ?? true,
   };
 }
 
@@ -216,22 +310,43 @@ function normalizeJobTask(raw) {
   };
 }
 
-function getSiteAddress(h) {
+function getSiteAddress(h, siteMap = null, outsideSiteMap = null) {
   if (!h) return '';
 
-  // 1. Try nested site object (if populated)
-  const s = h.site ? normalizeSite(h.site) : null;
+  const isExt = Boolean(
+    h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' ||
+    h.is_External === true || String(h.is_External).toLowerCase() === 'true' ||
+    h.IsExternal === true || String(h.IsExternal).toLowerCase() === 'true' ||
+    h.Is_External === true || String(h.Is_External).toLowerCase() === 'true'
+  );
+  const sid = Number(h.siteID ?? h.SiteID ?? h.outsideSiteID ?? h.OutsideSiteID ?? 0);
+
+  // 1. Try outsideSiteMap or siteMap lookup
+  let s = null;
+  if (isExt) {
+    const rawOutSite = h.outsideSite || (outsideSiteMap && sid ? (typeof outsideSiteMap.get === 'function' ? outsideSiteMap.get(sid) : outsideSiteMap[sid]) : null) || (siteMap && sid ? (typeof siteMap.get === 'function' ? siteMap.get(sid) : siteMap[sid]) : null) || h.site;
+    s = rawOutSite ? normalizeOutsideSite(rawOutSite) : null;
+  } else {
+    const rawSite = h.site || (siteMap && sid ? (typeof siteMap.get === 'function' ? siteMap.get(sid) : siteMap[sid]) : null);
+    s = rawSite ? normalizeSite(rawSite) : null;
+  }
+
   if (s) {
-    const addr = [s.addressLine1, s.addressLine2].filter(Boolean).join(', ');
+    const addr = [s.addressLine1, s.addressLine2, s.addressLine3].filter(Boolean).join(', ');
     const city = [s.city, s.district].filter(Boolean).join(', ');
     const full = [addr, city].filter(Boolean).join(' — ');
     if (full) return full;
+    if (addr) return addr;
+    if (city) return city;
+    if (s.landmark) return s.landmark;
+    if (s.siteName) return s.siteName;
   }
 
   // 2. Try flat fields directly on the hoarding (common in .NET APIs)
   const flatAddr = [
-    h.addressLine1 ?? h.AddressLine1 ?? '',
+    h.addressLine1 ?? h.AddressLine1 ?? h.siteAddress ?? h.SiteAddress ?? '',
     h.addressLine2 ?? h.AddressLine2 ?? '',
+    h.addressLine3 ?? h.AddressLine3 ?? '',
   ].filter(Boolean).join(', ');
 
   const flatCity = [
@@ -241,21 +356,27 @@ function getSiteAddress(h) {
 
   const flatFull = [flatAddr, flatCity].filter(Boolean).join(' — ');
   if (flatFull) return flatFull;
+  if (flatAddr) return flatAddr;
+  if (flatCity) return flatCity;
 
   // 3. Try landmark
   const landmark = h.landmark ?? h.Landmark ?? h.siteLandmark ?? h.SiteLandmark ?? '';
   if (landmark) return landmark;
 
-  // 4. Last resort
+  // 4. Try site name
+  const siteName = h.siteName ?? h.SiteName ?? '';
+  if (siteName) return siteName;
+
+  // 5. Last resort
   return h.hoardingCode ?? h.HoardingCode ?? '';
 }
 
-const newTaskRow = (h = null) => ({
+const newTaskRow = (h = null, siteMap = null, outsideSiteMap = null) => ({
   _id: uid(),
   jobTaskID: 0,
   hoardingID: h?.hoardingID || 0,
   hoardingCode: h?.hoardingCode || '',
-  siteAddress: getSiteAddress(h),
+  siteAddress: getSiteAddress(h, siteMap, outsideSiteMap),
   size: h ? `${h.width} X ${h.height}` : '',
   sqFt: h ? (h.width * h.height) : 0,
   actualCompletionDate: '',
@@ -301,7 +422,7 @@ function TaskStatusSelect({ value, onChange, disabled }) {
         fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700,
         padding: '4px 10px', borderRadius: 7,
         border: `1.5px solid ${s.border}`,
-        background: s.bg, color: s.color,
+        backgroundColor: s.bg, color: s.color,
         cursor: disabled ? 'not-allowed' : 'pointer',
         outline: 'none',
         appearance: 'none', WebkitAppearance: 'none',
@@ -316,6 +437,452 @@ function TaskStatusSelect({ value, onChange, disabled }) {
     </select>
   );
 }
+
+/* ═══════════════════════════════════════════
+   JOB PDF HTML BUILDER
+═══════════════════════════════════════════ */
+const JOB_COMPANY = {
+  name: 'JALARAM AD',
+  line1: '103/4/5/6, Drashti Arcade, Opp. Anand ITI',
+  line2: 'Nr. Grid Crossing, Anand - 388001, GUJ. INDIA',
+  phone: 'Parag Patel # 9428151123',
+};
+
+function getHoardingAddressLine1(h, task = null) {
+  if (h) {
+    const s = h.site || h.outsideSite || null;
+    if (s) {
+      const line1 = s.addressLine1 ?? s.AddressLine1 ?? s.address_line1 ?? s.address ?? s.Address ?? '';
+      if (line1) return String(line1).trim();
+    }
+    const directLine1 = h.addressLine1 ?? h.AddressLine1 ?? h.address_line1 ?? h.address ?? h.Address ?? '';
+    if (directLine1) return String(directLine1).trim();
+  }
+
+  if (task) {
+    const taskLine1 = task.addressLine1 ?? task.AddressLine1 ?? '';
+    if (taskLine1) return String(taskLine1).trim();
+
+    if (task.siteAddress) {
+      const parts = String(task.siteAddress).split(' — ');
+      if (parts[0]) {
+        const subParts = parts[0].split(', ');
+        return (subParts[0] || parts[0]).trim();
+      }
+      return String(task.siteAddress).trim();
+    }
+  }
+
+  return '';
+}
+
+function buildJobPDFHTML({ company, job, customerName, supervisorName, tasks, attachments, hoardings, hoardingMerges = [] }) {
+  const comp = company || JOB_COMPANY;
+  const today = new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const fmtD = (d) => {
+    if (!d) return '—';
+    return new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  // Build a map: taskID -> { near, far }
+  const taskPhotoMap = {};
+  attachments.forEach(att => {
+    const taskID = Number(att.jobTaskID ?? att.JobTaskID ?? 0);
+    if (!taskID) return;
+    const url = buildImageUrl(att);
+    if (!url) return;
+    const type = (att.photoFileType ?? att.PhotoFileType ?? '').toLowerCase();
+    if (!taskPhotoMap[taskID]) taskPhotoMap[taskID] = { near: null, far: null };
+    if (type.includes('near')) {
+      taskPhotoMap[taskID].near = taskPhotoMap[taskID].near || url;
+    } else if (type.includes('far')) {
+      taskPhotoMap[taskID].far = taskPhotoMap[taskID].far || url;
+    }
+  });
+
+  // Group tasks by merge group if merged, else unmerged
+  const mergeMap = new Map();
+  (hoardingMerges || []).forEach(m => {
+    const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+    if (hid) {
+      mergeMap.set(hid, m);
+    }
+  });
+
+  const isMounting = (job?.jobType || '').toLowerCase() === 'mounting';
+  const shouldMerge = isMounting ? Boolean(job?.customerID) : Boolean(job?.customerContractID && job?.customerID);
+  const mergedGroups = {}; // key: `${siteID}_${flag}` -> array of tasks
+  const unmergedTasks = [];
+
+  tasks.forEach(task => {
+    const mergeInfo = shouldMerge ? mergeMap.get(Number(task.hoardingID)) : null;
+    const flag = shouldMerge ? (task.mergeAlongFlag || mergeInfo?.mergeAlongFlag) : null;
+    if (flag) {
+      const key = `${task.siteID || 0}_${flag}`;
+      if (!mergedGroups[key]) mergedGroups[key] = [];
+      mergedGroups[key].push(task);
+    } else {
+      unmergedTasks.push(task);
+    }
+  });
+
+  const mergedItems = Object.entries(mergedGroups).map(([key, groupTasks]) => {
+    const [siteIDStr, flag] = key.split('_');
+    const isSquare = flag === 'S';
+    const isHorizontalMerge = flag === 'H';
+
+    const mergedHoardings = groupTasks.map(t => {
+      const h = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === Number(t.hoardingID));
+      const addrLine1 = getHoardingAddressLine1(h, t);
+      return {
+        hoardingCode: t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`,
+        width: Number(h?.width ?? h?.Width ?? 0),
+        height: Number(h?.height ?? h?.Height ?? 0),
+        siteAddress: addrLine1,
+        taskID: Number(t.jobTaskID),
+      };
+    });
+
+    const sizes = mergedHoardings.map(h => ({ w: h.width, h: h.height }));
+    const gaps = Math.max(groupTasks.length - 1, 0);
+    let mw, mh;
+    if (isSquare) {
+      const singleW = sizes[0]?.w || 0;
+      const singleH = sizes[0]?.h || 0;
+      mw = (singleW * 2) + 1;
+      mh = (singleH * 2) + 1;
+    } else if (isHorizontalMerge) {
+      mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+      mh = Math.max(...sizes.map(s => s.h), 0);
+    } else {
+      mw = Math.max(...sizes.map(s => s.w), 0);
+      mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+    }
+    const combinedSqFt = mw * mh;
+
+    const hoardingCodes = mergedHoardings.map(h => h.hoardingCode).join(' + ');
+    const siteAddr = mergedHoardings.find(h => h.siteAddress)?.siteAddress || '';
+
+    // Photos: look across all taskIDs in the merge group
+    const allTaskIDs = groupTasks.map(t => Number(t.jobTaskID));
+    let near = null;
+    let far = null;
+    for (const tid of allTaskIDs) {
+      if (!near && taskPhotoMap[tid]?.near) near = taskPhotoMap[tid].near;
+      if (!far && taskPhotoMap[tid]?.far) far = taskPhotoMap[tid].far;
+    }
+
+    return {
+      isMerged: true,
+      direction: flag,
+      hoardingCodes,
+      mergedHoardings,
+      size: `${mw} × ${mh} ft`,
+      sqFt: combinedSqFt,
+      siteAddr,
+      status: groupTasks[0].status || 'Open',
+      photos: { near, far },
+      taskIDs: allTaskIDs,
+      totalCount: groupTasks.length,
+    };
+  });
+
+  // Process unmerged tasks
+  const unmergedItems = unmergedTasks.map(t => {
+    const h = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === Number(t.hoardingID));
+    const hoardingCode = t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`;
+    const size = h ? `${h.width} × ${h.height} ft` : (t.size || '—');
+    const sqFt = h ? (Number(h.width) * Number(h.height)) : (Number(t.sqFt) || 0);
+    const siteAddr = getHoardingAddressLine1(h, t);
+    const taskID = Number(t.jobTaskID);
+    const photos = taskPhotoMap[taskID] || { near: null, far: null };
+    return {
+      isMerged: false,
+      hoardingCode,
+      size,
+      sqFt,
+      siteAddr,
+      status: t.status,
+      photos,
+      taskID,
+      totalCount: 1,
+    };
+  });
+
+  const taskItems = [...mergedItems, ...unmergedItems];
+  const totalSqFt = taskItems.reduce((s, t) => s + (t.sqFt || 0), 0);
+
+  const css = `
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#000;}
+
+    /* ── A4 page ── */
+    .page{
+      width:210mm; height:297mm;
+      padding:10mm 14mm 9mm;
+      page-break-after:always;
+      display:flex; flex-direction:column;
+      overflow:hidden;
+    }
+    .page:last-child{page-break-after:avoid;}
+
+    /* ── Page header ── */
+    .ph{
+      display:flex; justify-content:space-between; align-items:flex-end;
+      padding-bottom:5px; border-bottom:2px solid #000;
+      margin-bottom:7px; flex-shrink:0;
+    }
+    .ph-co{font-size:14px;font-weight:900;letter-spacing:1px;}
+    .ph-r{font-size:10px;color:#444;text-align:right;line-height:1.4;}
+
+    /* ── COVER ── */
+    .cov{justify-content:space-between;}
+    .cov-top{
+      display:flex;justify-content:space-between;align-items:flex-start;
+      padding-bottom:13px;border-bottom:3px solid #000;
+    }
+    .cov-co{font-size:38px;font-weight:900;letter-spacing:2px;line-height:1.1;}
+    .cov-addr{font-size:10.5px;color:#555;margin-top:6px;line-height:1.7;}
+    .cov-date{font-size:15px;font-weight:700;white-space:nowrap;}
+    .cov-body{flex:1;display:flex;flex-direction:column;justify-content:center;padding:26px 0 14px;}
+    .cov-title{font-size:30px;font-weight:700;margin-bottom:8px;}
+    .cov-sub{font-size:15px;color:#333;margin-top:4px;}
+    .cov-info{
+      margin-top:18px;padding:13px 15px;
+      background:#f4f4f4;border-left:5px solid #000;
+      font-size:13px;line-height:2;color:#111;
+    }
+    .cov-foot{
+      display:flex;justify-content:space-between;align-items:center;
+      border-top:1px solid #ccc;padding-top:8px;
+      font-size:10.5px;color:#555;font-weight:600;
+    }
+
+    /* ── HOARDING PAIR ── */
+    .pair-wrap{
+      flex:1;min-height:0;
+      display:flex;flex-direction:column;
+      gap:0;
+    }
+    .hrd-section{
+      flex:0 0 50%;max-height:50%;
+      min-height:0;
+      display:flex;flex-direction:column;
+    }
+    .hrd-section + .hrd-section{
+      border-top:1.5px dashed #ccc;
+      padding-top:5px;
+    }
+    /* Vision photos side by side */
+    .hrd-photos{
+      flex:1;min-height:0;overflow:hidden;
+      display:flex;gap:4px;margin-bottom:4px;
+    }
+    .hrd-photo-wrap{
+      flex:1;min-width:0;position:relative;overflow:hidden;
+      background:#e0e0e0;
+    }
+    .hrd-photo-wrap img{
+      width:100%;height:100%;object-fit:contain;display:block;
+    }
+    .hrd-vision-label{
+      position:absolute;bottom:4px;left:4px;
+      background:rgba(0,0,0,0.65);color:#fff;
+      font-size:9px;font-weight:bold;
+      padding:1px 6px;border-radius:4px;
+    }
+    .hrd-no-photo{
+      flex:1;min-height:0;overflow:hidden;
+      background:#f5f5f5;border:1.5px dashed #ccc;
+      margin-bottom:4px;
+      display:flex;align-items:center;justify-content:center;
+      font-size:11px;color:#aaa;gap:6px;
+    }
+    /* Details box */
+    .hrd-box{
+      background:#f2f2f2;padding:8px 12px;
+      border-left:4px solid #000;flex-shrink:0;
+    }
+    .hrd-title{font-size:11.5px;font-weight:700;margin-bottom:5px;line-height:1.4;color:#000;}
+    .hrd-row{display:flex;flex-wrap:wrap;font-size:11px;}
+    .hrd-cell{flex:0 0 50%;padding-right:8px;}
+    .hrd-lbl{font-weight:700;}
+    .hrd-status{display:inline-block;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:800;
+      background:#e8fdf3;color:#16a34a;border:1px solid #bbf7d0;}
+
+    /* Download bar */
+    #dl-bar{
+      position:fixed;top:0;left:0;right:0;z-index:9999;
+      background:#111;color:#fff;
+      display:flex;align-items:center;justify-content:space-between;
+      padding:10px 20px;font-family:Arial,sans-serif;font-size:13px;gap:12px;
+    }
+    .dl-btn{
+      padding:7px 22px;background:#dc2626;color:#fff;
+      border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;
+    }
+    .dl-btn:hover{background:#b91c1c;}
+    @media print{
+      #dl-bar{display:none!important;}
+      body{padding-top:0!important;}
+      .page{width:100%;height:100vh;padding:8mm 12mm 8mm;}
+    }
+    @page{size:A4 portrait;margin:0;}
+  `;
+
+  /* shared page header */
+  const ph = `
+    <div class="ph">
+      <span class="ph-co">${comp.name}</span>
+      <span class="ph-r">Job #${job.jobRequestID} &mdash; ${customerName}<br>${today}</span>
+    </div>`;
+
+  /* hoarding section */
+  const section = (item) => {
+    const hasNear = !!item.photos.near;
+    const hasFar = !!item.photos.far;
+    const hasAnyPhoto = hasNear || hasFar;
+    const displayName = item.isMerged ? item.hoardingCodes : item.hoardingCode;
+
+    const photoArea = hasAnyPhoto ? `
+      <div class="hrd-photos">
+        ${hasNear ? `
+          <div class="hrd-photo-wrap">
+            <img src="${item.photos.near}" alt="Short Vision - ${displayName}" />
+            <span class="hrd-vision-label">📸 Short Vision</span>
+          </div>` : `
+          <div class="hrd-photo-wrap" style="display:flex;align-items:center;justify-content:center;font-size:11px;color:#aaa;">
+            📷 No Short Vision
+          </div>`}
+        ${hasFar ? `
+          <div class="hrd-photo-wrap">
+            <img src="${item.photos.far}" alt="Long Vision - ${displayName}" />
+            <span class="hrd-vision-label">🔭 Long Vision</span>
+          </div>` : `
+          <div class="hrd-photo-wrap" style="display:flex;align-items:center;justify-content:center;font-size:11px;color:#aaa;">
+            📷 No Long Vision
+          </div>`}
+      </div>` :
+      `<div class="hrd-no-photo">📷&nbsp;No photos uploaded for ${displayName}</div>`;
+
+    const detailsBox = item.isMerged ? `
+      <div class="hrd-box" style="border-left: 4px solid #7c3aed; background: #faf8ff;">
+        <div class="hrd-title">
+          <strong>${item.hoardingCodes}</strong>
+          <span style="display:inline-block;padding:1px 8px;border-radius:10px;background:#ede9fe;color:#7c3aed;font-size:10px;font-weight:800;margin-left:6px;border:1px solid #ddd6fe;">
+            ${item.direction === 'S' ? '⊞ Square Merge' : item.direction === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'}
+          </span>
+          ${item.siteAddr ? `&nbsp;&mdash;&nbsp;${item.siteAddr}` : ''}
+          ${item.size ? `&nbsp;&mdash;&nbsp;<strong>${item.size}</strong>` : ''}
+        </div>
+        <div class="hrd-row">
+          <div class="hrd-cell" style="flex:0 0 100%;margin-bottom:3px;">
+            <span class="hrd-lbl">Merged Hoardings:</span>&nbsp;
+            ${(item.mergedHoardings || []).map(h => `<span style="display:inline-block;background:#fff;padding:1px 6px;border-radius:4px;border:1px solid #e0d8f8;margin-right:4px;font-size:10.5px;">${h.hoardingCode} (${h.width}×${h.height} ft)</span>`).join('')}
+          </div>
+          <div class="hrd-cell"><span class="hrd-lbl">Combined Area:</span>&nbsp;${item.sqFt ? item.sqFt.toLocaleString('en-IN') + ' sq.ft' : '—'}</div>
+          <div class="hrd-cell"><span class="hrd-lbl">Status:</span>&nbsp;<span class="hrd-status">${item.status || 'Open'}</span></div>
+        </div>
+      </div>` : `
+      <div class="hrd-box">
+        <div class="hrd-title">${item.hoardingCode}${item.siteAddr ? ` &mdash; ${item.siteAddr}` : ''}${item.size ? ` &mdash; ${item.size}` : ''}</div>
+        <div class="hrd-row">
+          <div class="hrd-cell"><span class="hrd-lbl">Area:</span>&nbsp;${item.sqFt ? item.sqFt.toLocaleString('en-IN') + ' sq.ft' : '—'}</div>
+          <div class="hrd-cell"><span class="hrd-lbl">Status:</span>&nbsp;<span class="hrd-status">${item.status || 'Open'}</span></div>
+        </div>
+      </div>`;
+
+    return `
+      <div class="hrd-section">
+        ${photoArea}
+        ${detailsBox}
+      </div>`;
+  };
+
+  /* ── COVER ── */
+  const totalHoardingsCount = tasks.length;
+  const cover = `
+    <div class="page cov">
+      <div class="cov-top">
+        <div>
+          <div class="cov-co">${comp.name}</div>
+          <div class="cov-addr">${comp.line1}<br>${comp.line2}</div>
+        </div>
+        <div class="cov-date">${today}</div>
+      </div>
+      <div class="cov-body">
+        <div class="cov-title">Job #${job.jobRequestID}</div>
+        ${customerName ? `<div class="cov-sub">${customerName}</div>` : ''}
+        <div class="cov-info">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <tr>
+              <td style="width:180px;font-weight:bold;padding:2px 0;">Job Type</td>
+              <td style="padding:2px 0;">: ${job.jobType || '—'}</td>
+            </tr>
+            <tr>
+              <td style="font-weight:bold;padding:2px 0;">Supervisor</td>
+              <td style="padding:2px 0;">: ${supervisorName || '—'}</td>
+            </tr>
+            ${job.actualCompletionDate ? `
+            <tr>
+              <td style="font-weight:bold;padding:2px 0;">Completed On</td>
+              <td style="padding:2px 0;">: ${fmtD(job.actualCompletionDate)}</td>
+            </tr>` : ''}
+            <tr>
+              <td style="font-weight:bold;padding:2px 0;">Total Area</td>
+              <td style="padding:2px 0;">: ${totalSqFt.toLocaleString('en-IN')} sq.ft</td>
+            </tr>
+            <tr>
+              <td style="font-weight:bold;padding:2px 0;">Total Hoardings</td>
+              <td style="padding:2px 0;">: ${totalHoardingsCount} (${taskItems.length} location${taskItems.length !== 1 ? 's' : ''})</td>
+            </tr>
+            ${job.jobDescription ? `
+            <tr>
+              <td style="font-weight:bold;padding:2px 0;vertical-align:top;">Description</td>
+              <td style="padding:2px 0;">: ${job.jobDescription}</td>
+            </tr>` : ''}
+          </table>
+        </div>
+      </div>
+      <div class="cov-foot">
+        <span>${comp.phone}</span>
+        <span>${taskItems.length} Location${taskItems.length !== 1 ? 's' : ''} (${totalHoardingsCount} Hoarding${totalHoardingsCount !== 1 ? 's' : ''})</span>
+      </div>
+    </div>`;
+
+  /* ── HOARDING PAGES (2 per page) ── */
+  const hrdPages = [];
+  for (let i = 0; i < taskItems.length; i += 2) {
+    const a = taskItems[i];
+    const b = taskItems[i + 1];
+    hrdPages.push(`
+      <div class="page" style="display:flex;flex-direction:column;">
+        ${ph}
+        <div class="pair-wrap">
+          ${section(a)}
+          ${b ? section(b) : ''}
+        </div>
+      </div>`);
+  }
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Job #${job.jobRequestID} &mdash; ${customerName}</title>
+  <style>${css}</style>
+</head>
+<body style="padding-top:44px;">
+  <div id="dl-bar">
+    <span><strong>${comp.name}</strong> &mdash; Job #${job.jobRequestID} &mdash; ${customerName}</span>
+    <button class="dl-btn" onclick="window.print()">&#8681; Download / Print PDF</button>
+  </div>
+  ${cover}
+  ${hrdPages.join('')}
+</body>
+</html>`;
+}
+
 
 /* ═══════════════════════════════════════════
    PORTAL DROPDOWN
@@ -435,23 +1002,34 @@ function ComboField({ value, onChange, options, placeholder, icon: Icon, disable
 /* ═══════════════════════════════════════════
    HOARDING SELECT MODAL
 ═══════════════════════════════════════════ */
-function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAdd, onClose, anyIdToLatestId, hoardingMerges }) {
+function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAdd, onClose, anyIdToLatestId, hoardingMerges, siteMap, outsideSiteMap, jobType, allowMerge }) {
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(new Set());
   const isFiltered = filteredHoardingIds !== null;
 
-  // Build a map: hoardingID → mergeAlongFlag ('H' or 'V'), for merged hoardings only
-  const mergedFlagMap = useMemo(() => {
+  // Build a map: hoardingID → { flag: 'H'|'V', lineNo: number, contractID: number }
+  const mergeInfoMap = useMemo(() => {
     const map = new Map();
     (hoardingMerges || []).forEach(m => {
       const id = Number(m.hoardingID ?? m.HoardingID ?? 0);
-      if (id) map.set(id, m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H');
+      if (id) {
+        map.set(id, {
+          flag: m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H',
+          lineNo: Number(m.hoardingLineNumber ?? m.HoardingLineNumber ?? 0),
+          contractID: Number(m.customerContractID ?? m.CustomerContractID ?? 0),
+        });
+      }
     });
     return map;
   }, [hoardingMerges]);
 
   const base = useMemo(() => {
-    if (!isFiltered) return hoardings;
+    if (!isFiltered) {
+      if (jobType === 'Repair') {
+        return hoardings.filter(h => !(h.isExternal === true || String(h.isExternal).toLowerCase() === 'true'));
+      }
+      return hoardings;
+    }
     const canonicalIds = new Set();
     filteredHoardingIds.forEach(rawId => {
       canonicalIds.add(rawId);
@@ -464,52 +1042,94 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
       }
     });
     return hoardings.filter(h => canonicalIds.has(Number(h.hoardingID)));
-  }, [hoardings, filteredHoardingIds, isFiltered, anyIdToLatestId]);
+  }, [hoardings, filteredHoardingIds, isFiltered, anyIdToLatestId, jobType]);
 
   const display = useMemo(() => {
     const q = search.toLowerCase();
     if (!q) return base;
     return base.filter(h =>
       (h.hoardingCode || '').toLowerCase().includes(q) ||
-      getSiteAddress(h).toLowerCase().includes(q) ||
+      getSiteAddress(h, siteMap, outsideSiteMap).toLowerCase().includes(q) ||
       (h.site?.city || '').toLowerCase().includes(q)
     );
-  }, [base, search]);
+  }, [base, search, siteMap, outsideSiteMap]);
 
-  const selectable = display.filter(h => !existingIds.has(h.hoardingID));
-  const allSelected = selectable.length > 0 && selectable.every(h => selected.has(h.hoardingID));
-  const someSel = selectable.some(h => selected.has(h.hoardingID));
-
-  const toggle = (id) => setSelected(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const toggleAll = () => {
-    if (allSelected) setSelected(p => { const n = new Set(p); selectable.forEach(h => n.delete(h.hoardingID)); return n; });
-    else setSelected(p => { const n = new Set(p); selectable.forEach(h => n.add(h.hoardingID)); return n; });
-  };
-
-  // Group display: merged hoardings shown together, unmerged shown individually
+  // Group display: merged hoardings shown together by line/site & flag, unmerged shown individually
   const { mergeGroups, unmerged } = useMemo(() => {
-    const groups = new Map(); // flag → [hoardings]
+    if (!allowMerge) {
+      return { mergeGroups: [], unmerged: display };
+    }
+
+    const groups = new Map(); // key -> { key, siteID, flag, hoardings: [] }
     const ungrouped = [];
 
     display.forEach(h => {
-      const flag = mergedFlagMap.get(Number(h.hoardingID));
-      if (flag) {
-        const key = flag; // 'H' or 'V' — groups all same-direction merges together
-        if (!groups.has(key)) groups.set(key, []);
-        groups.get(key).push(h);
+      const info = mergeInfoMap.get(Number(h.hoardingID));
+      if (info) {
+        const siteID = Number(h.siteID ?? h.SiteID ?? h.site?.siteID ?? 0);
+        const key = info.lineNo > 0
+          ? `line_${info.contractID}_${info.lineNo}`
+          : `site_${siteID}_${info.flag}`;
+        if (!groups.has(key)) {
+          groups.set(key, { key, siteID, flag: info.flag, hoardings: [] });
+        }
+        groups.get(key).hoardings.push(h);
       } else {
         ungrouped.push(h);
       }
     });
 
-    return { mergeGroups: [...groups.entries()], unmerged: ungrouped };
-  }, [display, mergedFlagMap]);
+    return { mergeGroups: [...groups.values()], unmerged: ungrouped };
+  }, [display, mergeInfoMap, allowMerge]);
+
+  // Build a lookup map: hoardingID -> array of other hoardingIDs in the same merge group
+  const hoardingIdToGroupIds = useMemo(() => {
+    if (!allowMerge) return new Map();
+    const map = new Map();
+    mergeGroups.forEach(g => {
+      const ids = g.hoardings.map(h => h.hoardingID);
+      ids.forEach(id => {
+        map.set(id, ids);
+      });
+    });
+    return map;
+  }, [mergeGroups, allowMerge]);
+
+  const selectable = display.filter(h => !existingIds.has(h.hoardingID));
+  const allSelected = selectable.length > 0 && selectable.every(h => selected.has(h.hoardingID));
+  const someSel = selectable.some(h => selected.has(h.hoardingID));
+
+  const toggle = (id) => setSelected(p => {
+    const n = new Set(p);
+    const groupIds = hoardingIdToGroupIds.get(id);
+    if (groupIds) {
+      const turningOn = !n.has(id);
+      groupIds.forEach(gid => {
+        if (!existingIds.has(gid)) {
+          if (turningOn) n.add(gid);
+          else n.delete(gid);
+        }
+      });
+    } else {
+      n.has(id) ? n.delete(id) : n.add(id);
+    }
+    return n;
+  });
+
+  const toggleAll = () => {
+    if (allSelected) setSelected(p => { const n = new Set(p); selectable.forEach(h => n.delete(h.hoardingID)); return n; });
+    else setSelected(p => { const n = new Set(p); selectable.forEach(h => n.add(h.hoardingID)); return n; });
+  };
 
   const renderRow = (h, isMerged = false, mergeFlag = null) => {
     const checked = selected.has(h.hoardingID);
     const alreadyIn = existingIds.has(h.hoardingID);
-    const addr = getSiteAddress(h);
-    const siteCity = [h.site?.city, h.site?.district].filter(Boolean).join(', ');
+    const isExt = Boolean(h.isExternal === true || String(h.isExternal).toLowerCase() === 'true');
+    const sid = Number(h.siteID ?? h.SiteID ?? h.outsideSiteID ?? h.OutsideSiteID ?? 0);
+    const siteObj = h.site ?? (isExt ? (outsideSiteMap?.get(sid) || siteMap?.get(sid) || null) : (siteMap?.get(sid) || null));
+    const enrichedH = siteObj ? { ...h, site: siteObj } : h;
+    const addr = getSiteAddress(enrichedH, siteMap, outsideSiteMap);
+    const siteCity = [siteObj?.city ?? h.siteCity ?? h.city, siteObj?.district ?? h.siteDistrict ?? h.district].filter(Boolean).join(', ');
 
     return (
       <div key={h.hoardingID}
@@ -553,7 +1173,9 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
               <p className="pg-modal__subtitle">
                 {isFiltered
                   ? `${base.length} hoarding${base.length !== 1 ? 's' : ''} from selected customer/contract`
-                  : `All ${base.length} hoardings (no customer/contract filter)`}
+                  : jobType === 'Repair'
+                    ? `All ${base.length} internal hoardings (Repair job, no customer/contract selected)`
+                    : `All ${base.length} hoardings (no customer/contract filter)`}
               </p>
             </div>
           </div>
@@ -593,25 +1215,38 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
           ) : (
             <>
               {/* ── Merged groups ── */}
-              {mergeGroups.map(([flag, groupHoardings]) => {
+              {mergeGroups.map(({ key, siteID, flag, hoardings: groupHoardings }) => {
                 // Compute combined size
                 const sizes = groupHoardings.map(h => ({ w: Number(h.width) || 0, h: Number(h.height) || 0 }));
-                const gaps = Math.max(groupHoardings.length - 1, 1);
-                const mw = flag === 'H' ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps : Math.max(...sizes.map(s => s.w));
-                const mh = flag === 'H' ? Math.max(...sizes.map(s => s.h)) : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+                const gaps = Math.max(groupHoardings.length - 1, 0);
+                const isSquare = flag === 'S';
+                const isHorizontalMerge = flag === 'H';
+                let mw, mh;
+                if (isSquare) {
+                  const singleW = sizes[0]?.w || 0;
+                  const singleH = sizes[0]?.h || 0;
+                  mw = (singleW * 2) + 1;
+                  mh = (singleH * 2) + 1;
+                } else if (isHorizontalMerge) {
+                  mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+                  mh = Math.max(...sizes.map(s => s.h), 0);
+                } else {
+                  mw = Math.max(...sizes.map(s => s.w), 0);
+                  mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+                }
                 const mergedSqFt = mw * mh;
 
                 return (
-                  <div key={flag} style={{ margin: '8px 12px', border: '1.5px solid rgba(124,58,237,0.25)', borderRadius: 10, overflow: 'hidden' }}>
+                  <div key={key || `${siteID}_${flag}`} style={{ margin: '8px 12px', border: '1.5px solid rgba(124,58,237,0.25)', borderRadius: 10, overflow: 'hidden' }}>
                     {/* Merge group header */}
                     <div style={{
                       padding: '8px 14px', background: 'rgba(124,58,237,0.06)',
                       borderBottom: '1px solid rgba(124,58,237,0.15)',
                       display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
                     }}>
-                      <span style={{ fontSize: 13 }}>{flag === 'H' ? '↔' : '↕'}</span>
+                      <span style={{ fontSize: 13 }}>{isSquare ? '⊞' : isHorizontalMerge ? '↔' : '↕'}</span>
                       <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#7c3aed' }}>
-                        {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge · {groupHoardings.length} hoardings
+                        {isSquare ? 'Square' : isHorizontalMerge ? 'Horizontal' : 'Vertical'} Merge · {groupHoardings.length} hoardings
                       </span>
                       <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#5a5a78' }}>
                         {mw} × {mh} ft
@@ -647,6 +1282,197 @@ function HoardingSelectModal({ hoardings, filteredHoardingIds, existingIds, onAd
           </div>
         </div>
       </div>
+    </div>,
+    document.body
+  );
+}
+
+function ValidationAlertModal({ isOpen, onClose, contractStartDate, targetDate, reason }) {
+  if (!isOpen) return null;
+
+  return ReactDOM.createPortal(
+    <div style={{
+      position: 'fixed',
+      inset: 0,
+      zIndex: 99999999,
+      background: 'rgba(15, 23, 42, 0.65)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 16,
+    }}>
+      <div style={{
+        background: '#fff',
+        borderRadius: '24px',
+        width: '100%',
+        maxWidth: '460px',
+        overflow: 'hidden',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 40px rgba(4, 158, 223, 0.05)',
+        fontFamily: 'Nunito, sans-serif',
+        animation: 'fadeInScale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+        border: '1px solid rgba(226, 232, 240, 0.8)',
+      }}>
+        {/* Header */}
+        <div style={{
+          background: 'linear-gradient(135deg, #ef4444, #f97316)',
+          padding: '30px 24px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 12,
+          textAlign: 'center',
+          color: '#fff',
+        }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            background: 'rgba(255, 255, 255, 0.2)',
+            border: '2px solid rgba(255, 255, 255, 0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '32px',
+            boxShadow: '0 8px 16px rgba(0, 0, 0, 0.1)',
+            animation: 'pulse 2s infinite',
+          }}>
+            ⚠️
+          </div>
+          <div>
+            <h4 style={{ margin: 0, fontSize: '20px', fontWeight: 900, letterSpacing: '-0.5px' }}>
+              Date Validation Failed
+            </h4>
+            <p style={{ margin: '4px 0 0 0', fontSize: '13px', color: 'rgba(255, 255, 255, 0.9)', fontWeight: 600 }}>
+              Job cannot be created with selected date
+            </p>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div style={{ padding: '28px 24px 20px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{
+            background: '#fff8f6',
+            border: '1.5px dashed rgba(239, 68, 68, 0.3)',
+            borderRadius: '16px',
+            padding: '16px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 12,
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Contract Start Date:</span>
+              <span style={{ fontSize: '13.5px', color: '#1e293b', fontWeight: 800 }}>
+                {fmtDate(contractStartDate)}
+              </span>
+            </div>
+
+            <div style={{ height: '1px', background: 'rgba(239, 68, 68, 0.1)' }} />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Selected Target Date:</span>
+              <span style={{ fontSize: '13.5px', color: '#ef4444', fontWeight: 800 }}>
+                {fmtDate(targetDate)}
+              </span>
+            </div>
+
+            <div style={{ height: '1px', background: 'rgba(239, 68, 68, 0.1)' }} />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: '13px', color: '#64748b', fontWeight: 600 }}>Maximum Allowed Date:</span>
+              <span style={{
+                fontSize: '13.5px',
+                color: '#16a34a',
+                fontWeight: 800,
+                background: 'rgba(22, 163, 74, 0.08)',
+                padding: '3px 8px',
+                borderRadius: '6px',
+              }}>
+                {(() => {
+                  if (!contractStartDate) return '—';
+                  const d = new Date(contractStartDate + 'T00:00:00');
+                  d.setDate(d.getDate() + 7);
+                  const year = d.getFullYear();
+                  const month = String(d.getMonth() + 1).padStart(2, '0');
+                  const day = String(d.getDate()).padStart(2, '0');
+                  return fmtDate(`${year}-${month}-${day}`);
+                })()}
+              </span>
+            </div>
+          </div>
+
+          <div style={{
+            fontSize: '13.5px',
+            color: '#475569',
+            lineHeight: '1.6',
+            fontWeight: 600,
+            textAlign: 'center',
+          }}>
+            {reason === 'greater_than_7_days' ? (
+              <span>
+                Target Completion Date can be any date before the contract start date. However, if it is on or after the start date, it must be within <strong style={{ color: '#ef4444' }}>7 days</strong> of the start date.
+              </span>
+            ) : (
+              <span>
+                The Target Completion Date is invalid. Please adjust the target completion date.
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '0 24px 24px', display: 'flex', justifyContent: 'center' }}>
+          <button
+            onClick={onClose}
+            style={{
+              width: '100%',
+              padding: '12px 0',
+              border: 'none',
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #ef4444, #f97316)',
+              color: '#fff',
+              fontSize: '14px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              boxShadow: '0 10px 20px -5px rgba(239, 68, 68, 0.4)',
+              transition: 'all 0.2s',
+              outline: 'none',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.transform = 'translateY(-1px)';
+              e.currentTarget.style.boxShadow = '0 12px 22px -5px rgba(239, 68, 68, 0.5)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 10px 20px -5px rgba(239, 68, 68, 0.4)';
+            }}
+          >
+            Adjust Date
+          </button>
+        </div>
+      </div>
+
+      {/* Styles for animation */}
+      <style>{`
+        @keyframes fadeInScale {
+          from {
+            opacity: 0;
+            transform: scale(0.95);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+        @keyframes pulse {
+          0%, 100% {
+            transform: scale(1);
+          }
+          50% {
+            transform: scale(1.05);
+          }
+        }
+      `}</style>
     </div>,
     document.body
   );
@@ -1403,15 +2229,80 @@ function TaskPhotoModal({ task, jobRequestID, attachments, onClose, showToast, o
 /* ═══════════════════════════════════════════
    JOB PHOTOS VIEW MODAL
 ═══════════════════════════════════════════ */
-function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
-  const [selectedTaskID, setSelectedTaskID] = useState(
-    tasks.length > 0 ? String(tasks[0].jobTaskID) : ''
-  );
+// ✅ MODIFIED: Added hoardingMerges prop to group merged hoardings together in dropdown and photos view
+function JobPhotosViewModal({ job, tasks, hoardings, attachments, hoardingMerges = [], onClose }) {
+  // ✅ MODIFIED: Group tasks by site and merge flag so merged hoardings show up as a single dropdown item
+  const options = useMemo(() => {
+    const isMounting = (job?.jobType || '').toLowerCase() === 'mounting';
+    const shouldMerge = isMounting ? Boolean(job?.customerID) : Boolean(job?.customerContractID && job?.customerID);
+    if (!shouldMerge) {
+      return tasks.map(task => ({ _type: 'single', jobTaskID: String(task.jobTaskID), ...task }));
+    }
+
+    const mergeMap = new Map();
+    (hoardingMerges || []).forEach(m => {
+      const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+      if (hid) {
+        mergeMap.set(hid, m);
+      }
+    });
+
+    const mergedGroups = {}; // key: siteID_flag -> array of tasks
+    const unmergedRows = [];
+
+    tasks.forEach(task => {
+      const hid = Number(task.hoardingID);
+      const mergeInfo = mergeMap.get(hid);
+      if (mergeInfo) {
+        const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+        const lineNum = Number(mergeInfo.hoardingLineNumber ?? mergeInfo.HoardingLineNumber ?? 0);
+        const hoarding = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
+        const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
+        const key = `${siteID}_${flag}_${lineNum}`;
+        if (!mergedGroups[key]) {
+          mergedGroups[key] = [];
+        }
+        mergedGroups[key].push(task);
+      } else {
+        unmergedRows.push(task);
+      }
+    });
+
+    const result = [];
+
+    // Process merged groups
+    Object.entries(mergedGroups).forEach(([key, groupTasks]) => {
+      if (groupTasks.length === 0) return;
+      const [siteIDStr, flag] = key.split('_');
+      result.push({
+        _type: 'merged',
+        _id: `__merged__${key}`,
+        tasks: groupTasks,
+        mergeFlag: flag,
+        jobTaskID: String(groupTasks[0].jobTaskID),
+      });
+    });
+
+    // Individual rows for unmerged
+    unmergedRows.forEach(task => result.push({ _type: 'single', jobTaskID: String(task.jobTaskID), ...task }));
+
+    return result;
+  }, [tasks, hoardingMerges, hoardings]);
+
+  const [selectedTaskID, setSelectedTaskID] = useState('');
+
+  // Set default selection
+  useEffect(() => {
+    if (options.length > 0 && !selectedTaskID) {
+      setSelectedTaskID(String(options[0].jobTaskID));
+    }
+  }, [options, selectedTaskID]);
+
   const [lightbox, setLightbox] = useState(null);
   const [geoAddress, setGeoAddress] = useState('');
   const [geoLoading, setGeoLoading] = useState(false);
 
-  const selectedTask = tasks.find(t => String(t.jobTaskID) === selectedTaskID);
+  const selectedOption = options.find(o => String(o.jobTaskID) === selectedTaskID);
 
   // Fetch geo address whenever the selected task changes
   useEffect(() => {
@@ -1430,12 +2321,20 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
       .finally(() => setGeoLoading(false));
   }, [selectedTaskID]);
 
+  // ✅ MODIFIED: Retrieve photos for all task IDs in a group if it is a merged hoarding, otherwise retrieve for the single task
   const taskAttachments = useMemo(() => {
-    if (!selectedTaskID) return [];
-    return attachments.filter(
-      a => Number(a.jobTaskID ?? a.JobTaskID) === Number(selectedTaskID)
-    );
-  }, [selectedTaskID, attachments]);
+    if (!selectedOption) return [];
+    if (selectedOption._type === 'merged') {
+      const taskIDs = selectedOption.tasks.map(t => Number(t.jobTaskID));
+      return attachments.filter(
+        a => taskIDs.includes(Number(a.jobTaskID ?? a.JobTaskID))
+      );
+    } else {
+      return attachments.filter(
+        a => Number(a.jobTaskID ?? a.JobTaskID) === Number(selectedTaskID)
+      );
+    }
+  }, [selectedOption, selectedTaskID, attachments]);
 
   const customerName = job.customerName || `Customer ID ${job.customerID}`;
 
@@ -1499,45 +2398,38 @@ function JobPhotosViewModal({ job, tasks, hoardings, attachments, onClose }) {
             }}>
               Select Hoarding from this Job:
             </label>
-            <div style={{ position: 'relative' }}>
-              <select
-                value={selectedTaskID}
-                onChange={e => setSelectedTaskID(e.target.value)}
-                style={{
-                  width: '100%', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700,
-                  padding: '11px 36px 11px 16px', borderRadius: 10,
-                  border: '1.5px solid #e2e8f0', background: '#fff', color: '#1f2937',
-                  outline: 'none', cursor: 'pointer',
-                  appearance: 'none', WebkitAppearance: 'none',
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%234b5563' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 14px center',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-                  transition: 'border-color 0.15s, box-shadow 0.15s',
-                }}
-                onFocus={e => {
-                  e.target.style.borderColor = '#049edf';
-                  e.target.style.boxShadow = '0 0 0 3px rgba(4,158,223,0.12)';
-                }}
-                onBlur={e => {
-                  e.target.style.borderColor = '#e2e8f0';
-                  e.target.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)';
-                }}
-              >
-                {tasks.map(t => {
+            <ComboField
+              value={selectedTaskID}
+              onChange={t => setSelectedTaskID(t ? String(t.jobTaskID) : '')}
+              options={options}
+              placeholder="Select hoarding…"
+              icon={Building2}
+              getLabel={t => {
+                if (t._type === 'merged') {
+                  const flagStr = t.mergeFlag === 'S' ? 'Square Merge' : t.mergeFlag === 'H' ? 'Horizontal Merge' : 'Vertical Merge';
+                  const codes = t.tasks.map(tsk => {
+                    const h = hoardings.find(hh => Number(hh.hoardingID) === Number(tsk.hoardingID));
+                    return tsk.hoardingCode || h?.hoardingCode || `#${tsk.hoardingID}`;
+                  }).join(' + ');
+                  return `${flagStr} [${codes}]`;
+                } else {
                   const h = hoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
-                  const label = [
-                    t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`,
-                    getSiteAddress(h)
-                  ].filter(Boolean).join(' - ');
-                  return (
-                    <option key={t.jobTaskID} value={t.jobTaskID}>
-                      {label}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
+                  return t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`;
+                }
+              }}
+              getValue={t => t.jobTaskID}
+              getSecondary={t => {
+                if (t._type === 'merged') {
+                  const firstTask = t.tasks[0];
+                  const h = hoardings.find(hh => Number(hh.hoardingID) === Number(firstTask.hoardingID));
+                  return getSiteAddress(h);
+                } else {
+                  const h = hoardings.find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
+                  return getSiteAddress(h);
+                }
+              }}
+              searchPlaceholder="Search hoardings…"
+            />
           </div>
 
           {/* Photo Display Grid */}
@@ -1666,38 +2558,106 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
   const [error, setError] = useState('');
   const [showConfirm, setShowConfirm] = useState(false);
 
-  // Find tasks without photos
-  const tasksWithNoPhotos = useMemo(() => {
-    // Group task IDs by mergeFlag
-    const mergeFlagToTaskIDs = {};
-    tasks.forEach(t => {
-      const m = (hoardingMerges || []).find(x => Number(x.hoardingID ?? x.HoardingID ?? 0) === Number(t.hoardingID));
-      const flag = m ? (m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H') : null;
-      if (flag) {
-        if (!mergeFlagToTaskIDs[flag]) mergeFlagToTaskIDs[flag] = [];
-        mergeFlagToTaskIDs[flag].push(Number(t.jobTaskID));
-      }
-    });
+  // Group tasks by merges so merged hoardings are evaluated together
+  const { groupedPreviews, missingPhotoCount } = useMemo(() => {
+    const isMounting = (job?.jobType || '').toLowerCase() === 'mounting';
+    const shouldMerge = isMounting ? Boolean(job?.customerID) : Boolean(job?.customerContractID && job?.customerID);
+    if (!shouldMerge) {
+      const previews = [];
+      let missing = 0;
+      (tasks || []).forEach(task => {
+        const h = (allHoardings || []).find(hh => Number(hh.hoardingID) === Number(task.hoardingID));
+        const taskID = Number(task.jobTaskID);
+        const hasPhoto = (attachments || []).some(a => Number(a.jobTaskID ?? a.JobTaskID ?? 0) === taskID);
 
-    return tasks.filter(t => {
-      const m = (hoardingMerges || []).find(x => Number(x.hoardingID ?? x.HoardingID ?? 0) === Number(t.hoardingID));
-      const flag = m ? (m.mergeAlongFlag ?? m.MergeAlongFlag ?? 'H') : null;
+        if (!hasPhoto) missing++;
 
-      let targetTaskIDs = [Number(t.jobTaskID)];
-      if (flag && mergeFlagToTaskIDs[flag]) {
-        targetTaskIDs = mergeFlagToTaskIDs[flag];
-      }
-
-      const hasPhoto = (attachments || []).some(a => {
-        const aTaskID = Number(a.jobTaskID ?? a.JobTaskID ?? 0);
-        return targetTaskIDs.includes(aTaskID);
+        previews.push({
+          _type: 'single',
+          _id: String(task.jobTaskID || task._id),
+          hoardingCode: task.hoardingCode || h?.hoardingCode || `#${task.hoardingID}`,
+          currentStatus: h?.status || 'Active',
+        });
       });
+      return { groupedPreviews: previews, missingPhotoCount: missing };
+    }
 
-      return !hasPhoto;
+    const mergeMap = new Map();
+    (hoardingMerges || []).forEach(m => {
+      const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+      if (hid) {
+        mergeMap.set(hid, m);
+      }
     });
-  }, [tasks, attachments, hoardingMerges]);
 
-  const hasMissingPhotos = tasksWithNoPhotos.length > 0;
+    const mergedGroups = {}; // key: siteID_flag_lineNum -> array of tasks
+    const unmergedRows = [];
+
+    (tasks || []).forEach(task => {
+      const hid = Number(task.hoardingID);
+      const mergeInfo = mergeMap.get(hid);
+      if (mergeInfo) {
+        const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+        const lineNum = Number(mergeInfo.hoardingLineNumber ?? mergeInfo.HoardingLineNumber ?? 0);
+        const hoarding = (allHoardings || []).find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
+        const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
+        const key = `${siteID}_${flag}_${lineNum}`;
+        if (!mergedGroups[key]) {
+          mergedGroups[key] = [];
+        }
+        mergedGroups[key].push(task);
+      } else {
+        unmergedRows.push(task);
+      }
+    });
+
+    const previews = [];
+    let missing = 0;
+
+    // Process merged groups
+    Object.entries(mergedGroups).forEach(([key, groupTasks]) => {
+      if (groupTasks.length === 0) return;
+      const [siteIDStr, flag] = key.split('_');
+      const firstH = (allHoardings || []).find(hh => Number(hh.hoardingID) === Number(groupTasks[0].hoardingID));
+      const flagStr = flag === 'S' ? 'Square Merge' : flag === 'H' ? 'Horizontal Merge' : 'Vertical Merge';
+      const codes = groupTasks.map(t => {
+        const h = (allHoardings || []).find(hh => Number(hh.hoardingID) === Number(t.hoardingID));
+        return t.hoardingCode || h?.hoardingCode || `#${t.hoardingID}`;
+      }).join(' + ');
+
+      const targetTaskIDs = groupTasks.map(t => Number(t.jobTaskID)).filter(Boolean);
+      const hasPhoto = (attachments || []).some(a => targetTaskIDs.includes(Number(a.jobTaskID ?? a.JobTaskID ?? 0)));
+
+      if (!hasPhoto) missing++;
+
+      previews.push({
+        _type: 'merged',
+        _id: `__merged__${key}`,
+        hoardingCode: `${flagStr} [${codes}]`,
+        currentStatus: firstH?.status || 'Active',
+      });
+    });
+
+    // Individual rows for unmerged
+    unmergedRows.forEach(task => {
+      const h = (allHoardings || []).find(hh => Number(hh.hoardingID) === Number(task.hoardingID));
+      const taskID = Number(task.jobTaskID);
+      const hasPhoto = (attachments || []).some(a => Number(a.jobTaskID ?? a.JobTaskID ?? 0) === taskID);
+
+      if (!hasPhoto) missing++;
+
+      previews.push({
+        _type: 'single',
+        _id: String(task.jobTaskID || task._id),
+        hoardingCode: task.hoardingCode || h?.hoardingCode || `#${task.hoardingID}`,
+        currentStatus: h?.status || 'Active',
+      });
+    });
+
+    return { groupedPreviews: previews, missingPhotoCount: missing };
+  }, [tasks, hoardingMerges, allHoardings, attachments]);
+
+  const hasMissingPhotos = missingPhotoCount > 0;
 
   /* Build preview: for each task find the hoarding's current (latest) status */
   const hoardingPreviews = tasks.map(t => {
@@ -1721,7 +2681,7 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
   return ReactDOM.createPortal(
     // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && !completing && onCancel()}>
     <div className="pg-overlay">
-      <div className="pg-modal" style={{ maxWidth: 480, position: 'relative', overflow: 'hidden' }}>
+      <div className="pg-modal" style={{ maxWidth: 480, position: 'relative', overflowY: 'auto', maxHeight: '90vh' }}>
 
         {/* Confirmation Screen */}
         {showConfirm && (
@@ -1734,12 +2694,16 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
             flexDirection: 'column',
             fontFamily: 'Nunito,sans-serif',
             animation: 'fadeIn 0.2s',
+            borderRadius: '20px',
+            overflow: 'hidden',
           }}>
             {/* Header */}
             <div style={{
               background: 'linear-gradient(135deg,#16a34a,#15803d)',
               padding: '24px 26px 18px',
               display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+              borderTopLeftRadius: '20px',
+              borderTopRightRadius: '20px',
             }}>
               <div style={{
                 width: 56, height: 56, borderRadius: '50%',
@@ -1801,6 +2765,8 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
           background: 'linear-gradient(135deg,#16a34a,#15803d)',
           padding: '24px 26px 18px',
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+          borderTopLeftRadius: '20px',
+          borderTopRightRadius: '20px',
         }}>
           <div style={{
             width: 56, height: 56, borderRadius: '50%',
@@ -1858,22 +2824,23 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
                 {hoardingPreviews.length} New Effdt Row{hoardingPreviews.length !== 1 ? 's' : ''} Will Be Added
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {hoardingPreviews.map((h, i) => (
-                  <div key={i} style={{
+              {/* ✅ MODIFIED: Render groupedPreviews list instead of hoardingPreviews individually */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
+                {groupedPreviews.map((h, i) => (
+                  <div key={h._id || i} style={{
                     display: 'flex', alignItems: 'center', gap: 8,
                     padding: '7px 10px', borderRadius: 8,
                     background: '#fff', border: '1px solid #dcfce7',
                     fontFamily: 'Nunito,sans-serif', fontSize: 11.5,
                   }}>
                     {/* Hoarding code */}
-                    <span style={{ fontWeight: 800, color: '#15803d', minWidth: 70 }}>
+                    <span style={{ fontWeight: 800, color: '#15803d' }}>
                       {h.hoardingCode}
                     </span>
                     {/* Arrow */}
-                    <span style={{ color: '#9090a8', fontWeight: 700, fontSize: 11 }}>effdt =</span>
+                    <span style={{ color: '#9090a8', fontWeight: 700, fontSize: 11, marginLeft: '6px' }}>effdt =</span>
                     {/* Date */}
-                    <span style={{ fontWeight: 700, color: '#1a1a2e' }}>
+                    <span style={{ fontWeight: 700, color: '#1a1a2e', marginLeft: '4px' }}>
                       {completionDate ? fmtDate(completionDate) : '—'}
                     </span>
                     {/* Status (from last effdt row) */}
@@ -1945,14 +2912,28 @@ function CompleteJobModal({ job, tasks, allHoardings, hoardingMerges, attachment
     document.body
   );
 }
+const getJobDraft = () => {
+  try {
+    const draft = sessionStorage.getItem('job_form_draft');
+    return draft ? JSON.parse(draft) : null;
+  } catch (e) {
+    console.error("Failed to parse job draft", e);
+    return null;
+  }
+};
+
 /* ═══════════════════════════════════════════
    MAIN JOB PAGE
 ═══════════════════════════════════════════ */
-export default function JobPage() {
+export default function JobPage({ changeTab }) {
+  const jobDraft = useMemo(() => getJobDraft(), []);
 
   /* ── API data ── */
   const [customers, setCustomers] = useState([]);
   const [contracts, setContracts] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [sites, setSites] = useState([]);
+  const [outsideSites, setOutsideSites] = useState([]);
   const [hoardings, setHoardings] = useState([]);
   const [availableHoardings, setAvailableHoardings] = useState([]);
   const [supervisors, setSupervisors] = useState([]);
@@ -1966,36 +2947,112 @@ export default function JobPage() {
   const [completing, setCompleting] = useState(false);
   const [deleteConfirmTarget, setDeleteConfirmTarget] = useState(null);
 
+  const siteMap = useMemo(() => new Map(
+    sites.map(s => [Number(s.siteID ?? s.SiteID ?? 0), normalizeSite(s)])
+  ), [sites]);
+
+  const outsideSiteMap = useMemo(() => new Map(
+    outsideSites.map(s => [Number(s.outsideSiteID ?? s.siteID ?? 0), normalizeOutsideSite(s)])
+  ), [outsideSites]);
+
+
   /* ── UI ── */
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [apiError, setApiError] = useState('');
   const [toast, setToast] = useState(null);
-  const [isCreating, setIsCreating] = useState(false);
-  const [step, setStep] = useState(1);
+  // Original code:
+  // const [isCreating, setIsCreating] = useState(false);
+  const [isCreating, setIsCreating] = useState(() => jobDraft?.isCreating ?? false);
+  // Original code:
+  // const [step, setStep] = useState(1);
+  const [step, setStep] = useState(() => jobDraft?.step ?? 1);
   const [step1Error, setStep1Error] = useState('');
   const [step2Error, setStep2Error] = useState('');
-  const [editingJobID, setEditingJobID] = useState(null);
+  // Original code:
+  // const [editingJobID, setEditingJobID] = useState(null);
+  const [editingJobID, setEditingJobID] = useState(() => jobDraft?.editingJobID ?? null);
   const [showHoardModal, setShowHoardModal] = useState(false);
 
 
   /* ── Form ── */
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [selectedContract, setSelectedContract] = useState(null);
+  // Original code:
+  // const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedCustomer, setSelectedCustomer] = useState(() => jobDraft?.selectedCustomer ?? null);
+  // Original code:
+  // const [selectedContract, setSelectedContract] = useState(null);
+  const [selectedContract, setSelectedContract] = useState(() => jobDraft?.selectedContract ?? null);
   const [pendingContract, setPendingContract] = useState(null);
-  const [jobType, setJobType] = useState('');
-  const [selectedSupervisor, setSelectedSupervisor] = useState(null);
-  const [jobDescription, setJobDescription] = useState('');
-  const [ratePerSQFT, setRatePerSQFT] = useState('');
-  const [targetDate, setTargetDate] = useState('');
-  const [supervisorAcceptDttm, setSupervisorAcceptDttm] = useState('');
-  const [actualCompletionDate, setActualCompletionDate] = useState('');
-  const [jobStatus, setJobStatus] = useState('Open');
+  // Original code:
+  // const [jobType, setJobType] = useState('');
+  const [jobType, setJobType] = useState(() => jobDraft?.jobType ?? '');
+  // Original code:
+  // const [selectedSupervisor, setSelectedSupervisor] = useState(null);
+  const [selectedSupervisor, setSelectedSupervisor] = useState(() => jobDraft?.selectedSupervisor ?? null);
+  // Original code:
+  // const [jobDescription, setJobDescription] = useState('');
+  const [jobDescription, setJobDescription] = useState(() => jobDraft?.jobDescription ?? '');
+  // Original code:
+  // const [ratePerSQFT, setRatePerSQFT] = useState('');
+  const [ratePerSQFT, setRatePerSQFT] = useState(() => jobDraft?.ratePerSQFT ?? '');
+  // Original code:
+  // const [targetDate, setTargetDate] = useState('');
+  const [targetDate, setTargetDate] = useState(() => jobDraft?.targetDate ?? '');
+  // Original code:
+  // const [supervisorAcceptDttm, setSupervisorAcceptDttm] = useState('');
+  const [supervisorAcceptDttm, setSupervisorAcceptDttm] = useState(() => jobDraft?.supervisorAcceptDttm ?? '');
+  // Original code:
+  // const [actualCompletionDate, setActualCompletionDate] = useState('');
+  const [actualCompletionDate, setActualCompletionDate] = useState(() => jobDraft?.actualCompletionDate ?? '');
+  // Original code:
+  // const [jobStatus, setJobStatus] = useState('Open');
+  const [jobStatus, setJobStatus] = useState(() => jobDraft?.jobStatus ?? 'Open');
   const [contractHoardingMaps, setContractHoardingMaps] = useState([]);
   const [hoardingMerges, setHoardingMerges] = useState([]);
+  const [contractStartDate, setContractStartDate] = useState(null);
+  const [validationAlert, setValidationAlert] = useState(null);
 
   /* ── Inline tasks ── */
-  const [tasks, setTasks] = useState([]);
+  // Original code:
+  // const [tasks, setTasks] = useState([]);
+  const [tasks, setTasks] = useState(() => jobDraft?.tasks ?? []);
+
+  useEffect(() => {
+    if (isCreating) {
+      const draftData = {
+        isCreating,
+        step,
+        selectedCustomer,
+        selectedContract,
+        jobType,
+        selectedSupervisor,
+        jobDescription,
+        ratePerSQFT,
+        targetDate,
+        supervisorAcceptDttm,
+        actualCompletionDate,
+        jobStatus,
+        tasks,
+        editingJobID,
+      };
+      sessionStorage.setItem('job_form_draft', JSON.stringify(draftData));
+    }
+  }, [
+    isCreating,
+    step,
+    selectedCustomer,
+    selectedContract,
+    jobType,
+    selectedSupervisor,
+    jobDescription,
+    ratePerSQFT,
+    targetDate,
+    supervisorAcceptDttm,
+    actualCompletionDate,
+    jobStatus,
+    tasks,
+    editingJobID,
+  ]);
   const [contractBanners, setContractBanners] = useState([]);
   const [bannersLoading, setBannersLoading] = useState(false);
   /* ── History table ── */
@@ -2026,16 +3083,36 @@ export default function JobPage() {
   useResizableColumns(taskTableRef, taskTableReady, [40, 240, 90, 90, 70, 148, 140, 170, 80, 60]);
   // Group tasks: merged ones collapse into a single display row
   const displayTaskRows = useMemo(() => {
-    const mergedIds = new Set(
-      hoardingMerges.map(m => Number(m.hoardingID ?? m.HoardingID ?? 0)).filter(Boolean)
-    );
+    const isMounting = (jobType || '').toLowerCase() === 'mounting';
+    const shouldMerge = isMounting ? Boolean(selectedCustomer) : Boolean(selectedContract && selectedCustomer);
+    if (!shouldMerge) {
+      return tasks.map(task => ({ _type: 'single', ...task }));
+    }
 
-    const mergedGroup = [];
+    const mergeMap = new Map();
+    hoardingMerges.forEach(m => {
+      const hid = Number(m.hoardingID ?? m.HoardingID ?? 0);
+      if (hid) {
+        mergeMap.set(hid, m);
+      }
+    });
+
+    const mergedGroups = {}; // key: siteID_flag -> array of tasks
     const unmergedRows = [];
 
     tasks.forEach(task => {
-      if (mergedIds.has(Number(task.hoardingID))) {
-        mergedGroup.push(task);
+      const hid = Number(task.hoardingID);
+      const mergeInfo = mergeMap.get(hid);
+      if (mergeInfo) {
+        const flag = mergeInfo.mergeAlongFlag ?? mergeInfo.MergeAlongFlag ?? 'H';
+        const lineNum = Number(mergeInfo.hoardingLineNumber ?? mergeInfo.HoardingLineNumber ?? 0);
+        const hoarding = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === hid);
+        const siteID = hoarding ? Number(hoarding.siteID ?? hoarding.SiteID ?? 0) : 0;
+        const key = `${siteID}_${flag}_${lineNum}`;
+        if (!mergedGroups[key]) {
+          mergedGroups[key] = [];
+        }
+        mergedGroups[key].push(task);
       } else {
         unmergedRows.push(task);
       }
@@ -2043,36 +3120,51 @@ export default function JobPage() {
 
     const result = [];
 
-    // One grouped row for all merged hoardings
-    if (mergedGroup.length > 0) {
-      const flag = hoardingMerges.find(
-        m => Number(m.hoardingID ?? m.HoardingID) === Number(mergedGroup[0].hoardingID)
-      )?.mergeAlongFlag ?? 'H';
+    // Process merged groups
+    Object.entries(mergedGroups).forEach(([key, groupTasks]) => {
+      if (groupTasks.length === 0) return;
 
-      const sizes = mergedGroup.map(t => {
-        const h = hoardings.find(hh => hh.hoardingID === t.hoardingID);
-        return { w: Number(h?.width) || 0, h: Number(h?.height) || 0 };
+      const [siteIDStr, flag] = key.split('_');
+      const siteID = Number(siteIDStr);
+
+      const sizes = groupTasks.map(t => {
+        const h = hoardings.find(hh => Number(hh.hoardingID ?? hh.HoardingID) === Number(t.hoardingID));
+        return { w: Number(h?.width ?? h?.Width ?? 0), h: Number(h?.height ?? h?.Height ?? 0) };
       });
-      const gaps = Math.max(mergedGroup.length - 1, 1);
-      const mw = flag === 'H' ? sizes.reduce((s, sz) => s + sz.w, 0) + gaps : Math.max(...sizes.map(s => s.w));
-      const mh = flag === 'H' ? Math.max(...sizes.map(s => s.h)) : sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+
+      const gaps = Math.max(groupTasks.length - 1, 0);
+      const isSquare = flag === 'S';
+      const isHorizontalMerge = flag === 'H';
+      let mw, mh;
+      if (isSquare) {
+        const singleW = sizes[0]?.w || 0;
+        const singleH = sizes[0]?.h || 0;
+        mw = (singleW * 2) + 1;
+        mh = (singleH * 2) + 1;
+      } else if (isHorizontalMerge) {
+        mw = sizes.reduce((s, sz) => s + sz.w, 0) + gaps;
+        mh = Math.max(...sizes.map(s => s.h), 0);
+      } else {
+        mw = Math.max(...sizes.map(s => s.w), 0);
+        mh = sizes.reduce((s, sz) => s + sz.h, 0) + gaps;
+      }
 
       result.push({
         _type: 'merged',
-        _id: '__merged__',
-        tasks: mergedGroup,
+        _id: `__merged__${key}`,
+        tasks: groupTasks,
         mergeFlag: flag,
         mergedWidth: mw,
         mergedHeight: mh,
         mergedSqFt: mw * mh,
         // Use first task's fields for status/date editing (or aggregate)
-        status: mergedGroup[0].status,
-        actualCompletionDate: mergedGroup[0].actualCompletionDate,
-        submitDttm: mergedGroup[0].submitDttm,
-        saved: mergedGroup.every(t => t.saved),
-        jobTaskID: mergedGroup[0].jobTaskID,
+        status: groupTasks[0].status,
+        actualCompletionDate: groupTasks[0].actualCompletionDate,
+        submitDttm: groupTasks[0].submitDttm,
+        saved: groupTasks.every(t => t.saved),
+        jobTaskID: groupTasks[0].jobTaskID,
       });
-    }
+    });
 
     // Individual rows for unmerged
     unmergedRows.forEach(task => result.push({ _type: 'single', ...task }));
@@ -2208,6 +3300,23 @@ export default function JobPage() {
             return;
           }
 
+          const isExternal = Boolean(
+            h.isExternal === true ||
+            String(h.isExternal).toLowerCase() === 'true' ||
+            h.is_External === true ||
+            String(h.is_External).toLowerCase() === 'true' ||
+            h.IsExternal === true ||
+            String(h.IsExternal).toLowerCase() === 'true' ||
+            h.isexternal === true ||
+            String(h.isexternal).toLowerCase() === 'true' ||
+            task?.isExternal === true ||
+            String(task?.isExternal).toLowerCase() === 'true' ||
+            task?.is_External === true ||
+            String(task?.is_External).toLowerCase() === 'true' ||
+            h.outsideSiteID != null ||
+            h.outside_site_id != null
+          );
+
           const payload = {
             effdt: completionDate,        // "YYYY-MM-DD"
             material,
@@ -2217,6 +3326,7 @@ export default function JobPage() {
             width,
             height,
             siteID,
+            isExternal,
           };
 
           console.log('[Complete] addHoardingEffdt →', hoardingCode, payload);
@@ -2272,12 +3382,32 @@ export default function JobPage() {
       .catch(() => setContractBanners([]))
       .finally(() => setBannersLoading(false));
   }, [selectedContract]);
+
+  useEffect(() => {
+    if (!selectedContract) {
+      setContractStartDate(null);
+      return;
+    }
+    apiService.getCustomerContractById(selectedContract.customerContractID)
+      .then(res => {
+        const rawData = res?.data ?? res;
+        const startD = rawData?.startDate ?? rawData?.StartDate ?? null;
+        setContractStartDate(startD ? startD.split('T')[0] : null);
+      })
+      .catch(err => {
+        console.error("Failed to fetch customer contract details:", err);
+        if (selectedContract.startDate) {
+          setContractStartDate(selectedContract.startDate.split('T')[0]);
+        }
+      });
+  }, [selectedContract]);
+
   /* ── Load data ── */
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const [cRaw, conRaw, hRaw, avhRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw] = await Promise.all([
+        const [cRaw, conRaw, hRaw, avhRaw, uRaw, jRaw, jtRaw, attRaw, sRaw, chmRaw, mergeRaw, extRaw, compRaw, osRaw] = await Promise.all([
           apiService.getAllCustomers().catch(() => []),
           apiService.getAllCustomerContracts().catch(() => []),
           apiService.getAllHoardings().catch(() => []), // All Hoardings for info/other
@@ -2289,19 +3419,38 @@ export default function JobPage() {
           apiService.getAllSites().catch(() => []),
           apiService.getAllCustomerContractHoardingMaps().catch(() => []),
           apiService.getAllHoardingMerges().catch(() => []),   // ← ADD
+          apiService.getAllExternalHoardings().catch(() => []), // ← NEW
+          apiService.getAllCompanyDetails().catch(() => []),   // ← Companies
+          apiService.getAllOutsideSites().catch(() => []),     // ← Outside Sites
         ]);
 
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
         setContracts(normalizeList(conRaw).map(normalizeContract));
+        setCompanies(normalizeList(compRaw).map(normalizeCompany));
         // Build site lookup map
-        const siteList = normalizeList(sRaw);
-        const siteMap = new Map(
+        const siteList = normalizeList(sRaw).map(normalizeSite).filter(Boolean);
+        setSites(siteList);
+        const siteMapLocal = new Map(
           siteList.map(s => [
             Number(s.siteID ?? s.SiteID ?? 0),
             normalizeSite(s)
           ])
         );
-        const rawHoardings = normalizeList(hRaw);
+        const outsideSiteList = normalizeList(osRaw).map(normalizeOutsideSite).filter(Boolean);
+        setOutsideSites(outsideSiteList);
+        const outsideSiteMapLocal = new Map(
+          outsideSiteList.map(s => [
+            Number(s.outsideSiteID ?? s.siteID ?? 0),
+            s
+          ])
+        );
+
+        const internalHoardings = normalizeList(hRaw);
+        const externalHoardings = normalizeList(extRaw).map(eh => ({ ...eh, isExternal: true }));
+        const rawHoardings = [
+          ...internalHoardings,
+          ...externalHoardings,
+        ];
 
         // ── 1. Build code → latest hoarding
         const latestByCode = new Map();
@@ -2333,20 +3482,45 @@ export default function JobPage() {
 
         // ── 3. Enrich with site data
         const enrichedHoardings = Array.from(latestByCode.values()).map(h => {
-          const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
-          const foundSite = siteMap.get(siteID) || null;
-          const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
-          return {
-            ...h,
-            site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
-          };
+          const isExt = Boolean(
+            h.isExternal === true ||
+            String(h.isExternal).toLowerCase() === 'true' ||
+            h.is_External === true ||
+            String(h.is_External).toLowerCase() === 'true' ||
+            h.IsExternal === true ||
+            String(h.IsExternal).toLowerCase() === 'true' ||
+            h.isexternal === true ||
+            String(h.isexternal).toLowerCase() === 'true' ||
+            h.outsideSiteID != null ||
+            h.outside_site_id != null
+          );
+          const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.outsideSiteID ?? 0);
+          if (isExt) {
+            const foundSite = outsideSiteMapLocal.get(siteID) || siteMapLocal.get(siteID) || null;
+            return {
+              ...h,
+              isExternal: true,
+              site: foundSite ? normalizeOutsideSite(foundSite) : (h.site ? normalizeOutsideSite(h.site) : null),
+            };
+          } else {
+            const foundSite = siteMapLocal.get(siteID) || null;
+            const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+            return {
+              ...h,
+              isExternal: false,
+              site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+            };
+          }
         });
 
         setHoardings(enrichedHoardings);
         setAnyIdToLatestId(anyIdToLatestId); // ← new state, see below
 
         // Deduplicate and enrich available hoardings:
-        const rawAvailable = normalizeList(avhRaw);
+        const rawAvailable = [
+          ...normalizeList(avhRaw),
+          ...externalHoardings,
+        ];
         const latestAvailableByCode = new Map();
         rawAvailable.forEach(h => {
           const code = h.hoardingCode ?? h.HoardingCode ?? '';
@@ -2356,13 +3530,35 @@ export default function JobPage() {
           if (!existing || thisDate > existDate) latestAvailableByCode.set(code, h);
         });
         const enrichedAvailable = Array.from(latestAvailableByCode.values()).map(h => {
-          const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
-          const foundSite = siteMap.get(siteID) || null;
-          const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
-          return {
-            ...h,
-            site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
-          };
+          const isExt = Boolean(
+            h.isExternal === true ||
+            String(h.isExternal).toLowerCase() === 'true' ||
+            h.is_External === true ||
+            String(h.is_External).toLowerCase() === 'true' ||
+            h.IsExternal === true ||
+            String(h.IsExternal).toLowerCase() === 'true' ||
+            h.isexternal === true ||
+            String(h.isexternal).toLowerCase() === 'true' ||
+            h.outsideSiteID != null ||
+            h.outside_site_id != null
+          );
+          const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.outsideSiteID ?? 0);
+          if (isExt) {
+            const foundSite = outsideSiteMapLocal.get(siteID) || siteMapLocal.get(siteID) || null;
+            return {
+              ...h,
+              isExternal: true,
+              site: foundSite ? normalizeOutsideSite(foundSite) : (h.site ? normalizeOutsideSite(h.site) : null),
+            };
+          } else {
+            const foundSite = siteMapLocal.get(siteID) || null;
+            const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+            return {
+              ...h,
+              isExternal: false,
+              site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+            };
+          }
         });
         setAvailableHoardings(enrichedAvailable);
 
@@ -2395,9 +3591,11 @@ export default function JobPage() {
   }, []);
   const refreshAvailableHoardings = useCallback(async () => {
     try {
-      const [hRaw, sRaw] = await Promise.all([
+      const [hRaw, sRaw, extRaw, osRaw] = await Promise.all([
         apiService.getAllavailableforJob().catch(() => []),
         apiService.getAllSites().catch(() => []),
+        apiService.getAllExternalHoardings().catch(() => []),
+        apiService.getAllOutsideSites().catch(() => []),
       ]);
       const siteList = normalizeList(sRaw);
       const siteMap = new Map(
@@ -2406,7 +3604,17 @@ export default function JobPage() {
           normalizeSite(s)
         ])
       );
-      const rawHoardings = normalizeList(hRaw);
+      const outsideSiteList = normalizeList(osRaw).map(normalizeOutsideSite).filter(Boolean);
+      const outsideSiteMap = new Map(
+        outsideSiteList.map(s => [
+          Number(s.outsideSiteID ?? s.siteID ?? 0),
+          s
+        ])
+      );
+      const rawHoardings = [
+        ...normalizeList(hRaw),
+        ...normalizeList(extRaw).map(eh => ({ ...eh, isExternal: true }))
+      ];
 
       // ── 1. Build code → latest hoarding
       const latestByCode = new Map();
@@ -2420,13 +3628,35 @@ export default function JobPage() {
 
       // ── 3. Enrich with site data
       const enrichedHoardings = Array.from(latestByCode.values()).map(h => {
-        const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? 0);
-        const foundSite = siteMap.get(siteID) || null;
-        const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
-        return {
-          ...h,
-          site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
-        };
+        const isExt = Boolean(
+          h.isExternal === true ||
+          String(h.isExternal).toLowerCase() === 'true' ||
+          h.is_External === true ||
+          String(h.is_External).toLowerCase() === 'true' ||
+          h.IsExternal === true ||
+          String(h.IsExternal).toLowerCase() === 'true' ||
+          h.isexternal === true ||
+          String(h.isexternal).toLowerCase() === 'true' ||
+          h.outsideSiteID != null ||
+          h.outside_site_id != null
+        );
+        const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.outsideSiteID ?? 0);
+        if (isExt) {
+          const foundSite = outsideSiteMap.get(siteID) || siteMap.get(siteID) || null;
+          return {
+            ...h,
+            isExternal: true,
+            site: foundSite ? normalizeOutsideSite(foundSite) : (h.site ? normalizeOutsideSite(h.site) : null),
+          };
+        } else {
+          const foundSite = siteMap.get(siteID) || null;
+          const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+          return {
+            ...h,
+            isExternal: false,
+            site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+          };
+        }
       });
 
       setAvailableHoardings(enrichedHoardings);
@@ -2471,6 +3701,8 @@ export default function JobPage() {
     setStep1Error(''); setStep2Error('');
     setEditingJobID(null);
     setJobStatus('Open');
+    setContractStartDate(null);
+    setValidationAlert(null);
   };
 
   /* ── Start new ── */
@@ -2481,7 +3713,7 @@ export default function JobPage() {
   };
 
   /* ── Edit existing ── */
-  const handleEdit = (job) => {
+  const handleEdit = useCallback((job, targetStep = 1) => {
     const cust = customers.find(c => c.customerID === job.customerID) || null;
     const cont = contracts.find(c => c.customerContractID === job.customerContractID) || null;
     const sup = supervisors.find(u => String(u.userID) === String(job.supervisorID)) || null;
@@ -2506,7 +3738,7 @@ export default function JobPage() {
         jobTaskID: jt.jobTaskID,
         hoardingID: jt.hoardingID,
         hoardingCode: h?.hoardingCode || '',
-        siteAddress: getSiteAddress(h),
+        siteAddress: getSiteAddress(h, siteMap, outsideSiteMap),
         size: h ? `${h.width} X ${h.height}` : '',
         sqFt: h ? (h.width * h.height) : 0,
         actualCompletionDate: jt.actualCompletionDate || '',
@@ -2517,9 +3749,24 @@ export default function JobPage() {
     }));
 
     setStep1Error(''); setStep2Error('');
-    setStep(1); setIsCreating(true);
+    setStep(targetStep); setIsCreating(true);
     setTimeout(() => formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80);
-  };
+  }, [customers, contracts, supervisors, allJobTasks, hoardings, siteMap, outsideSiteMap]);
+
+  /* ── Automatic Navigation from Ledger / external link ── */
+  useEffect(() => {
+    const openJobId = sessionStorage.getItem('open_job_id');
+    const openJobStep = sessionStorage.getItem('open_job_step');
+    if (openJobId && !loading && jobRequests.length > 0) {
+      const targetJob = jobRequests.find(j => String(j.jobRequestID) === String(openJobId));
+      if (targetJob) {
+        const stepNum = openJobStep ? Number(openJobStep) : 2;
+        handleEdit(targetJob, stepNum);
+      }
+      sessionStorage.removeItem('open_job_id');
+      sessionStorage.removeItem('open_job_step');
+    }
+  }, [loading, jobRequests, handleEdit]);
 
   /* ── Step navigation ── */
   const goNext = () => {
@@ -2528,13 +3775,40 @@ export default function JobPage() {
       if (!selectedSupervisor || !selectedSupervisor.userID) { setStep1Error('Please select a supervisor.'); return; }
       if (!targetDate) { setStep1Error('Target completion date is required.'); return; }
       if (!ratePerSQFT || Number(ratePerSQFT) <= 0) { setStep1Error('Rate per SQFT must be greater than 0.'); return; }
+
+      if (selectedContract && contractStartDate) {
+        const res = validateTargetDate(targetDate, contractStartDate);
+        if (!res.isValid) {
+          setValidationAlert({
+            reason: res.reason,
+            contractStartDate: contractStartDate,
+            targetDate: targetDate
+          });
+          setStep1Error(res.message);
+          return;
+        }
+      }
+
       setStep1Error(''); setStep(2);
     }
   };
   const goBack = () => setStep(s => Math.max(1, s - 1));
   const handleBackToList = () => {
+    sessionStorage.removeItem('job_form_draft');
+    setStep(1);
+    resetForm();
     setIsCreating(false);
     setStep1Error(''); setStep2Error('');
+
+    const fromLedger = sessionStorage.getItem('from_payment_ledger');
+    if (fromLedger === 'true') {
+      sessionStorage.removeItem('from_payment_ledger');
+      if (changeTab) {
+        changeTab('JobPaymentLedger');
+        return;
+      }
+    }
+
     setTimeout(() => window.scrollTo({ top: 0, behavior: 'smooth' }), 80);
   };
 
@@ -2543,7 +3817,7 @@ export default function JobPage() {
     const existingHoardingIDs = new Set(tasks.map(t => t.hoardingID));
     const toAdd = hoardings
       .filter(h => selectedIds.has(h.hoardingID) && !existingHoardingIDs.has(h.hoardingID))
-      .map(h => newTaskRow(h));
+      .map(h => newTaskRow(h, siteMap, outsideSiteMap));
     setTasks(p => [...p, ...toAdd]);
     setShowHoardModal(false);
   };
@@ -2564,6 +3838,20 @@ export default function JobPage() {
   /* ── Save ── */
   const handleSave = async () => {
     if (tasks.length === 0) { setStep2Error('Add at least one hoarding task.'); return; }
+
+    if (selectedContract && contractStartDate) {
+      const res = validateTargetDate(targetDate, contractStartDate);
+      if (!res.isValid) {
+        setValidationAlert({
+          reason: res.reason,
+          contractStartDate: contractStartDate,
+          targetDate: targetDate
+        });
+        setStep2Error(res.message);
+        return;
+      }
+    }
+
     setStep2Error('');
     setSaving(true);
     try {
@@ -2621,6 +3909,9 @@ export default function JobPage() {
       setTasks(updatedTasks); // ← update tasks with real server IDs
 
       showToast(editingJobID ? 'Job updated successfully!' : 'Job created successfully!', 'success');
+      // Original code:
+      // await refreshJobs();
+      sessionStorage.removeItem('job_form_draft');
       await refreshJobs();
       // ← removed: setIsCreating(false)  so form stays open for photos
 
@@ -2973,7 +4264,21 @@ export default function JobPage() {
                     <div className="qt-input-wrap">
                       <Calendar size={14} color="#c0c0d8" style={{ flexShrink: 0 }} />
                       <input className="qt-input" type="date" value={targetDate}
-                        onChange={e => { setTargetDate(e.target.value); setStep1Error(''); }} />
+                        onChange={e => {
+                          const val = e.target.value;
+                          setTargetDate(val);
+                          setStep1Error('');
+                          if (val && selectedContract && contractStartDate) {
+                            const res = validateTargetDate(val, contractStartDate);
+                            if (!res.isValid) {
+                              setValidationAlert({
+                                reason: res.reason,
+                                contractStartDate: contractStartDate,
+                                targetDate: val
+                              });
+                            }
+                          }
+                        }} />
                     </div>
                   </div>
 
@@ -3125,7 +4430,7 @@ export default function JobPage() {
                             const anySubmitted = row.tasks.some(t => t.status === 'Submitted');
 
                             return (
-                              <tr key="__merged__" className="pg-tr" style={{
+                              <tr key={row._id} className="pg-tr" style={{
                                 background: allSubmitted ? 'rgba(22,163,74,0.04)' : 'rgba(124,58,237,0.03)',
                                 borderLeft: '3px solid rgba(124,58,237,0.35)',
                               }}>
@@ -3146,7 +4451,7 @@ export default function JobPage() {
                                       color: '#7c3aed',
                                       fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 800,
                                     }}>
-                                      {row.mergeFlag === 'H' ? '↔' : '↕'} {row.mergeFlag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                                      {row.mergeFlag === 'S' ? '⊞' : row.mergeFlag === 'H' ? '↔' : '↕'} {row.mergeFlag === 'S' ? 'Square' : row.mergeFlag === 'H' ? 'Horizontal' : 'Vertical'} Merge
                                     </span>
                                     <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>
                                       {row.tasks.length} hoardings merged
@@ -3520,13 +4825,28 @@ export default function JobPage() {
                                 supervisorAcceptDttm,
                                 actualCompletionDate,
                               },
-                              tasks: tasks.map(t => ({
-                                jobTaskID: t.jobTaskID,
-                                hoardingID: t.hoardingID,
-                                hoardingCode: t.hoardingCode,
-                                siteAddress: t.siteAddress,
-                                status: t.status,
-                              })),
+                              tasks: tasks.map(t => {
+                                const h = hoardings.find(hh => hh.hoardingID === t.hoardingID);
+                                return {
+                                  jobTaskID: t.jobTaskID,
+                                  hoardingID: t.hoardingID,
+                                  hoardingCode: t.hoardingCode,
+                                  siteAddress: t.siteAddress,
+                                  status: t.status,
+                                  isExternal: Boolean(
+                                    t.isExternal === true ||
+                                    String(t.isExternal).toLowerCase() === 'true' ||
+                                    h?.isExternal === true ||
+                                    String(h?.isExternal).toLowerCase() === 'true' ||
+                                    h?.is_External === true ||
+                                    String(h?.is_External).toLowerCase() === 'true' ||
+                                    h?.IsExternal === true ||
+                                    String(h?.IsExternal).toLowerCase() === 'true' ||
+                                    h?.outsideSiteID != null ||
+                                    h?.outside_site_id != null
+                                  ),
+                                };
+                              }),
                             });
                           }}
                           disabled={completing}                    // ← disable while in-flight
@@ -3569,7 +4889,7 @@ export default function JobPage() {
                     {editingJobID && (
                       <button
                         className="pg-btn-cancel"
-                        onClick={() => setIsCreating(false)}
+                        onClick={handleBackToList}
                         style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                       >
                         <LayoutGrid size={13} /> Done
@@ -3663,6 +4983,14 @@ export default function JobPage() {
                     const myTasks = getMyTasks(job.jobRequestID);
                     const submittedCnt = myTasks.filter(t => t.status === 'Submitted').length;
                     const jts = jobTypeBadgeStyle(job.jobType);
+                    const currentStatus =
+                      job.jobStatus === 'Completed'
+                        ? 'Completed'
+                        : myTasks.length > 0
+                          ? (submittedCnt === myTasks.length ? 'Submitted' : (submittedCnt > 0 ? 'In Progress' : (['In Progress', 'Accepted', 'Submitted'].includes(job.jobStatus) ? 'Accepted' : job.jobStatus)))
+                          : (job.jobStatus || 'Open');
+                    const isPdfEligible = currentStatus === 'Completed' || currentStatus === 'Submitted';
+
                     return (
                       <tr key={job.jobRequestID} className="pg-tr">
                         <td className="pg-td">
@@ -3712,15 +5040,7 @@ export default function JobPage() {
                           )}
                         </td>
                         <td className="pg-td">
-                          <JobStatusBadge
-                            status={
-                              job.jobStatus === 'Completed'
-                                ? 'Completed'
-                                : myTasks.length > 0
-                                  ? (submittedCnt === myTasks.length ? 'Submitted' : (submittedCnt > 0 ? 'In Progress' : (['In Progress', 'Accepted', 'Submitted'].includes(job.jobStatus) ? 'Accepted' : job.jobStatus)))
-                                  : (job.jobStatus || 'Open')
-                            }
-                          />
+                          <JobStatusBadge status={currentStatus} />
                         </td>
                         <td className="pg-td">
                           <div className="pg-action-wrap">
@@ -3728,6 +5048,64 @@ export default function JobPage() {
                             <button className="pg-btn-view" onClick={() => setPhotosViewTarget(job)} title="View Photos" style={{ background: 'rgba(4,158,223,0.08)', color: '#049edf' }}>
                               <Camera size={13} />
                             </button>
+
+                            {/* Generate Job PDF - Shown only when Completed or Submitted */}
+                            {isPdfEligible && (
+                              <button
+                                className="pg-btn-view"
+                                onClick={async () => {
+                                  const jobTasks = getMyTasks(job.jobRequestID).map(jt => {
+                                    const h = hoardings.find(hh => hh.hoardingID === jt.hoardingID);
+                                    return {
+                                      jobTaskID: jt.jobTaskID,
+                                      hoardingID: jt.hoardingID,
+                                      hoardingCode: h?.hoardingCode || '',
+                                      siteAddress: getHoardingAddressLine1(h, jt),
+                                      size: h ? `${h.width} X ${h.height}` : '',
+                                      sqFt: h ? (h.width * h.height) : 0,
+                                      status: jt.status,
+                                    };
+                                  });
+                                  const contract = contracts.find(c => Number(c.customerContractID) === Number(job.customerContractID));
+                                  const companyID = contract?.companyID ? Number(contract.companyID) : 0;
+                                  let compRecord = companies.find(c => Number(c.companyID) === companyID);
+
+                                  if (!compRecord && companyID) {
+                                    try {
+                                      const res = await apiService.getCompanyDetailsById(companyID);
+                                      const raw = res?.data ?? res;
+                                      if (raw) compRecord = normalizeCompany(raw);
+                                    } catch (e) {
+                                      console.warn('Failed to fetch company details by ID:', companyID, e);
+                                    }
+                                  }
+
+                                  if (!compRecord && companies.length > 0) {
+                                    compRecord = companies[0];
+                                  }
+
+                                  const companyInfo = getCompanyInfo(compRecord);
+
+                                  const html = buildJobPDFHTML({
+                                    company: companyInfo,
+                                    job,
+                                    customerName: custName(job.customerID),
+                                    supervisorName: supName(job.supervisorID),
+                                    tasks: jobTasks,
+                                    attachments: allAttachments,
+                                    hoardings,
+                                    hoardingMerges,
+                                  });
+                                  const win = window.open('', '_blank');
+                                  if (win) { win.document.write(html); win.document.close(); }
+                                  else alert('Popup blocked. Please allow popups for this site and try again.');
+                                }}
+                                title="Generate Job PDF"
+                                style={{ background: 'rgba(108,99,255,0.08)', color: '#6c63ff' }}
+                              >
+                                <FileText size={13} />
+                              </button>
+                            )}
 
                             {/* Edit */}
                             <button className="pg-btn-view" onClick={() => handleEdit(job)} title="Edit">
@@ -3747,6 +5125,16 @@ export default function JobPage() {
                                       hoardingCode: h?.hoardingCode || '',
                                       siteAddress: getSiteAddress(h),
                                       status: jt.status,
+                                      isExternal: Boolean(
+                                        h?.isExternal === true ||
+                                        String(h?.isExternal).toLowerCase() === 'true' ||
+                                        h?.is_External === true ||
+                                        String(h?.is_External).toLowerCase() === 'true' ||
+                                        h?.IsExternal === true ||
+                                        String(h?.IsExternal).toLowerCase() === 'true' ||
+                                        h?.outsideSiteID != null ||
+                                        h?.outside_site_id != null
+                                      ),
                                     };
                                   });
                                   setCompleteTarget({ job, tasks: jobTasks });
@@ -3827,13 +5215,21 @@ export default function JobPage() {
       {/* ── Hoarding selector modal ── */}
       {showHoardModal && (
         <HoardingSelectModal
-          hoardings={availableHoardings}
+          hoardings={hoardings}
+          siteMap={siteMap}
+          outsideSiteMap={outsideSiteMap}
           filteredHoardingIds={filteredHoardingIds}
           existingIds={existingTaskHoardingIds}
           onAdd={handleAddHoardings}
           onClose={() => setShowHoardModal(false)}
           anyIdToLatestId={anyIdToLatestId}
           hoardingMerges={hoardingMerges}
+          jobType={jobType}
+          allowMerge={
+            (jobType || '').toLowerCase() === 'mounting'
+              ? Boolean(selectedCustomer)
+              : Boolean(selectedCustomer && selectedContract)
+          }
         />
       )}
       {/* ── Task Photo Modal ── */}
@@ -3887,6 +5283,7 @@ export default function JobPage() {
           tasks={getMyTasks(photosViewTarget.jobRequestID)}
           hoardings={hoardings}
           attachments={allAttachments}
+          hoardingMerges={hoardingMerges} // ✅ MODIFIED: Pass hoardingMerges to view combined photos/dropdowns
           onClose={() => setPhotosViewTarget(null)}
         />
       )}
@@ -3951,7 +5348,7 @@ export default function JobPage() {
                 width: 60,
                 height: 60,
                 borderRadius: '50%',
-                background: 'rgba(255,255,255,0.2)',
+                background: 'rgba(255, 255, 255, 0.2)',
                 border: '2px solid rgba(255,255,255,0.3)',
                 display: 'flex',
                 alignItems: 'center',
@@ -4025,6 +5422,15 @@ export default function JobPage() {
             </div>
           </div>
         </div>
+      )}
+      {validationAlert && (
+        <ValidationAlertModal
+          isOpen={!!validationAlert}
+          onClose={() => setValidationAlert(null)}
+          contractStartDate={validationAlert.contractStartDate}
+          targetDate={validationAlert.targetDate}
+          reason={validationAlert.reason}
+        />
       )}
     </>
   );

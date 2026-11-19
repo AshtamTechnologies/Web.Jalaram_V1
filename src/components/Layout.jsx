@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   LogOut, Menu, X, ChevronDown, ChevronRight,
-  IndianRupee, Users, MapPin, Layers, UserCircle, Hash, FileX,
-  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard, UserRoundPlus
+  IndianRupee, Users, MapPin, Globe, Layers, UserCircle, Hash, FileX,
+  FileText, BarChart3, PlusSquare, Banknote, bibriefcase, Briefcase, CreditCard, UserRoundPlus, Lightbulb, BookOpen, Wrench
 } from 'lucide-react';
 // import Chatbot from './Chatbot';
 import Notification from './Notification';
@@ -20,6 +20,7 @@ const MENU = [
     children: [
       { id: 'Jobs', icon: Briefcase, label: 'Jobs', badge: null },
       { id: 'JobPayment', icon: CreditCard, label: 'Job Payment', badge: null },
+      { id: 'JobPaymentLedger', icon: BookOpen, label: 'Payment Ledger', badge: null },
     ]
   },
   {
@@ -37,6 +38,7 @@ const MENU = [
   },
   { id: 'owners', icon: UserCircle, label: 'LandLord', badge: null },
   { id: 'sites', icon: MapPin, label: 'Sites', badge: null },
+  { id: 'external-sites', icon: Globe, label: 'External Sites', badge: null },
   { id: 'Registration', icon: UserRoundPlus, label: 'Registration', badge: null },
 
   {
@@ -46,7 +48,9 @@ const MENU = [
     badge: null,
     children: [
       { id: 'new-hoarding', icon: PlusSquare, label: 'Maintain Hoarding' },
+      { id: 'external-hoarding', icon: PlusSquare, label: 'External Hoardings' },
       { id: 'hoarding-expense', icon: IndianRupee, label: 'Hoarding Expense' },
+      { id: 'hoarding-maintenance', icon: Wrench, label: 'Hoarding Maintenance' },
       // { id: 'hoarding-merge', icon: Layers, label: 'Hoarding Merge' },
     ],
   },
@@ -60,6 +64,8 @@ const MENU = [
     children: [
       { id: 'land-contracts', icon: FileText, label: 'Land Contracts' },
       { id: 'land-payment', icon: Banknote, label: 'Land Payment' },
+      { id: 'vendors', icon: Users, label: 'Vendor' },
+      { id: 'opportunity', icon: Lightbulb, label: 'Opportunity' },
     ],
   },
   //  { id: 'Jobs', icon: Briefcase, label: 'Jobs', badge: null },
@@ -72,8 +78,8 @@ const MENU = [
       { id: 'terms', icon: FileText, label: 'Terms' },
       { id: 'FinancialYear', icon: FileText, label: 'Financial Year' },
       { id: 'SeriesSetup', icon: Hash, label: 'Series Setup' },
-
-
+      { id: 'ExpenseType', icon: FileText, label: 'Hoarding Expense Type' },
+      { id: 'CompanyDetails', icon: FileText, label: 'Company Details' },
     ],
   },
 ];
@@ -356,7 +362,7 @@ export default function Layout({ tab, changeTab, onLogout, children }) {
 
           <div className="topbar-right">
             {/* Notification Bell Dropdown & Toasts */}
-            {/* <Notification handleTabChange={handleTabChange} />*/}
+            <Notification handleTabChange={handleTabChange} />
 
             <div ref={dropRef} style={{ position: 'relative' }}>
               <button className="profile-btn" onClick={() => setDropOpen(v => !v)}>

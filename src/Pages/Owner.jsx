@@ -5,7 +5,7 @@ import {
   Building2, MapPin, Search, Users, RefreshCw,
   X, AlertCircle, Check, Edit2, Eye, ChevronDown,
   ChevronUp, ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight,
-  Filter, Mail, Loader2
+  Filter, Mail, Loader2, History, Calendar, FileText
 } from 'lucide-react';
 import './Common1.css';
 import { apiService } from '../api/api';
@@ -585,16 +585,16 @@ function buildOwner(id, raw) {
 ───────────────────────────────────────── */
 function toPayload(form) {
   return {
-    ownerName: form.ownerName.trim(),
-    alternateContactName: form.alternateContactName.trim(),
-    ownerAddress: form.ownerAddress.trim(),
-    phone1: form.phone1.trim(),
-    phone2: form.phone2.trim(),
-    city: form.city.trim(),
-    district: form.district.trim(),
-    state: form.state.trim(),
-    country: form.country.trim(),
-    emailAddress: form.emailAddress.trim(),
+    ownerName: String(form.ownerName || '').trim(),
+    alternateContactName: String(form.alternateContactName || '').trim(),
+    ownerAddress: String(form.ownerAddress || '').trim(),
+    phone1: String(form.phone1 || '').trim(),
+    phone2: String(form.phone2 || '').trim(),
+    city: String(form.city || '').trim(),
+    district: String(form.district || '').trim(),
+    state: String(form.state || '').trim(),
+    country: String(form.country || 'India').trim(),
+    emailAddress: String(form.emailAddress || '').trim(),
   };
 }
 
@@ -679,14 +679,58 @@ function ViewModal({ owner, onClose, onEdit }) {
 /* ═══════════════════════════════════════════
    ADD / EDIT MODAL
 ═══════════════════════════════════════════ */
-function OwnerModal({ onClose, onSaved, editData }) {
-  const isEdit = !!editData;
-  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+function OwnerModal({ onClose, onSaved, editData, fromOpportunityId, changeTab }) {
+  const isEdit = !!editData && editData._id !== undefined && editData._id !== null;
+  const activeOpportunityId = fromOpportunityId || sessionStorage.getItem('unsaved_convert_opportunity_id') || null;
+
+  const [form, setForm] = useState(() => {
+    if (editData && editData._id !== undefined && editData._id !== null) {
+      return { ...EMPTY_FORM, ...editData };
+    }
+    const saved = sessionStorage.getItem('unsaved_owner_form');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    if (editData) return { ...EMPTY_FORM, ...editData };
+    return { ...EMPTY_FORM };
+  });
+
+  const [comments, setComments] = useState(() => {
+    return sessionStorage.getItem('unsaved_owner_comments') || '';
+  });
+
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [success, setSuccess] = useState(false);
   const [apiError, setApiError] = useState('');
+  const isSubmittingRef = useRef(false);
+
+  useEffect(() => {
+    if (!isEdit && !submitting && !success && !isSubmittingRef.current) {
+      sessionStorage.setItem('unsaved_owner_form', JSON.stringify(form));
+      if (activeOpportunityId) {
+        sessionStorage.setItem('unsaved_convert_opportunity_id', String(activeOpportunityId));
+        sessionStorage.setItem('unsaved_owner_comments', comments);
+      }
+    }
+  }, [form, isEdit, activeOpportunityId, comments, submitting, success]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_owner_form');
+    sessionStorage.removeItem('unsaved_convert_opportunity_id');
+    sessionStorage.removeItem('unsaved_owner_comments');
+    const returnTab = sessionStorage.getItem('redirect_after_owner_save');
+    if (returnTab) {
+      sessionStorage.removeItem('redirect_after_owner_save');
+      onClose();
+      if (typeof changeTab === 'function') {
+        changeTab(returnTab);
+      }
+      return;
+    }
+    onClose();
+  };
 
   const runValidate = (f) => {
     const e = {};
@@ -725,6 +769,8 @@ function OwnerModal({ onClose, onSaved, editData }) {
   };
 
   const handleSubmit = async () => {
+    if (isSubmittingRef.current || submitting || success) return;
+
     const allTouched = {};
     FIELDS.forEach(f => { allTouched[f.key] = true; });
     setTouched(allTouched);
@@ -740,6 +786,7 @@ function OwnerModal({ onClose, onSaved, editData }) {
       return;
     }
 
+    isSubmittingRef.current = true;
     setSubmitting(true);
     setApiError('');
 
@@ -757,12 +804,49 @@ function OwnerModal({ onClose, onSaved, editData }) {
         const response = await apiService.createOwner(payload);
         const raw = response?.data ?? response;
         saved = normalizeOwner(raw);
+        const newOwnerID = saved._id || saved.ownerID || (typeof raw === 'object' && (raw.ownerID ?? raw.ownerId ?? raw.id));
+
+        if (activeOpportunityId && newOwnerID) {
+          try {
+            await apiService.convertToLandlord(activeOpportunityId, {
+              OpportunityId: Number(activeOpportunityId),
+              OwnerId: Number(newOwnerID),
+              Comments: String(comments || '').trim() || null,
+            });
+          } catch (convErr) {
+            console.error('Conversion link error:', convErr);
+            const convMsg = convErr?.response?.data?.message || convErr?.message || 'Conversion linking failed';
+            setApiError(`Owner #${newOwnerID} (${form.ownerName}) was created successfully, but linking to Opportunity #${activeOpportunityId} failed: ${convMsg}. Please link them manually.`);
+            setSubmitting(false);
+            isSubmittingRef.current = false;
+            return;
+          }
+        }
       }
 
       setSuccess(true);
-      await new Promise(r => setTimeout(r, 700));
+      sessionStorage.removeItem('unsaved_owner_form');
+      sessionStorage.removeItem('unsaved_convert_opportunity_id');
+      sessionStorage.removeItem('unsaved_owner_comments');
+
+      await new Promise(r => setTimeout(r, 600));
       onSaved(saved, isEdit);
       onClose();
+
+      const returnTab = sessionStorage.getItem('redirect_after_owner_save');
+      if (returnTab) {
+        sessionStorage.removeItem('redirect_after_owner_save');
+        const createdId = saved?._id || saved?.ownerID || null;
+        if (createdId) {
+          sessionStorage.setItem('newly_created_owner_id', String(createdId));
+        }
+        if (typeof changeTab === 'function') {
+          changeTab(returnTab);
+        }
+      } else if (activeOpportunityId && typeof changeTab === 'function') {
+        sessionStorage.setItem('opportunity_convert_success', `Opportunity #${activeOpportunityId} was successfully converted to Landlord "${form.ownerName}"!`);
+        changeTab('opportunity');
+      }
 
     } catch (err) {
       console.error('Save owner error:', err);
@@ -775,11 +859,11 @@ function OwnerModal({ onClose, onSaved, editData }) {
       setApiError(typeof msg === 'string' ? msg : JSON.stringify(msg));
     } finally {
       setSubmitting(false);
+      isSubmittingRef.current = false;
     }
   };
 
   return ReactDOM.createPortal(
-    // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
     <div className="pg-overlay">
       <div className="pg-modal">
 
@@ -788,11 +872,11 @@ function OwnerModal({ onClose, onSaved, editData }) {
           <div className="pg-modal__head-left">
             <div className="pg-modal__icon-wrap"><UserCircle size={20} color="#049edf" /></div>
             <div>
-              <h5 className="pg-modal__title">{isEdit ? 'Edit Owner' : 'Add New Owner'}</h5>
-              <p className="pg-modal__subtitle">{isEdit ? `Editing: ${editData.ownerName}` : 'Fill in the details below'}</p>
+              <h5 className="pg-modal__title">{isEdit ? 'Edit Owner' : activeOpportunityId ? 'Convert Opportunity to Landlord' : 'Add New Owner'}</h5>
+              <p className="pg-modal__subtitle">{isEdit ? `Editing: ${editData.ownerName}` : activeOpportunityId ? `Converting Opportunity #${activeOpportunityId}` : 'Fill in the details below'}</p>
             </div>
           </div>
-          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
         </div>
 
         {/* API error banner */}
@@ -867,6 +951,35 @@ function OwnerModal({ onClose, onSaved, editData }) {
                 </div>
               );
             })}
+
+            {/* Conversion Comments field - only when converting from opportunity */}
+            {activeOpportunityId && (
+              <div className="col-12">
+                <label className="pg-field-label">
+                  Conversion Comments <span className="pg-field-label__optional">(optional)</span>
+                </label>
+                <div className="pg-field-wrap pg-field-wrap--normal">
+                  <FileText size={14} color="#049edf" style={{ flexShrink: 0, marginTop: 8 }} />
+                  <textarea
+                    className="pg-field-input"
+                    placeholder="Add comments or notes for landlord conversion..."
+                    value={comments}
+                    onChange={e => setComments(e.target.value)}
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      outline: 'none',
+                      resize: 'vertical',
+                      minHeight: '70px',
+                      paddingTop: '8px',
+                      paddingBottom: '8px',
+                      fontFamily: 'inherit',
+                      fontSize: '13px'
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
           <p className="pg-form__note">
             <span className="pg-field-label__required">*</span> Required fields &nbsp;·&nbsp; Fields marked optional may be left blank
@@ -875,24 +988,24 @@ function OwnerModal({ onClose, onSaved, editData }) {
 
         {/* Footer */}
         <div className="pg-modal__foot">
-          <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
-          <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
+          <button className="pg-btn-cancel" onClick={handleCancel} disabled={submitting || success}>Cancel</button>
+          <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting || success}>
             {success
               ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Added!'}</>
               : submitting
                 ? <><RefreshCw size={13} className="pg-spin" /> Saving…</>
-                : <><Plus size={14} /> {isEdit ? 'Save Changes' : 'Add Owner'}</>}
+                : <><Plus size={14} /> {isEdit ? 'Save Changes' : activeOpportunityId ? 'Create & Convert Landlord' : 'Add Owner'}</>}
           </button>
         </div>
 
       </div>
     </div>,
-    document.body   // ← escapes sidebar stacking context
+    document.body
   );
 }
 
 /* ─── Mobile Card ─── */
-function OwnerCard({ o, onEdit, onView }) {
+function OwnerCard({ o, onEdit, onView, onPaymentHistory }) {
   return (
     <div className="pg-card">
       <div className="pg-card__header">
@@ -905,6 +1018,20 @@ function OwnerCard({ o, onEdit, onView }) {
         <div className="pg-card__actions">
           <button className="pg-card__btn-edit" onClick={() => onEdit(o)} title="Edit"><Edit2 size={13} /></button>
           <button className="pg-card__btn-view" onClick={() => onView(o)} title="View"><Eye size={13} /></button>
+          {/* ── START: Payment History Button (mobile) ── */}
+          <button
+            title="Payment History"
+            onClick={() => onPaymentHistory(o)}
+            style={{
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              gap: 4, padding: '4px 9px', borderRadius: 7, border: '1.5px solid #a78bfa',
+              background: '#f5f0ff', color: '#7c3aed', fontSize: 11, fontWeight: 700,
+              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'Nunito, sans-serif',
+            }}
+          >
+            <History size={12} /> History
+          </button>
+          {/* ── END: Payment History Button (mobile) ── */}
         </div>
       </div>
       <div className="pg-card__body">
@@ -953,17 +1080,334 @@ function OwnerCard({ o, onEdit, onView }) {
   );
 }
 
+// ── START: Land Payment History Modal ──
+
+/* ContractCombo: custom dropdown matching the system pg-combo-* design */
+function ContractCombo({ contracts, value, onChange, fmtDate }) {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  useEffect(() => {
+    function handler(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const selected = contracts.find(c => Number(c.landContractID ?? c.LandContractID) === value);
+
+  const displayLabel = (c) => {
+    if (!c) return '';
+    const cid = Number(c.landContractID ?? c.LandContractID);
+    const start = c.startDate ? fmtDate(c.startDate) : '—';
+    const end = c.endDate ? fmtDate(c.endDate) : '—';
+    return `Contract #${cid}  ·  ${start} → ${end}`;
+  };
+
+  const statusBadge = (c) => {
+    const s = c?.status ?? '';
+    if (!s) return null;
+    const color = s.toLowerCase() === 'active' ? '#10b981' : '#9090a8';
+    const bg = s.toLowerCase() === 'active' ? '#edfbf4' : '#f0f0f8';
+    return (
+      <span style={{
+        fontSize: 10.5, fontWeight: 800, fontFamily: 'Nunito, sans-serif',
+        color, background: bg, borderRadius: 20, padding: '2px 8px',
+        border: `1px solid ${color}22`, flexShrink: 0, letterSpacing: '0.02em',
+      }}>{s}</span>
+    );
+  };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef} style={{ width: '100%' }}>
+      <div
+        className="pg-field-wrap pg-combo-trigger pg-field-wrap--normal"
+        onClick={() => setOpen(o => !o)}
+        tabIndex={0}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(o => !o); }
+          if (e.key === 'Escape') setOpen(false);
+        }}
+      >
+        <FileText size={14} color="#c0c0d8" style={{ flexShrink: 0 }} />
+        <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`}>
+          {selected ? displayLabel(selected) : 'Select a contract…'}
+        </span>
+        {selected && statusBadge(selected)}
+        <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
+      </div>
+
+      {open && (
+        <div className="pg-combo-panel">
+          <div className="pg-combo-list">
+            {contracts.map(c => {
+              const cid = Number(c.landContractID ?? c.LandContractID);
+              const isActive = cid === value;
+              return (
+                <div
+                  key={cid}
+                  className={`pg-combo-option${isActive ? ' pg-combo-option--active' : ''}`}
+                  tabIndex={0}
+                  onClick={() => { onChange(cid); setOpen(false); }}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(cid); setOpen(false); } }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div className="pg-combo-option__name">Contract #{cid}</div>
+                    <div style={{ fontSize: 11.5, fontFamily: 'Nunito, sans-serif', fontWeight: 600, color: '#9090a8', marginTop: 2 }}>
+                      {c.startDate ? fmtDate(c.startDate) : '—'} → {c.endDate ? fmtDate(c.endDate) : '—'}
+                    </div>
+                  </div>
+                  {statusBadge(c)}
+                  {isActive && <Check size={13} color="#049edf" style={{ flexShrink: 0 }} />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LandPaymentHistoryModal({ owner, onClose }) {
+  const [contracts, setContracts] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [activeContractId, setActiveContractId] = useState(null);
+
+  useEffect(() => {
+    if (!owner) return;
+    setLoading(true);
+    setError('');
+    Promise.all([
+      apiService.getAllLandContracts(),
+      apiService.getAllLandPayments(),
+    ])
+      .then(([contractsRes, paymentsRes]) => {
+        const allContracts = Array.isArray(contractsRes) ? contractsRes
+          : Array.isArray(contractsRes?.data) ? contractsRes.data : [];
+        const allPayments = Array.isArray(paymentsRes) ? paymentsRes
+          : Array.isArray(paymentsRes?.data) ? paymentsRes.data : [];
+
+        const ownerContracts = allContracts.filter(
+          c => Number(c.ownerID ?? c.OwnerID) === Number(owner._id)
+        );
+        const contractIds = new Set(ownerContracts.map(c => Number(c.landContractID ?? c.LandContractID)));
+        const ownerPayments = allPayments.filter(
+          p => contractIds.has(Number(p.landContractID ?? p.LandContractID))
+            || Number(p.ownerID ?? p.OwnerID) === Number(owner._id)
+        );
+
+        setContracts(ownerContracts);
+        setPayments(ownerPayments);
+        if (ownerContracts.length > 0) {
+          setActiveContractId(Number(ownerContracts[0].landContractID ?? ownerContracts[0].LandContractID));
+        }
+      })
+      .catch(err => {
+        setError(err?.message || 'Failed to load payment history.');
+      })
+      .finally(() => setLoading(false));
+  }, [owner]);
+
+  const fmt = (val) => {
+    if (!val) return '—';
+    const n = Number(val);
+    if (isNaN(n)) return val;
+    return '₹ ' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  const fmtDate = (d) => {
+    if (!d) return '—';
+    // Suppress API sentinel dates like "0001-01-01"
+    if (typeof d === 'string' && d.startsWith('0001')) return '—';
+    const dt = new Date(d);
+    if (isNaN(dt.getTime()) || dt.getFullYear() <= 1) return '—';
+    return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  };
+
+  const activeContract = contracts.find(
+    c => Number(c.landContractID ?? c.LandContractID) === activeContractId
+  );
+  const contractPayments = payments.filter(
+    p => Number(p.landContractID ?? p.LandContractID) === activeContractId
+  );
+
+  const totalPaid = contractPayments.reduce((s, p) => s + Number(p.amountPaid ?? p.AmountPaid ?? 0), 0);
+
+  const NUN = { fontFamily: 'Nunito, sans-serif' };
+
+  return ReactDOM.createPortal(
+    // <div className="pg-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+    <div className="pg-overlay">
+      <div className="pg-modal" style={{ maxWidth: 760, width: '96vw', maxHeight: '92vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+        {/* Header */}
+        <div className="pg-modal__head" style={{ flexShrink: 0 }}>
+          <div className="pg-modal__head-left">
+            <div className="pg-modal__icon-wrap"><History size={20} color="#049edf" /></div>
+            <div>
+              <h5 className="pg-modal__title">Land Payment History</h5>
+              <p className="pg-modal__subtitle">{owner.ownerName}</p>
+            </div>
+          </div>
+          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 20px' }}>
+          {loading && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '30px 0', justifyContent: 'center' }}>
+              <Loader2 size={22} color="#049edf" className="pg-spin" />
+              <span style={{ ...NUN, color: '#9090a8', fontSize: 13, fontWeight: 600 }}>Loading payment history…</span>
+            </div>
+          )}
+
+          {!loading && error && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '20px 0', color: '#dc2626' }}>
+              <AlertCircle size={16} /><span style={{ ...NUN, fontSize: 13, fontWeight: 600 }}>{error}</span>
+            </div>
+          )}
+
+          {!loading && !error && contracts.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#9090a8' }}>
+              <FileText size={36} color="#d0d0e8" style={{ marginBottom: 10 }} />
+              <p style={{ ...NUN, fontSize: 13, fontWeight: 600, color: '#9090a8', margin: 0 }}>No land contracts found for this owner.</p>
+            </div>
+          )}
+
+          {!loading && !error && contracts.length > 0 && (
+            <>
+              {/* Contract Combo Dropdown */}
+              <div style={{ marginTop: 16, marginBottom: 16 }}>
+                <label className="pg-field-label" style={{ marginBottom: 6 }}>Select Contract</label>
+                <ContractCombo
+                  contracts={contracts}
+                  value={activeContractId}
+                  onChange={setActiveContractId}
+                  fmtDate={fmtDate}
+                />
+              </div>
+
+              {/* Contract Details */}
+              {activeContract && (
+                <div style={{
+                  background: '#f4f8ff', border: '1px solid #d8e6fb', borderRadius: 12,
+                  padding: '14px 18px', marginBottom: 18, display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: '10px 18px'
+                }}>
+                  {[
+                    { label: 'Start Date', value: fmtDate(activeContract.startDate) },
+                    { label: 'End Date', value: fmtDate(activeContract.endDate) },
+                    { label: 'Total Contract Value', value: fmt(activeContract.totalContractValue) },
+                    { label: 'Amount Per Freq', value: fmt(activeContract.amountPerFreq) },
+                    { label: 'Advance Paid', value: fmt(activeContract.advancePaid) },
+                    { label: 'Comments', value: activeContract.comments || '—' },
+                  ].map(({ label, value }) => (
+                    <div key={label}>
+                      <div style={{ ...NUN, fontSize: 10.5, color: '#8090b0', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 2 }}>{label}</div>
+                      <div style={{ ...NUN, fontSize: 13, color: '#2a3a5a', fontWeight: 700 }}>{value}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Summary Bar */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#edfbf4', border: '1px solid #b6eccd', borderRadius: 9, padding: '7px 14px' }}>
+                  <span style={{ ...NUN, fontSize: 14, fontWeight: 900, color: '#10b981', lineHeight: 1 }}>₹</span>
+                  <span style={{ ...NUN, fontSize: 12.5, fontWeight: 800, color: '#065f46' }}>Total Paid: {fmt(totalPaid)}</span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#f0f4ff', border: '1px solid #c7d7fb', borderRadius: 9, padding: '7px 14px' }}>
+                  <Calendar size={14} color="#4f6ef7" />
+                  <span style={{ ...NUN, fontSize: 12.5, fontWeight: 800, color: '#1e3a8a' }}>{contractPayments.length} Payment{contractPayments.length !== 1 ? 's' : ''}</span>
+                </div>
+              </div>
+
+              {/* Payments Table */}
+              {contractPayments.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '28px 0' }}>
+                  <Calendar size={30} color="#d0d0e8" style={{ marginBottom: 8 }} />
+                  <p style={{ ...NUN, fontSize: 13, fontWeight: 600, color: '#9090a8', margin: 0 }}>No payments recorded for this contract.</p>
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, ...NUN }}>
+                    <thead>
+                      <tr style={{ background: '#f1f5fb' }}>
+                        {['#', 'Payment Date', 'Amount Paid', 'Purpose', 'Mode', 'Next Due', 'Paid By', 'Ref #'].map(h => (
+                          <th key={h} style={{
+                            ...NUN, padding: '9px 12px', textAlign: 'left', fontWeight: 800,
+                            fontSize: 11.5, color: '#5a6a8a', whiteSpace: 'nowrap',
+                            borderBottom: '1.5px solid #d8e0f0'
+                          }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {contractPayments.map((p, idx) => (
+                        <tr key={p.landPaymentID ?? idx} style={{ borderBottom: '1px solid #eef0f8', background: idx % 2 === 0 ? '#fff' : '#fafbff' }}>
+                          <td style={{ ...NUN, padding: '9px 12px', color: '#8090b0', fontWeight: 700 }}>{idx + 1}</td>
+                          <td style={{ ...NUN, padding: '9px 12px', whiteSpace: 'nowrap', color: '#2a3a5a', fontWeight: 600 }}>{fmtDate(p.paymentDate ?? p.PaymentDate)}</td>
+                          <td style={{ ...NUN, padding: '9px 12px', whiteSpace: 'nowrap', fontWeight: 800, color: '#059669' }}>{fmt(p.amountPaid ?? p.AmountPaid)}</td>
+                          <td style={{ ...NUN, padding: '9px 12px', color: '#4a5568', fontWeight: 600 }}>{p.paymentPurpose ?? p.PaymentPurpose ?? '—'}</td>
+                          <td style={{ ...NUN, padding: '9px 12px', color: '#4a5568', fontWeight: 600 }}>{p.paymentMode ?? p.PaymentMode ?? '—'}</td>
+                          <td style={{ ...NUN, padding: '9px 12px', whiteSpace: 'nowrap', color: '#9090a8', fontWeight: 600 }}>{fmtDate(p.nextDueDate ?? p.NextDueDate)}</td>
+                          <td style={{ ...NUN, padding: '9px 12px', color: '#4a5568', fontWeight: 600 }}>{p.paidBy ?? p.PaidBy ?? '—'}</td>
+                          <td style={{ ...NUN, padding: '9px 12px', color: '#8090b0', fontSize: 12, fontWeight: 600 }}>{p.referenceNumber ?? p.ReferenceNumber ?? '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="pg-modal__foot" style={{ flexShrink: 0 }}>
+          <button className="pg-btn-cancel" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+// ── END: Land Payment History Modal ──
+
 /* ═══════════════════════════════════════════
    OWNER PAGE
 ═══════════════════════════════════════════ */
-export default function OwnerPage() {
+export default function OwnerPage({ changeTab }) {
   const [owners, setOwners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
 
-  const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(() => {
+    return (
+      sessionStorage.getItem('unsaved_owner_form') !== null ||
+      sessionStorage.getItem('pending_convert_opportunity') !== null ||
+      sessionStorage.getItem('open_owner_modal') === 'true'
+    );
+  });
   const [editOwner, setEditOwner] = useState(null);
+  const [convertOpportunityId, setConvertOpportunityId] = useState(() => {
+    return sessionStorage.getItem('unsaved_convert_opportunity_id') || null;
+  });
   const [viewOwner, setViewOwner] = useState(null);
+  const [paymentHistoryOwner, setPaymentHistoryOwner] = useState(null);
+
+  const closeModal = () => {
+    setShowModal(false);
+    setEditOwner(null);
+    setConvertOpportunityId(null);
+    sessionStorage.removeItem('unsaved_owner_form');
+    sessionStorage.removeItem('unsaved_convert_opportunity_id');
+    sessionStorage.removeItem('unsaved_owner_comments');
+    sessionStorage.removeItem('open_owner_modal');
+  };
 
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('ownerName');
@@ -973,6 +1417,39 @@ export default function OwnerPage() {
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
+  // ── Handle open_owner_modal trigger ──
+  useEffect(() => {
+    if (sessionStorage.getItem('open_owner_modal') === 'true') {
+      sessionStorage.removeItem('open_owner_modal');
+      setEditOwner(null);
+      setConvertOpportunityId(null);
+      setShowModal(true);
+    }
+  }, []);
+
+  // ── Pre-fill conversion data effect ──
+  useEffect(() => {
+    const pendingData = sessionStorage.getItem('pending_convert_opportunity');
+    if (pendingData) {
+      try {
+        const parsed = JSON.parse(pendingData);
+        if (parsed) {
+          setEditOwner(parsed);
+          const oppId = parsed.fromOpportunityId || null;
+          setConvertOpportunityId(oppId);
+          if (oppId) {
+            sessionStorage.setItem('unsaved_convert_opportunity_id', String(oppId));
+          }
+          sessionStorage.setItem('unsaved_owner_form', JSON.stringify(parsed));
+          setShowModal(true);
+        }
+      } catch (err) {
+        console.error('Failed to parse pending convert opportunity:', err);
+      } finally {
+        sessionStorage.removeItem('pending_convert_opportunity');
+      }
+    }
+  }, []);
   useResizableColumns(tableRef, tableReady, [150, 150, 120, 110, 90, 90, 90, 120, 80]);
 
   /* ── Fetch all owners ── */
@@ -1043,7 +1520,6 @@ export default function OwnerPage() {
     setEditOwner({ ...o });   // spread so modal gets a fresh copy
     setShowModal(true);
   };
-  const closeModal = () => { setShowModal(false); setEditOwner(null); };
   const handleView = (o) => setViewOwner(o);
   const closeView = () => setViewOwner(null);
 
@@ -1232,6 +1708,22 @@ export default function OwnerPage() {
                         {/* <button className="pg-btn-view" onClick={() => handleView(o)} title="View">
                           <Eye size={13} />
                         </button> */}
+                        {/* ── START: Payment History Button ── */}
+                        <button
+                          title="Payment History"
+                          onClick={() => setPaymentHistoryOwner(o)}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            gap: 4, padding: '4px 9px', borderRadius: 7, border: '1.5px solid #a78bfa',
+                            background: '#f5f0ff', color: '#7c3aed', fontSize: 11.5, fontWeight: 700,
+                            cursor: 'pointer', whiteSpace: 'nowrap', transition: 'all 0.17s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#7c3aed'; e.currentTarget.style.color = '#fff'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = '#f5f0ff'; e.currentTarget.style.color = '#7c3aed'; }}
+                        >
+                          <History size={12} /> History
+                        </button>
+                        {/* ── END: Payment History Button ── */}
                       </div>
                     </td>
 
@@ -1249,7 +1741,7 @@ export default function OwnerPage() {
                 <span className="pg-empty__label">No owners found</span>
               </div>
             ) : paginated.map(o => (
-              <OwnerCard key={o._id} o={o} onEdit={handleEdit} onView={handleView} />
+              <OwnerCard key={o._id} o={o} onEdit={handleEdit} onView={handleView} onPaymentHistory={setPaymentHistoryOwner} />
             ))}
           </div>
 
@@ -1298,14 +1790,27 @@ export default function OwnerPage() {
 
       {showModal && (
         <OwnerModal
-          onClose={closeModal}
+          onClose={() => {
+            closeModal();
+            setConvertOpportunityId(null);
+          }}
           onSaved={handleSaved}
           editData={editOwner}
+          fromOpportunityId={convertOpportunityId}
+          changeTab={changeTab}
         />
       )}
       {viewOwner && (
         <ViewModal owner={viewOwner} onClose={closeView} onEdit={handleEdit} />
       )}
+      {/* ── START: Render Payment History Modal ── */}
+      {paymentHistoryOwner && (
+        <LandPaymentHistoryModal
+          owner={paymentHistoryOwner}
+          onClose={() => setPaymentHistoryOwner(null)}
+        />
+      )}
+      {/* ── END: Render Payment History Modal ── */}
     </>
   );
 }

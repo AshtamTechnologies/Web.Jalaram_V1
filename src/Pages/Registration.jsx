@@ -430,42 +430,36 @@ function StatusDropdown({ value, onChange, onBlur, hasError }) {
           : <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />}
       </div>
 
-      {open && ReactDOM.createPortal(
-        <div ref={panelRef} style={(() => {
-          const r = triggerRef.current?.getBoundingClientRect();
-          if (!r) return {};
-          return { position: 'fixed', top: r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 };
-        })()}>
-          <div className="pg-combo-panel pg-combo-panel--sm" style={{ position: 'static' }}>
-            <div className="pg-combo-list" ref={listRef}>
-              {STATUS_OPTIONS.map(opt => {
-                const sc = STATUS_COLORS[opt];
-                return (
-                  <div
-                    key={opt}
-                    className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
-                    onClick={() => select(opt)}
-                    tabIndex={0}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
-                      else nav(e);
-                    }}
-                  >
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                      <span style={{ width: 8, height: 8, borderRadius: '50%', background: sc?.color, flexShrink: 0 }} />
-                      <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: sc?.color }}>
-                        {opt}
-                      </span>
+      {/* Portal dropdown panel */}
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel pg-combo-panel--sm" style={{ position: 'static' }}>
+          <div className="pg-combo-list" ref={listRef}>
+            {STATUS_OPTIONS.map(opt => {
+              const sc = STATUS_COLORS[opt];
+              return (
+                <div
+                  key={opt}
+                  className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
+                  onClick={() => select(opt)}
+                  tabIndex={0}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+                    else nav(e);
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ width: 8, height: 8, borderRadius: '50%', background: sc?.color, flexShrink: 0 }} />
+                    <span style={{ fontFamily: 'Nunito, sans-serif', fontSize: 13, fontWeight: 700, color: sc?.color }}>
+                      {opt}
                     </span>
-                    {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
-                  </div>
-                );
-              })}
-            </div>
+                  </span>
+                  {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                </div>
+              );
+            })}
           </div>
-        </div>,
-        document.body
-      )}
+        </div>
+      </PortalDropdown>
     </div>
   );
 }
@@ -528,41 +522,34 @@ function RoleDropdown({ value, onChange, onBlur, hasError }) {
       </div>
 
       {/* Portal dropdown panel */}
-      {open && ReactDOM.createPortal(
-        <div ref={panelRef} style={(() => {
-          const r = triggerRef.current?.getBoundingClientRect();
-          if (!r) return {};
-          return { position: 'fixed', top: r.bottom + 4, left: r.left, width: r.width, zIndex: 99999 };
-        })()}>
-          <div className="pg-combo-panel pg-combo-panel--sm" style={{ position: 'static' }}>
-            <div className="pg-combo-list" ref={listRef}>
-              {ROLE_OPTIONS.map(opt => (
-                <div
-                  key={opt}
-                  className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
-                  onClick={() => select(opt)}
-                  tabIndex={0}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
-                    else nav(e);
-                  }}
-                >
-                  <span style={{
-                    fontFamily: 'Nunito, sans-serif',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    color: ROLE_COLORS[opt]?.color || '#4a5568',
-                  }}>
-                    {opt}
-                  </span>
-                  {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
-                </div>
-              ))}
-            </div>
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel pg-combo-panel--sm" style={{ position: 'static' }}>
+          <div className="pg-combo-list" ref={listRef}>
+            {ROLE_OPTIONS.map(opt => (
+              <div
+                key={opt}
+                className={`pg-combo-option${opt === value ? ' pg-combo-option--active' : ''}`}
+                onClick={() => select(opt)}
+                tabIndex={0}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(opt); }
+                  else nav(e);
+                }}
+              >
+                <span style={{
+                  fontFamily: 'Nunito, sans-serif',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: ROLE_COLORS[opt]?.color || '#4a5568',
+                }}>
+                  {opt}
+                </span>
+                {opt === value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+              </div>
+            ))}
           </div>
-        </div>,
-        document.body
-      )}
+        </div>
+      </PortalDropdown>
     </div>
   );
 }
@@ -574,7 +561,28 @@ function RoleDropdown({ value, onChange, onBlur, hasError }) {
 function UserModal({ onClose, onSaved, editData }) {
   const isEdit = !!editData;
 
-  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  // ── START: Restore unsaved form data support ──
+  // const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  const [form, setForm] = useState(() => {
+    if (isEdit) return { ...editData };
+    const saved = sessionStorage.getItem('unsaved_registration_form');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { ...EMPTY_FORM };
+  });
+
+  useEffect(() => {
+    if (!isEdit) {
+      sessionStorage.setItem('unsaved_registration_form', JSON.stringify(form));
+    }
+  }, [form, isEdit]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_registration_form');
+    onClose();
+  };
+  // ── END: Restore unsaved form data support ──
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -620,6 +628,9 @@ function UserModal({ onClose, onSaved, editData }) {
       }
       setSuccess(true);
       await new Promise(r => setTimeout(r, 600));
+      // ── START: Clear unsaved form on submit success ──
+      sessionStorage.removeItem('unsaved_registration_form');
+      // ── END: Clear unsaved form on submit success ──
       onSaved();
       onClose();
     } catch (err) {
@@ -655,7 +666,7 @@ function UserModal({ onClose, onSaved, editData }) {
               </p>
             </div>
           </div>
-          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
         </div>
 
         <div className="pg-modal__body">
@@ -988,7 +999,12 @@ export default function RegistrationPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
 
-  const [showModal, setShowModal] = useState(false);
+  // ── START: Restore showModal if unsaved registration form exists ──
+  // const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(() => {
+    return sessionStorage.getItem('unsaved_registration_form') !== null;
+  });
+  // ── END: Restore showModal if unsaved registration form exists ──
   const [editUser, setEditUser] = useState(null);   // null = Add, object = Edit
   const [viewUser, setViewUser] = useState(null);
   const [resetPasswordUser, setResetPasswordUser] = useState(null);
@@ -998,6 +1014,7 @@ export default function RegistrationPage() {
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
+  const [statusFilter, setStatusFilter] = useState(''); // ✅ MODIFIED: State for status filter
 
   /* ── Resizable columns ── */
   const tableRef = useRef(null);
@@ -1038,6 +1055,9 @@ export default function RegistrationPage() {
 
   /* ── Filter / sort / paginate ── */
   const filtered = users.filter(u => {
+    // ✅ MODIFIED: Apply status filter
+    if (statusFilter && u.status !== statusFilter) return false;
+
     const q = search.toLowerCase();
     return (
       fullName(u).toLowerCase().includes(q) ||
@@ -1137,6 +1157,17 @@ export default function RegistrationPage() {
                 />
                 {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
               </div>
+              
+              {/* ✅ MODIFIED: Dropdown for status filter */}
+              <select
+                className="hd-filter-select"
+                value={statusFilter}
+                onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+              >
+                <option value="">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
               <button className="pg-pg-btn" onClick={fetchData} title="Refresh list" style={{ marginLeft: 'auto' }}>
                 <RefreshCw size={13} />
               </button>

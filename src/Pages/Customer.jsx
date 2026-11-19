@@ -360,21 +360,39 @@ function CustomerViewModal({ customer, onClose, onEdit }) {
 function CustomerForm({ mode, customer, onBack, onSave }) {
   const isAdd = mode === 'add';
 
-  const [form, setForm] = useState(() =>
-    isAdd ? { ...EMPTY_FORM } : {
-      customerName:   customer?.customerName   ?? '',
-      addressLine1:   customer?.addressLine1   ?? '',
-      addressLine2:   customer?.addressLine2   ?? '',
-      addressLine3:   customer?.addressLine3   ?? '',
-      city:           customer?.city           ?? '',
-      district:       customer?.district       ?? '',
-      country:        'India',   // hardcoded
-      phone1:         customer?.phone1         ?? '',
-      phone2:         customer?.phone2         ?? '',
-      authorizedName: customer?.authorizedName ?? '',
-      gstNumber:      customer?.gstNumber      ?? '',
+  const [form, setForm] = useState(() => {
+    if (!isAdd) {
+      return {
+        customerName:   customer?.customerName   ?? '',
+        addressLine1:   customer?.addressLine1   ?? '',
+        addressLine2:   customer?.addressLine2   ?? '',
+        addressLine3:   customer?.addressLine3   ?? '',
+        city:           customer?.city           ?? '',
+        district:       customer?.district       ?? '',
+        country:        'India',   // hardcoded
+        phone1:         customer?.phone1         ?? '',
+        phone2:         customer?.phone2         ?? '',
+        authorizedName: customer?.authorizedName ?? '',
+        gstNumber:      customer?.gstNumber      ?? '',
+      };
     }
-  );
+    const saved = sessionStorage.getItem('unsaved_customer_form');
+    if (saved) {
+      try { return JSON.parse(saved); } catch (e) {}
+    }
+    return { ...EMPTY_FORM };
+  });
+
+  useEffect(() => {
+    if (isAdd) {
+      sessionStorage.setItem('unsaved_customer_form', JSON.stringify(form));
+    }
+  }, [form, isAdd]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_customer_form');
+    onBack();
+  };
 
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
@@ -402,6 +420,9 @@ function CustomerForm({ mode, customer, onBack, onSave }) {
       }
       setSaveOk(true);
       await new Promise(r => setTimeout(r, 700));
+      // ── START: Clear unsaved form on submit success ──
+      sessionStorage.removeItem('unsaved_customer_form');
+      // ── END: Clear unsaved form on submit success ──
       onSave(saved, isAdd);
       onBack();
     } catch (err) {
@@ -415,7 +436,7 @@ function CustomerForm({ mode, customer, onBack, onSave }) {
       {/* Top bar */}
       <div className="hd-topbar">
         <div className="hd-topbar-left">
-          <button className="hd-back-btn" onClick={onBack}>
+          <button className="hd-back-btn" onClick={handleCancel}>
             <ArrowLeft size={14} />
             <span className="d-none d-sm-inline">Back to Customers</span>
             <span className="d-inline d-sm-none">Back</span>
@@ -634,8 +655,16 @@ export default function CustomerPage() {
   const [loading,     setLoading]     = useState(true);
   const [loadError,   setLoadError]   = useState('');
 
-  const [view,        setView]        = useState('grid');   // 'grid' | 'form'
-  const [formMode,    setFormMode]    = useState(null);     // 'add' | 'edit'
+  // ── START: Restore view and formMode if unsaved customer form exists ──
+  // const [view,        setView]        = useState('grid');
+  // const [formMode,    setFormMode]    = useState(null);
+  const [view,        setView]        = useState(() => {
+    return sessionStorage.getItem('unsaved_customer_form') !== null ? 'form' : 'grid';
+  });
+  const [formMode,    setFormMode]    = useState(() => {
+    return sessionStorage.getItem('unsaved_customer_form') !== null ? 'add' : null;
+  });
+  // ── END: Restore view and formMode if unsaved customer form exists ──
   const [editTarget,  setEditTarget]  = useState(null);
   const [viewTarget,  setViewTarget]  = useState(null);
   const [deleteTarget,setDeleteTarget]= useState(null);
