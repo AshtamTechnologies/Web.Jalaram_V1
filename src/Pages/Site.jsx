@@ -431,11 +431,54 @@ function InactiveWarningModal({ onConfirm, onCancel, saving }) {
 /* ═══════════════════════════════════════════
    ADD / EDIT MODAL
 ═══════════════════════════════════════════ */
-function SiteModal({ onClose, onSaved, editData, owners }) {
+function SiteModal({ onClose, onSaved, editData, owners, changeTab }) {
   const isEdit = !!editData;
   const originalStatus = isEdit ? (editData?.status || '') : '';
 
-  const [form, setForm] = useState(isEdit ? { ...editData } : { ...EMPTY_FORM });
+  // ── START: Restore unsaved form data support ──
+  const [form, setForm] = useState(() => {
+    if (isEdit) return { ...editData };
+    const saved = sessionStorage.getItem('unsaved_site_form');
+    const newOwnerId = sessionStorage.getItem('newly_created_owner_id');
+    if (newOwnerId) {
+      sessionStorage.removeItem('newly_created_owner_id');
+    }
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (newOwnerId) {
+          parsed.ownerID = Number(newOwnerId);
+        }
+        return parsed;
+      } catch (e) {}
+    }
+    if (newOwnerId) {
+      return { ...EMPTY_FORM, ownerID: Number(newOwnerId) };
+    }
+    return { ...EMPTY_FORM };
+  });
+
+  useEffect(() => {
+    if (!isEdit) {
+      sessionStorage.setItem('unsaved_site_form', JSON.stringify(form));
+    }
+  }, [form, isEdit]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_site_form');
+    sessionStorage.removeItem('newly_created_owner_id');
+    onClose();
+  };
+
+  const handleAddNewOwner = () => {
+    sessionStorage.setItem('unsaved_site_form', JSON.stringify(form));
+    sessionStorage.setItem('redirect_after_owner_save', 'sites');
+    sessionStorage.setItem('open_owner_modal', 'true');
+    if (typeof changeTab === 'function') {
+      changeTab('owners');
+    }
+  };
+  // ── END: Restore unsaved form data support ──
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -532,6 +575,9 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
 
       setSuccess(true);
       await new Promise(r => setTimeout(r, 600));
+      // ── START: Clear unsaved form on submit success ──
+      sessionStorage.removeItem('unsaved_site_form');
+      // ── END: Clear unsaved form on submit success ──
       onSaved();
       onClose();
     } catch (err) {
@@ -561,7 +607,7 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
                 <p className="pg-modal__subtitle">{isEdit ? `Editing: ${editData.addressLine1}` : 'Fill in the site details below'}</p>
               </div>
             </div>
-            <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+            <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
           </div>
 
           {apiError && (
@@ -658,10 +704,36 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
               </div>
 
               <div className="col-12">
-                <label className="pg-field-label">
-                  Owner <span className="pg-field-label__required">*</span>
-                  <span className="pg-field-label__hint"> — search by name or ID</span>
-                </label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <label className="pg-field-label" style={{ marginBottom: 0 }}>
+                    Owner <span className="pg-field-label__required">*</span>
+                    <span className="pg-field-label__hint"> — search by name or ID</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleAddNewOwner}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      background: 'none',
+                      border: 'none',
+                      color: '#049edf',
+                      fontFamily: 'Nunito,sans-serif',
+                      fontSize: 12.5,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      padding: '2px 6px',
+                      borderRadius: 6,
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.textDecoration = 'underline'}
+                    onMouseLeave={e => e.currentTarget.style.textDecoration = 'none'}
+                  >
+                    <Plus size={13} color="#049edf" />
+                    <span>Add New Owner</span>
+                  </button>
+                </div>
                 <OwnerCombo
                   value={form.ownerID}
                   onChange={v => handleChange('ownerID', v)}
@@ -686,7 +758,7 @@ function SiteModal({ onClose, onSaved, editData, owners }) {
           </div>
 
           <div className="pg-modal__foot">
-            <button className="pg-btn-cancel" onClick={onClose} disabled={submitting}>Cancel</button>
+            <button className="pg-btn-cancel" onClick={handleCancel} disabled={submitting}>Cancel</button>
             <button className="pg-btn-save" onClick={handleSubmit} disabled={submitting}>
               {success
                 ? <><Check size={14} /> {isEdit ? 'Saved!' : 'Added!'}</>
@@ -733,18 +805,24 @@ function SiteCard({ s, onEdit, owners }) {
 /* ═══════════════════════════════════════════
    SITE PAGE
 ═══════════════════════════════════════════ */
-export default function SitePage() {
+export default function SitePage({ changeTab }) {
   const [sites, setSites] = useState([]);
   const [owners, setOwners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
-  const [showModal, setShowModal] = useState(false);
+  // ── START: Restore showModal if unsaved site form exists ──
+  // const [showModal, setShowModal] = useState(false);
+  const [showModal, setShowModal] = useState(() => {
+    return sessionStorage.getItem('unsaved_site_form') !== null;
+  });
+  // ── END: Restore showModal if unsaved site form exists ──
   const [editSite, setEditSite] = useState(null);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState('addressLine1');
   const [sortDir, setSortDir] = useState('asc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
+  const [statusFilter, setStatusFilter] = useState(''); // ✅ MODIFIED: State for status filter
   const tableRef = useRef(null);
   const [tableReady, setTableReady] = useState(false);
   useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
@@ -767,6 +845,9 @@ export default function SitePage() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   const filtered = sites.filter(s => {
+    // ✅ MODIFIED: Apply status filter
+    if (statusFilter && s.status !== statusFilter) return false;
+
     const q = search.toLowerCase();
     const owner = owners.find(o => o._id === s.ownerID || o._id === Number(s.ownerID));
     return (
@@ -842,6 +923,17 @@ export default function SitePage() {
                 <input placeholder="Search by address, city, district, owner, type, status…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
                 {search && <X size={12} className="pg-search-clear" onClick={() => setSearch('')} />}
               </div>
+              
+              {/* ✅ MODIFIED: Dropdown for status filter */}
+              <select
+                className="hd-filter-select"
+                value={statusFilter}
+                onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+              >
+                <option value="">All Statuses</option>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
               <button className="pg-pg-btn" onClick={fetchData} title="Refresh" style={{ marginLeft: 'auto' }}><RefreshCw size={13} /></button>
             </div>
           </div>
@@ -915,6 +1007,7 @@ export default function SitePage() {
           onSaved={handleSaved}
           editData={editSite}
           owners={owners}
+          changeTab={changeTab}
         />
       )}
     </>

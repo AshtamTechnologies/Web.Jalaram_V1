@@ -4,7 +4,9 @@ import Layout from './components/Layout';
 import Dashboard from './Pages/Dashboard';
 import OwnerPage from './Pages/Owner';
 import SitePage from './Pages/Site.jsx';
+import ExternalSitePage from './Pages/ExternalSite.jsx';
 import Hoarding from './Pages/Hoarding.jsx';
+import ExternalHoarding from './Pages/ExternalHoarding.jsx';
 import Hoardingexpense from './Pages/Hoardingexpense.jsx';
 import LandContract from './Pages/LandContract.jsx';
 import LandPayment from './Pages/LandPayment.jsx';
@@ -20,10 +22,16 @@ import WorkersPage from './Pages/Workers.jsx';
 import Supervisorjobs from './Pages/SupervisorJobs.jsx';
 import WorkerTask from './Pages/WorkerTask.jsx';
 import JobPaymentPage from './Pages/JobPaymentPage.jsx';
+import JobPaymentLedger from './Pages/JobPaymentLedger.jsx';
 import FinancialYear from './Pages/FinancialYear.jsx'
 import SeriesSetup from './Pages/SeriesSetup.jsx';
 import DissloveContract from './Pages/DissloveContract.jsx'
 import RegistrationPage from './Pages/Registration.jsx';
+import ExpenseType from './Pages/ExpenseType.jsx';
+import VendorPage from './Pages/Vendor.jsx';
+import CompanyDetailsPage from './Pages/CompanyDetails.jsx';
+import OpportunityPage from './Pages/Opportunity.jsx';
+import HoardingMaintenancePage from './Pages/HoardingMaintenance/HoardingMaintenancePage.jsx';
 
 import { CalendarCheck, Users, CreditCard } from 'lucide-react';
 import './App.css';
@@ -82,42 +90,54 @@ export default function App() {
     setUserRole('');   // ← this line is what's new
   };
 
+  const [tabResetIndex, setTabResetIndex] = useState(0);
+
   /* ── Tab/route handler (passed down to Layout + pages) ── */
   const changeTab = (id) => {
     setTab(id);
     sessionStorage.setItem('dashTab', id);
+    setTabResetIndex(prev => prev + 1);
   };
 
   /* ── Page renderer ── */
   const renderPage = () => {
     switch (tab) {
       case 'dashboard': return <Dashboard changeTab={changeTab} />;
-      case 'new-hoarding': return <Hoarding />;
+      case 'new-hoarding': return <Hoarding changeTab={changeTab} />;
+      case 'external-hoarding': return <ExternalHoarding />;
       case 'hoarding-expense': return <Hoardingexpense />;
+      case 'hoarding-maintenance': return <HoardingMaintenancePage changeTab={changeTab} />;
       case 'hoarding-merge': return <HoardingMerge />;
       case 'land-contracts': return <LandContract />;
       case 'land-payment': return <LandPayment />;
       case 'bookings': return <Placeholder title="Bookings" Icon={CalendarCheck} />;
       case 'clients': return <Placeholder title="Clients" Icon={Users} />;
-      case 'owners': return <OwnerPage />;
+      case 'owners': return <OwnerPage changeTab={changeTab} />;
       case 'payments': return <Placeholder title="Payments" Icon={CreditCard} />;
       case 'customer-details': return <CustomerPage />;
       case 'customer-contract': return <CustomerContract />;
-      case 'sites': return <SitePage />;
+      case 'sites': return <SitePage changeTab={changeTab} />;
+      case 'external-sites': return <ExternalSitePage changeTab={changeTab} />;
       case 'reports': return <Reports />;
-      case 'quotation': return <Quotation onNavigateToContracts={() => changeTab('customer-contract')} />;
+      case 'quotation': return <Quotation onNavigateToContracts={() => changeTab('customer-contract')} changeTab={changeTab} />;
       case 'terms': return <Terms />;
       case 'FinancialYear': return <FinancialYear />;
-      case 'Jobs': return <Jobs />;
+      case 'Jobs': return <Jobs changeTab={changeTab} />;
       case 'workers': return <WorkersPage />;
       case 'jobs': return <Supervisorjobs />;
       case 'WorkersPage': return <Supervisorjobs />;
-      case 'JobPayment': return <JobPaymentPage />;
+      case 'JobPayment': return <JobPaymentPage changeTab={changeTab} />;
+      case 'JobPaymentLedger': return <JobPaymentLedger changeTab={changeTab} />;
       case 'SeriesSetup': return <SeriesSetup />;
       case 'DissloveContract': return <DissloveContract />;
       case 'Registration': return <RegistrationPage />;
-
-
+      case 'ExpenseType': return <ExpenseType />;
+      case 'vendors': return <VendorPage changeTab={changeTab} />;
+      case 'CompanyDetails': return <CompanyDetailsPage />;
+      // ── START: Pass changeTab to OpportunityPage ──
+      // case 'opportunity': return <OpportunityPage />;
+      case 'opportunity': return <OpportunityPage changeTab={changeTab} />;
+      // ── END: Pass changeTab to OpportunityPage ──
 
       default: return <Dashboard changeTab={changeTab} />;
     }
@@ -155,9 +175,9 @@ export default function App() {
 
   return (
     <Layout tab={tab} changeTab={changeTab} onLogout={handleLogout}>
-      {/* key={tab} forces a full remount on every navigation so each page
+      {/* key={`${tab}-${tabResetIndex}`} forces a full remount on every navigation so each page
           always starts from its default state (e.g. grid view, not form) */}
-      <div key={tab}>
+      <div key={`${tab}-${tabResetIndex}`}>
         {renderPage()}
       </div>
     </Layout>

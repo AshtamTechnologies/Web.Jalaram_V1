@@ -452,7 +452,7 @@ export default function Login({ onLogin, onNavigate }) {
           {errors.password && <p className="lp-field-err" style={{ marginBottom: '8px' }}>{errors.password}</p>}
 
           {/* Options row */}
-          <div className="lp-opts">
+          <div className="lp-opts" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '10px' }}>
             <label className="lp-check">
               <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)} />
               <span className="lp-checkmark">
@@ -464,6 +464,7 @@ export default function Login({ onLogin, onNavigate }) {
               </span>
               Remember me?
             </label>
+            {/*
             <button
               type="button"
               className="lp-forgot"
@@ -473,6 +474,10 @@ export default function Login({ onLogin, onNavigate }) {
             >
               {forgotLoading ? 'Sending…' : 'Forgot password?'}
             </button>
+            */}
+            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: '13px', color: '#9090a8' }}>
+              For password changes, please contact your administrator.
+            </span>
           </div>
 
           {forgotError && (

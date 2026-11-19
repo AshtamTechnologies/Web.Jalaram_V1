@@ -875,26 +875,78 @@ function ExpenseRowsTable({ rows, rowErrors, onChangeRow, onDeleteRow, deletingR
 function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, expenseTypeOptions = [] }) {
   const isAdd = mode === 'add';
 
-  const [hoardingID, setHoardingID] = useState(isAdd ? '' : (expense?.hoardingID || ''));
+  const [hoardingID, setHoardingID] = useState(() => {
+    if (!isAdd) return expense?.hoardingID || '';
+    const saved = sessionStorage.getItem('unsaved_hoarding_expense_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.hoardingID) return parsed.hoardingID;
+      } catch (e) {}
+    }
+    return '';
+  });
   const [hoardingError, setHoardingError] = useState('');
 
   const [rows, setRows] = useState(() => {
-    if (isAdd || !expense) return [];
-    const siblings = (allExpenses || []).filter(e => e.hoardingID === expense.hoardingID);
-    const source = siblings.length > 0 ? siblings : [expense];
-    return source.map(e => ({
-      ...EMPTY_ROW, _rowId: makeRowId(), _expenseID: e.expenseID,
-      expenseDate: toDateInputValue(e.expenseDate),
-      expenseType: e.expenseType || '', expenseDTL: e.expenseDTL || '',
-      amount: e.amount ?? '', paidBy: e.paidBy || '', comments: e.comments || '',
-    }));
+    if (!isAdd) {
+      if (!expense) return [];
+      const siblings = (allExpenses || []).filter(e => e.hoardingID === expense.hoardingID);
+      const source = siblings.length > 0 ? siblings : [expense];
+      return source.map(e => ({
+        ...EMPTY_ROW, _rowId: makeRowId(), _expenseID: e.expenseID,
+        expenseDate: toDateInputValue(e.expenseDate),
+        expenseType: e.expenseType || '', expenseDTL: e.expenseDTL || '',
+        amount: e.amount ?? '', paidBy: e.paidBy || '', comments: e.comments || '',
+      }));
+    }
+    const saved = sessionStorage.getItem('unsaved_hoarding_expense_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.rows) return parsed.rows;
+      } catch (e) {}
+    }
+    return [];
   });
 
   const [rowErrors, setRowErrors] = useState({});
   const emptyCurrentRow = () => ({ ...EMPTY_ROW, _rowId: makeRowId() });
-  const [currentRow, setCurrentRow] = useState(emptyCurrentRow);
+  const [currentRow, setCurrentRow] = useState(() => {
+    const saved = sessionStorage.getItem('unsaved_hoarding_expense_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.currentRow) return parsed.currentRow;
+      } catch (e) {}
+    }
+    return emptyCurrentRow();
+  });
   const [currentErrors, setCurrentErrors] = useState({});
-  const [showEntryForm, setShowEntryForm] = useState(isAdd);
+  const [showEntryForm, setShowEntryForm] = useState(() => {
+    if (!isAdd) return false;
+    const saved = sessionStorage.getItem('unsaved_hoarding_expense_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.showEntryForm !== undefined) return parsed.showEntryForm;
+      } catch (e) {}
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    if (isAdd) {
+      sessionStorage.setItem('unsaved_hoarding_expense_form', JSON.stringify({
+        hoardingID, rows, currentRow, showEntryForm
+      }));
+    }
+  }, [hoardingID, rows, currentRow, showEntryForm, isAdd]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_hoarding_expense_form');
+    onBack();
+  };
 
   const [saving, setSaving] = useState(false);
   const [saveOk, setSaveOk] = useState(false);
@@ -1051,9 +1103,15 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, exp
       if (attachErrors.length) {
         setApiErr(`Expenses saved, but ${attachErrors.length} attachment(s) failed: ${attachErrors[0]}`);
         setSaveOk(true);
+        // ── START: Clear unsaved draft on save success ──
+        sessionStorage.removeItem('unsaved_hoarding_expense_form');
+        // ── END: Clear unsaved draft on save success ──
         setTimeout(() => onBack(), 2500);
       } else {
         setSaveOk(true);
+        // ── START: Clear unsaved draft on save success ──
+        sessionStorage.removeItem('unsaved_hoarding_expense_form');
+        // ── END: Clear unsaved draft on save success ──
         setTimeout(() => onBack(), 700);
       }
     } catch (err) {
@@ -1073,7 +1131,7 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, exp
 
       <div className="hd-topbar">
         <div className="hd-topbar-left">
-          <button className="hd-back-btn" onClick={onBack} disabled={saving}>
+          <button className="hd-back-btn" onClick={handleCancel} disabled={saving}>
             <ArrowLeft size={14} />
             <span className="d-none d-sm-inline">Back to Expenses</span>
             <span className="d-inline d-sm-none">Back</span>
@@ -1195,7 +1253,7 @@ function ExpenseForm({ mode, expense, hoardings, sites, allExpenses, onBack, exp
       </div>
 
       <div className="hd-form-footer hd-form-footer--sticky">
-        <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
+        <button className="pg-btn-cancel" onClick={handleCancel} disabled={saving}>Cancel</button>
         <button className="pg-btn-save" onClick={handleSave}
           disabled={saving || !!deletingRowId || uploadingRowIds.size > 0}>
           {saveOk
@@ -1229,8 +1287,16 @@ export default function HoardingExpensePage() {
   useEffect(() => { if (!isLoading) setTableReady(true); }, [isLoading]);
   useResizableColumns(tableRef, tableReady, [300, 200, 80]);
 
-  const [view, setView] = useState('grid');
-  const [formMode, setFormMode] = useState(null);
+  // ── START: Restore view and formMode if unsaved hoarding expense form exists ──
+  // const [view, setView] = useState('grid');
+  // const [formMode, setFormMode] = useState(null);
+  const [view, setView] = useState(() => {
+    return sessionStorage.getItem('unsaved_hoarding_expense_form') !== null ? 'form' : 'grid';
+  });
+  const [formMode, setFormMode] = useState(() => {
+    return sessionStorage.getItem('unsaved_hoarding_expense_form') !== null ? 'add' : null;
+  });
+  // ── END: Restore view and formMode if unsaved hoarding expense form exists ──
   const [editTarget, setEditTarget] = useState(null);
 
   const [search, setSearch] = useState('');

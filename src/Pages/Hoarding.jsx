@@ -7,9 +7,12 @@ import {
   ZoomIn, ArrowLeft, Hash, Clock, Info, ShieldCheck,
   ChevronUp, ChevronDown, ChevronsLeft, ChevronsRight,
   ChevronLeft, ChevronRight, MapPin, Layers,
-  CheckCircle, Wrench, Eye, Replace, Loader2, AlertTriangle
+  CheckCircle, Wrench, Eye, Replace, Loader2, AlertTriangle,
+  User
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
+import MaintenanceStatusBadge from '../components/hoardingMaintenance/StatusBadge';
+import MaintenancePriorityBadge from '../components/hoardingMaintenance/PriorityBadge';
 import './Common1.css';
 
 /* ─────────────────────────────────────────
@@ -548,6 +551,243 @@ function VersionForm({ form, errors, onChange, isNewEffdt, sites, hoardingTypes 
 }
 
 /* ─────────────────────────────────────────
+   PHOTO HELPER
+───────────────────────────────────────── */
+export function isPhotoDefault(p) {
+  if (!p) return false;
+  return p.isDefault === true || p.isDefault === 'true' ||
+         p.is_Default === true || p.is_Default === 'true' ||
+         p.IsDefault === true || p.IsDefault === 'true';
+}
+
+/* ─────────────────────────────────────────
+   PHOTO ADD MODAL (with isDefault checkbox)
+───────────────────────────────────────── */
+function PhotoAddModal({ files, existingPhotos = [], onConfirm, onClose }) {
+  const hasExistingDefault = existingPhotos.some(p => isPhotoDefault(p));
+  const existingDefaultPhoto = existingPhotos.find(p => isPhotoDefault(p));
+  const [isDefault, setIsDefault] = useState(false);
+
+  const previews = useRef(files.map(f => ({
+    name: f.name,
+    url: URL.createObjectURL(f),
+  }))).current;
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100000,
+        background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 20, width: '100%', maxWidth: 450,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '22px 22px 18px',
+          animation: 'modalIn 0.24s cubic-bezier(0.22,1,0.36,1) both',
+          fontFamily: 'Nunito, sans-serif',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: 'rgba(4,158,223,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Upload size={18} color="#049edf" />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: '#1a1a2e' }}>
+                Add Photo{files.length > 1 ? `s (${files.length})` : ''}
+              </h3>
+              <p style={{ margin: 0, fontSize: 11.5, fontWeight: 600, color: '#7878a0' }}>
+                Configure photos before staging
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9090a8', padding: 4 }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Previews */}
+        <div style={{
+          display: 'flex', gap: 10, overflowX: 'auto', padding: '6px 2px 10px', marginBottom: 14,
+        }}>
+          {previews.map((p, i) => (
+            <div key={i} style={{
+              position: 'relative', width: 88, height: 80, borderRadius: 8, overflow: 'hidden',
+              border: '1.5px solid #ececf8', flexShrink: 0
+            }}>
+              <img src={p.url} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div style={{
+                position: 'absolute', bottom: 0, insetInline: 0, background: 'rgba(0,0,0,0.65)',
+                color: '#fff', fontSize: 9, fontWeight: 700, padding: '2px 4px',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+              }}>{p.name}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* isDefault Checkbox */}
+        <div style={{
+          background: hasExistingDefault ? '#fffbeb' : '#f8fafd',
+          border: `1.5px solid ${hasExistingDefault ? '#fde68a' : '#e0e7ff'}`,
+          borderRadius: 12, padding: '12px 14px', marginBottom: 16,
+        }}>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            cursor: hasExistingDefault ? 'not-allowed' : 'pointer',
+            opacity: hasExistingDefault ? 0.75 : 1,
+            userSelect: 'none'
+          }}>
+            <input
+              type="checkbox"
+              checked={!hasExistingDefault && isDefault}
+              disabled={hasExistingDefault}
+              onChange={e => setIsDefault(e.target.checked)}
+              style={{ width: 17, height: 17, accentColor: '#049edf', cursor: hasExistingDefault ? 'not-allowed' : 'pointer' }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 800, color: hasExistingDefault ? '#92400e' : '#1a1a2e' }}>
+              Set as default photo
+            </span>
+          </label>
+          {hasExistingDefault && (
+            <p style={{ margin: '6px 0 0 27px', fontSize: 11.5, fontWeight: 600, color: '#b45309', lineHeight: 1.4 }}>
+              A default photo already exists{existingDefaultPhoto?.filename ? ` ("${existingDefaultPhoto.filename}")` : ''}. Delete or replace the existing default photo first to set a new default.
+            </p>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
+          <button className="pg-btn-save" onClick={() => onConfirm(files, isDefault)}>
+            <Check size={14} /> Add {files.length > 1 ? `${files.length} Photos` : 'Photo'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ─────────────────────────────────────────
+   PHOTO REPLACE MODAL (with isDefault checkbox)
+───────────────────────────────────────── */
+function PhotoReplaceModal({ photoToReplace, newFile, existingPhotos = [], onConfirm, onClose }) {
+  const isCurrentDefault = isPhotoDefault(photoToReplace);
+  const hasOtherDefault = existingPhotos.some(
+    p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID && isPhotoDefault(p)
+  );
+  const otherDefaultPhoto = existingPhotos.find(
+    p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID && isPhotoDefault(p)
+  );
+
+  const [isDefault, setIsDefault] = useState(isCurrentDefault && !hasOtherDefault);
+
+  const newPreviewUrl = useRef(URL.createObjectURL(newFile)).current;
+
+  return ReactDOM.createPortal(
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 100000,
+        background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(8px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      }}
+      onClick={onClose}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: '#fff', borderRadius: 20, width: '100%', maxWidth: 440,
+          boxShadow: '0 20px 60px rgba(0,0,0,0.25)', overflow: 'hidden',
+          display: 'flex', flexDirection: 'column', padding: '22px 22px 18px',
+          animation: 'modalIn 0.24s cubic-bezier(0.22,1,0.36,1) both',
+          fontFamily: 'Nunito, sans-serif',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: 'rgba(4,158,223,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
+              <Replace size={18} color="#049edf" />
+            </div>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 900, color: '#1a1a2e' }}>
+                Replace Photo
+              </h3>
+              <p style={{ margin: 0, fontSize: 11.5, fontWeight: 600, color: '#7878a0' }}>
+                Replacing "{photoToReplace.filename}"
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9090a8', padding: 4 }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* New Preview */}
+        <div style={{
+          width: '100%', height: 160, borderRadius: 10, overflow: 'hidden',
+          border: '1.5px solid #ececf8', marginBottom: 14, position: 'relative'
+        }}>
+          <img src={newPreviewUrl} alt={newFile.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <div style={{
+            position: 'absolute', bottom: 0, insetInline: 0, background: 'rgba(0,0,0,0.65)',
+            color: '#fff', fontSize: 11, fontWeight: 700, padding: '4px 8px',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+          }}>New: {newFile.name}</div>
+        </div>
+
+        {/* isDefault Checkbox */}
+        <div style={{
+          background: hasOtherDefault ? '#fffbeb' : '#f8fafd',
+          border: `1.5px solid ${hasOtherDefault ? '#fde68a' : '#e0e7ff'}`,
+          borderRadius: 12, padding: '12px 14px', marginBottom: 16,
+        }}>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            cursor: hasOtherDefault ? 'not-allowed' : 'pointer',
+            opacity: hasOtherDefault ? 0.75 : 1,
+            userSelect: 'none'
+          }}>
+            <input
+              type="checkbox"
+              checked={!hasOtherDefault && isDefault}
+              disabled={hasOtherDefault}
+              onChange={e => setIsDefault(e.target.checked)}
+              style={{ width: 17, height: 17, accentColor: '#049edf', cursor: hasOtherDefault ? 'not-allowed' : 'pointer' }}
+            />
+            <span style={{ fontSize: 13, fontWeight: 800, color: hasOtherDefault ? '#92400e' : '#1a1a2e' }}>
+              Set as default photo
+            </span>
+          </label>
+          {hasOtherDefault && (
+            <p style={{ margin: '6px 0 0 27px', fontSize: 11.5, fontWeight: 600, color: '#b45309', lineHeight: 1.4 }}>
+              Another photo is already marked as default{otherDefaultPhoto?.filename ? ` ("${otherDefaultPhoto.filename}")` : ''}. Delete or replace that photo first to set this one as default.
+            </p>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+          <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
+          <button className="pg-btn-save" onClick={() => onConfirm(photoToReplace, newFile, isDefault)}>
+            <Check size={14} /> Confirm Replace
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ─────────────────────────────────────────
    PHOTO SECTION
 ───────────────────────────────────────── */
 function PhotoSection({
@@ -559,10 +799,13 @@ function PhotoSection({
   onDeletePhoto,
   readOnly = false,
   uploading = false,
+  creatingNew = false,
 }) {
   const [lightbox, setLightbox] = useState(null);
   const [photoError, setPhotoError] = useState('');
   const [replacingPhoto, setReplacingPhoto] = useState(null);
+  const [pendingReplaceFile, setPendingReplaceFile] = useState(null);
+  const [pendingAddFiles, setPendingAddFiles] = useState(null);
   const [photoToDelete, setPhotoToDelete] = useState(null);
   const addRef = useRef(null);
   const replaceRef = useRef(null);
@@ -584,8 +827,13 @@ function PhotoSection({
     e.target.value = '';
     if (!files.length) return;
     if (!validateFiles(files)) return;
+    setPendingAddFiles(files);
+  };
+
+  const confirmAddPhotos = (files, isDefault) => {
+    setPendingAddFiles(null);
     if (onAddPhotos) {
-      onAddPhotos(files);
+      onAddPhotos(files, isDefault);
     }
   };
 
@@ -594,8 +842,14 @@ function PhotoSection({
     e.target.value = '';
     if (!file || !replacingPhoto) return;
     if (!validateFiles([file])) return;
+    setPendingReplaceFile(file);
+  };
+
+  const confirmReplacePhoto = (photoToReplace, file, isDefault) => {
+    setPendingReplaceFile(null);
+    setReplacingPhoto(null);
     if (onReplacePhoto) {
-      onReplacePhoto(replacingPhoto, file);
+      onReplacePhoto(photoToReplace, file, isDefault);
     }
   };
 
@@ -627,6 +881,8 @@ function PhotoSection({
     return `${base}${rel}`;
   };
 
+  const canUpload = !readOnly && (!!hoardingID || creatingNew);
+
   return (
     <div className="hd-photo-wrap">
       <div className="hd-photo-header">
@@ -640,8 +896,8 @@ function PhotoSection({
           <button
             className="hd-btn-upload"
             onClick={() => addRef.current?.click()}
-            disabled={uploading || !hoardingID}
-            title={!hoardingID ? 'Save the hoarding first' : `Upload photos (${ALLOWED_LABEL})`}
+            disabled={uploading || !canUpload}
+            title={!canUpload ? 'Save the hoarding first' : `Upload photos (${ALLOWED_LABEL})`}
           >
             <Upload size={12} /> Upload
           </button>
@@ -667,7 +923,7 @@ function PhotoSection({
           <span>
             {readOnly
               ? 'No photos for this version'
-              : hoardingID
+              : canUpload
                 ? `No photos yet — click Upload to add images (${ALLOWED_LABEL})`
                 : 'Save the hoarding version first, then upload photos'}
           </span>
@@ -677,8 +933,24 @@ function PhotoSection({
       {photos.length > 0 && (
         <div className="hd-photo-grid">
           {photos.map((p) => (
-            <div key={p.hoardingPhotoID} className="hd-photo-item">
+            <div key={p.hoardingPhotoID} className="hd-photo-item" style={{ position: 'relative' }}>
               <img src={resolvePhotoSrc(p)} alt={p.filename} />
+              {isPhotoDefault(p) && (
+                <span
+                  className="hd-default-badge"
+                  style={{
+                    position: 'absolute', top: 6, left: 6,
+                    fontSize: 9, fontWeight: 900, color: '#fff',
+                    background: 'linear-gradient(135deg, #049edf, #0284c7)',
+                    boxShadow: '0 2px 6px rgba(4,158,223,0.45)',
+                    padding: '2px 7px', borderRadius: 4,
+                    fontFamily: 'Nunito,sans-serif', letterSpacing: 0.5,
+                    zIndex: 2, textTransform: 'uppercase'
+                  }}
+                >
+                  DEFAULT
+                </span>
+              )}
               <div className="hd-photo-name">{p.filename}</div>
               <div className="hd-photo-overlay">
                 <button className="hd-photo-action" onClick={() => setLightbox(p)} title="View" disabled={uploading}>
@@ -706,8 +978,8 @@ function PhotoSection({
             </div>
           ))}
           {!readOnly && (
-            <label className={`hd-upload-tile ${(!hoardingID || uploading) ? 'hd-upload-tile--disabled' : ''}`}>
-              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={handleAddFiles} style={{ display: 'none' }} disabled={!hoardingID || uploading} />
+            <label className={`hd-upload-tile ${(!canUpload || uploading) ? 'hd-upload-tile--disabled' : ''}`}>
+              <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" multiple onChange={handleAddFiles} style={{ display: 'none' }} disabled={!canUpload || uploading} />
               {uploading ? <Loader2 size={16} className="pg-spin" /> : <Upload size={16} />}
               <span>{uploading ? 'Uploading…' : 'Add More'}</span>
             </label>
@@ -733,6 +1005,27 @@ function PhotoSection({
           </div>
         </div>,
         document.body
+      )}
+
+      {/* Add Photo Modal with isDefault */}
+      {pendingAddFiles && (
+        <PhotoAddModal
+          files={pendingAddFiles}
+          existingPhotos={photos}
+          onConfirm={confirmAddPhotos}
+          onClose={() => setPendingAddFiles(null)}
+        />
+      )}
+
+      {/* Replace Photo Modal with isDefault */}
+      {pendingReplaceFile && replacingPhoto && (
+        <PhotoReplaceModal
+          photoToReplace={replacingPhoto}
+          newFile={pendingReplaceFile}
+          existingPhotos={photos}
+          onConfirm={confirmReplacePhoto}
+          onClose={() => { setPendingReplaceFile(null); setReplacingPhoto(null); }}
+        />
       )}
 
       {photoToDelete && (
@@ -935,10 +1228,41 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     ? [...hoarding.versions].sort((a, b) => new Date(b.effdt) - new Date(a.effdt))
     : [];
 
-  const [hoardingCode, setHoardingCode] = useState(hoarding?.hoardingCode || '');
+  const [hoardingCode, setHoardingCode] = useState(() => {
+    if (hoarding?.hoardingCode) return hoarding.hoardingCode;
+    const saved = sessionStorage.getItem('unsaved_hoarding_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.hoardingCode) return parsed.hoardingCode;
+      } catch (e) {}
+    }
+    return '';
+  });
   const [hcError, setHcError] = useState('');
-  const [addForm, setAddForm] = useState({ ...EMPTY_VERSION });
+  const [addForm, setAddForm] = useState(() => {
+    if (isEdit) return { ...EMPTY_VERSION };
+    const saved = sessionStorage.getItem('unsaved_hoarding_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.addForm) return parsed.addForm;
+      } catch (e) {}
+    }
+    return { ...EMPTY_VERSION };
+  });
   const [addErrors, setAddErrors] = useState({});
+
+  useEffect(() => {
+    if (isAdd) {
+      sessionStorage.setItem('unsaved_hoarding_form', JSON.stringify({ hoardingCode, addForm }));
+    }
+  }, [hoardingCode, addForm, isAdd]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_hoarding_form');
+    onBack();
+  };
   const [newlySavedHoardingID, setNewlySavedHoardingID] = useState(null);
   const [newlySavedEffdtRaw, setNewlySavedEffdtRaw] = useState('');
   const [activePanel, setActivePanel] = useState(null);
@@ -950,10 +1274,40 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
   const [saveOk, setSaveOk] = useState(false);
   const [apiErr, setApiErr] = useState('');
   const [availabilityConflict, setAvailabilityConflict] = useState(null);
+  const [maintenanceData, setMaintenanceData] = useState(null);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
+
+  useEffect(() => {
+    const targetHoardingId = sortedVersions[0]?.hoardingID || hoarding?.hoardingID;
+    if (isEdit && targetHoardingId) {
+      setMaintenanceLoading(true);
+      apiService
+        .getHoardingIsInMaintenance(targetHoardingId)
+        .then((res) => {
+          if (res) {
+            setMaintenanceData(res);
+          }
+        })
+        .catch((err) => console.warn('Failed to fetch maintenance status:', err))
+        .finally(() => setMaintenanceLoading(false));
+    }
+  }, [isEdit, sortedVersions[0]?.hoardingID, hoarding?.hoardingID]);
+
+  const isInMaintenance = Boolean(
+    maintenanceData?.is_In_Maintenance ||
+    maintenanceData?.isInMaintenance ||
+    maintenanceData?.is_in_maintenance
+  );
+  const activeRequests =
+    maintenanceData?.active_Maintenance_Requests ||
+    maintenanceData?.activeMaintenanceRequests ||
+    maintenanceData?.active_maintenance_requests ||
+    [];
 
   const [versionPhotos, setVersionPhotos] = useState([]);
   const [stagedNewPhotos, setStagedNewPhotos] = useState([]);
   const [stagedDeletedPhotos, setStagedDeletedPhotos] = useState([]);
+  const [stagedReplacedPhotos, setStagedReplacedPhotos] = useState([]);
 
   const activeVersion = activePanel !== null && activePanel.idx >= 0
     ? sortedVersions[activePanel.idx]
@@ -1003,6 +1357,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
       setVersionPhotos(hoardingPhotos);
       setStagedNewPhotos([]);
       setStagedDeletedPhotos([]);
+      setStagedReplacedPhotos([]);
     } catch (err) {
       console.error('[loadPhotos] failed:', err);
       setPhotosMap(prev => ({ ...prev, [hoardingID]: [] }));
@@ -1010,40 +1365,57 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     } finally { setPhotosLoading(false); }
   }, []);
 
-  const handleAddPhotos = (files) => {
-    files.forEach(file => {
+  const handleAddPhotos = (files, isDefault = false) => {
+    const fileList = Array.isArray(files) ? files : [files];
+    fileList.forEach((file, idx) => {
       const tempId = 'new_' + Math.random().toString(36).substr(2, 9);
       const newPhoto = {
         hoardingPhotoID: tempId,
         filename: file.name,
         _file: file,
         photoUrl: URL.createObjectURL(file),
+        isDefault: idx === 0 ? !!isDefault : false,
       };
       setVersionPhotos(prev => [...prev, newPhoto]);
       setStagedNewPhotos(prev => [...prev, newPhoto]);
     });
   };
 
-  const handleReplacePhoto = (photoToReplace, file) => {
-    if (!String(photoToReplace.hoardingPhotoID).startsWith('new_')) {
-      setStagedDeletedPhotos(prev => [...prev, photoToReplace]);
+  const handleReplacePhoto = (photoToReplace, file, isDefault) => {
+    const isLocallyStaged = String(photoToReplace.hoardingPhotoID).startsWith('new_');
+    const defaultVal = isDefault !== undefined ? !!isDefault : isPhotoDefault(photoToReplace);
+
+    if (isLocallyStaged) {
+      const updated = {
+        ...photoToReplace,
+        filename: file.name,
+        _file: file,
+        photoUrl: URL.createObjectURL(file),
+        isDefault: defaultVal,
+      };
+      setVersionPhotos(prev => prev.map(p => p.hoardingPhotoID === photoToReplace.hoardingPhotoID ? updated : p));
+      setStagedNewPhotos(prev => prev.map(p => p.hoardingPhotoID === photoToReplace.hoardingPhotoID ? updated : p));
     } else {
-      setStagedNewPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID));
+      const updated = {
+        ...photoToReplace,
+        filename: file.name,
+        _file: file,
+        photoUrl: URL.createObjectURL(file),
+        isDefault: defaultVal,
+      };
+      setVersionPhotos(prev => prev.map(p => p.hoardingPhotoID === photoToReplace.hoardingPhotoID ? updated : p));
+      setStagedReplacedPhotos(prev => [
+        ...prev.filter(p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID),
+        updated
+      ]);
+      setStagedDeletedPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToReplace.hoardingPhotoID));
     }
-    const tempId = 'new_' + Math.random().toString(36).substr(2, 9);
-    const newPhoto = {
-      hoardingPhotoID: tempId,
-      filename: file.name,
-      _file: file,
-      photoUrl: URL.createObjectURL(file),
-    };
-    setVersionPhotos(prev => prev.map(p => p.hoardingPhotoID === photoToReplace.hoardingPhotoID ? newPhoto : p));
-    setStagedNewPhotos(prev => [...prev, newPhoto]);
   };
 
   const handleDeletePhoto = (photoToDelete) => {
     if (!String(photoToDelete.hoardingPhotoID).startsWith('new_')) {
       setStagedDeletedPhotos(prev => [...prev, photoToDelete]);
+      setStagedReplacedPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToDelete.hoardingPhotoID));
     } else {
       setStagedNewPhotos(prev => prev.filter(p => p.hoardingPhotoID !== photoToDelete.hoardingPhotoID));
     }
@@ -1123,10 +1495,35 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
       if (savedID) {
         setNewlySavedHoardingID(savedID);
         setNewlySavedEffdtRaw(new Date(addForm.effdt + 'T00:00:00.000Z').toISOString());
+
+        // Upload staged photos if any
+        if (stagedNewPhotos.length > 0) {
+          const userId = getLoggedInUserId();
+          const todayDate = new Date().toISOString().split('T')[0];
+          const effdtDateOnly = (addForm.effdt || '').split('T')[0] || todayDate;
+          for (const np of stagedNewPhotos) {
+            const fd = new FormData();
+            fd.append('hoardingPhotoID', '0');
+            fd.append('hoardingID', String(savedID));
+            fd.append('effdt', effdtDateOnly);
+            fd.append('photo', np._file, np.filename);
+            fd.append('photoUrl', np.filename);
+            fd.append('photoPath', np.filename);
+            fd.append('filename', np.filename);
+            fd.append('uploadedOn', todayDate);
+            fd.append('lastUpdateDttm', todayDate);
+            fd.append('lastUpdatedBy', String(userId));
+            fd.append('isDefault', np.isDefault ? 'true' : 'false');
+            await apiService.uploadHoardingPhoto(fd);
+          }
+        }
       }
 
       setSaveOk(true);
       await onRefresh();
+      // ── START: Clear unsaved draft on save success ──
+      sessionStorage.removeItem('unsaved_hoarding_form');
+      // ── END: Clear unsaved draft on save success ──
       setTimeout(() => onBack(), 1200);
     } catch (err) {
       setApiErr(err?.response?.data?.message || err?.response?.data?.title || err?.message || 'Save failed. Please try again.');
@@ -1147,14 +1544,26 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
           : activeVersion?.status;
         const currentStatus = effdtForm.status;
 
-        // Only check availability details if the status is being changed
-        if (originalStatus && currentStatus !== originalStatus) {
+        // Check availability details if it's a new version OR if the status of an existing version is being changed
+        if (isPanelNew || (originalStatus && currentStatus !== originalStatus)) {
           const details = await apiService.getHoardingAvailabilityDetails(checkID);
           const timeline = details?.timeline ?? details?.Timeline ?? [];
           if (timeline.length > 0) {
-            setAvailabilityConflict(details);
-            setSaving(false);
-            return;
+            // Check if the form's effective date is less than or equal to any of the contract/job end dates in the timeline.
+            // If it is greater than all end dates, we allow saving.
+            const formDateStr = effdtForm.effdt ? effdtForm.effdt.split('T')[0] : '';
+            const hasConflict = timeline.some(item => {
+              const itemEndDateRaw = item.endDate || item.EndDate || item.startDate || item.StartDate;
+              if (!itemEndDateRaw) return true;
+              const itemEndDateStr = String(itemEndDateRaw).split('T')[0];
+              return formDateStr <= itemEndDateStr;
+            });
+
+            if (hasConflict) {
+              setAvailabilityConflict(details);
+              setSaving(false);
+              return;
+            }
           }
         }
       }
@@ -1190,6 +1599,26 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
             await apiService.deleteHoardingPhoto(dp.hoardingPhotoID);
           }
         }
+        if (stagedReplacedPhotos.length > 0 && resolvedHID) {
+          const userId = getLoggedInUserId();
+          const todayDate = new Date().toISOString().split('T')[0];
+          const effdtDateOnly = (effdtForm.effdtRaw || effdtForm.effdt || '').split('T')[0] || todayDate;
+          for (const rp of stagedReplacedPhotos) {
+            const fd = new FormData();
+            fd.append('hoardingPhotoID', String(rp.hoardingPhotoID));
+            fd.append('hoardingID', String(resolvedHID));
+            fd.append('effdt', effdtDateOnly);
+            fd.append('photo', rp._file, rp.filename);
+            fd.append('photoUrl', rp.filename);
+            fd.append('photoPath', rp.filename);
+            fd.append('filename', rp.filename);
+            fd.append('uploadedOn', todayDate);
+            fd.append('lastUpdateDttm', todayDate);
+            fd.append('lastUpdatedBy', String(userId));
+            fd.append('isDefault', rp.isDefault ? 'true' : 'false');
+            await apiService.updateHoardingPhoto(rp.hoardingPhotoID, fd);
+          }
+        }
         if (stagedNewPhotos.length > 0 && resolvedHID) {
           const userId = getLoggedInUserId();
           const todayDate = new Date().toISOString().split('T')[0];
@@ -1206,6 +1635,7 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
             fd.append('uploadedOn', todayDate);
             fd.append('lastUpdateDttm', todayDate);
             fd.append('lastUpdatedBy', String(userId));
+            fd.append('isDefault', np.isDefault ? 'true' : 'false');
             await apiService.uploadHoardingPhoto(fd);
           }
         }
@@ -1222,9 +1652,13 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
     <div className="hd-form-page">
       <div className="hd-topbar">
         <div className="hd-topbar-left">
-          <button className="hd-back-btn" onClick={onBack}>
+          <button className="hd-back-btn" onClick={handleCancel}>
             <ArrowLeft size={14} />
-            <span className="d-none d-sm-inline">Back to Hoardings</span>
+            <span className="d-none d-sm-inline">
+              {sessionStorage.getItem('hoarding_return_tab') === 'hoarding-maintenance'
+                ? 'Back to Maintenance'
+                : 'Back to Hoardings'}
+            </span>
             <span className="d-inline d-sm-none">Back</span>
           </button>
           <div className="hd-topbar-divider" />
@@ -1295,15 +1729,13 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                     <PhotoSection
                       hoardingID={newlySavedHoardingID}
                       effdtRaw={newlySavedEffdtRaw}
-                      photos={photosFor(newlySavedHoardingID)}
-                      onPhotosChange={() => loadPhotos(newlySavedHoardingID, newlySavedEffdtRaw)}
+                      photos={versionPhotos}
+                      onAddPhotos={handleAddPhotos}
+                      onReplacePhoto={handleReplacePhoto}
+                      onDeletePhoto={handleDeletePhoto}
+                      creatingNew={true}
+                      uploading={saving}
                     />
-                    {!newlySavedHoardingID && (
-                      <div className="hd-info-banner mt-2">
-                        <Info size={13} style={{ flexShrink: 0 }} />
-                        <span>Save the hoarding first, then you can upload photos for it.</span>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
@@ -1312,10 +1744,137 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
 
           {/* ══ EDIT MODE ══ */}
           {isEdit && (
-            <div className="row g-4">
-              <div className="col-12 col-xl-3">
-                <div className="hd-section-card">
+            <>
+              {/* Under Maintenance Section Card */}
+              {isInMaintenance && (
+                <div className="hd-section-card mb-4">
                   <div className="hd-section-head">
+                    <div
+                      className="hd-section-icon-wrap"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(217, 119, 6, 0.15), rgba(245, 158, 11, 0.08))',
+                      }}
+                    >
+                      <Wrench size={15} color="#d97706" />
+                    </div>
+                    <div className="flex-grow-1">
+                      <div className="hd-section-title">
+                        <span>Under Maintenance</span>
+                        <span
+                          className="hd-count-pill"
+                          style={{
+                            background: 'rgba(217, 119, 6, 0.1)',
+                            color: '#d97706',
+                            borderColor: 'rgba(217, 119, 6, 0.22)',
+                          }}
+                        >
+                          {activeRequests.length} Active {activeRequests.length === 1 ? 'Request' : 'Requests'}
+                        </span>
+                      </div>
+                      <div className="hd-section-sub">
+                        This hoarding is currently undergoing physical maintenance or site repairs
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: 0 }}>
+                    {activeRequests.map((req, idx) => {
+                      const reqId = req.maintenance_ID || req.maintenanceID || req.id;
+                      const reason = req.reason_Name || req.reasonName || 'Maintenance';
+                      const priority = req.priority || 'Normal';
+                      const status = req.status || 'Open';
+                      const reportedBy =
+                        req.reported_By_Name ||
+                        req.reportedByName ||
+                        (req.reported_By ? `User #${req.reported_By}` : 'Admin');
+                      const reportedDate = req.reported_Date || req.reportedDate;
+
+                      return (
+                        <div
+                          key={reqId || idx}
+                          style={{
+                            padding: '12px 18px',
+                            borderBottom: idx < activeRequests.length - 1 ? '1px solid #f0f0f8' : 'none',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            flexWrap: 'wrap',
+                            gap: 12,
+                            background: '#ffffff',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                            <span
+                              style={{
+                                fontFamily: 'Nunito, sans-serif',
+                                fontWeight: 800,
+                                fontSize: 13,
+                                color: '#049edf',
+                              }}
+                            >
+                              #{reqId}
+                            </span>
+                            <span
+                              style={{
+                                fontFamily: 'Nunito, sans-serif',
+                                fontWeight: 800,
+                                fontSize: 13,
+                                color: '#1a1a2e',
+                              }}
+                            >
+                              {reason}
+                            </span>
+                            {req.description && (
+                              <span
+                                style={{
+                                  fontFamily: 'Nunito, sans-serif',
+                                  fontSize: 12,
+                                  color: '#7878a0',
+                                  fontStyle: 'italic',
+                                }}
+                              >
+                                "{req.description}"
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                            <div
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 5,
+                                fontSize: 12,
+                                color: '#7878a0',
+                                fontFamily: 'Nunito, sans-serif',
+                              }}
+                            >
+                              <Calendar size={12} color="#9090a8" />
+                              <span>
+                                Reported:{' '}
+                                <strong style={{ color: '#1a1a2e', fontWeight: 700 }}>
+                                  {fmtDate(reportedDate ? reportedDate.split('T')[0] : '')}
+                                </strong>{' '}
+                                by{' '}
+                                <strong style={{ color: '#1a1a2e', fontWeight: 700 }}>
+                                  {reportedBy}
+                                </strong>
+                              </span>
+                            </div>
+                            <MaintenancePriorityBadge priority={priority} />
+                            <MaintenanceStatusBadge status={status} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="row g-4">
+                <div className="col-12 col-xl-3">
+                  <div className="hd-section-card">
+                    <div className="hd-section-head">
                     <div className="hd-section-icon-wrap"><Hash size={14} color="#049edf" /></div>
                     <div>
                       <div className="hd-section-title">Identity</div>
@@ -1482,13 +2041,14 @@ function HoardingFormPage({ mode, hoarding, sites, hoardingTypes, hoardingTypeMa
                 )}
               </div>
             </div>
+            </>
           )}
         </div>
       </div>
 
       {isAdd && (
         <div className="hd-form-footer hd-form-footer--sticky">
-          <button className="pg-btn-cancel" onClick={onBack} disabled={saving}>Cancel</button>
+          <button className="pg-btn-cancel" onClick={handleCancel} disabled={saving}>Cancel</button>
           <button className="pg-btn-save" onClick={saveNewHoarding} disabled={saving}>
             {saveOk ? <><Check size={13} /> Saved!</> : saving ? <><Loader2 size={13} className="pg-spin" /> Saving…</> : <><Check size={13} /> Save Hoarding</>}
           </button>
@@ -1589,10 +2149,11 @@ function useResizableColumns(tableRef, tableReady) {
   }, [tableReady]);
 }
 
-export default function HoardingPage() {
+export default function HoardingPage({ changeTab }) {
   const [hoardings, setHoardings] = useState([]);
   const [sites, setSites] = useState([]);
   const [hoardingTypes, setHoardingTypes] = useState([]);
+  const [owners, setOwners] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const tableRef = useRef(null);
@@ -1604,8 +2165,16 @@ export default function HoardingPage() {
 
   useResizableColumns(tableRef, tableReady);
 
-  const [view, setView] = useState('grid');
-  const [formMode, setFormMode] = useState(null);
+  // ── START: Restore view and formMode if unsaved hoarding form exists ──
+  // const [view, setView] = useState('grid');
+  // const [formMode, setFormMode] = useState(null);
+  const [view, setView] = useState(() => {
+    return sessionStorage.getItem('unsaved_hoarding_form') !== null ? 'form' : 'grid';
+  });
+  const [formMode, setFormMode] = useState(() => {
+    return sessionStorage.getItem('unsaved_hoarding_form') !== null ? 'add' : null;
+  });
+  // ── END: Restore view and formMode if unsaved hoarding form exists ──
   const [editTarget, setEditTarget] = useState(null);
 
   const [search, setSearch] = useState('');
@@ -1626,10 +2195,11 @@ export default function HoardingPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true); setLoadError('');
     try {
-      const [rawHoardings, rawSites, rawTypes] = await Promise.all([
+      const [rawHoardings, rawSites, rawTypes, rawOwners] = await Promise.all([
         apiService.getAllHoardings(),
         apiService.getAllSites(),
         apiService.getAllHoardingTypes(),
+        apiService.getAllOwners(),
       ]);
 
       const extractArray = (res) => {
@@ -1642,6 +2212,7 @@ export default function HoardingPage() {
       setHoardings(groupHoardingsByCode(extractArray(rawHoardings)));
       setSites(extractArray(rawSites));
       setHoardingTypes(extractArray(rawTypes));
+      setOwners(extractArray(rawOwners));
     } catch (err) {
       setLoadError(err?.response?.data?.message || err?.message || 'Failed to load hoardings.');
     } finally { setLoading(false); }
@@ -1657,15 +2228,37 @@ export default function HoardingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoardings]);
 
+  // Deep-linking from Maintenance List/Details
+  useEffect(() => {
+    const targetCode = sessionStorage.getItem('open_hoarding_code');
+    const targetId = sessionStorage.getItem('open_hoarding_id');
+    if ((targetCode || targetId) && hoardings.length > 0) {
+      sessionStorage.removeItem('open_hoarding_code');
+      sessionStorage.removeItem('open_hoarding_id');
+      const found = hoardings.find(h =>
+        (targetCode && (h.hoardingCode || '').toLowerCase().trim() === targetCode.toLowerCase().trim()) ||
+        (targetCode && (h.hoardingCode || '').toLowerCase().replace(/[\s\-_]/g, '') === targetCode.toLowerCase().replace(/[\s\-_]/g, '')) ||
+        (targetId && h.versions?.some(v => String(v.hoardingID) === String(targetId)))
+      );
+      if (found) {
+        setFormMode('edit');
+        setEditTarget(found);
+        setView('form');
+      }
+    }
+  }, [hoardings]);
+
   const hoardingTypeMap = Object.fromEntries(hoardingTypes.map(t => [t.hoardingType, t.typeName]));
 
   const rows = hoardings.map(h => {
     const latest = latestVersion(h);
     const site = sites.find(s => s.siteID === latest?.siteID);
+    const owner = site ? owners.find(o => Number(o.ownerID ?? o.OwnerID ?? o._id ?? 0) === Number(site.ownerID ?? site.OwnerID ?? 0)) : null;
     return {
       hoardingCode: h.hoardingCode,
       siteLabel: site ? `${site.addressLine1}${site.city ? ', ' + site.city : ''}` : latest?.siteID ? `Site ${latest.siteID}` : '—',
-      material: latest?.material || '',
+      // material: latest?.material || '',
+      landlordName: owner ? (owner.ownerName ?? owner.OwnerName ?? '—') : '—', // show the land load name in the list
       typeLabel: hoardingTypeMap[latest?.hoardingType] || '',
       status: latest?.status || '',
       monthlyRent: latest?.monthlyRent ?? 0,
@@ -1679,16 +2272,25 @@ export default function HoardingPage() {
     const q = search.toLowerCase();
     return (
       (r.hoardingCode.toLowerCase().includes(q) || r.siteLabel.toLowerCase().includes(q) ||
-        r.material.toLowerCase().includes(q) || r.typeLabel.toLowerCase().includes(q) ||
+        // r.material.toLowerCase().includes(q) ||
+        r.landlordName.toLowerCase().includes(q) || // show the land load name in the list
+        r.typeLabel.toLowerCase().includes(q) ||
         r.status.toLowerCase().includes(q))
       && (statusFilter ? r.status === statusFilter : true)
     );
   });
 
+  // const sorted = [...filtered].sort((a, b) => {
+  //   const av = String(a[sortKey] ?? '').toLowerCase();
+  //   const bv = String(b[sortKey] ?? '').toLowerCase();
+  //   return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+  // });
+
   const sorted = [...filtered].sort((a, b) => {
-    const av = String(a[sortKey] ?? '').toLowerCase();
-    const bv = String(b[sortKey] ?? '').toLowerCase();
-    return sortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    const av = String(a[sortKey] ?? '');
+    const bv = String(b[sortKey] ?? '');
+    const cmp = av.localeCompare(bv, undefined, { numeric: true, sensitivity: 'base' });
+    return sortDir === 'asc' ? cmp : -cmp;
   });
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
@@ -1706,7 +2308,32 @@ export default function HoardingPage() {
     sessionStorage.removeItem('hd_view');
     sessionStorage.removeItem('hd_formMode');
     sessionStorage.removeItem('hd_editTarget');
-    setView('grid'); setFormMode(null); setEditTarget(null);
+
+    const returnTab = sessionStorage.getItem('hoarding_return_tab');
+    if (returnTab) {
+      sessionStorage.removeItem('hoarding_return_tab');
+      const returnMaintView = sessionStorage.getItem('hoarding_return_maint_view');
+      const returnMaintId = sessionStorage.getItem('hoarding_return_maint_id');
+      if (returnMaintView) {
+        sessionStorage.setItem('hoarding_maint_view', returnMaintView);
+        sessionStorage.removeItem('hoarding_return_maint_view');
+      }
+      if (returnMaintId) {
+        sessionStorage.setItem('hoarding_maint_selected_id', returnMaintId);
+        sessionStorage.removeItem('hoarding_return_maint_id');
+      }
+      if (changeTab) {
+        changeTab(returnTab);
+      } else {
+        sessionStorage.setItem('dashTab', returnTab);
+        window.location.reload();
+      }
+      return;
+    }
+
+    setView('grid');
+    setFormMode(null);
+    setEditTarget(null);
   };
 
   const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -1732,7 +2359,8 @@ export default function HoardingPage() {
     { key: 'hoardingCode', label: 'Hoarding Code' },
     { key: 'siteLabel', label: 'Site' },
     { key: 'typeLabel', label: 'Type' },
-    { key: 'material', label: 'Material', tabletHide: true },
+    // { key: 'material', label: 'Material', tabletHide: true },
+    { key: 'landlordName', label: 'Landlord', tabletHide: true }, // show the land load name in the list
     { key: 'status', label: 'Status' },
     { key: 'monthlyRent', label: 'Monthly Rent', tabletHide: true },
     { key: 'size', label: 'Size (W×H)', tabletHide: true, noSort: true },
@@ -1816,7 +2444,9 @@ export default function HoardingPage() {
                     <td className="pg-td"><div className="pg-td__primary hd-code-cell">{r.hoardingCode}</div></td>
                     <td className="pg-td pg-td--overflow"><span className="pg-td__ellipsis" title={r.siteLabel}>{r.siteLabel}</span></td>
                     <td className="pg-td"><span className="hd-type-pill">{r.typeLabel || '—'}</span></td>
-                    <td className="pg-td pg-tablet-hide"><span className="pg-td__ellipsis">{r.material || '—'}</span></td>
+                    {/* <td className="pg-td pg-tablet-hide"><span className="pg-td__ellipsis">{r.material || '—'}</span></td> */}
+                    {/* show the land load name in the list */}
+                    <td className="pg-td pg-tablet-hide"><span className="pg-td__ellipsis">{r.landlordName || '—'}</span></td>
                     <td className="pg-td"><StatusBadge status={r.status} /></td>
                     <td className="pg-td pg-tablet-hide"><span className="pg-td__primary">{fmtCurrency(r.monthlyRent)}</span></td>
                     <td className="pg-td pg-tablet-hide"><span className="pg-td__ellipsis">{r.width && r.height ? `${r.width} × ${r.height} ft` : '—'}</span></td>
@@ -1848,7 +2478,9 @@ export default function HoardingPage() {
                   </div>
                 </div>
                 <div className="pg-card__body">
-                  <div className="pg-card__row"><Layers size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.material}</span></div>
+                  {/* <div className="pg-card__row"><Layers size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.material}</span></div> */}
+                  {/* show the land load name in the list */}
+                  <div className="pg-card__row"><User size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.typeLabel} · {r.landlordName}</span></div>
                   <div className="pg-card__row"><IndianRupee size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{fmtCurrency(r.monthlyRent)} / month</span></div>
                   <div className="pg-card__row"><Maximize2 size={12} color="#c0c0d8" className="pg-card__row-icon" /><span className="pg-card__row-text">{r.width && r.height ? `${r.width} × ${r.height} ft (${r.width * r.height} sq ft)` : '—'}</span></div>
                   <div className="pg-card__row"><StatusBadge status={r.status} /></div>

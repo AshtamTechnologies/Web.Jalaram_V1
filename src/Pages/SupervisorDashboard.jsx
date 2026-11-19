@@ -3,6 +3,9 @@ import SupervisorLayout from '../components/SupervisorLayout.jsx';
 import SupDashboardHome from './SupDashboardHome.jsx';
 import WorkersPage from './Workers.jsx';
 import SupervisorJobsPage from './SupervisorJobs.jsx';
+import SupervisorPaymentPage from './SupervisorPayment.jsx';
+import OpportunityPage from './Opportunity.jsx';
+import HoardingMaintenancePage from './HoardingMaintenance/HoardingMaintenancePage.jsx';
 
 import { BarChart3, Layers, MapPin, Briefcase, CheckSquare } from 'lucide-react';
 
@@ -25,33 +28,44 @@ function PlaceholderPage({ title, Icon, color = '#10b981' }) {
 /* ═══════════════════════════════════════════
    SUPERVISOR DASHBOARD  —  entry point
    Called from App.js when role === 'supervisor'
-═══════════════════════════════════════════ */
+ ═══════════════════════════════════════════ */
 export default function SupervisorDashboard({ onLogout }) {
   const [tab, setTab] = useState(
     () => sessionStorage.getItem('supTab') || 'sup-dashboard'
   );
+  const [tabResetIndex, setTabResetIndex] = useState(0);
 
   const changeTab = (id) => {
     setTab(id);
     sessionStorage.setItem('supTab', id);
+    setTabResetIndex(prev => prev + 1);
   };
 
-const renderPage = () => {
-  switch (tab) {
-    case 'sup-jobs':
-      return <SupervisorJobsPage />;
+  const renderPage = () => {
+    switch (tab) {
+      case 'sup-jobs':
+        return <SupervisorJobsPage />;
 
-    case 'workers':
-      return <WorkersPage />;
+      case 'workers':
+        return <WorkersPage />;
 
-    default:
-      return <SupervisorJobsPage />;
-  }
-};
+      case 'sup-payment':
+        return <SupervisorPaymentPage />;
+
+      case 'opportunity':
+        return <OpportunityPage />;
+
+      case 'hoarding-maintenance':
+        return <HoardingMaintenancePage changeTab={changeTab} />;
+
+      default:
+        return <SupervisorJobsPage />;
+    }
+  };
 
   return (
     <SupervisorLayout tab={tab} changeTab={changeTab} onLogout={onLogout}>
-      <div key={tab}>
+      <div key={`${tab}-${tabResetIndex}`}>
         {renderPage()}
       </div>
     </SupervisorLayout>

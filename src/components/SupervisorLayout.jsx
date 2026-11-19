@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import {
     LogOut, Menu, X, ChevronDown, ChevronRight,
-    Layers, MapPin, Briefcase, BarChart3, CheckSquare, HardHat
+    Layers, MapPin, Briefcase, BarChart3, CheckSquare, HardHat, CreditCard, Lightbulb, Wrench
 } from 'lucide-react';
+import Notification from './Notification';
 import './SupervisorLayout.css';
 
 /* ─────────────────────────────────────
@@ -10,8 +11,11 @@ import './SupervisorLayout.css';
 ───────────────────────────────────── */
 const SUP_MENU = [
     // { id: 'sup-dashboard', icon: BarChart3,  label: 'Dashboard' },
-    { id: 'sup-jobs',      icon: Briefcase,  label: 'Jobs'      },  // ← fixed: was 'sup-hoardings'
-    { id: 'workers',       icon: HardHat,    label: 'Workers'   },
+    { id: 'sup-jobs', icon: Briefcase, label: 'Jobs' },  // ← fixed: was 'sup-hoardings'
+    { id: 'workers', icon: HardHat, label: 'Workers' },
+    { id: 'sup-payment', icon: CreditCard, label: 'Payments' },
+    { id: 'opportunity', icon: Lightbulb, label: 'Opportunity' },
+    { id: 'hoarding-maintenance', icon: Wrench, label: 'Hoarding Maintenance' },
 ];
 
 /* ── Lookup maps ── */
@@ -269,6 +273,7 @@ export default function SupervisorLayout({ tab, changeTab, onLogout, children })
                     </div>
 
                     <div className="sup-topbar-right">
+                        <Notification handleTabChange={handleTabChange} />
                         <div ref={dropRef} style={{ position: 'relative' }}>
                             <button className="sup-profile-btn" onClick={() => setDropOpen(v => !v)}>
                                 <div className="sup-profile-avatar">

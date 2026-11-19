@@ -7,7 +7,7 @@ import {
     Calendar, CheckCircle, Clock, Circle, Hash,
     Briefcase, Layers, Edit3, Save, Camera,
     ZoomIn, ZoomOut, Trash2, Check, AlertTriangle, Info, LogOut,
-    ImagePlus, SendHorizonal, MapPin,
+    ImagePlus, SendHorizonal, MapPin, User,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import { useResizableColumns } from '../hooks/useResizableColumns';
@@ -121,21 +121,85 @@ function extractArray(res) {
     return [];
 }
 
-function getSiteAddress(h) {
+function normalizeSite(raw) {
+    if (!raw) return null;
+    return {
+        siteID: raw.siteID ?? raw.SiteID ?? raw.site_id ?? raw.Site_ID ?? 0,
+        addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? raw.address_line1 ?? raw.address ?? raw.Address ?? '',
+        addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? raw.address_line2 ?? '',
+        landmark: raw.landmark ?? raw.Landmark ?? '',
+        city: raw.city ?? raw.City ?? '',
+        district: raw.district ?? raw.District ?? '',
+        siteName: raw.siteName ?? raw.SiteName ?? '',
+    };
+}
+
+function normalizeOutsideSite(raw) {
+    if (!raw) return null;
+    return {
+        outsideSiteID: raw.outsideSiteID ?? raw.OutsideSiteID ?? raw.outside_site_id ?? raw.outsideSiteId ?? raw.siteID ?? raw.SiteID ?? 0,
+        addressLine1: raw.addressLine1 ?? raw.AddressLine1 ?? raw.address_line1 ?? raw.address ?? raw.Address ?? '',
+        addressLine2: raw.addressLine2 ?? raw.AddressLine2 ?? raw.address_line2 ?? '',
+        addressLine3: raw.addressLine3 ?? raw.AddressLine3 ?? raw.address_line3 ?? '',
+        landmark: raw.landmark ?? raw.Landmark ?? '',
+        city: raw.city ?? raw.City ?? '',
+        district: raw.district ?? raw.District ?? '',
+        state: raw.state ?? raw.State ?? '',
+        pincode: raw.pincode ?? raw.Pincode ?? '',
+        siteType: raw.siteType ?? raw.SiteType ?? '',
+        country: raw.country ?? raw.Country ?? '',
+        siteName: raw.siteName ?? raw.SiteName ?? '',
+    };
+}
+
+function getSiteAddress(h, siteMap = null, outsideSiteMap = null) {
     if (!h) return '';
-    const s = h.site || null;
+    const isExt = Boolean(h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' || h.is_External === true || h.IsExternal === true);
+    const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.outsideSiteID ?? h.OutsideSiteID ?? 0);
+
+    if (isExt) {
+        const rawOutside = h.site || (outsideSiteMap && siteID ? outsideSiteMap.get(siteID) : null) || (siteMap && siteID ? siteMap.get(siteID) : null);
+        const os = rawOutside ? normalizeOutsideSite(rawOutside) : null;
+        if (os) {
+            const addr = [os.addressLine1, os.addressLine2, os.addressLine3].filter(Boolean).join(', ');
+            const city = [os.city, os.district, os.state].filter(Boolean).join(', ');
+            const full = [addr, city].filter(Boolean).join(' — ');
+            if (full) return full;
+            if (addr) return addr;
+            if (city) return city;
+            if (os.landmark) return os.landmark;
+            if (os.siteName) return os.siteName;
+        }
+    }
+
+    const rawSite = h.site || (siteMap && siteID ? siteMap.get(siteID) : null);
+    const s = rawSite ? normalizeSite(rawSite) : null;
     if (s) {
         const addr = [s.addressLine1, s.addressLine2].filter(Boolean).join(', ');
         const city = [s.city, s.district].filter(Boolean).join(', ');
         const full = [addr, city].filter(Boolean).join(' — ');
         if (full) return full;
+        if (addr) return addr;
+        if (city) return city;
+        if (s.landmark) return s.landmark;
+        if (s.siteName) return s.siteName;
     }
-    const flatAddr = [h.addressLine1 ?? h.AddressLine1 ?? '', h.addressLine2 ?? h.AddressLine2 ?? ''].filter(Boolean).join(', ');
-    const flatCity = [h.city ?? h.City ?? h.siteCity ?? h.SiteCity ?? '', h.district ?? h.District ?? ''].filter(Boolean).join(', ');
+    const flatAddr = [
+        h.addressLine1 ?? h.AddressLine1 ?? h.siteAddress ?? h.SiteAddress ?? '',
+        h.addressLine2 ?? h.AddressLine2 ?? '',
+    ].filter(Boolean).join(', ');
+    const flatCity = [
+        h.city ?? h.City ?? h.siteCity ?? h.SiteCity ?? '',
+        h.district ?? h.District ?? h.siteDistrict ?? h.SiteDistrict ?? '',
+    ].filter(Boolean).join(', ');
     const flatFull = [flatAddr, flatCity].filter(Boolean).join(' — ');
     if (flatFull) return flatFull;
-    const landmark = h.landmark ?? h.Landmark ?? '';
+    if (flatAddr) return flatAddr;
+    if (flatCity) return flatCity;
+    const landmark = h.landmark ?? h.Landmark ?? h.siteLandmark ?? h.SiteLandmark ?? '';
     if (landmark) return landmark;
+    const siteName = h.siteName ?? h.SiteName ?? '';
+    if (siteName) return siteName;
     return h.hoardingCode ?? h.HoardingCode ?? '';
 }
 
@@ -300,9 +364,107 @@ function BannerStrip({ contractID }) {
 }
 
 /* ══════════════════════════════════════════
+   HOARDING PHOTO MODAL
+══════════════════════════════════════════ */
+function HoardingPhotoModal({ hoardingInfo, onClose }) {
+    const [loading, setLoading] = useState(true);
+    const [photo, setPhoto] = useState(null);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (!hoardingInfo?.hoardingID) return;
+        setLoading(true);
+        setError('');
+        apiService.getPhotosByHoardingID(hoardingInfo.hoardingID)
+            .then(res => {
+                const list = extractArray(res);
+                if (list.length === 0) {
+                    setPhoto(null);
+                } else {
+                    const sorted = [...list].sort((a, b) => {
+                        const effA = a.effdt || a.Effdt ? new Date(a.effdt || a.Effdt).getTime() : 0;
+                        const effB = b.effdt || b.Effdt ? new Date(b.effdt || b.Effdt).getTime() : 0;
+                        if (effB !== effA) return effB - effA;
+                        const idA = Number(a.hoardingPhotoID ?? a.HoardingPhotoID ?? 0);
+                        const idB = Number(b.hoardingPhotoID ?? b.HoardingPhotoID ?? 0);
+                        return idB - idA;
+                    });
+                    setPhoto(sorted[0]);
+                }
+            })
+            .catch(err => {
+                setError(err?.response?.data?.message || err?.message || 'Failed to load hoarding photo.');
+            })
+            .finally(() => setLoading(false));
+    }, [hoardingInfo?.hoardingID]);
+
+    if (!hoardingInfo) return null;
+
+    const rawPath = photo?.photoPath ?? photo?.PhotoPath ?? photo?.photoFilePath ?? photo?.PhotoFilePath ?? '';
+    const imgUrl = rawPath ? (rawPath.startsWith('http') ? rawPath : `${API_ROOT_URL}${rawPath}`) : '';
+
+    return ReactDOM.createPortal(
+        <div onClick={() => onClose()}
+            style={{ position: 'fixed', inset: 0, zIndex: 999999, background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 20, width: '100%', maxWidth: 540, overflow: 'hidden', boxShadow: '0 20px 50px rgba(0,0,0,0.3)', animation: 'wt-slide-up 0.2s cubic-bezier(0.22,1,0.36,1) both' }}>
+                <div style={{ background: 'linear-gradient(135deg,#049edf 0%,#6c63ff 100%)', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', color: '#fff' }}>
+                    <div>
+                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.6px', opacity: 0.85 }}>Hoarding Image</div>
+                        <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 16, fontWeight: 900 }}>
+                            {hoardingInfo.hoardingCode || `Hoarding #${hoardingInfo.hoardingID}`}
+                        </div>
+                    </div>
+                    <button onClick={onClose} style={{ width: 32, height: 32, borderRadius: 9, background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                        <X size={14} />
+                    </button>
+                </div>
+
+                {hoardingInfo.siteAddress && (
+                    <div style={{ padding: '10px 20px', background: '#f8f8fd', borderBottom: '1px solid #eeeefc', display: 'flex', alignItems: 'flex-start', gap: 6 }}>
+                        <MapPin size={13} color="#049edf" style={{ flexShrink: 0, marginTop: 2 }} />
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, color: '#4a5568', fontWeight: 700, lineHeight: 1.4 }}>{hoardingInfo.siteAddress}</span>
+                    </div>
+                )}
+
+                <div style={{ padding: 20, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 220 }}>
+                    {loading ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#9090a8', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700 }}>
+                            <Loader2 size={20} color="#049edf" className="pg-spin" /> Loading hoarding image…
+                        </div>
+                    ) : error ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#ef4444', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700 }}>
+                            <AlertCircle size={18} /> {error}
+                        </div>
+                    ) : !photo || !imgUrl ? (
+                        <div style={{ textAlign: 'center', color: '#9090a8', padding: '30px 10px' }}>
+                            <Camera size={36} color="#d0d0e8" style={{ marginBottom: 8 }} />
+                            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 14, fontWeight: 800, color: '#4a5568' }}>No Image Available</div>
+                            <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 600, color: '#a0a0bc', marginTop: 4 }}>No hoarding photos uploaded for this site yet.</div>
+                        </div>
+                    ) : (
+                        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                            <div style={{ width: '100%', maxHeight: '60vh', borderRadius: 12, overflow: 'hidden', border: '1.5px solid #e8e8f4', background: '#f8f8fd', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+                                <img src={imgUrl} alt={photo.filename || 'Hoarding Photo'} style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', display: 'block', cursor: 'zoom-in' }}
+                                    onClick={() => window.open(imgUrl, '_blank')}
+                                    title="Click to view full size"
+                                    onError={e => {
+                                        e.currentTarget.style.display = 'none';
+                                        e.currentTarget.parentElement.innerHTML = '<div style="padding:40px;text-align:center;font-size:13px;color:#9090a8;font-weight:700">Image failed to load</div>';
+                                    }} />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
+/* ══════════════════════════════════════════
    TASK MODAL  (View + Update tabs)
 ══════════════════════════════════════════ */
-function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
+function TaskModal({ task, initialTab = 'view', onClose, onSave, onOpenHoardingPhoto }) {
     const tabs = [{ id: 'view', label: '📋 Details' }, { id: 'update', label: '✏️ Update Task' }];
     const [tab, setTab] = useState(initialTab);
     const [closeImg, setCloseImg] = useState([]);
@@ -384,7 +546,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
         } finally { setSaving(false); }
     };
 
-    const InfoRow = ({ icon: Icon, label, value, accent = '#049edf' }) => (
+    const InfoRow = ({ icon: Icon, label, value, accent = '#049edf', action }) => (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 14px', background: '#f8f8fd', borderRadius: 11, border: '1px solid #eeeefc' }}>
             <div style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, background: 'linear-gradient(135deg,#e8f6fd,#ede9ff)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Icon size={14} color={accent} />
@@ -393,6 +555,11 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, color: '#a0a0bc', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 2 }}>{label}</div>
                 <div style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 700, color: '#1a1a2e', wordBreak: 'break-word' }}>{value || '—'}</div>
             </div>
+            {action && (
+                <div style={{ flexShrink: 0, alignSelf: 'center' }}>
+                    {action}
+                </div>
+            )}
         </div>
     );
 
@@ -491,7 +658,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                         </span>
                         {task.isMerged && (
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 20, background: 'rgba(124,58,237,0.25)', border: '1px solid rgba(255,255,255,0.3)', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, color: '#fff' }}>
-                                {task.mergeAlongFlag === 'H' ? '↔' : '↕'} Merged
+                                {task.mergeAlongFlag === 'S' ? '⊞' : task.mergeAlongFlag === 'H' ? '↔' : '↕'} Merged
                             </span>
                         )}
                     </div>
@@ -522,13 +689,28 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
                             {task.groupTasks ? (
                                 <>
                                     {task.groupTasks.map((t, idx) => t.siteAddress ? (
-                                        <InfoRow key={idx} icon={MapPin} label={`Site Address (${t.hoardingCode || `Hoarding #${t.hoardingID}`})`} value={t.siteAddress} accent="#16a34a" />
+                                        <InfoRow key={idx} icon={MapPin} label={`Site Address (${t.hoardingCode || `Hoarding #${t.hoardingID}`})`} value={t.siteAddress} accent="#16a34a"
+                                            action={onOpenHoardingPhoto && (
+                                                <button type="button" onClick={() => onOpenHoardingPhoto({ hoardingID: t.hoardingID, hoardingCode: t.hoardingCode, siteAddress: t.siteAddress })}
+                                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 8, background: 'rgba(4,158,223,0.1)', border: '1px solid rgba(4,158,223,0.3)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
+                                                    <Eye size={12} /> View Image
+                                                </button>
+                                            )}
+                                        />
                                     ) : null)}
                                 </>
                             ) : (
-                                task.siteAddress && <InfoRow icon={MapPin} label="Site Address" value={task.siteAddress} accent="#16a34a" />
+                                task.siteAddress && <InfoRow icon={MapPin} label="Site Address" value={task.siteAddress} accent="#16a34a"
+                                    action={onOpenHoardingPhoto && (
+                                        <button type="button" onClick={() => onOpenHoardingPhoto({ hoardingID: task.hoardingID, hoardingCode: task.hoardingCode, siteAddress: task.siteAddress })}
+                                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px', borderRadius: 8, background: 'rgba(4,158,223,0.1)', border: '1px solid rgba(4,158,223,0.3)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 800, cursor: 'pointer' }}>
+                                            <Eye size={12} /> View Image
+                                        </button>
+                                    )}
+                                />
                             )}
-                            {task.isMerged && <InfoRow icon={Layers} label="Merge Type" value={task.mergeAlongFlag === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'} accent="#7c3aed" />}
+                            {task.isMerged && <InfoRow icon={Layers} label="Merge Type" value={task.mergeAlongFlag === 'S' ? '⊞ Square Merge' : task.mergeAlongFlag === 'H' ? '↔ Horizontal Merge' : '↕ Vertical Merge'} accent="#7c3aed" />}
+                            <InfoRow icon={User} label="Supervisor" value={task.supervisorName} accent="#6c63ff" />
                             <InfoRow icon={CheckCircle} label="Status" value={task.status} />
                             <InfoRow icon={Calendar} label="Completion Date" value={fmtDate(task.actualCompletionDate)} />
                             <InfoRow icon={Calendar} label="Submitted At" value={fmtDateTime(task.submitDTTM)} />
@@ -697,7 +879,7 @@ function TaskModal({ task, initialTab = 'view', onClose, onSave }) {
 /* ══════════════════════════════════════════
    MERGED GROUP ROW  (desktop table)
 ══════════════════════════════════════════ */
-function MergedGroupRow({ groupTasks, onView, onEdit }) {
+function MergedGroupRow({ groupTasks, onView, onEdit, onOpenHoardingPhoto }) {
     const flag = groupTasks[0]?.mergeAlongFlag || 'H';
     const firstTask = groupTasks[0];
     const job = firstTask?.job;
@@ -723,7 +905,7 @@ function MergedGroupRow({ groupTasks, onView, onEdit }) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 800, color: '#1a1a2e' }}>{job?.jobType || '—'}</span>
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.22)', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800 }}>
-                            {flag === 'H' ? '↔' : '↕'} {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                            {flag === 'S' ? '⊞' : flag === 'H' ? '↔' : '↕'} {flag === 'S' ? 'Square' : flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
                         </span>
                     </div>
                     {job?.jobDescription && (
@@ -740,16 +922,21 @@ function MergedGroupRow({ groupTasks, onView, onEdit }) {
                             <Layers size={9} /> {t.hoardingCode || `#${t.hoardingID}`}
                         </span>
                     ))}
-                    {groupTasks.map((t, idx) => t.siteAddress ? (
+                    {/* Display site addresses under hoarding badges */}
+                    {[...new Set(groupTasks.map(t => t.siteAddress).filter(Boolean))].map((addr, idx) => (
                         <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: 4, marginTop: 2 }}>
                             <MapPin size={10} color="#9090a8" style={{ flexShrink: 0, marginTop: 2 }} />
-                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4 }}>
-                                <strong style={{ color: '#7c3aed', marginRight: 3 }}>{t.hoardingCode || `Hoarding #${t.hoardingID}`}:</strong>
-                                {t.siteAddress}
+                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4, flex: 1 }}>
+                                {addr}
                             </span>
                         </div>
-                    ) : null)}
+                    ))}
                 </div>
+            </td>
+            <td className="pg-td">
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'Nunito,sans-serif', fontWeight: 700, color: '#4a5568', fontSize: 12 }}>
+                    <User size={12} color="#c0c0d8" /> {firstTask.supervisorName || '—'}
+                </span>
             </td>
             <td className="pg-td pg-tablet-hide">
                 <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#4a5568', fontSize: 12 }}>
@@ -778,7 +965,7 @@ function MergedGroupRow({ groupTasks, onView, onEdit }) {
 }
 
 /* ─── Mobile Task Card ─── */
-function TaskCard({ task, onView, onEdit }) {
+function TaskCard({ task, onView, onEdit, onOpenHoardingPhoto }) {
     const st = getStatusStyle(task.status);
     const job = task.job;
     return (
@@ -797,7 +984,7 @@ function TaskCard({ task, onView, onEdit }) {
                 {task.isMerged && (
                     <div className="pg-card__row">
                         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 20, background: 'rgba(124,58,237,0.08)', color: '#7c3aed', border: '1px solid rgba(124,58,237,0.2)', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800 }}>
-                            {task.mergeAlongFlag === 'H' ? '↔' : '↕'} {task.mergeAlongFlag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                            {task.mergeAlongFlag === 'S' ? '⊞' : task.mergeAlongFlag === 'H' ? '↔' : '↕'} {task.mergeAlongFlag === 'S' ? 'Square' : task.mergeAlongFlag === 'H' ? 'Horizontal' : 'Vertical'} Merge
                         </span>
                     </div>
                 )}
@@ -806,13 +993,23 @@ function TaskCard({ task, onView, onEdit }) {
                     <span className="pg-card__row-text">{task.hoardingCode || `Hoarding #${task.hoardingID}`}</span>
                 </div>
                 {task.siteAddress && (
-                    <div className="pg-card__row">
+                    <div className="pg-card__row" style={{ alignItems: 'flex-start' }}>
                         <MapPin size={12} color="#c0c0d8" className="pg-card__row-icon" style={{ marginTop: 2 }} />
                         <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4, flex: 1 }}>
                             {task.siteAddress}
                         </span>
+                        {onOpenHoardingPhoto && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); onOpenHoardingPhoto({ hoardingID: task.hoardingID, hoardingCode: task.hoardingCode, siteAddress: task.siteAddress }); }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.22)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+                                <Eye size={11} /> View Image
+                            </button>
+                        )}
                     </div>
                 )}
+                <div className="pg-card__row">
+                    <User size={12} color="#c0c0d8" className="pg-card__row-icon" />
+                    <span className="pg-card__row-text">{task.supervisorName || '—'}</span>
+                </div>
                 <div className="pg-card__row">
                     <Calendar size={12} color="#c0c0d8" className="pg-card__row-icon" />
                     <span className="pg-card__row-text--ellipsis">{fmtDate(task.actualCompletionDate)}</span>
@@ -832,7 +1029,7 @@ function TaskCard({ task, onView, onEdit }) {
 }
 
 /* ─── Mobile merged group card — individual buttons per task ─── */
-function MergedGroupCard({ groupTasks, onView, onEdit }) {
+function MergedGroupCard({ groupTasks, onView, onEdit, onOpenHoardingPhoto }) {
     const flag = groupTasks[0]?.mergeAlongFlag || 'H';
     const firstTask = groupTasks[0];
     const job = firstTask?.job;
@@ -846,9 +1043,9 @@ function MergedGroupCard({ groupTasks, onView, onEdit }) {
         <div className="pg-card" style={{ border: '1.5px solid rgba(124,58,237,0.3)', background: 'linear-gradient(135deg,rgba(124,58,237,0.03),#fff)' }}>
             {/* Merge header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px 8px', borderBottom: '1px solid rgba(124,58,237,0.12)', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: 16 }}>{flag === 'H' ? '↔' : '↕'}</span>
+                <span style={{ fontSize: 16 }}>{flag === 'S' ? '⊞' : flag === 'H' ? '↔' : '↕'}</span>
                 <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 900, color: '#7c3aed' }}>
-                    {flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
+                    {flag === 'S' ? 'Square' : flag === 'H' ? 'Horizontal' : 'Vertical'} Merge
                 </span>
                 <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, color: '#9090a8', fontWeight: 600 }}>
                     · {groupTasks.length} hoardings
@@ -872,6 +1069,10 @@ function MergedGroupCard({ groupTasks, onView, onEdit }) {
                         <span className="pg-card__row-text" style={{ fontSize: 11, color: '#9090a8' }}>{job.jobDescription}</span>
                     </div>
                 )}
+                <div className="pg-card__row">
+                    <User size={12} color="#c0c0d8" className="pg-card__row-icon" />
+                    <span className="pg-card__row-text">{firstTask.supervisorName || '—'}</span>
+                </div>
                 {groupTasks.some(t => t.siteAddress) && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 2 }}>
                         {groupTasks.map((t, idx) => t.siteAddress ? (
@@ -881,6 +1082,12 @@ function MergedGroupCard({ groupTasks, onView, onEdit }) {
                                     <strong style={{ color: '#7c3aed', marginRight: 4 }}>{t.hoardingCode || `Hoarding #${t.hoardingID}`}:</strong>
                                     {t.siteAddress}
                                 </span>
+                                {onOpenHoardingPhoto && (
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); onOpenHoardingPhoto({ hoardingID: t.hoardingID, hoardingCode: t.hoardingCode, siteAddress: t.siteAddress }); }}
+                                        style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '2px 8px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.22)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 10, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+                                        <Eye size={11} /> View Image
+                                    </button>
+                                )}
                             </div>
                         ) : null)}
                     </div>
@@ -926,6 +1133,7 @@ export default function WorkerTasksPage() {
     const [fetchError, setFetchError] = useState('');
     const [modalTask, setModalTask] = useState(null);
     const [modalTab, setModalTab] = useState('view');
+    const [selectedHoardingPhoto, setSelectedHoardingPhoto] = useState(null);
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState('Open');
     const [sortKey, setSortKey] = useState('jobTaskID');
@@ -934,7 +1142,7 @@ export default function WorkerTasksPage() {
     const [pageSize, setPageSize] = useState(12);
     const tableRef = useRef(null);
     const [tableReady, setTableReady] = useState(false);
-    useResizableColumns(tableRef, tableReady, [80, 80, 180, 100, 130, 140, 130, 110]);
+    useResizableColumns(tableRef, tableReady, [80, 180, 130, 130, 120, 120, 120, 110]);
 
     const fetchData = useCallback(async () => {
         setLoading(true); setFetchError('');
@@ -944,18 +1152,82 @@ export default function WorkerTasksPage() {
             const assigns = Array.isArray(assignRes) ? assignRes : Array.isArray(assignRes?.data) ? assignRes.data : [];
             if (assigns.length === 0) { setTasks([]); setLoading(false); return; }
             const assignedTaskIds = new Set(assigns.map(a => Number(a.jobTaskID ?? a.JobTaskID)));
-            const [tRes, jRes, contractRes, hRaw, sRaw, mergeRaw] = await Promise.all([
+            const [tRes, jRes, contractRes, hRaw, sRaw, mergeRaw, uRaw, extRaw, outsideRaw] = await Promise.all([
                 apiService.getAllJobTasks(),
                 apiService.getAllJobRequests(),
                 apiService.getAllCustomerContracts(),
                 apiService.getAllHoardings(),
                 apiService.getAllSites().catch(() => []),
                 apiService.getAllHoardingMerges().catch(() => []),
+                apiService.getAllUsers().catch(() => []),
+                apiService.getAllExternalHoardings().catch(() => []),
+                apiService.getAllOutsideSites().catch(() => []),
             ]);
-            const siteList = extractArray(sRaw);
-            const siteMap = new Map(siteList.map(s => [Number(s.siteID ?? s.SiteID ?? 0), { addressLine1: s.addressLine1 ?? s.AddressLine1 ?? '', addressLine2: s.addressLine2 ?? s.AddressLine2 ?? '', city: s.city ?? s.City ?? '', district: s.district ?? s.District ?? '', landmark: s.landmark ?? s.Landmark ?? '' }]));
-            const rawHoardings = extractArray(hRaw);
-            const enrichedHoardings = rawHoardings.map(h => { const siteID = Number(h.siteID ?? h.SiteID ?? h.siteId ?? 0); return { ...h, site: siteMap.get(siteID) || h.site || null }; });
+            const userList = extractArray(uRaw);
+            const userMap = new Map(userList.map(u => {
+                const firstName = u.first_Name ?? u.First_Name ?? u.firstName ?? u.FirstName ?? '';
+                const lastName = u.last_Name ?? u.Last_Name ?? u.lastName ?? u.LastName ?? '';
+                const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+                const userName = u.userName ?? u.UserName ?? u.fullName ?? u.FullName ??
+                    u.name ?? u.Name ??
+                    (fullName || null) ??
+                    u.email ?? u.Email ?? '';
+                const id = u.userID ?? u.UserID ?? u.id ?? 0;
+                return [Number(id), userName];
+            }));
+            const siteList = extractArray(sRaw).map(normalizeSite).filter(Boolean);
+            const siteMap = new Map(siteList.map(s => [Number(s.siteID ?? s.SiteID ?? 0), s]));
+            const outsideSiteList = extractArray(outsideRaw).map(normalizeOutsideSite).filter(Boolean);
+            const outsideSiteMap = new Map(outsideSiteList.map(s => [Number(s.outsideSiteID ?? s.OutsideSiteID ?? 0), s]));
+
+            const rawHoardings = [
+                ...extractArray(hRaw).map(h => ({ ...h, isExternal: false })),
+                ...extractArray(extRaw).map(h => ({ ...h, isExternal: true }))
+            ];
+
+            // Build latestByCode and anyIdToLatest map (matching Job.jsx)
+            const latestByCode = new Map();
+            rawHoardings.forEach(h => {
+                const code = (h.hoardingCode ?? h.HoardingCode ?? '').trim();
+                if (!code) return;
+                const existing = latestByCode.get(code);
+                const thisDate = new Date(h.effdt ?? h.Effdt ?? 0).getTime();
+                const existDate = existing ? new Date(existing.effdt ?? existing.Effdt ?? 0).getTime() : -1;
+                if (!existing || thisDate > existDate) latestByCode.set(code, h);
+            });
+
+            const anyIdToLatest = new Map();
+            rawHoardings.forEach(h => {
+                const code = (h.hoardingCode ?? h.HoardingCode ?? '').trim();
+                const latest = latestByCode.get(code) || h;
+                const hID = Number(h.hoardingID ?? h.HoardingID ?? 0);
+                if (hID) {
+                    anyIdToLatest.set(hID, latest);
+                }
+            });
+
+            const enrichHoarding = (h) => {
+                if (!h) return null;
+                const isExt = Boolean(h.isExternal === true || String(h.isExternal).toLowerCase() === 'true' || h.is_External === true || h.IsExternal === true);
+                const siteID = Number(h.siteID ?? h.SiteID ?? h.site_id ?? h.Site_ID ?? h.siteId ?? h.outsideSiteID ?? h.site?.siteID ?? 0);
+                if (isExt) {
+                    const foundSite = outsideSiteMap.get(siteID) || siteMap.get(siteID) || null;
+                    return {
+                        ...h,
+                        isExternal: true,
+                        site: foundSite ? normalizeOutsideSite(foundSite) : (h.site ? normalizeOutsideSite(h.site) : null),
+                    };
+                } else {
+                    const foundSite = siteMap.get(siteID) || null;
+                    const hasFoundSite = foundSite && (foundSite.addressLine1 || foundSite.city);
+                    return {
+                        ...h,
+                        site: hasFoundSite ? foundSite : (h.site ? normalizeSite(h.site) : null),
+                    };
+                }
+            };
+
+            const enrichedHoardings = rawHoardings.map(enrichHoarding);
             const hoardingMap = new Map(enrichedHoardings.map(h => [Number(h.hoardingID ?? h.HoardingID ?? 0), h]));
             const mergeList = extractArray(mergeRaw);
             const mergeMap = new Map(mergeList.map(m => [Number(m.hoardingID ?? m.HoardingID ?? 0), m]));
@@ -970,16 +1242,47 @@ export default function WorkerTasksPage() {
                 .filter(t => assignedTaskIds.has(Number(t.jobTaskID ?? t.JobTaskID)))
                 .map(raw => {
                     const task = normalizeTask(raw);
-                    const h = hoardingMap.get(Number(task.hoardingID));
-                    const merge = mergeMap.get(Number(task.hoardingID));
+                    const rawH = anyIdToLatest.get(Number(task.hoardingID)) || hoardingMap.get(Number(task.hoardingID));
+                    const h = enrichHoarding(rawH);
                     const jobObj = jobMap[task.jobRequestID] ?? null;
-                    const contractID = jobObj?.customerContractID ?? 0;
-                    return { ...task, hoardingCode: h?.hoardingCode ?? h?.HoardingCode ?? '', siteAddress: getSiteAddress(h), mergeAlongFlag: merge?.mergeAlongFlag ?? null, isMerged: !!merge, job: jobObj, contract: contractMap[contractID] ?? null };
+                    const contractID = Number(jobObj?.customerContractID ?? 0);
+                    const customerID = Number(jobObj?.customerID ?? contractMap[contractID]?.customerID ?? 0);
+                    const isMounting = (jobObj?.jobType || '').toLowerCase() === 'mounting';
+                    const shouldMerge = isMounting ? Boolean(customerID) : Boolean(contractID && customerID);
+                    const contractMerges = (shouldMerge && contractID) ? mergeList.filter(x => Number(x.customerContractID ?? x.CustomerContractID) === contractID) : [];
+                    const mergePool = contractMerges.length > 0 ? contractMerges : (shouldMerge ? mergeList : []);
+                    const merge = !shouldMerge ? null : (
+                        (contractID ? contractMerges.find(m => Number(m.hoardingID ?? m.HoardingID) === Number(task.hoardingID)) : null)
+                        || mergeMap.get(Number(task.hoardingID))
+                        || mergePool.find(x => {
+                            const xHid = Number(x.hoardingID ?? x.HoardingID);
+                            if (xHid === Number(task.hoardingID)) return true;
+                            if (rawH && Number(rawH.hoardingID ?? rawH.HoardingID) === xHid) return true;
+                            const xH = hoardingMap.get(xHid);
+                            if (xH && h && (xH.hoardingCode ?? xH.HoardingCode) && (h.hoardingCode ?? h.HoardingCode) && (xH.hoardingCode ?? xH.HoardingCode).trim().toLowerCase() === (h.hoardingCode ?? h.HoardingCode).trim().toLowerCase()) {
+                                return true;
+                            }
+                            return false;
+                        })
+                    );
+                    const supervisorId = jobObj ? Number(jobObj.iD) : 0;
+                    const supervisorName = supervisorId ? (userMap.get(supervisorId) || `User #${supervisorId}`) : '—';
+                    return {
+                        ...task,
+                        hoardingCode: h?.hoardingCode ?? h?.HoardingCode ?? '',
+                        siteAddress: getSiteAddress(h, siteMap, outsideSiteMap),
+                        siteID: h ? Number(h.siteID ?? h.SiteID ?? 0) : 0,
+                        mergeAlongFlag: merge?.mergeAlongFlag ?? merge?.MergeAlongFlag ?? null,
+                        hoardingLineNumber: Number(merge?.hoardingLineNumber ?? merge?.HoardingLineNumber ?? 0),
+                        customerContractID: Number(merge?.customerContractID ?? merge?.CustomerContractID ?? contractID ?? 0),
+                        hoardingMergeID: Number(merge?.hoardingMergeID ?? merge?.HoardingMergeID ?? 0),
+                        isMerged: !!merge,
+                        job: jobObj,
+                        contract: contractMap[contractID] ?? null,
+                        supervisorName
+                    };
                 });
-            const jobMergeFlags = new Map();
-            myTasks.forEach(t => { if (t.isMerged && !jobMergeFlags.has(t.jobRequestID)) jobMergeFlags.set(t.jobRequestID, t.mergeAlongFlag); });
-            const finalTasks = myTasks.map(t => jobMergeFlags.has(t.jobRequestID) ? { ...t, isMerged: true, mergeAlongFlag: t.mergeAlongFlag ?? jobMergeFlags.get(t.jobRequestID) } : t);
-            setTasks(finalTasks);
+            setTasks(myTasks);
         } catch (err) {
             setFetchError(err?.response?.data?.message || err?.message || 'Failed to load tasks.');
         } finally { setLoading(false); }
@@ -1068,7 +1371,13 @@ export default function WorkerTasksPage() {
         const mergedGroupMap = new Map();
         sorted.forEach(task => {
             if (task.isMerged) {
-                const key = `merged__${task.jobRequestID}`;
+                const siteID = task.siteID ?? 0;
+                const flag = task.mergeAlongFlag || 'H';
+                const lineNum = Number(task.hoardingLineNumber ?? 0);
+                const contractID = Number(task.customerContractID ?? task.contract?.customerContractID ?? 0);
+                const key = lineNum > 0
+                    ? `merged__${task.jobRequestID}_line_${contractID}_${lineNum}`
+                    : `merged__${task.jobRequestID}_site_${siteID}_${flag}`;
                 if (mergedGroupMap.has(key)) { rows[mergedGroupMap.get(key)].groupTasks.push(task); }
                 else { mergedGroupMap.set(key, rows.length); rows.push({ type: 'merged', groupTasks: [task] }); }
             } else {
@@ -1096,6 +1405,7 @@ export default function WorkerTasksPage() {
         { key: 'jobRequestID', label: 'Job ID', w: '7%' },
         { key: '_jobType', label: 'Job Type', w: '16%', noSort: true },
         { key: 'hoardingID', label: 'Hoarding', w: '14%' },
+        { key: 'supervisorName', label: 'Supervisor', w: '12%' },
         { key: 'actualCompletionDate', label: 'Comp. Date', w: '11%', tabletHide: true },
         { key: 'submitDTTM', label: 'Submitted', w: '11%', tabletHide: true },
         { key: 'status', label: 'Status', w: '13%' },
@@ -1260,7 +1570,8 @@ export default function WorkerTasksPage() {
                                             <MergedGroupRow key={`merged-${row.groupTasks[0].jobTaskID}`}
                                                 groupTasks={row.groupTasks}
                                                 onView={t => { setModalTask(t); setModalTab('view'); }}
-                                                onEdit={t => { setModalTask(t); setModalTab('update'); }} />
+                                                onEdit={t => { setModalTask(t); setModalTab('update'); }}
+                                                onOpenHoardingPhoto={setSelectedHoardingPhoto} />
                                         );
                                     }
                                     const task = row.task;
@@ -1278,12 +1589,22 @@ export default function WorkerTasksPage() {
                                                         <Layers size={10} /> {task.hoardingCode || `#${task.hoardingID}`}
                                                     </span>
                                                     {task.siteAddress && (
-                                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 4 }}>
                                                             <MapPin size={10} color="#9090a8" style={{ flexShrink: 0, marginTop: 2 }} />
-                                                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4 }}>{task.siteAddress}</span>
+                                                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, color: '#6b7280', fontWeight: 600, lineHeight: 1.4, flex: 1 }}>{task.siteAddress}</span>
+                                                            <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedHoardingPhoto({ hoardingID: task.hoardingID, hoardingCode: task.hoardingCode, siteAddress: task.siteAddress }); }}
+                                                                title="View Hoarding Image"
+                                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '1px 6px', borderRadius: 6, background: 'rgba(4,158,223,0.08)', border: '1px solid rgba(4,158,223,0.22)', color: '#049edf', fontFamily: 'Nunito,sans-serif', fontSize: 9.5, fontWeight: 800, cursor: 'pointer', flexShrink: 0 }}>
+                                                                <Eye size={10} /> View
+                                                            </button>
                                                         </div>
                                                     )}
                                                 </div>
+                                            </td>
+                                            <td className="pg-td">
+                                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontFamily: 'Nunito,sans-serif', fontWeight: 700, color: '#4a5568', fontSize: 12 }}>
+                                                    <User size={12} color="#c0c0d8" /> {task.supervisorName || '—'}
+                                                </span>
                                             </td>
                                             <td className="pg-td pg-tablet-hide">
                                                 <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#4a5568', fontSize: 12 }}>
@@ -1317,13 +1638,15 @@ export default function WorkerTasksPage() {
                                         <MergedGroupCard key={`merged-m-${row.groupTasks[0].jobTaskID}`}
                                             groupTasks={row.groupTasks}
                                             onView={t => { setModalTask(t); setModalTab('view'); }}
-                                            onEdit={t => { setModalTask(t); setModalTab('update'); }} />
+                                            onEdit={t => { setModalTask(t); setModalTab('update'); }}
+                                            onOpenHoardingPhoto={setSelectedHoardingPhoto} />
                                     );
                                 }
                                 return (
                                     <TaskCard key={row.task.jobTaskID} task={row.task}
                                         onView={t => { setModalTask(t); setModalTab('view'); }}
-                                        onEdit={t => { setModalTask(t); setModalTab('update'); }} />
+                                        onEdit={t => { setModalTask(t); setModalTab('update'); }}
+                                        onOpenHoardingPhoto={setSelectedHoardingPhoto} />
                                 );
                             })
                         }
@@ -1354,7 +1677,13 @@ export default function WorkerTasksPage() {
 
             {modalTask && (
                 <TaskModal task={modalTask} initialTab={modalTab}
-                    onClose={() => setModalTask(null)} onSave={handleSave} />
+                    onClose={() => setModalTask(null)} onSave={handleSave}
+                    onOpenHoardingPhoto={setSelectedHoardingPhoto} />
+            )}
+
+            {selectedHoardingPhoto && (
+                <HoardingPhotoModal hoardingInfo={selectedHoardingPhoto}
+                    onClose={() => setSelectedHoardingPhoto(null)} />
             )}
         </>
     );

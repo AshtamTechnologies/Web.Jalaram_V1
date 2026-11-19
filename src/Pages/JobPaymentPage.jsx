@@ -9,12 +9,13 @@ import {
   ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight, ChevronUp,
   Edit2, Filter,
   Calendar, CheckCircle2,
-  Briefcase,
-  User, FileText, Image,
-  CreditCard, Wallet,
+  Briefcase, Building2,
+  User, FileText, Image, Eye,
+  CreditCard, Wallet, BookOpen,
 } from 'lucide-react';
 import { apiService, API_ROOT_URL } from '../api/api';
 import "./Common1.css";
+import { useResizableColumns } from '../hooks/useResizableColumns';
 
 /* ═══════════════════════════════════════════
    CONSTANTS
@@ -61,10 +62,23 @@ function normalizeJobRequest(raw) {
     customerID: raw.customerID ?? raw.CustomerID ?? 0,
     jobType: raw.jobType ?? raw.JobType ?? '',
     jobDescription: raw.jobDescription ?? raw.JobDescription ?? '',
+    supervisorID: Number(raw.iD ?? raw.ID ?? raw.id ?? raw.supervisorID ?? raw.SupervisorID ?? 0),
     totalAreaSQFT: Number(raw.totalAreaSQFT ?? raw.TotalAreaSQFT ?? 0),
     rateperSQFT: Number(raw.rateperSQFT ?? raw.RateperSQFT ?? 0),
     targetCompletionDate: (raw.targetCompletionDate ?? raw.TargetCompletionDate ?? '').split('T')[0],
     jobStatus: raw.jobStatus ?? raw.JobStatus ?? '',
+  };
+}
+
+function normalizeUser(raw) {
+  const id = Number(raw.id ?? raw.Id ?? raw.ID ?? raw.userID ?? raw.UserID ?? raw.userId ?? 0);
+  const firstName = raw.first_Name ?? raw.firstName ?? raw.FirstName ?? '';
+  const lastName = raw.last_Name ?? raw.lastName ?? raw.LastName ?? '';
+  const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+  return {
+    id,
+    name: fullName || raw.name || raw.Name || raw.email || `User #${id}`,
+    role: String(raw.role ?? raw.Role ?? '').trim(),
   };
 }
 
@@ -76,15 +90,29 @@ function normalizeCustomer(raw) {
   };
 }
 
+function normalizeCompany(raw) {
+  return {
+    companyID: raw.company_ID ?? raw.companyID ?? raw.CompanyID ?? 0,
+    companyName: raw.company_Name ?? raw.companyName ?? raw.CompanyName ?? '',
+    city: raw.city ?? raw.City ?? '',
+    isActive: raw.is_Active ?? raw.isActive ?? raw.IsActive ?? false,
+  };
+}
+
 function normalizePayment(raw) {
   return {
     jobPaymentID: raw.jobPaymentID ?? raw.JobPaymentID ?? 0,
     jobRequestID: raw.jobRequestID ?? raw.JobRequestID ?? 0,
+    companyID: Number(raw.companyID ?? raw.CompanyID ?? raw.company_ID ?? 0),
+    companyName: raw.companyName ?? raw.CompanyName ?? raw.company_Name ?? '',
     paymentDate: (raw.paymentDate ?? raw.PaymentDate ?? '').split('T')[0],
     calculatedAmount: Number(raw.calculatedAmount ?? raw.CalculatedAmount ?? 0),
     paidAmount: Number(raw.paidAmount ?? raw.PaidAmount ?? 0),
     remainingAmount: Number(raw.remainingAmount ?? raw.RemainingAmount ?? 0),
     paidBY: raw.paidBY ?? raw.PaidBY ?? raw.paidBy ?? raw.PaidBy ?? '',
+    extrapayment: raw.extrapayment ?? raw.ExtraPayment ?? raw.extraPayment ?? '',
+    isAdvancePayment: !!(raw.isAdvancePayment ?? raw.IsAdvancePayment ?? false),
+    advancePaymentAmount: Number(raw.advancePaymentAmount ?? raw.AdvancePaymentAmount ?? 0),
     receiptPhoto: raw.receiptPhoto ?? raw.ReceiptPhoto ?? '',
     comments: raw.comments ?? raw.Comments ?? '',
     isParicialPayment: !!(raw.isParicialPayment ?? raw.IsParicialPayment ?? raw.isPartialPayment ?? raw.IsPartialPayment ?? false),
@@ -287,18 +315,209 @@ function JobComboField({ value, onChange, options, disabled }) {
                     <span className="pg-combo-option__name">
                       Job #{o.jobRequestID} — {o.jobType || '—'}
                     </span>
-                    {o.customerName && (
-                      <span className="pg-combo-option__id">
-                        {o.customerName}
-                        {o.totalAreaSQFT ? ` · ${Number(o.totalAreaSQFT).toFixed(1)} sq.ft` : ''}
-                      </span>
-                    )}
+                    <span className="pg-combo-option__id">
+                      {o.customerName ? `${o.customerName} · ` : ''}
+                      {o.totalAreaSQFT ? `${Number(o.totalAreaSQFT).toFixed(1)} sq.ft` : ''}
+                      {o.totalAmount ? ` · Total: ${fmtCurrency(o.totalAmount)}` : ''}
+                      {o.remainingForJob !== undefined ? ` · Pending: ${fmtCurrency(o.remainingForJob)}` : ''}
+                    </span>
                   </div>
                   {o.jobRequestID === value && (
                     <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
                   )}
                 </div>
               ))}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   SUPERVISOR COMBO (SYSTEM DROPDOWN)
+═══════════════════════════════════════════ */
+function SupervisorComboField({ value, onChange, supervisors }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const inputRef = useRef(null);
+  const listRef = useRef(null);
+
+  const close = useCallback(() => { setOpen(false); setQuery(''); }, []);
+  useOutsideClick(wrapRef, panelRef, open, close);
+
+  const selected = supervisors.find(s => String(s.id) === String(value));
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return q ? supervisors.filter(s => (s.name || '').toLowerCase().includes(q)) : supervisors;
+  }, [supervisors, query]);
+
+  const openDD = () => { setOpen(true); setQuery(''); setTimeout(() => inputRef.current?.focus(), 0); };
+  const select = (s) => { onChange(s); setOpen(false); setQuery(''); };
+  const clear = (e) => { e.stopPropagation(); onChange(null); setOpen(false); setQuery(''); };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef} style={{ minWidth: 175 }}>
+      <div
+        ref={triggerRef}
+        className="pg-field-wrap pg-combo-trigger pg-field-wrap--normal"
+        onClick={openDD}
+        tabIndex={0}
+        style={{
+          background: '#f4f4fb',
+          border: '1.5px solid #ececf8',
+          borderRadius: 9,
+          padding: '6px 12px',
+          minHeight: 'unset',
+          height: 35,
+          cursor: 'pointer'
+        }}
+      >
+        <User size={14} color="#049edf" style={{ flexShrink: 0 }} />
+        <span className={`pg-combo-display${!selected ? ' pg-combo-display--placeholder' : ''}`} style={{ fontSize: 12.5, fontWeight: 700, color: selected ? '#1a1a2e' : '#9090a8' }}>
+          {selected ? selected.name : 'All Supervisors'}
+        </span>
+        {selected ? (
+          <X size={12} className="pg-combo-clear" onClick={clear} />
+        ) : (
+          <ChevronDown size={13} color="#9090a8" style={{ flexShrink: 0 }} />
+        )}
+      </div>
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static' }}>
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              className="pg-combo-search__input"
+              placeholder="Search supervisor…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') close(); }}
+            />
+            {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+          </div>
+          <div className="pg-combo-list" ref={listRef}>
+            <div
+              className={`pg-combo-option${!value ? ' pg-combo-option--active' : ''}`}
+              onClick={() => select(null)}
+              tabIndex={0}
+            >
+              <span className="pg-combo-option__name">All Supervisors</span>
+              {!value && <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+            </div>
+            {filtered.map(s => (
+              <div
+                key={s.id}
+                className={`pg-combo-option${String(s.id) === String(value) ? ' pg-combo-option--active' : ''}`}
+                onClick={() => select(s)}
+                tabIndex={0}
+              >
+                <div style={{ flex: 1 }}>
+                  <span className="pg-combo-option__name">{s.name}</span>
+                </div>
+                {String(s.id) === String(value) && (
+                  <Check size={12} color="#049edf" style={{ marginLeft: 'auto', flexShrink: 0 }} />
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </PortalDropdown>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════
+   COMPANY COMBO FIELD
+═══════════════════════════════════════════ */
+function CompanyComboField({ value, onChange, companies = [], placeholder = 'Select company…', allowAll = false }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef(null);
+  const triggerRef = useRef(null);
+  const panelRef = useRef(null);
+  const inputRef = useRef(null);
+
+  const close = useCallback(() => { setOpen(false); setQuery(''); }, []);
+  useOutsideClick(wrapRef, panelRef, open, close);
+
+  const selected = companies.find(c => String(c.companyID) === String(value));
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return q ? companies.filter(c => (c.companyName || '').toLowerCase().includes(q)) : companies;
+  }, [companies, query]);
+
+  const openDD = () => { setOpen(true); setQuery(''); setTimeout(() => inputRef.current?.focus(), 0); };
+  const select = (c) => { onChange(c); setOpen(false); setQuery(''); };
+  const clear = (e) => { e.stopPropagation(); onChange(null); };
+
+  return (
+    <div className="pg-combo-wrap" ref={wrapRef} style={{ minWidth: 190 }}>
+      <div
+        ref={triggerRef}
+        className="pg-field-wrap pg-combo-trigger pg-field-wrap--normal"
+        onClick={openDD}
+        tabIndex={0}
+      >
+        <Building2 size={14} color="#049edf" style={{ flexShrink: 0 }} />
+        <span className={`pg-combo-display${!selected && !allowAll ? ' pg-combo-display--placeholder' : ''}`}>
+          {selected ? selected.companyName : allowAll ? 'All Companies' : placeholder}
+        </span>
+        {selected ? (
+          <X size={12} className="pg-combo-clear" onClick={clear} />
+        ) : (
+          <ChevronDown size={13} color="#c0c0d8" style={{ flexShrink: 0 }} />
+        )}
+      </div>
+      <PortalDropdown open={open} triggerRef={triggerRef} panelRef={panelRef}>
+        <div className="pg-combo-panel" style={{ position: 'static' }}>
+          <div className="pg-combo-search">
+            <Search size={12} color="#c0c0d8" style={{ flexShrink: 0 }} />
+            <input
+              ref={inputRef}
+              className="pg-combo-search__input"
+              placeholder="Search company…"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Escape') close(); }}
+            />
+            {query && <X size={11} className="pg-combo-clear" onClick={() => setQuery('')} />}
+          </div>
+          <div className="pg-combo-list">
+            {allowAll && (
+              <div
+                className={`pg-combo-option${!value ? ' pg-combo-option--active' : ''}`}
+                onClick={() => select(null)}
+                tabIndex={0}
+              >
+                <div style={{ flex: 1 }}>
+                  <span className="pg-combo-option__name">All Companies</span>
+                </div>
+                {!value && <Check size={12} color="#049edf" />}
+              </div>
+            )}
+            {filtered.length === 0 ? (
+              <div className="pg-combo-empty">No companies found</div>
+            ) : (
+              filtered.map(c => (
+                <div
+                  key={c.companyID}
+                  className={`pg-combo-option${String(c.companyID) === String(value) ? ' pg-combo-option--active' : ''}`}
+                  onClick={() => select(c)}
+                  tabIndex={0}
+                >
+                  <div style={{ flex: 1 }}>
+                    <span className="pg-combo-option__name">{c.companyName}</span>
+                    {c.city && <span className="pg-combo-option__id"> · {c.city}</span>}
+                  </div>
+                  {String(c.companyID) === String(value) && <Check size={12} color="#049edf" />}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </PortalDropdown>
@@ -551,16 +770,144 @@ function AttachmentModal({ payment, onClose, showToast }) {
 /* ═══════════════════════════════════════════
    PAYMENT FORM MODAL  (create / edit)
 ═══════════════════════════════════════════ */
-function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, showToast }) {
+function PaymentFormModal({ payment, jobOptions, allPayments, companies = [], onSave, onClose, showToast }) {
   const isEdit = !!payment?.jobPaymentID;
 
-  const [jobRequestID, setJobRequestID] = useState(payment?.jobRequestID || 0);
-  const [paymentDate, setPaymentDate] = useState(payment?.paymentDate || todayISO());
-  const [calculatedAmount, setCalculatedAmount] = useState(String(payment?.calculatedAmount ?? ''));
-  const [paidAmount, setPaidAmount] = useState(String(payment?.paidAmount ?? ''));
-  const [paidBY, setPaidBY] = useState(payment?.paidBY || '');
-  const [comments, setComments] = useState(payment?.comments || '');
-  const [isParicialPayment, setIsParicialPayment] = useState(payment?.isParicialPayment || false);
+  const [companyID, setCompanyID] = useState(() => {
+    if (isEdit) return payment?.companyID || 0;
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.companyID) return parsed.companyID;
+      } catch (e) { }
+    }
+    return 0;
+  });
+  const [companyName, setCompanyName] = useState(() => {
+    if (isEdit) return payment?.companyName || '';
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.companyName) return parsed.companyName;
+      } catch (e) { }
+    }
+    return '';
+  });
+
+  const [jobRequestID, setJobRequestID] = useState(() => {
+    if (isEdit) return payment?.jobRequestID || 0;
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.jobRequestID) return parsed.jobRequestID;
+      } catch (e) { }
+    }
+    return 0;
+  });
+  const [paymentDate, setPaymentDate] = useState(() => {
+    if (isEdit) return payment?.paymentDate || todayISO();
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.paymentDate) return parsed.paymentDate;
+      } catch (e) { }
+    }
+    return todayISO();
+  });
+  const [calculatedAmount, setCalculatedAmount] = useState(() => {
+    if (isEdit) return String(payment?.calculatedAmount ?? '');
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.calculatedAmount) return parsed.calculatedAmount;
+      } catch (e) { }
+    }
+    return '';
+  });
+  const [paidAmount, setPaidAmount] = useState(() => {
+    if (isEdit) return String(payment?.paidAmount ?? '');
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.paidAmount) return parsed.paidAmount;
+      } catch (e) { }
+    }
+    return '';
+  });
+  const [paidBY, setPaidBY] = useState(() => {
+    if (isEdit) return payment?.paidBY || '';
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.paidBY) return parsed.paidBY;
+      } catch (e) { }
+    }
+    return '';
+  });
+  const [extrapayment, setExtrapayment] = useState(() => {
+    if (isEdit) return payment?.extrapayment || '';
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.extrapayment) return parsed.extrapayment;
+      } catch (e) { }
+    }
+    return '';
+  });
+  const [comments, setComments] = useState(() => {
+    if (isEdit) return payment?.comments || '';
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.comments) return parsed.comments;
+      } catch (e) { }
+    }
+    return '';
+  });
+  const [isParicialPayment, setIsParicialPayment] = useState(() => {
+    if (isEdit) return payment?.isParicialPayment || false;
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.isParicialPayment !== undefined) return parsed.isParicialPayment;
+      } catch (e) { }
+    }
+    return false;
+  });
+  const [isAdvancePayment, setIsAdvancePayment] = useState(() => {
+    if (isEdit) return payment?.isAdvancePayment || false;
+    const saved = sessionStorage.getItem('unsaved_job_payment_form');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.isAdvancePayment !== undefined) return parsed.isAdvancePayment;
+      } catch (e) { }
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (!isEdit) {
+      sessionStorage.setItem('unsaved_job_payment_form', JSON.stringify({
+        jobRequestID, companyID, companyName, paymentDate, calculatedAmount, paidAmount, paidBY, extrapayment, comments, isParicialPayment, isAdvancePayment
+      }));
+    }
+  }, [jobRequestID, companyID, companyName, paymentDate, calculatedAmount, paidAmount, paidBY, extrapayment, comments, isParicialPayment, isAdvancePayment, isEdit]);
+
+  const handleCancel = () => {
+    sessionStorage.removeItem('unsaved_job_payment_form');
+    onClose();
+  };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -597,10 +944,12 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
   }, [remainingAmount]);
 
   const validate = () => {
+    if (!companyID) return 'Please select a company.';
     if (!jobRequestID) return 'Please select a job request.';
     if (!paymentDate) return 'Payment date is required.';
     if (!calculatedAmount || Number(calculatedAmount) <= 0) return 'Calculated amount must be greater than 0.';
     if (paidAmount === '' || Number(paidAmount) < 0) return 'Paid amount cannot be negative.';
+    if (extrapayment !== '' && Number(extrapayment) < 0) return 'Extra payment cannot be negative.';
     const maxPaid = Math.max(0, Number(calculatedAmount) - totalPaidSoFar);
     if (Number(paidAmount) > maxPaid) return `Paid amount cannot be greater than remaining amount (${fmtCurrency(maxPaid)}).`;
     return '';
@@ -614,11 +963,16 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
     try {
       const body = {
         jobRequestID,
+        companyID: Number(companyID) || 0,
+        companyName: companyName || '',
         paymentDate,
         calculatedAmount: Number(calculatedAmount),
         paidAmount: Number(paidAmount) || 0,
         remainingAmount,
         paidBY: paidBY || '',
+        extrapayment: extrapayment || '',
+        isAdvancePayment: Boolean(isAdvancePayment),
+        advancePaymentAmount: 0,
         receiptPhoto: payment?.receiptPhoto || '',
         comments: comments || '',
         isParicialPayment: Boolean(isParicialPayment),
@@ -630,6 +984,9 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
         await apiService.createJobPayment(body);
       }
 
+      // ── START: Clear unsaved draft on save success ──
+      sessionStorage.removeItem('unsaved_job_payment_form');
+      // ── END: Clear unsaved draft on save success ──
       showToast(isEdit ? 'Payment updated!' : 'Payment created!', 'success');
       onSave();
     } catch (err) {
@@ -657,11 +1014,25 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
               </p>
             </div>
           </div>
-          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+          <button className="pg-modal__close" onClick={handleCancel}><X size={15} /></button>
         </div>
 
         {/* Body */}
         <div className="pg-modal__body" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+          {/* Company */}
+          <div>
+            <label className="qt-label">Company <span className="qt-label--req">*</span></label>
+            <CompanyComboField
+              value={companyID}
+              onChange={c => {
+                setCompanyID(c?.companyID || 0);
+                setCompanyName(c?.companyName || '');
+                setError('');
+              }}
+              companies={companies}
+            />
+          </div>
 
           {/* Job Request */}
           <div>
@@ -677,6 +1048,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
                 <span>Type: {selectedJob.jobType}</span>
                 <span>{Number(selectedJob.totalAreaSQFT).toFixed(1)} sq.ft</span>
                 <span style={{ color: '#049edf' }}>₹{selectedJob.rateperSQFT}/sq.ft</span>
+                <span>Total: {fmtCurrency(Number(selectedJob.totalAreaSQFT) * Number(selectedJob.rateperSQFT))}</span>
                 {selectedJob.jobStatus && <span>Status: {selectedJob.jobStatus}</span>}
               </div>
             )}
@@ -771,6 +1143,37 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
             )}
           </div>
 
+          {/* Is Advance Payment */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '4px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                id="isAdvancePayment"
+                type="checkbox"
+                checked={isAdvancePayment}
+                onChange={e => setIsAdvancePayment(e.target.checked)}
+                style={{
+                  width: 16,
+                  height: 16,
+                  cursor: 'pointer',
+                  accentColor: '#049edf',
+                }}
+              />
+              <label
+                htmlFor="isAdvancePayment"
+                style={{
+                  fontFamily: 'Nunito,sans-serif',
+                  fontSize: 13,
+                  fontWeight: 700,
+                  color: '#1a1a2e',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                }}
+              >
+                Is Advance Payment?
+              </label>
+            </div>
+          </div>
+
           {/* Paid By */}
           <div>
             <label className="qt-label">Paid By</label>
@@ -779,6 +1182,17 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
               <input className="qt-input" type="text"
                 value={paidBY} onChange={e => setPaidBY(e.target.value)}
                 placeholder="Name of person / organization who paid…" />
+            </div>
+          </div>
+
+          {/* Extra Payment */}
+          <div>
+            <label className="qt-label">Extra Payment</label>
+            <div className="qt-input-wrap">
+              <span style={{ fontSize: 13, color: '#049edf', fontWeight: 800, flexShrink: 0 }}>₹</span>
+              <input className="qt-input" type="number" min="0" step="0.01"
+                value={extrapayment} onChange={e => { setExtrapayment(e.target.value); setError(''); }}
+                placeholder="0.00" />
             </div>
           </div>
 
@@ -803,7 +1217,7 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
 
         {/* Footer */}
         <div className="pg-modal__foot">
-          <button className="pg-btn-cancel" onClick={onClose}>Cancel</button>
+          <button className="pg-btn-cancel" onClick={handleCancel}>Cancel</button>
           <button className="pg-btn-save" onClick={handleSave} disabled={saving}>
             {saving
               ? <><Loader2 size={13} className="pg-spin" /> Saving…</>
@@ -818,23 +1232,196 @@ function PaymentFormModal({ payment, jobOptions, allPayments, onSave, onClose, s
 }
 
 /* ═══════════════════════════════════════════
+   PAYMENT DETAILS MODAL
+═══════════════════════════════════════════ */
+function PaymentDetailsModal({ payment, customerName, supervisorName, jobInfo, onClose, onEdit, onReceipts }) {
+  if (!payment) return null;
+  const isPartial = payment.isParicialPayment;
+  const rawRem = Number(payment.remainingAmount ?? 0);
+  const displayRem = isPartial ? rawRem : 0;
+  const displayPenalty = !isPartial ? rawRem : 0;
+
+  return ReactDOM.createPortal(
+    <div className="pg-overlay">
+      <div className="pg-modal" style={{ maxWidth: 540 }}>
+        {/* Head */}
+        <div className="pg-modal__head">
+          <div className="pg-modal__head-left">
+            <div className="pg-modal__icon-wrap">
+              <CreditCard size={20} color="#049edf" />
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <h5 className="pg-modal__title">Payment #{payment.jobPaymentID}</h5>
+                <PaymentStatusBadge payment={payment} />
+              </div>
+              <p className="pg-modal__subtitle">
+                Recorded on {fmtDate(payment.paymentDate)}
+              </p>
+            </div>
+          </div>
+          <button className="pg-modal__close" onClick={onClose}><X size={15} /></button>
+        </div>
+
+        {/* Body */}
+        <div className="pg-modal__body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          
+          {/* Customer & Company Card */}
+          <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Customer</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#1e293b' }}>{customerName || '—'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Company</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#049edf', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Building2 size={13} color="#049edf" /> {payment.companyName || '—'}
+              </span>
+            </div>
+          </div>
+
+          {/* Job Details Strip */}
+          <div style={{ background: '#f8fafc', padding: '12px 16px', borderRadius: 10, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Job Request</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: '#1e293b' }}>Job #{payment.jobRequestID} {jobInfo?.jobType ? `(${jobInfo.jobType})` : ''}</span>
+            </div>
+            {jobInfo && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Area & Rate</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b' }}>
+                  {Number(jobInfo.totalAreaSQFT || 0).toFixed(1)} sq.ft @ ₹{jobInfo.rateperSQFT || 0}/sq.ft
+                </span>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Supervisor (Pay To)</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#334155', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <User size={13} color="#049edf" /> {supervisorName || '—'}
+              </span>
+            </div>
+          </div>
+
+          {/* Financial Breakdown Grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ background: '#f1f5f9', padding: '10px 14px', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: '#64748b', fontWeight: 700 }}>Calculated Amount</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: '#0f172a', marginTop: 2 }}>{fmtCurrency(payment.calculatedAmount)}</div>
+            </div>
+            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '10px 14px', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 700 }}>Paid Amount</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: '#16a34a', marginTop: 2 }}>{fmtCurrency(payment.paidAmount)}</div>
+            </div>
+            <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', padding: '10px 14px', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: '#2563eb', fontWeight: 700 }}>Extra Payment</div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: '#2563eb', marginTop: 2 }}>
+                {payment.extrapayment && Number(payment.extrapayment) !== 0 ? fmtCurrency(payment.extrapayment) : '₹ 0.00'}
+              </div>
+            </div>
+            <div style={{ background: isPartial ? (displayRem > 0 ? '#fef2f2' : '#f8fafc') : (displayPenalty > 0 ? '#fef2f2' : '#f8fafc'), border: `1px solid ${displayRem > 0 || displayPenalty > 0 ? '#fecaca' : '#e2e8f0'}`, padding: '10px 14px', borderRadius: 8 }}>
+              <div style={{ fontSize: 11, color: displayRem > 0 || displayPenalty > 0 ? '#dc2626' : '#64748b', fontWeight: 700 }}>
+                {isPartial ? 'Remaining Balance' : 'Penalty'}
+              </div>
+              <div style={{ fontSize: 15, fontWeight: 800, color: displayRem > 0 || displayPenalty > 0 ? '#dc2626' : '#64748b', marginTop: 2 }}>
+                {isPartial ? (displayRem !== 0 ? fmtCurrency(displayRem) : '₹ 0.00') : (displayPenalty > 0 ? fmtCurrency(displayPenalty) : '₹ 0.00')}
+              </div>
+            </div>
+          </div>
+
+          {/* Payment Meta */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12.5 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>Paid By</span>
+              <span style={{ fontWeight: 700, color: '#1e293b' }}>{payment.paidBY || '—'}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8' }}>Advance Payment</span>
+              <span style={{ fontWeight: 700, color: payment.isAdvancePayment ? '#2563eb' : '#64748b' }}>
+                {payment.isAdvancePayment ? 'Yes (Advance)' : 'No'}
+              </span>
+            </div>
+          </div>
+
+          {payment.comments && (
+            <div style={{ background: '#fdfdfd', border: '1px solid #e2e8f0', borderRadius: 8, padding: '10px 14px' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>Comments</div>
+              <div style={{ fontSize: 12.5, color: '#334155', marginTop: 4, whiteSpace: 'pre-wrap' }}>{payment.comments}</div>
+            </div>
+          )}
+
+        </div>
+
+        {/* Foot */}
+        <div className="pg-modal__foot" style={{ justifyContent: 'space-between' }}>
+          <button
+            type="button"
+            className="pg-btn-secondary"
+            onClick={() => { onClose(); onReceipts(payment); }}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, fontSize: 12.5, fontWeight: 700, color: '#7c3aed', border: '1px solid #ddd6fe', background: '#f5f3ff', cursor: 'pointer' }}
+          >
+            <Image size={13} /> View Receipts
+          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button type="button" className="pg-btn-cancel" onClick={onClose}>Close</button>
+            <button
+              type="button"
+              onClick={() => { onClose(); onEdit(payment); }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 18px',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                color: '#ffffff',
+                background: '#049edf',
+                border: 'none',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(4,158,223,0.3)',
+              }}
+            >
+              <Edit2 size={13} /> Edit
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/* ═══════════════════════════════════════════
    MAIN JOB PAYMENT PAGE
 ═══════════════════════════════════════════ */
-export default function JobPaymentPage() {
+export default function JobPaymentPage({ changeTab }) {
 
   /* ── Data ── */
   const [payments, setPayments] = useState([]);
   const [jobRequests, setJobRequests] = useState([]);
-  const [completedJobRequests, setCompletedJobRequests] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [supervisors, setSupervisors] = useState([]);
+  const [companies, setCompanies] = useState([]);
+
+  /* ── Filters ── */
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [selectedSupervisor, setSelectedSupervisor] = useState('');
+  const [selectedCompany, setSelectedCompany] = useState('');
 
   /* ── UI ── */
   const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState('');
   const [toast, setToast] = useState(null);
-  const [showForm, setShowForm] = useState(false);
+  // ── START: Restore showForm if unsaved job payment form exists ──
+  // const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(() => {
+    return sessionStorage.getItem('unsaved_job_payment_form') !== null;
+  });
   const [editingPayment, setEditingPayment] = useState(null);
+  // ── END: Restore showForm if unsaved job payment form exists ──
   const [attachmentPayment, setAttachmentPayment] = useState(null);
+  const [detailPayment, setDetailPayment] = useState(null);
 
   /* ── Table ── */
   const [search, setSearch] = useState('');
@@ -843,53 +1430,75 @@ export default function JobPaymentPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
 
+  const tableRef = useRef(null);
+  const [tableReady, setTableReady] = useState(false);
+  useEffect(() => { if (!loading) setTableReady(true); }, [loading]);
+  useResizableColumns(tableRef, tableReady, [95, 190, 140, 110, 110, 130, 120, 90, 75, 80]);
+
   const showToast = useCallback((msg, type = 'success') => setToast({ msg, type }), []);
 
-  /* ── Job options enriched with customer name ── */
+  /* ── Job options enriched with customer name & payment calculation ── */
   const jobOptions = useMemo(() => {
-    const list = completedJobRequests
-      .filter(j => {
+    const list = jobRequests
+      .map(j => {
         const totalValue = Number(j.totalAreaSQFT ?? 0) * Number(j.rateperSQFT ?? 0);
         const totalPaid = payments
           .filter(p => p.jobRequestID === j.jobRequestID && (!editingPayment || p.jobPaymentID !== editingPayment.jobPaymentID))
           .reduce((sum, p) => sum + Number(p.paidAmount ?? 0), 0);
         const remaining = totalValue - totalPaid;
-        return remaining > 0;
+        const cust = customers.find(c => c.customerID === j.customerID);
+        return {
+          ...j,
+          totalAmount: totalValue,
+          totalPaidForJob: totalPaid,
+          remainingForJob: remaining,
+          customerName: cust?.customerName || '',
+        };
       })
-      .map(j => ({
-        ...j,
-        customerName: customers.find(c => c.customerID === j.customerID)?.customerName || '',
-      }));
+      .filter(j => j.remainingForJob > 0);
+
     if (editingPayment?.jobRequestID) {
       const exists = list.some(o => o.jobRequestID === editingPayment.jobRequestID);
       if (!exists) {
         const fullJob = jobRequests.find(j => j.jobRequestID === editingPayment.jobRequestID);
         if (fullJob) {
+          const totalValue = Number(fullJob.totalAreaSQFT ?? 0) * Number(fullJob.rateperSQFT ?? 0);
+          const totalPaid = payments
+            .filter(p => p.jobRequestID === fullJob.jobRequestID && p.jobPaymentID !== editingPayment.jobPaymentID)
+            .reduce((sum, p) => sum + Number(p.paidAmount ?? 0), 0);
           list.push({
             ...fullJob,
+            totalAmount: totalValue,
+            totalPaidForJob: totalPaid,
+            remainingForJob: totalValue - totalPaid,
             customerName: customers.find(c => c.customerID === fullJob.customerID)?.customerName || '',
           });
         }
       }
     }
     return list;
-  }, [completedJobRequests, jobRequests, customers, editingPayment, payments]);
+  }, [jobRequests, customers, editingPayment, payments]);
 
   /* ── Initial load using apiService ── */
   useEffect(() => {
     (async () => {
       setLoading(true);
       try {
-        const [pRaw, jRaw, cRaw, compRaw] = await Promise.all([
-          apiService.getAllJobPayments().catch(() => []),
+        const [pRaw, jRaw, cRaw, uRaw, compRaw] = await Promise.all([
+          apiService.getFilteredJobPayments().catch(() => []),
           apiService.getAllJobRequests().catch(() => []),
           apiService.getAllCustomers().catch(() => []),
-          apiService.getCompletedJobsWithPendingPayment().catch(() => []),
+          apiService.getAllUsers().catch(() => []),
+          apiService.getAllCompanyDetails().catch(() => []),
         ]);
         setPayments(normalizeList(pRaw).map(normalizePayment));
         setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
         setCustomers(normalizeList(cRaw).map(normalizeCustomer));
-        setCompletedJobRequests(normalizeList(compRaw).map(normalizeJobRequest));
+        const allUsers = normalizeList(uRaw).map(normalizeUser);
+        setSupervisors(allUsers.filter(u => u.role.toLowerCase() === 'supervisor'));
+        const allCompanies = normalizeList(compRaw).map(normalizeCompany);
+        const activeCompanies = allCompanies.filter(c => c.isActive);
+        setCompanies(activeCompanies.length > 0 ? activeCompanies : allCompanies);
       } catch (err) {
         setApiError(err?.message || 'Failed to load data.');
       } finally {
@@ -898,20 +1507,51 @@ export default function JobPaymentPage() {
     })();
   }, []);
 
+  /* ── Date filter effect ── */
+  useEffect(() => {
+    let ignore = false;
+    const loadFiltered = async () => {
+      try {
+        const pRaw = await apiService.getFilteredJobPayments({
+          fromDate: fromDate || undefined,
+          toDate: toDate || undefined,
+        });
+        if (!ignore) {
+          setPayments(normalizeList(pRaw).map(normalizePayment));
+        }
+      } catch (err) {
+        if (!ignore) {
+          console.error('Failed to load filtered payments:', err);
+        }
+      }
+    };
+    if (!loading) {
+      loadFiltered();
+    }
+    return () => { ignore = true; };
+  }, [fromDate, toDate]);
+
   /* ── Refresh ── */
   const refresh = useCallback(async () => {
     try {
-      const [pRaw, compRaw] = await Promise.all([
-        apiService.getAllJobPayments(),
-        apiService.getCompletedJobsWithPendingPayment().catch(() => []),
+      const [pRaw, jRaw, uRaw, compRaw] = await Promise.all([
+        apiService.getFilteredJobPayments({ fromDate: fromDate || undefined, toDate: toDate || undefined }),
+        apiService.getAllJobRequests().catch(() => []),
+        apiService.getAllUsers().catch(() => []),
+        apiService.getAllCompanyDetails().catch(() => []),
       ]);
       setPayments(normalizeList(pRaw).map(normalizePayment));
-      setCompletedJobRequests(normalizeList(compRaw).map(normalizeJobRequest));
+      setJobRequests(normalizeList(jRaw).map(normalizeJobRequest));
+      const allUsers = normalizeList(uRaw).map(normalizeUser);
+      setSupervisors(allUsers.filter(u => u.role.toLowerCase() === 'supervisor'));
+      const allCompanies = normalizeList(compRaw).map(normalizeCompany);
+      const activeCompanies = allCompanies.filter(c => c.isActive);
+      setCompanies(activeCompanies.length > 0 ? activeCompanies : allCompanies);
       showToast('Refreshed', 'success');
     } catch {
       showToast('Refresh failed', 'error');
     }
-  }, [showToast]);
+  }, [fromDate, toDate, showToast]);
 
   /* ── Table helpers ── */
   const custName = (jobReqID) => {
@@ -923,24 +1563,49 @@ export default function JobPaymentPage() {
   const jobType = (jobReqID) =>
     jobRequests.find(j => j.jobRequestID === jobReqID)?.jobType || '—';
 
+  const supervisorName = (jobReqID) => {
+    const job = jobRequests.find(j => j.jobRequestID === jobReqID);
+    if (!job || !job.supervisorID) return '—';
+    const sup = supervisors.find(s => s.id === job.supervisorID);
+    return sup?.name || (job.supervisorID ? `Supervisor #${job.supervisorID}` : '—');
+  };
+
   /* ── Filter / sort / paginate ── */
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    if (!q) return payments;
     return payments.filter(p => {
+      const job = jobRequests.find(j => j.jobRequestID === p.jobRequestID);
+      const sName = supervisorName(p.jobRequestID);
       const cName = custName(p.jobRequestID).toLowerCase();
       const jType = jobType(p.jobRequestID).toLowerCase();
+      const compName = (p.companyName || '').toLowerCase();
+
+      // Supervisor filter
+      if (selectedSupervisor && String(job?.supervisorID) !== String(selectedSupervisor)) {
+        return false;
+      }
+
+      // Company filter
+      if (selectedCompany && String(p.companyID) !== String(selectedCompany)) {
+        return false;
+      }
+
+      if (!q) return true;
       return (
         String(p.jobPaymentID).includes(q) ||
         String(p.jobRequestID).includes(q) ||
+        compName.includes(q) ||
         cName.includes(q) ||
         jType.includes(q) ||
+        sName.toLowerCase().includes(q) ||
         (p.paidBY || '').toLowerCase().includes(q) ||
+        (p.extrapayment || '').toLowerCase().includes(q) ||
+        (p.isAdvancePayment ? 'advance' : '').includes(q) ||
         getPaymentStatus(p).toLowerCase().includes(q)
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [payments, search, jobRequests, customers]);
+  }, [payments, search, jobRequests, customers, supervisors, selectedSupervisor, selectedCompany]);
 
   const sorted = useMemo(() =>
     [...filtered].sort((a, b) => {
@@ -995,6 +1660,7 @@ export default function JobPaymentPage() {
           payment={editingPayment}
           jobOptions={jobOptions}
           allPayments={payments}
+          companies={companies}
           showToast={showToast}
           onSave={async () => {
             setShowForm(false);
@@ -1013,6 +1679,18 @@ export default function JobPaymentPage() {
         />
       )}
 
+      {detailPayment && (
+        <PaymentDetailsModal
+          payment={detailPayment}
+          customerName={custName(detailPayment.jobRequestID)}
+          supervisorName={supervisorName(detailPayment.jobRequestID)}
+          jobInfo={jobRequests.find(j => j.jobRequestID === detailPayment.jobRequestID)}
+          onClose={() => setDetailPayment(null)}
+          onEdit={(p) => { setDetailPayment(null); setEditingPayment(p); setShowForm(true); }}
+          onReceipts={(p) => { setDetailPayment(null); setAttachmentPayment(p); }}
+        />
+      )}
+
       <div className="pg-page">
 
         {/* ── Page Header ── */}
@@ -1023,9 +1701,35 @@ export default function JobPaymentPage() {
               Track and manage <strong>payment records</strong> against job requests.
             </p>
           </div>
-          <button className="pg-btn-add" onClick={() => { setEditingPayment(null); setShowForm(true); }}>
-            <Plus size={14} /> New Payment
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <button
+              type="button"
+              className="pg-btn-secondary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '9px 16px',
+                borderRadius: 10,
+                fontFamily: 'Nunito,sans-serif',
+                fontSize: 13,
+                fontWeight: 800,
+                background: '#ffffff',
+                color: '#049edf',
+                border: '1.5px solid #049edf',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(4,158,223,0.12)',
+                transition: 'all 0.15s ease'
+              }}
+              onClick={() => changeTab?.('JobPaymentLedger')}
+              title="View Dr/Cr Job Payment Ledger"
+            >
+              <BookOpen size={15} /> View Ledger
+            </button>
+            <button className="pg-btn-add" onClick={() => { setEditingPayment(null); setShowForm(true); }}>
+              <Plus size={14} /> New Payment
+            </button>
+          </div>
         </div>
 
         {apiError && (
@@ -1051,17 +1755,81 @@ export default function JobPaymentPage() {
               </div>
             </div>
 
-            <div style={{ flex: 1, minWidth: 220, display: 'flex', alignItems: 'center', gap: 9, padding: '9px 14px', background: '#f4f4fb', borderRadius: 10, border: '1.5px solid #ececf8' }}>
+            {/* Search */}
+            <div style={{ flex: 1, minWidth: 190, display: 'flex', alignItems: 'center', gap: 9, padding: '8px 14px', background: '#f4f4fb', borderRadius: 10, border: '1.5px solid #ececf8' }}>
               <Search size={14} color="#9090a8" style={{ flexShrink: 0 }} />
               <input
                 style={{ flex: 1, border: 'none', background: 'transparent', outline: 'none', fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}
-                placeholder="Search by ID, customer, job type, status…"
+                placeholder="Search by ID, customer, supervisor, status…"
                 value={search}
                 onChange={e => { setSearch(e.target.value); setPage(1); }}
               />
               {search && <X size={13} style={{ cursor: 'pointer', color: '#9090a8', flexShrink: 0 }} onClick={() => setSearch('')} />}
             </div>
 
+            {/* Supervisor System Combo Filter */}
+            <SupervisorComboField
+              value={selectedSupervisor}
+              onChange={s => { setSelectedSupervisor(s ? String(s.id) : ''); setPage(1); }}
+              supervisors={supervisors}
+            />
+
+            {/* Company System Combo Filter */}
+            <CompanyComboField
+              value={selectedCompany}
+              onChange={c => { setSelectedCompany(c ? String(c.companyID) : ''); setPage(1); }}
+              companies={companies}
+              allowAll
+            />
+
+            {/* From Date */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Calendar size={14} color="#049edf" style={{ flexShrink: 0 }} />
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>From:</span>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={e => { setFromDate(e.target.value); setPage(1); }}
+                style={{
+                  padding: '6px 10px', borderRadius: 8, border: '1.5px solid #ececf8',
+                  background: '#f4f4fb', fontFamily: 'Nunito,sans-serif', fontSize: 12,
+                  fontWeight: 600, color: '#1a1a2e', outline: 'none', cursor: 'pointer',
+                }}
+              />
+            </div>
+
+            {/* To Date */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12, fontWeight: 700, color: '#5a5a78' }}>To:</span>
+              <input
+                type="date"
+                value={toDate}
+                onChange={e => { setToDate(e.target.value); setPage(1); }}
+                style={{
+                  padding: '6px 10px', borderRadius: 8, border: '1.5px solid #ececf8',
+                  background: '#f4f4fb', fontFamily: 'Nunito,sans-serif', fontSize: 12,
+                  fontWeight: 600, color: '#1a1a2e', outline: 'none', cursor: 'pointer',
+                }}
+              />
+            </div>
+
+            {/* Clear Filters */}
+            {(fromDate || toDate || selectedSupervisor || selectedCompany) && (
+              <button
+                onClick={() => { setFromDate(''); setToDate(''); setSelectedSupervisor(''); setSelectedCompany(''); setPage(1); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4, padding: '7px 11px',
+                  borderRadius: 9, border: '1px solid #fecaca', background: '#fef2f2',
+                  color: '#dc2626', fontFamily: 'Nunito,sans-serif', fontSize: 12,
+                  fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+                }}
+                title="Clear all filters"
+              >
+                <X size={12} /> Clear
+              </button>
+            )}
+
+            {/* Refresh */}
             <button
               onClick={refresh}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', borderRadius: 9, border: '1.5px solid #e8e8f4', background: '#fff', color: '#5a5a78', cursor: 'pointer', fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, flexShrink: 0 }}
@@ -1072,22 +1840,20 @@ export default function JobPaymentPage() {
 
           {/* Table */}
           <div style={{ overflowX: 'auto' }}>
-            <table className="pg-table" style={{ minWidth: 900 }}>
+            <table ref={tableRef} className="pg-table" style={{ minWidth: 1040, tableLayout: 'fixed' }}>
               <thead>
                 <tr>
                   {[
-                    { key: 'jobPaymentID', label: 'Pay ID', w: '6%' },
-                    { key: 'jobRequestID', label: 'Job #', w: '6%' },
-                    { key: '_customer', label: 'Customer', w: '12%', noSort: true },
-                    { key: '_jobType', label: 'Type', w: '8%', noSort: true },
-                    { key: 'paymentDate', label: 'Date', w: '9%' },
+                    { key: 'jobPaymentID', label: 'Payment / Job', w: '9%' },
+                    { key: '_customer', label: 'Customer & Company', w: '18%', noSort: true },
+                    { key: '_jobType', label: 'Type & Pay To', w: '13%', noSort: true },
+                    { key: 'paymentDate', label: 'Date', w: '10%' },
                     { key: 'calculatedAmount', label: 'Calculated', w: '10%' },
-                    { key: 'paidAmount', label: 'Paid', w: '9%' },
-                    { key: 'remainingAmount', label: 'Remaining', w: '9%' },
-                    { key: 'penalty', label: 'Penalty', w: '9%', noSort: true },
-                    { key: 'paidBY', label: 'Paid By', w: '8%' },
-                    { key: '_status', label: 'Status', w: '7%', noSort: true },
-                    { key: '_action', label: 'Actions', w: '7%', noSort: true },
+                    { key: 'paidAmount', label: 'Paid Amount', w: '12%' },
+                    { key: 'remainingAmount', label: 'Balance / Penalty', w: '11%' },
+                    { key: 'paidBY', label: 'Paid By', w: '7%' },
+                    { key: '_status', label: 'Status', w: '5%', noSort: true },
+                    { key: '_action', label: 'Actions', w: '5%', noSort: true },
                   ].map(col => (
                     <th
                       key={col.key} style={{ width: col.w }}
@@ -1107,7 +1873,7 @@ export default function JobPaymentPage() {
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={12} className="pg-td pg-empty">
+                    <td colSpan={10} className="pg-td pg-empty">
                       <div className="pg-empty__inner">
                         <CreditCard size={36} color="#d0d0e8" />
                         <span className="pg-empty__label">No payments found</span>
@@ -1117,6 +1883,7 @@ export default function JobPaymentPage() {
                 ) : paginated.map(p => {
                   const cName = custName(p.jobRequestID);
                   const jType = jobType(p.jobRequestID);
+                  const sName = supervisorName(p.jobRequestID);
                   const jts = jobTypeBadgeStyle(jType);
                   const rawRem = Number(p.remainingAmount ?? 0);
                   const isPartial = p.isParicialPayment;
@@ -1124,65 +1891,179 @@ export default function JobPaymentPage() {
                   const displayPenalty = !isPartial ? rawRem : 0;
                   return (
                     <tr key={p.jobPaymentID} className="pg-tr">
+                      {/* 1. Payment / Job */}
                       <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#049edf' }}>
-                          #{p.jobPaymentID}
-                        </span>
-                      </td>
-                      <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 700, color: '#4a5568' }}>
-                          #{p.jobRequestID}
-                        </span>
-                      </td>
-                      <td className="pg-td pg-td--overflow">
-                        <span className="pg-td__ellipsis" title={cName}>{cName}</span>
-                      </td>
-                      <td className="pg-td">
-                        {jType !== '—' ? (
-                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 5, background: jts.bg, color: jts.color, border: `1px solid ${jts.border}`, whiteSpace: 'nowrap' }}>
-                            {jType}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#049edf' }}>
+                            #{p.jobPaymentID}
                           </span>
-                        ) : <span style={{ color: '#c0c0d8' }}>—</span>}
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#9090a8' }}>
+                            Job #{p.jobRequestID}
+                          </span>
+                        </div>
                       </td>
-                      <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#4a5568' }}>
-                          {fmtDate(p.paymentDate)}
-                        </span>
+
+                      {/* 2. Customer & Company */}
+                      <td className="pg-td pg-td--overflow">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span className="pg-td__ellipsis" style={{ fontWeight: 800, color: '#1a1a2e', fontSize: 13 }} title={cName}>
+                            {cName}
+                          </span>
+                          {p.companyName ? (
+                            <span className="pg-td__ellipsis" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600, color: '#049edf' }} title={p.companyName}>
+                              <Building2 size={11} color="#049edf" style={{ flexShrink: 0 }} /> {p.companyName}
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: 11, color: '#b0b0c8' }}>—</span>
+                          )}
+                        </div>
                       </td>
+
+                      {/* 3. Type & Pay To */}
+                      <td className="pg-td pg-td--overflow">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, alignItems: 'flex-start' }}>
+                          {jType !== '—' ? (
+                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 5, background: jts.bg, color: jts.color, border: `1px solid ${jts.border}`, whiteSpace: 'nowrap' }}>
+                              {jType}
+                            </span>
+                          ) : <span style={{ color: '#c0c0d8', fontSize: 11 }}>—</span>}
+                          {sName !== '—' ? (
+                            <span className="pg-td__ellipsis" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11.5, fontWeight: 600, color: '#4a5568' }} title={sName}>
+                              <User size={11} color="#8a94a6" style={{ flexShrink: 0 }} /> {sName}
+                            </span>
+                          ) : <span style={{ color: '#c0c0d8', fontSize: 11 }}>—</span>}
+                        </div>
+                      </td>
+
+                      {/* 4. Date */}
                       <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#1a1a2e' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, alignItems: 'flex-start' }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 600, color: '#1a1a2e' }}>
+                            {fmtDate(p.paymentDate)}
+                          </span>
+                          {p.isAdvancePayment && (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', padding: '1px 6px',
+                              borderRadius: 8, fontFamily: 'Nunito,sans-serif', fontSize: 10,
+                              fontWeight: 700, background: '#eff6ff', color: '#2563eb',
+                              border: '1px solid #bfdbfe', whiteSpace: 'nowrap'
+                            }}>
+                              Advance
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 5. Calculated */}
+                      <td className="pg-td">
+                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#1a1a2e' }}>
                           {fmtCurrency(p.calculatedAmount)}
                         </span>
                       </td>
+
+                      {/* 6. Paid Amount */}
                       <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: '#16a34a' }}>
-                          {fmtCurrency(p.paidAmount)}
-                        </span>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#16a34a' }}>
+                            {fmtCurrency(p.paidAmount)}
+                          </span>
+                          {p.extrapayment && Number(p.extrapayment) !== 0 ? (
+                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 11, fontWeight: 700, color: '#049edf' }}>
+                              +{fmtCurrency(p.extrapayment)} Extra
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
+
+                      {/* 7. Balance / Penalty */}
                       <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: displayRem > 0 ? '#dc2626' : displayRem < 0 ? '#7c3aed' : '#9090a8' }}>
-                          {displayRem !== 0 ? fmtCurrency(displayRem) : '—'}
-                        </span>
+                        {isPartial ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: rawRem > 0 ? '#dc2626' : rawRem < 0 ? '#7c3aed' : '#9090a8' }}>
+                              {rawRem !== 0 ? fmtCurrency(rawRem) : '—'}
+                            </span>
+                            {rawRem !== 0 && (
+                              <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 600, color: '#9090a8' }}>
+                                Remaining
+                              </span>
+                            )}
+                          </div>
+                        ) : displayPenalty > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 13, fontWeight: 800, color: '#dc2626' }}>
+                              {fmtCurrency(displayPenalty)}
+                            </span>
+                            <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 10.5, fontWeight: 700, color: '#dc2626' }}>
+                              Penalty
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ color: '#c0c0d8' }}>—</span>
+                        )}
                       </td>
-                      <td className="pg-td">
-                        <span style={{ fontFamily: 'Nunito,sans-serif', fontSize: 12.5, fontWeight: 800, color: displayPenalty > 0 ? '#dc2626' : '#9090a8' }}>
-                          {displayPenalty !== 0 ? fmtCurrency(displayPenalty) : '—'}
-                        </span>
-                      </td>
+
+                      {/* 8. Paid By */}
                       <td className="pg-td pg-td--overflow">
-                        <span className="pg-td__ellipsis" style={{ color: '#4a5568' }} title={p.paidBY}>
+                        <span className="pg-td__ellipsis" style={{ color: '#4a5568', fontSize: 12.5, fontWeight: 600 }} title={p.paidBY}>
                           {p.paidBY || <span style={{ color: '#c0c0d8' }}>—</span>}
                         </span>
                       </td>
+
+                      {/* 9. Status */}
                       <td className="pg-td">
                         <PaymentStatusBadge payment={p} />
                       </td>
+
+                      {/* 10. Actions */}
                       <td className="pg-td">
-                        <div className="pg-action-wrap">
-                          <button className="pg-btn-edit" onClick={() => { setEditingPayment(p); setShowForm(true); }} title="Edit payment">
-                            <Edit2 size={13} />
+                        <div className="pg-action-wrap" style={{ gap: 5, alignItems: 'center' }}>
+                          <button
+                            type="button"
+                            onClick={() => setDetailPayment(p)}
+                            title="View payment details"
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 7,
+                              background: 'rgba(4, 158, 223, 0.1)',
+                              border: '1px solid rgba(4, 158, 223, 0.25)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              color: '#049edf',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            <Eye size={13} />
                           </button>
-                          <button className="pg-btn-view" onClick={() => setAttachmentPayment(p)} title="View / upload receipts" style={{ width: 30, height: 30 }}>
+                          <button
+                            type="button"
+                            className="pg-btn-edit"
+                            onClick={() => { setEditingPayment(p); setShowForm(true); }}
+                            title="Edit payment"
+                            style={{ width: 28, height: 28 }}
+                          >
+                            <Edit2 size={12} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setAttachmentPayment(p)}
+                            title="View / upload receipts"
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: 7,
+                              background: 'rgba(124, 58, 237, 0.1)',
+                              border: '1px solid rgba(124, 58, 237, 0.25)',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              color: '#7c3aed',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
                             <Image size={13} />
                           </button>
                         </div>
